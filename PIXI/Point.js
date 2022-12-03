@@ -4,10 +4,11 @@
 "use strict";
 
 // Add methods to PIXI.Point
-let isRegistered = false;
 export function registerPIXIPointMethods() {
-  if ( isRegistered ) return;
-  isRegistered = true;
+  CONFIG.Geometry ??= {};
+  CONFIG.Geometry.Registered ??= {};
+  if ( CONFIG.Geometry.Registered.PIXIPolygon ) return;
+  CONFIG.Geometry.Registered.PIXIPolygon = true;
 
   // ----- Static Methods ----- //
   Object.defineProperty(PIXI.Point, "midPoint", {

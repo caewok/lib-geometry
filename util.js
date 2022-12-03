@@ -9,10 +9,8 @@ import { Point3d } from "./Point3d.js";
 Math.SQRT3 = Math.sqrt(3);
 
 // Store some functions in foundry.utils for general use
-let isRegistered = false;
 export function registerFoundryUtilsMethods() {
-  if ( isRegistered ) return;
-  isRegistered = true;
+  if ( foundry.utils.orient3dFast ) return;
 
   Object.defineProperty(foundry.utils, "orient3dFast", {
     value: orient3dFast,
@@ -32,7 +30,6 @@ export function registerFoundryUtilsMethods() {
     configurable: true
   });
 }
-
 
 /**
  * Adapted from https://github.com/mourner/robust-predicates/blob/main/src/orient3d.js

@@ -8,10 +8,11 @@ libWrapper
 import { WeilerAthertonClipper } from "../WeilerAtherton.js";
 
 // ----------------  ADD METHODS TO THE PIXI.CIRCLE PROTOTYPE ------------------------
-let isRegistered = false;
 export function registerPIXICircleMethods() {
-  if ( isRegistered ) return;
-  isRegistered = true;
+  CONFIG.Geometry ??= {};
+  CONFIG.Geometry.Registered ??= {};
+  if ( CONFIG.Geometry.Registered.PIXIPolygon ) return;
+  CONFIG.Geometry.Registered.PIXIPolygon = true;
 
   // ----- Getters/Setters ----- //
   if ( !Object.hasOwn(PIXI.Circle.prototype, "area") ) {

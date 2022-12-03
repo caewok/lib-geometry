@@ -9,10 +9,11 @@ ClipperLib
 import { WeilerAthertonClipper } from "../WeilerAtherton.js";
 
 // ----------------  ADD METHODS TO THE PIXI.RECTANGLE PROTOTYPE ------------------------
-let isRegistered = false;
 export function registerPIXIRectangleMethods() {
-  if ( isRegistered ) return;
-  isRegistered = true;
+  CONFIG.Geometry ??= {};
+  CONFIG.Geometry.Registered ??= {};
+  if ( CONFIG.Geometry.Registered.PIXIPolygon ) return;
+  CONFIG.Geometry.Registered.PIXIPolygon = true;
 
   // ----- Getters/Setters ----- //
   if ( !Object.hasOwn(PIXI.Rectangle.prototype, "area") ) {
