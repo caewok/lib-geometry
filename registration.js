@@ -41,13 +41,25 @@ import { Matrix } from "./Matrix.js";
 // Shadow
 import { Shadow } from "./Shadow.js";
 
-// Helper to register all PIXI methods
-export function registerPIXI() {
-  registerPIXIPolygonMethods();
-  registerPIXICircleMethods();
-  registerPIXIRectangleMethods();
-  registerPIXIPointMethods();
+export function registerGeometry(categories = []) {
+  for ( category of categories ) REGISTER[category]();
 }
+
+const REGISTER = {
+  PIXIPolygon: registerPIXIPolygonMethods,
+  PIXICircle: registerPIXICircleMethods,
+  PIXIRectangle: registerPIXIRectangleMethods,
+  PIXIPoint: registerPIXIPointMethods,
+  CenteredPolygons: registerCenteredPolygons,
+  RegularPolygons: registerRegularPolygons,
+  Draw: registerDraw,
+  ThreeD: register3d,
+  Ellipse: registerEllipse,
+  Shadow: registerShadow,
+  Matrix: registerMatrix,
+  WeilerAtherton: registerWeilerAtherton
+}
+
 
 // Store new geometry classes in foundry.utils
 export function registerCenteredPolygons() {
