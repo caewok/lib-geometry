@@ -16,8 +16,20 @@ export function registerPIXIPointMethods() {
     configurable: true
   });
 
-  Object.defineProperty(PIXI.Point, "fromAngle" {
+  Object.defineProperty(PIXI.Point, "fromAngle", {
     value: fromAngle,
+    writable: true,
+    configurable: true
+  });
+
+  Object.defineProperty(PIXI.Point, "distanceBetween", {
+    value: distanceBetween,
+    writable: true,
+    configurable: true
+  });
+
+  Object.defineProperty(PIXI.Point, "distanceSquaredBetween", {
+    value: distanceBetween,
     writable: true,
     configurable: true
   });
@@ -120,6 +132,43 @@ export function registerPIXIPointMethods() {
     writable: true,
     configurable: true
   });
+
+  Object.defineProperty(PIXI.Point, "key", {
+    value: key,
+    writable: true,
+    configurable: true
+  });
+}
+
+/**
+ * Distance between two 2d points
+ * @param {PIXI.Point} a
+ * @param {PIXI.Point} b
+ * @returns {number}
+ */
+function distanceBetween(a, b) {
+  return b.subtract(a).magnitude();
+}
+
+/**
+ * Distance squared between two 2d points
+ * @param {PIXI.Point} a
+ * @param {PIXI.Point} b
+ * @returns {number}
+ */
+function distanceSquaredBetween(a, b) {
+  return b.subtract(a).magnitudeSquared();
+}
+
+/**
+ * Hashing key for a 2d point, rounded to nearest integer.
+ * Ordered, so sortable.
+ * @returns {number}
+ */
+function key() {
+  const x = Math.round(this.x);
+  const y = Math.round(this.y);
+  return (x << 16) ^ y;
 }
 
 /**
@@ -150,7 +199,7 @@ function flatMapPoints(ptsArr, transformFn) {
  * @param {Number}  distance  Distance to travel from the starting point.
  * @returns {Point}  Coordinates of point that lies distance away from origin along angle.
  */
-export function pointFromAngle(origin, radians, distance) {
+function pointFromAngle(origin, radians, distance) {
   const dx = Math.cos(radians);
   const dy = Math.sin(radians);
   return new this(origin.x + (dx * distance), origin.y + (dy * distance));
@@ -162,7 +211,7 @@ export function pointFromAngle(origin, radians, distance) {
  * @param {PIXI.Point} b
  * @returns {PIXI.Point}
  */
-export function midPoint(a, b) {
+function midPoint(a, b) {
   return new this( a.x + ((b.x - a.x) / 2), a.y + ((b.y - a.y) / 2));
 }
 

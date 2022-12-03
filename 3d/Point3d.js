@@ -54,6 +54,17 @@ export class Point3d extends PIXI.Point {
   }
 
   /**
+   * Hash key for this point, with coordinates rounded to nearest integer.
+   * Ordered, so sortable.
+   * @returns {BigInt}
+   */
+  key() {
+    const z = Math.round(p.z);
+    const key2d = super.key();
+    return (BigInt(key2d) << 32n) ^ BigInt(z);
+  }
+
+  /**
    * Drop the z dimension; return a new PIXI.Point
    * @param [object] [options]    Options that affect which axes are used
    * @param [string] [options.x]  Which 3d axis to use for the x axis
