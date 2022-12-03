@@ -3,7 +3,7 @@ PIXI
 */
 "use strict";
 
-import { Point3d } from "./Point3d.js";
+import { Point3d } from "./3d/Point3d.js";
 
 // Basic matrix operations
 // May eventually replace with math.js (when installed, call "math" to get functions)

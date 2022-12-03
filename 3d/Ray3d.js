@@ -4,15 +4,12 @@ canvas
 */
 "use strict";
 
-import { Point3d } from "./Point3d.js";
+import { Point3d, registerPoint3d } from "./Point3d.js";
 
-/**
- * Measure ray distance using the game rules for diagonals.
- * @param {boolean} gridSpaces Base distance on the number of grid spaces moved?
- * @returns {number}
- */
-function gameDistance(gridSpaces) {
-  return canvas.grid.grid.measureDistances([{ ray: this }], { gridSpaces });
+export function registerRay3d() {
+  registerPoint3d();
+  if ( foundry.utils.Geometry.Ray3d ) return;
+  foundry.utils.Geometry.Ray3d = Ray3d;
 }
 
 /**
