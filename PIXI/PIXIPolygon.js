@@ -142,30 +142,6 @@ function area() {
 }
 
 /**
- * Signed area of polygon
- * Similar approach to ClipperLib.Clipper.Area.
- * @returns {number}  Positive if clockwise. (b/c y-axis is reversed in Foundry)
- */
-function signedArea() {
-  const pts = [...this.iteratePoints(close: true)]
-  const ln = pts.length;
-  if ( ln < 3 ) return 0;
-
-  // (first + second) * (first - second)
-  // ...
-  // (last + first) * (last - first)
-
-  let area = 0;
-  for ( let i = 0; i < ln; i += 1 ) {
-    const iPt = pts[i];
-    const jPt = pts[i + 1];
-    area += (iPt.x + jPt.x) * (iPt.y - jPt.y)
-  }
-
-  return -area * 0.5;
-}
-
-/**
  * Calculate the centroid of the polygon
  * https://en.wikipedia.org/wiki/Centroid#Of_a_polygon
  * @returns {Point}
@@ -443,6 +419,29 @@ function reverseOrientation() {
   return this;
 }
 
+/**
+ * Signed area of polygon
+ * Similar approach to ClipperLib.Clipper.Area.
+ * @returns {number}  Positive if clockwise. (b/c y-axis is reversed in Foundry)
+ */
+function signedArea() {
+  const pts = [...this.iteratePoints(close: true)]
+  const ln = pts.length;
+  if ( ln < 3 ) return 0;
+
+  // (first + second) * (first - second)
+  // ...
+  // (last + first) * (last - first)
+
+  let area = 0;
+  for ( let i = 0; i < ln; i += 1 ) {
+    const iPt = pts[i];
+    const jPt = pts[i + 1];
+    area += (iPt.x + jPt.x) * (iPt.y - jPt.y)
+  }
+
+  return -area * 0.5;
+}
 
 /**
  * Test the point against existing hull points.
