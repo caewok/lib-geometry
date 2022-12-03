@@ -3,8 +3,6 @@ PIXI
 */
 "use strict";
 
-import { pointsAlmostEqual } from "./shapes/util.js";
-
 /**
  * @typedef {WeilerAthertonClipperConfig} WeilerAthertonClipperConfig
  * @property {number}   [density]    The desired density of the approximated circle, a number per PI
@@ -239,17 +237,17 @@ export class WeilerAthertonClipper extends PIXI.Polygon {
     const ln = points.length;
     if ( ln < 6 ) return []; // Minimum 3 Points required
 
-    let a = { x: points[0], y: points[1] };
+    let a = new PIXI.Point(points[0], points[1]);
     const pointsIxs = [a];
 
     // Closed polygon, so we can use the last point to circle back
     for ( let i = 2; i < ln; i += 2) {
-      const b = { x: points[i], y: points[i+1] };
+      const b = new PIXI.Point(points[i], points[i + 1])
       const ixs = this._findIntersections(a, b, clipObject);
       const ixsLn = ixs.length;
       if ( ixsLn ) {
-        if ( pointsAlmostEqual(ixs[0], a) ) pointsIxs.pop();
-        if ( pointsAlmostEqual(ixs[ixsLn - 1], b) ) ixs.pop(); // Get next round
+        if ( a.almostEqual(ixs[0]) ) pointsIxs.pop();
+        if ( b.almostEqual(ixs[ixsLn - 1]) ) ixs.pop(); // Get next round
         pointsIxs.push(...ixs);
       }
       pointsIxs.push(b);
