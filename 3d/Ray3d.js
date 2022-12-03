@@ -7,15 +7,6 @@ canvas
 import { Point3d } from "./Point3d.js";
 import { projectElevatedPoint } from "./util.js";
 
-// Add methods to Ray (2d)
-export function registerRayMethods() {
-  Object.defineProperty(Ray.prototype, "gameDistance", {
-    value: gameDistance,
-    writable: true,
-    configurable: true
-  });
-}
-
 /**
  * Measure ray distance using the game rules for diagonals.
  * @param {boolean} gridSpaces Base distance on the number of grid spaces moved?
@@ -95,17 +86,5 @@ export class Ray3d extends Ray {
   projectOntoCanvas() {
     const [newA, newB] = projectElevatedPoint(this.A, this.B);
     return new Ray(newA, newB);
-  }
-
-  /**
-   * Measure ray distance using the game rules for diagonals.
-   * The trick here is to first project the ray to the 2d canvas in a manner that
-   * preserves diagonal movement.
-   * @param {boolean} gridSpaces Base distance on the number of grid spaces moved?
-   * @returns {number}
-   */
-  gameDistance(gridSpaces) {
-    const r = this.projectOntoCanvas();
-    return r.gameDistance(gridSpaces);
   }
 }
