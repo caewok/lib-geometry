@@ -15,13 +15,6 @@ export function registerPIXIPolygonMethods() {
 
   // ----- Getters/Setters ----- //
 
-  if ( !Object.hasOwn(PIXI.Polygon.prototype, "isClockwise") ) {
-    Object.defineProperty(PIXI.Polygon.prototype, "isClockwise", {
-      get: isClockwise,
-      enumerable: false
-    });
-  }
-
   if ( !Object.hasOwn(PIXI.Polygon.prototype, "area") ) {
     Object.defineProperty(PIXI.Polygon.prototype, "area", {
       get: area,
@@ -32,6 +25,13 @@ export function registerPIXIPolygonMethods() {
   if ( !Object.hasOwn(PIXI.Polygon.prototype, "center") ) {
     Object.defineProperty(PIXI.Polygon.prototype, "center", {
       get: centroid,
+      enumerable: false
+    });
+  }
+
+  if ( !Object.hasOwn(PIXI.Polygon.prototype, "isClockwise") ) {
+    Object.defineProperty(PIXI.Polygon.prototype, "isClockwise", {
+      get: isClockwise,
       enumerable: false
     });
   }
@@ -255,11 +255,9 @@ function convexHullCmpFn(a, b) {
  * @returns {boolean}
  */
 function isClockwise() {
-  if ( typeof this._isClockwise === "undefined") {
-    this.close();
-    const path = this.toClipperPoints();
-    this._isClockwise = ClipperLib.Clipper.Orientation(path);
-  }
+  if ( this.points.length < 6 ) return (this._isClockwise = undefined);
+
+  if ( typeof this._isClockwise === "undefined") this._isClockwise = this.area > 0;
   return this._isClockwise;
 }
 
