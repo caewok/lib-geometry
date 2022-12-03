@@ -12,6 +12,7 @@ import { Point3d } from "./Point3d.js";
 import { ClipperPaths } from "./ClipperPaths.js";
 import { Plane } from "./Plane.js";
 import { TokenPoints3d } from "./TokenPoints3d.js";
+import { Draw } from "./Draw.js";
 
 /* Testing
 api = game.modules.get("tokenvisibility").api
@@ -456,12 +457,10 @@ export class Shadow extends PIXI.Polygon {
    * @param {HexString} color   Color of outline shape
    * @param {number} width      Width of outline shape
    * @param {HexString} fill    Color used to fill the shape
-   * @param {number} alpha      Alpha transparency between 0 and 1
+   * @param {number} fillAlpha      Alpha transparency between 0 and 1
    */
-  draw({ color = COLORS.gray, width = 1, fill = COLORS.gray, alpha = .5 } = {} ) {
-    canvas.controls.debug.beginFill(fill, alpha);
-    drawShape(this, { color, width });
-    canvas.controls.debug.endFill();
+  draw({ color = Draw.COLORS.gray, width = 1, fill = Draw.COLORS.gray, fillAlpha = .5 } = {} ) {
+    Draw.shape(this, { color, width, fill, fillAlpha });
   }
 
   /**
