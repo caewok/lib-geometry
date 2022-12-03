@@ -5,7 +5,6 @@ canvas
 "use strict";
 
 import { Point3d } from "./Point3d.js";
-import { projectElevatedPoint } from "./util.js";
 
 /**
  * Measure ray distance using the game rules for diagonals.
