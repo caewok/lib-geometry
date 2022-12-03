@@ -6,12 +6,11 @@ Ray
 */
 "use strict";
 
-import { zValue } from "../util.js";
-import { COLORS, drawShape } from "../drawing.js";
-import { Point3d } from "./Point3d.js";
+import { Point3d } from "./3d/Point3d.js";
 import { ClipperPaths } from "./ClipperPaths.js";
-import { Plane } from "./Plane.js";
-import { TokenPoints3d } from "./TokenPoints3d.js";
+import { Plane } from "./3d/Plane.js";
+// import { TokenPoints3d } from "./TokenPoints3d.js";
+import { Draw } from "./Draw.js";
 
 /* Testing
 api = game.modules.get("tokenvisibility").api
@@ -103,7 +102,14 @@ export class Shadow extends PIXI.Polygon {
 
   }
 
-  static zValue = zValue;
+  /**
+   * Convert grid unit elevation to a pixel value that aligns with x,y coords.
+   * @returns {number}
+   */
+  static zValue() {
+    const { distance, size } = canvas.scene.grid;
+    return (value * size) / distance;
+  }
 
   static upV = new Point3d(0, 0, 1);
 
@@ -410,45 +416,45 @@ export class Shadow extends PIXI.Polygon {
    * @param {boolean} [halfHeight]      Whether to use half the token height
    * @returns {Shadow[]|null}
    */
-  static constructfromToken(token, origin, { surfaceElevation = 0, type = "sight", halfHeight = false } = {}) {
-    // If the viewer elevation equals the surface elevation, no shadows to be seen
-    if ( origin.z.almostEqual(surfaceElevation) ) return null;
-
-    // Need Token3dPoints to find the sides that face the origin.
-    const token3d = new TokenPoints3d(token, { type, halfHeight });
-    const { bottomZ, topZ } = token3d;
-
-    // Run simple tests to avoid further computation
-    // Viewer and the surface elevation both above the wall, so no shadow
-    if ( origin.z >= topZ && surfaceElevation >= topZ ) return null;
-
-    // Viewer and the surface elevation both below the wall, so no shadow
-    else if ( origin.z <= bottomZ && surfaceElevation <= bottomZ ) return null;
-
-    // Projecting downward from source; if below bottom of wall, no shadow.
-    else if ( origin.z >= surfaceElevation && origin.z <= bottomZ ) return null;
-
-    // Projecting upward from source; if above bottom of wall, no shadow.
-    else if ( origin.z <= surfaceElevation && origin.z >= topZ ) return null;
-
-    const sides = token3d._viewableSides(origin);
-
-    const shadows = [];
-    for ( const side of sides ) {
-      // Build a "wall" based on side points
-      // Need bottomZ, topZ, A, B
-      const wall = {
-        A: side.points[0],
-        B: side.points[3],
-        topZ,
-        bottomZ
-      };
-      const shadow = Shadow.constructFromWall(wall, origin, surfaceElevation);
-      if ( shadow ) shadows.push(shadow);
-    }
-
-    return shadows;
-  }
+//   static constructfromToken(token, origin, { surfaceElevation = 0, type = "sight", halfHeight = false } = {}) {
+//     // If the viewer elevation equals the surface elevation, no shadows to be seen
+//     if ( origin.z.almostEqual(surfaceElevation) ) return null;
+//
+//     // Need Token3dPoints to find the sides that face the origin.
+//     const token3d = new TokenPoints3d(token, { type, halfHeight });
+//     const { bottomZ, topZ } = token3d;
+//
+//     // Run simple tests to avoid further computation
+//     // Viewer and the surface elevation both above the wall, so no shadow
+//     if ( origin.z >= topZ && surfaceElevation >= topZ ) return null;
+//
+//     // Viewer and the surface elevation both below the wall, so no shadow
+//     else if ( origin.z <= bottomZ && surfaceElevation <= bottomZ ) return null;
+//
+//     // Projecting downward from source; if below bottom of wall, no shadow.
+//     else if ( origin.z >= surfaceElevation && origin.z <= bottomZ ) return null;
+//
+//     // Projecting upward from source; if above bottom of wall, no shadow.
+//     else if ( origin.z <= surfaceElevation && origin.z >= topZ ) return null;
+//
+//     const sides = token3d._viewableSides(origin);
+//
+//     const shadows = [];
+//     for ( const side of sides ) {
+//       // Build a "wall" based on side points
+//       // Need bottomZ, topZ, A, B
+//       const wall = {
+//         A: side.points[0],
+//         B: side.points[3],
+//         topZ,
+//         bottomZ
+//       };
+//       const shadow = Shadow.constructFromWall(wall, origin, surfaceElevation);
+//       if ( shadow ) shadows.push(shadow);
+//     }
+//
+//     return shadows;
+//   }
 
   /**
    * Draw a shadow shape on canvas. Used for debugging.
@@ -456,12 +462,10 @@ export class Shadow extends PIXI.Polygon {
    * @param {HexString} color   Color of outline shape
    * @param {number} width      Width of outline shape
    * @param {HexString} fill    Color used to fill the shape
-   * @param {number} alpha      Alpha transparency between 0 and 1
+   * @param {number} fillAlpha      Alpha transparency between 0 and 1
    */
-  draw({ color = COLORS.gray, width = 1, fill = COLORS.gray, alpha = .5 } = {} ) {
-    canvas.controls.debug.beginFill(fill, alpha);
-    drawShape(this, { color, width });
-    canvas.controls.debug.endFill();
+  draw({ color = Draw.COLORS.gray, width = 1, fill = Draw.COLORS.gray, fillAlpha = .5 } = {} ) {
+    Draw.shape(this, { color, width, fill, fillAlpha });
   }
 
   /**

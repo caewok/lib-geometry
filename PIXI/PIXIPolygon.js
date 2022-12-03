@@ -15,13 +15,6 @@ export function registerPIXIPolygonMethods() {
 
   // ----- Getters/Setters ----- //
 
-  if ( !Object.hasOwn(PIXI.Polygon.prototype, "isClockwise") ) {
-    Object.defineProperty(PIXI.Polygon.prototype, "isClockwise", {
-      get: isClockwise,
-      enumerable: false
-    });
-  }
-
   if ( !Object.hasOwn(PIXI.Polygon.prototype, "area") ) {
     Object.defineProperty(PIXI.Polygon.prototype, "area", {
       get: area,
@@ -32,6 +25,13 @@ export function registerPIXIPolygonMethods() {
   if ( !Object.hasOwn(PIXI.Polygon.prototype, "center") ) {
     Object.defineProperty(PIXI.Polygon.prototype, "center", {
       get: centroid,
+      enumerable: false
+    });
+  }
+
+  if ( !Object.hasOwn(PIXI.Polygon.prototype, "isClockwise") ) {
+    Object.defineProperty(PIXI.Polygon.prototype, "isClockwise", {
+      get: isClockwise,
       enumerable: false
     });
   }
@@ -52,18 +52,20 @@ export function registerPIXIPolygonMethods() {
 
   // ----- Methods ----- //
 
-  Object.defineProperty(PIXI.Polygon.prototype, "close", {
-    value: function() {
-      if ( this.isClosed ) return;
-      if ( this.points.length < 2 ) return;
-      this.addPoint({x: this.points[0], y: this.points[1]});
-    },
+  Object.defineProperty(PIXI.Polygon.prototype, "clipperClip", {
+    value: clipperClip,
     writable: true,
     configurable: true
   });
 
   Object.defineProperty(PIXI.Polygon, "convexhull", {
     value: convexhull,
+    writable: true,
+    configurable: true
+  });
+
+  Object.defineProperty(PIXI.Polygon.prototype, "isSegmentEnclosed", {
+    value: isSegmentEnclosed,
     writable: true,
     configurable: true
   });
@@ -142,30 +144,6 @@ function area() {
 }
 
 /**
- * Signed area of polygon
- * Similar approach to ClipperLib.Clipper.Area.
- * @returns {number}  Positive if clockwise. (b/c y-axis is reversed in Foundry)
- */
-function signedArea() {
-  const pts = [...this.iteratePoints(close: true)]
-  const ln = pts.length;
-  if ( ln < 3 ) return 0;
-
-  // (first + second) * (first - second)
-  // ...
-  // (last + first) * (last - first)
-
-  let area = 0;
-  for ( let i = 0; i < ln; i += 1 ) {
-    const iPt = pts[i];
-    const jPt = pts[i + 1];
-    area += (iPt.x + jPt.x) * (iPt.y - jPt.y)
-  }
-
-  return -area * 0.5;
-}
-
-/**
  * Calculate the centroid of the polygon
  * https://en.wikipedia.org/wiki/Centroid#Of_a_polygon
  * @returns {Point}
@@ -200,6 +178,27 @@ function centroid() {
   outPoint.y *= areaMult;
 
   return outPoint;
+}
+
+/**
+ * Clip a polygon with another.
+ * Union, Intersect, diff, x-or
+ * @param {PIXI.Polygon} poly   Polygon to clip against this one.
+ * @param {object} [options]
+ * @param {ClipperLib.ClipType} [options.cliptype]  Type of clipping
+ * @return [ClipperLib.Paths[]] Array of Clipper paths
+ */
+function clipperClip(poly, { cliptype = ClipperLib.ClipType.ctUnion } = {}) {
+  const subj = this.toClipperPoints();
+  const clip = poly.toClipperPoints();
+
+  const solution = new ClipperLib.Paths();
+  const c = new ClipperLib.Clipper();
+  c.AddPath(subj, ClipperLib.PolyType.ptSubject, true); // True to be considered closed
+  c.AddPath(clip, ClipperLib.PolyType.ptClip, true);
+  c.Execute(cliptype, solution);
+
+  return solution;
 }
 
 /**
@@ -255,12 +254,44 @@ function convexHullCmpFn(a, b) {
  * @returns {boolean}
  */
 function isClockwise() {
-  if ( typeof this._isClockwise === "undefined") {
-    this.close();
-    const path = this.toClipperPoints();
-    this._isClockwise = ClipperLib.Clipper.Orientation(path);
-  }
+  if ( this.points.length < 6 ) return (this._isClockwise = undefined);
+
+  if ( typeof this._isClockwise === "undefined") this._isClockwise = this.area > 0;
   return this._isClockwise;
+}
+
+
+/**
+ * Test if a segment is enclosed by the polygon.
+ * @param {Segment} segment      Segment denoted by A and B points.
+ * @param {object} [options]  Options that affect the test
+ * @param {number} [options.epsilon]      Tolerance when testing for equality
+ * @returns {boolean} True is segment is enclosed by the polygon
+ */
+function isSegmentEnclosed(segment, { epsilon = 1e-08 } = {}) {
+  const { A, B } = segment;
+  const aInside = this.contains(A.x, A.y);
+  const bInside = this.contains(B.x, B.y);
+
+  // If either point outside, then not enclosed
+  if ( !aInside || !bInside ) return false;
+
+  // Could still (a) have an endpoint on an edge or (b) be an edge or (c) cross the polygon edge 2+ times.
+  const points = this.points;
+  const ln = points.length - 2;
+  for ( let i = 0; i < ln; i += 2 ) {
+    const edgeA = { x: points[i], y: points[i+1] };
+    if ( edgeA.x.almostEqual(A.x, epsilon) && edgeA.y.almostEqual(A.y, epsilon) ) return false;
+    if ( edgeA.x.almostEqual(B.x, epsilon) && edgeA.y.almostEqual(B.y, epsilon) ) return false;
+
+    const edgeB = { x: points[i+2], y: points[i+3] };
+    if ( edgeB.x.almostEqual(A.x, epsilon) && edgeB.y.almostEqual(A.y, epsilon) ) return false;
+    if ( edgeB.x.almostEqual(B.x, epsilon) && edgeB.y.almostEqual(B.y, epsilon) ) return false;
+
+    if ( foundry.utils.lineSegmentIntersects(edgeA, edgeB, A, B) ) return false;
+  }
+
+  return true;
 }
 
 /**
@@ -445,6 +476,29 @@ function reverseOrientation() {
   return this;
 }
 
+/**
+ * Signed area of polygon
+ * Similar approach to ClipperLib.Clipper.Area.
+ * @returns {number}  Positive if clockwise. (b/c y-axis is reversed in Foundry)
+ */
+function signedArea() {
+  const pts = [...this.iteratePoints(close: true)]
+  const ln = pts.length;
+  if ( ln < 3 ) return 0;
+
+  // (first + second) * (first - second)
+  // ...
+  // (last + first) * (last - first)
+
+  let area = 0;
+  for ( let i = 0; i < ln; i += 1 ) {
+    const iPt = pts[i];
+    const jPt = pts[i + 1];
+    area += (iPt.x + jPt.x) * (iPt.y - jPt.y)
+  }
+
+  return -area * 0.5;
+}
 
 /**
  * Test the point against existing hull points.
