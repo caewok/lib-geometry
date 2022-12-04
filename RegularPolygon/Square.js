@@ -82,10 +82,10 @@ export class Square extends RegularPolygon {
     const r = this.radius;
 
     return [
-      { x: r, y: 0 },
-      { x: 0, y: r },
-      { x: -r, y: 0 },
-      { x: 0, y: -r }
+      new PIXI.Point(r, 0),
+      new PIXI.Point(0, r),
+      new PIXI.Point(-r, 0),
+      new PIXI.Point(0, -r)
     ];
   }
 
