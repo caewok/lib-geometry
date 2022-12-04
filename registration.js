@@ -47,31 +47,23 @@ import { Shadow } from "./Shadow.js";
 // ClipperPaths
 import { ClipperPaths } from "./ClipperPaths.js";
 
-export function registerGeometry(categories = []) {
-  // Always register additions to methods
+export function registerGeometry() {
   registerPIXIPolygonMethods();
   registerPIXICircleMethods();
   registerPIXIRectangleMethods();
   registerPIXIPointMethods();
   registerFoundryUtilsMethods();
 
-  for ( const category of categories ) REGISTER[category]();
+  registerCenteredPolygons();
+  registerRegularPolygons();
+  registerDraw();
+  registerEllipse();
+  registerShadow();
+  registerMatrix();
+  registerWeilerAthertonClipper();
+  registerClipperPaths();
 }
 
-const REGISTER = {
-  CenteredPolygons: registerCenteredPolygons,
-  RegularPolygons: registerRegularPolygons,
-  Draw: registerDraw,
-  ThreeD: register3d,
-  Ellipse: registerEllipse,
-  Shadow: registerShadow,
-  Matrix: registerMatrix,
-  WeilerAthertonClipper: registerWeilerAthertonClipper,
-  ClipperPaths: registerClipperPaths
-}
-
-
-// Store new geometry classes in foundry.utils
 export function registerCenteredPolygons() {
   CONFIG.GeometryLib ??= {};
   if ( CONFIG.GeometryLib.CenteredPolygons ) return;
