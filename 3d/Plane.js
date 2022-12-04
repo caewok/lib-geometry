@@ -4,8 +4,7 @@
 "use strict";
 
 import { Point3d } from "./Point3d.js";
-import { Matrix } from "./Matrix.js";
-import { lineSegment3dPlaneIntersects } from "../util.js";
+import { Matrix } from "../Matrix.js";
 
 // Class to represent a plane
 export class Plane {
@@ -156,7 +155,7 @@ export class Plane {
   lineSegmentIntersects(a, b) {
     const vs = this.getVectorsOnPlane();
     const p0 = this.point;
-    return lineSegment3dPlaneIntersects(a, b, p0, p0.add(vs.u), p0.add(vs.v));
+    return foundry.utils.lineSegment3dPlaneIntersects(a, b, p0, p0.add(vs.u), p0.add(vs.v));
   }
 
 }

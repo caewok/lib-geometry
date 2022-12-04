@@ -3,11 +3,6 @@
 */
 "use strict";
 
-import { Point3d } from "./Point3d.js";
-
-// Store √3 as a constant
-Math.SQRT3 = Math.sqrt(3);
-
 // Store some functions in foundry.utils for general use
 export function registerFoundryUtilsMethods() {
   if ( foundry.utils.orient3dFast ) return;
@@ -29,6 +24,70 @@ export function registerFoundryUtilsMethods() {
     writable: true,
     configurable: true
   });
+
+  Object.defineProperty(foundry.utils, "lineSegment3dPlaneIntersects", {
+    value: lineSegment3dPlaneIntersects,
+    writable: true,
+    configurable: true
+  });
+
+  Object.defineProperty(foundry.utils, "lineSegmentCrosses", {
+    value: lineSegmentCrosses,
+    writable: true,
+    configurable: true
+  });
+}
+
+/**
+ * Like foundry.utils.lineSegmentIntersects but requires the two segments cross.
+ * In other words, sharing endpoints or an endpoint on the other segment does not count.
+ * @param {Point} a                   The first endpoint of segment AB
+ * @param {Point} b                   The second endpoint of segment AB
+ * @param {Point} c                   The first endpoint of segment CD
+ * @param {Point} d                   The second endpoint of segment CD
+ *
+ * @returns {boolean}                 Do the line segments cross?
+ */
+export function lineSegmentCrosses(a, b, c, d) {
+  const xa = foundry.utils.orient2dFast(a, b, c);
+  if ( !xa ) return false;
+
+  const xb = foundry.utils.orient2dFast(a, b, d);
+  if ( !xb ) return false;
+
+  const xc = foundry.utils.orient2dFast(c, d, a);
+  if ( !xc ) return false;
+
+  const xd = foundry.utils.orient2dFast(c, d, b);
+  if ( !xd ) return false;
+
+  const xab = (xa * xb) < 0; // Cannot be equal to 0.
+  const xcd = (xc * xd) < 0; // Cannot be equal to 0.
+
+  return xab && xcd;
+}
+
+/**
+ * Quickly test whether the line segment AB intersects with a plane.
+ * This method does not determine the point of intersection, for that use lineLineIntersection.
+ * Each Point3d should have {x, y, z} coordinates.
+ *
+ * @param {Point3d} a   The first endpoint of segment AB
+ * @param {Point3d} b   The second endpoint of segment AB
+ * @param {Point3d} c   The first point defining the plane
+ * @param {Point3d} d   The second point defining the plane
+ * @param {Point3d} e   The third point defining the plane.
+ *                      Optional. Default is for the plane to go up in the z direction.
+ *
+ * @returns {boolean} Does the line segment intersect the plane?
+ * Note that if the segment is part of the plane, this returns false.
+ */
+export function lineSegment3dPlaneIntersects(a, b, c, d, e = { x: c.x, y: c.y, z: c.z + 1 }) {
+  // A and b must be on opposite sides.
+  // Parallels the 2d case.
+  const xa = foundry.utils.orient3dFast(a, c, d, e);
+  const xb = foundry.utils.orient3dFast(b, c, d, e);
+  return xa * xb <= 0;
 }
 
 /**
