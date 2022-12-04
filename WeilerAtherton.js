@@ -68,7 +68,6 @@ export class WeilerAthertonClipper extends PIXI.Polygon {
   constructor(points = [], { union = true, clippingOpts = {} } = {}) {
     super(points);
 
-    this.close();
     if ( !this.isClockwise ) this.reverseOrientation();
 
     /**
@@ -235,18 +234,13 @@ export class WeilerAthertonClipper extends PIXI.Polygon {
    * @returns {Point[]}
    */
   _buildPointIntersectionArray(clipObject) {
-    const points = this.points;
-    const ln = points.length;
-    if ( ln < 6 ) return []; // Minimum 3 Points required
+    if ( this.points.length < 6 ) return []; // Minimum 3 Points required
 
-//     closePoints(points);
-
-    let a = new PIXI.Point(points[0], points[1]);
+    const ptsIter = this.iteratePoints({ close: true });
+    let a = ptsIter.next().value;
     const pointsIxs = [a];
 
-    // Closed polygon, so we can use the last point to circle back
-    for ( let i = 2; i < ln; i += 2) {
-      const b = new PIXI.Point(points[i], points[i + 1])
+    for ( const b of ptsIter ) {
       const ixs = this._findIntersections(a, b, clipObject);
       const ixsLn = ixs.length;
       if ( ixsLn ) {
@@ -258,8 +252,46 @@ export class WeilerAthertonClipper extends PIXI.Polygon {
 
       a = b;
     }
+
     return pointsIxs;
   }
+
+   // ptsIter = los.iteratePoints({close: true});
+//    let a = ptsIter.next().value;
+//    console.log(`${a.x},${a.y}`)
+//    for ( const b of ptsIter ) {
+//      console.log(`a: ${a.x},${a.y}; b: ${b.x},${b.y}`);
+//      a = b;
+//    }
+
+
+//   _buildPointIntersectionArray(clipObject) {
+//
+//     if ( this.points.length < 6 ) return []; // Minimum 3 Points required
+//
+//     const points = duplicate(this.points);
+//     closePoints(points);
+//     const ln = points.length;
+//
+//     let a = new PIXI.Point(points[0], points[1]);
+//     const pointsIxs = [a];
+//
+//     // Closed polygon, so we can use the last point to circle back
+//     for ( let i = 2; i < ln; i += 2) {
+//       const b = new PIXI.Point(points[i], points[i + 1])
+//       const ixs = this._findIntersections(a, b, clipObject);
+//       const ixsLn = ixs.length;
+//       if ( ixsLn ) {
+//         if ( a.almostEqual(ixs[0]) ) pointsIxs.pop();
+//         if ( b.almostEqual(ixs[ixsLn - 1]) ) ixs.pop(); // Get next round
+//         pointsIxs.push(...ixs);
+//       }
+//       pointsIxs.push(b);
+//
+//       a = b;
+//     }
+//     return pointsIxs;
+//   }
 
   /**
    * Given a set of points that are either endpoints or intersections of this polygon,
@@ -367,12 +399,9 @@ export class WeilerAthertonClipper extends PIXI.Polygon {
   }
 }
 
-/**
- * If points do not include the starting point, add.
- */
-function closePoints(points) {
-  const ln = points.length;
-  if ( ln < 2 ) return;
-  if ( points[0] !== points[ln - 2] || points[1] !== points[ln - 1] ) points.push(points[0], points[1]);
-  return points;
-}
+// function closePoints(points) {
+//   const ln = points.length;
+//   if ( ln < 2 ) return;
+//   if ( points[0] !== points[ln - 2] || points[1] !== points[ln - 1] ) points.push(points[0], points[1]);
+//   return points;
+// }
