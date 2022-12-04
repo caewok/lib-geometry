@@ -166,7 +166,7 @@ export class Shadow extends PIXI.Polygon {
     if ( Ve <= Te ) return null; // Vision object blocked completely by wall
 
     // Need the point of the wall that forms a perpendicular line to the vision object
-    const Tix = perpendicularPoint(wall.A, wall.B, source);
+    const Tix = CONFIG.GeometryLib.utils.perpendicularPoint(wall.A, wall.B, source);
     if ( !Tix ) return null; // Line collinear with vision object
     const VT = new Ray(source, Tix);
 
@@ -199,8 +199,8 @@ export class Shadow extends PIXI.Polygon {
     // V --> O --> ? (wall.A side and wall.B side)
 
     // Get the distances between Tix and the wall endpoints.
-    const distA = distanceBetweenPoints(wall.A, Tix);
-    const distB = distanceBetweenPoints(wall.B, Tix);
+    const distA = PIXI.Point.distanceBetween(wall.A, Tix);
+    const distB = PIXI.Point.distanceBetween(wall.B, Tix);
 
 
     /* Testing
