@@ -58,6 +58,19 @@ export function registerPIXIPolygonMethods() {
     configurable: true
   });
 
+  /**
+   * Close this polygon if needed.
+   */
+  Object.defineProperty(PIXI.Polygon.prototype, "close", {
+    value: function() {
+      if ( this.isClosed ) return;
+      if ( this.points.length < 2 ) return;
+      this.addPoint({x: this.points[0], y: this.points[1]});
+    },
+    writable: true,
+    configurable: true
+  });
+
   Object.defineProperty(PIXI.Polygon, "convexhull", {
     value: convexhull,
     writable: true,
