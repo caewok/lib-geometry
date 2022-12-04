@@ -5,7 +5,7 @@ canvas
 */
 "use strict";
 
-import * as drawing from "../drawing.js";
+import { Draw } from "./Draw.js";
 
 /**
  * Class to manage ClipperPaths for multiple polygons.
