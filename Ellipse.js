@@ -1,7 +1,10 @@
 /* globals
-PIXI
+PIXI,
+ClipperLib
 */
 "use strict";
+
+import { WeilerAthertonClipper } from "./WeilerAtherton.js";
 
 /* Testing
 api = game.modules.get('tokenvisibility').api;
@@ -106,7 +109,7 @@ export class Ellipse extends PIXI.Ellipse {
    * @returns {PIXI.Point}
    */
   fromCartesianCoords(a, outPoint) {
-    outPoint ??= new PIXI.Point;
+    outPoint ??= new PIXI.Point();
 
     a.translate(-this.x, -this.y, outPoint).rotate(-this.radians, outPoint);
     return outPoint;
@@ -119,14 +122,14 @@ export class Ellipse extends PIXI.Ellipse {
    * @returns {Point}
    */
   toCartesianCoords(a, outPoint) {
-    outPoint ??= new PIXI.Point;
+    outPoint ??= new PIXI.Point();
 
     a.rotate(this.radians, outPoint).translate(this.x, this.y, outPoint);
     return outPoint;
   }
 
   toCircleCoords(a, outPoint) {
-    outPoint ??= new PIXI.Point;
+    outPoint ??= new PIXI.Point();
 
     outPoint.x = a.x * this.ratioInv;
     outPoint.y = a.y;
@@ -134,7 +137,7 @@ export class Ellipse extends PIXI.Ellipse {
   }
 
   fromCircleCoords(a, outPoint) {
-    outPoint ??= new PIXI.Point;
+    outPoint ??= new PIXI.Point();
 
     outPoint.x = a.x * this.ratio;
     outPoint.y = a.y;
@@ -211,7 +214,7 @@ export class Ellipse extends PIXI.Ellipse {
     const pts = Array(ln);
     for ( let i = 0; i < ln; i += 2 ) {
       const cirPt = new PIXI.Point(cirPts[i], cirPts[i + 1]);
-      const ePt = new PIXI.Point()
+      const ePt = new PIXI.Point();
 
       this.fromCircleCoords(cirPt, cirPt);
       this.toCartesianCoords(ePt, ePt);
@@ -222,5 +225,85 @@ export class Ellipse extends PIXI.Ellipse {
 
     cirPoly.points = pts;
     return cirPoly;
+  }
+
+  /**
+   * Get all the intersection points for a segment A|B
+   * Intersections must be sorted from A to B
+   * @param {Point} a
+   * @param {Point} b
+   * @returns {Point[]}
+   */
+  segmentIntersections(a, b) {
+    // Translate to a circle
+    const cir = this._toCircle();
+
+    // Move to ellipse coordinates and then to circle coordinates
+    a = this.toCircleCoords(this.fromCartesianCoords(a));
+    b = this.toCircleCoords(this.fromCartesianCoords(b));
+
+    // Get the intersection points and convert back to cartesian coords;
+    const ixs = cir.segmentIntersections(a, b);
+    return ixs.map(ix => this.toCartesianCoords(this.fromCircleCoords(ix)));
+  }
+
+  /**
+   * Get all the points for a polygon approximation of a circle between two points on the circle.
+   * Points are clockwise from a to b.
+   * @param { Point } a
+   * @param { Point } b
+   * @return { Point[]}
+   */
+  pointsBetween(a, b, { density } = {}) {
+    // Default to the larger radius for density
+    density ??= PIXI.Circle.approximateVertexDensity(this.major);
+
+    // Translate to a circle
+    const cir = this._toCircle();
+
+    // Move to ellipse coordinates and then to circle coordinates
+    a = this.toCircleCoords(this.fromCartesianCoords(a));
+    b = this.toCircleCoords(this.fromCartesianCoords(b));
+
+    // Get the points and translate back to cartesian coordinates
+    const pts = cir.pointsBetween(a, b, { density });
+    return pts.map(pt => this.toCartesianCoords(this.fromCircleCoords(pt)));
+  }
+
+  /**
+   * Intersect this shape with a PIXI.Polygon.
+   * Use WeilerAtherton to perform precise intersect.
+   * @param {PIXI.Polygon} polygon      A PIXI.Polygon
+   * @param {object} [options]          Options which configure how the intersection is computed
+   * @param {number} [options.density]        Number of points in the polygon approximation of the ellipse
+   * @param {number} [options.clipType]       The clipper clip type (union or intersect will use WA)
+   * @param {number} [options.scalingFactor]  A scaling factor passed to Polygon#toClipperPoints to preserve precision
+   * @returns {PIXI.Polygon|null}       The intersected polygon or null if no solution was present
+   */
+  intersectPolygon(polygon, options) {
+    if ( !this.major || !this.minor ) return new PIXI.Polygon([]);
+
+    // Default to the larger radius for density
+    options.density ??= PIXI.Circle.approximateVertexDensity(this.major);
+
+    options.clipType ??= ClipperLib.ClipType.ctIntersection;
+    if ( options.clipType !== ClipperLib.ClipType.ctIntersection
+      && options.clipType !== ClipperLib.ClipType.ctUnion) {
+      const ellipsePolygon = this.toPolygon({ density: options.density });
+      return polygon.intersectPolygon(ellipsePolygon, options);
+    }
+
+    polygon._preWApoints = [...polygon.points];
+
+    const union = options.clipType === ClipperLib.ClipType.ctUnion;
+    const wa = WeilerAthertonClipper.fromPolygon(polygon, { union, density: options.density });
+    const res = wa.combine(this)[0];
+
+    if ( !res ) {
+      console.warn("Ellipse.prototype.intersectPolygon returned undefined.");
+      return new PIXI.Polygon([]);
+    }
+
+    return res instanceof PIXI.Polygon ? res : res.toPolygon();
   }
 }

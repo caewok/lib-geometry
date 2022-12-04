@@ -393,7 +393,7 @@ function rotate(angle, outPoint) {
   const cAngle = Math.cos(angle);
   const sAngle = Math.sin(angle);
   outPoint.x = (this.x * cAngle) - (this.y * sAngle);
-  outPoint.y = (this.y * cAngle) + (this.x * sAngle)
+  outPoint.y = (this.y * cAngle) + (this.x * sAngle);
   return outPoint;
 }
 
