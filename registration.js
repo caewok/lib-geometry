@@ -68,7 +68,7 @@ export function registerCenteredPolygons() {
   CONFIG.GeometryLib ??= {};
   if ( CONFIG.GeometryLib.CenteredPolygons ) return;
 
-  foundry.utils.GeometryLib.CenteredPolygons = {
+  CONFIG.GeometryLib.CenteredPolygons = {
     CenteredPolygonBase,
     CenteredPolygon,
     CenteredRectangle
