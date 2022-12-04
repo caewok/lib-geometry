@@ -17,12 +17,15 @@ import { RegularPolygon } from "./RegularPolygon.js";
  * See https://martiancraft.com/blog/2017/03/geometry-of-stars/
  */
 export class RegularStar extends RegularPolygon {
+
+  /** @type {PIXI.Point[]} */
+  _outerPoints;
+
+  /** @type {PIXI.Point[]} */
+  _innerPoints;
+
   constructor(origin, radius, { numPoints = 5, rotation = 0} = {}) {
     super(origin, radius, { numSides: numPoints, rotation});
-
-    // Placeholders for getters
-    this._outerPoints = undefined;
-    this._innerPoints = undefined;
   }
 
   /**
@@ -74,11 +77,12 @@ export class RegularStar extends RegularPolygon {
 
       const pts = this.innerCircle.toPolygon({density: numPoints}).points;
       this._innerPoints = [];
+
+      const angle = Math.PI / numPoints;
       const ln = pts.length;
       for ( let i = 0; i < ln; i += 2 ) {
         // Rotate the inner points by half the angle between the outer points
         // So the inner point lies halfway between two outerpoints
-        const angle = Math.PI / (numPoints);
         const pt = new PIXI.Point(pts[i], pts[i + 1]);
         pt.rotate(angle, pt);
         this._innerPoints.push(pt);

@@ -20,6 +20,36 @@ import { WeilerAthertonClipper } from "../WeilerAtherton.js";
 export class RegularPolygon extends PIXI.Polygon {
 
   /**
+   * Vertices when the polygon is centered on 0,0.
+   * @type {PIXI.Point[]}
+   */
+  _fixedPoints;
+
+  /**
+   * Vertices taking into account the origin {x, y}.
+   * @type {number[]}
+   */
+  _points;
+
+  /** @type {boolean} */
+  _isClockwise = true;
+
+  /** @type {number} */
+  x = 0;
+
+  /** @type {number} */
+  y = 0;
+
+  /** @type {number} */
+  numSides = 3;
+
+  /** @type {number} */
+  rotation = 0;
+
+  /** @type {number} */
+  radians = 0;
+
+  /**
    * @param {Point} origin   Center point of the polygon.
    * @param {number} radius  Circumscribed circle radius.
    * @param {object} options Options that affect the polygon shape
@@ -34,14 +64,6 @@ export class RegularPolygon extends PIXI.Polygon {
     this.radius = radius;
     this.rotation = Math.normalizeDegrees(rotation);
     this.radians = Math.toRadians(this.rotation);
-
-    // Placeholders for getters
-    this._fixedPoints = undefined; // So that subclasses can override generateFixedPoints
-    this._points = undefined;
-
-    // Polygon properties
-    this._isClosed = true;
-    this._isClockwise = true;
   }
 
   get center() { return { x: this.x, y: this.y }; }
