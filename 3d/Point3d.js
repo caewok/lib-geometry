@@ -3,12 +3,6 @@ PIXI
 */
 "use strict";
 
-export function registerPoint3d() {
-  foundry.utils.Geometry ??= {};
-  if ( foundry.utils.Geometry.Point3d ) return;
-  foundry.utils.Geometry.Point3d = Point3d;
-}
-
 /**
  * 3-D version of PIXI.Point
  * See https://pixijs.download/dev/docs/packages_math_src_Point.ts.html

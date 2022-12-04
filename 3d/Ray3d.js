@@ -4,13 +4,8 @@ canvas
 */
 "use strict";
 
-import { Point3d, registerPoint3d } from "./Point3d.js";
+import { Point3d } from "./Point3d.js";
 
-export function registerRay3d() {
-  registerPoint3d();
-  if ( foundry.utils.Geometry.Ray3d ) return;
-  foundry.utils.Geometry.Ray3d = Ray3d;
-}
 
 /**
  * Using Point3d, extend the Ray class to 3 dimensions.
@@ -124,7 +119,7 @@ export class Ray3d extends Ray {
     A.x += ratio * this.dy;
     A.y -= ratio * this.dx;
 
-    log(`Projecting Gridless: A: (${this.A.x},${this.A.y},${this.A.z})->(${A.x}, ${A.y}); B: (${this.B.x}, ${this.B.y}, ${this.B.z})->(${B.x}, ${B.y})`);
+   // Debug: console.log(`Projecting Gridless: A: (${this.A.x},${this.A.y},${this.A.z})->(${A.x}, ${A.y}); B: (${this.B.x}, ${this.B.y}, ${this.B.z})->(${B.x}, ${B.y})`);
     return new Ray(A, B);
   }
 
@@ -159,7 +154,7 @@ export class Ray3d extends Ray {
     // Otherwise set B to point south, A pointing east
     else return this._projectEast();
 
-    log(`Projecting Square: A: (${this.A.x},${this.A.y},${this.A.z})->(${A.x},${A.y}); B: (${this.B.x},${this.B.y},${this.B.z})->(${B.x},${B.y})`);
+    // Debug: console.log(`Projecting Square: A: (${this.A.x},${this.A.y},${this.A.z})->(${A.x},${A.y}); B: (${this.B.x},${this.B.y},${this.B.z})->(${B.x},${B.y})`);
 
     return new Ray(A, B);
   }
@@ -178,7 +173,7 @@ export class Ray3d extends Ray {
     A.y += height;
     B.x -= distance;
 
-    log(`Projecting South: A: (${this.A.x},${this.A.y},${this.A.z})->(${A.x},${A.y}); B: (${this.B.x},${this.B.y},${this.B.z})->(${B.x},${B.y})`);
+    // Debug: console.log(`Projecting South: A: (${this.A.x},${this.A.y},${this.A.z})->(${A.x},${A.y}); B: (${this.B.x},${this.B.y},${this.B.z})->(${B.x},${B.y})`);
 
     return new Ray(A, B);
   }
@@ -197,7 +192,7 @@ export class Ray3d extends Ray {
     A.x += height;
     B.y += distance;
 
-    log(`Projecting East: A: (${this.A.x},${this.A.y},${this.A.z})->(${A.x},${A.y}); B: (${this.B.x},${this.B.y},${this.B.z})->(${B.x},${B.y})`);
+    // Debug: log(`Projecting East: A: (${this.A.x},${this.A.y},${this.A.z})->(${A.x},${A.y}); B: (${this.B.x},${this.B.y},${this.B.z})->(${B.x},${B.y})`);
 
     return new Ray(A, B);
   }
