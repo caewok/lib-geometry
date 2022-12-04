@@ -153,7 +153,7 @@ export function registerPIXIPolygonMethods() {
  * @returns {number}  Positive rea
  */
 function area() {
-  return Math.abs(this.signedArea);
+  return Math.abs(this.signedArea());
 }
 
 /**
@@ -173,7 +173,8 @@ function centroid() {
 
   const outPoint = new PIXI.Point();
   let area = 0;
-  for ( let i = 0; i < ln; i += 1 ) {
+  const iter = ln - 2;
+  for ( let i = 0; i < iter; i += 1 ) {
     const iPt = pts[i];
     const jPt = pts[i + 1];
     const mult = (iPt.x * jPt.y) - (jPt.x * iPt.y);
@@ -269,7 +270,7 @@ function convexHullCmpFn(a, b) {
 function isClockwise() {
   if ( this.points.length < 6 ) return (this._isClockwise = undefined);
 
-  if ( typeof this._isClockwise === "undefined") this._isClockwise = this.area > 0;
+  if ( typeof this._isClockwise === "undefined") this._isClockwise = this.signedArea() > 0;
   return this._isClockwise;
 }
 
@@ -337,17 +338,20 @@ function* iterateEdges({close = true} = {}) {
 
 /**
  * Iterate over the polygon's {x, y} points in order.
- * If the polygon is closed and close is false,
- * the last two points (which should equal the first two points) will be dropped.
- * Otherwise, all points will be returned regardless of the close value.
+ * @param {object} [options]
+ * @param {boolean} [close]   If close, include the first point again.
  * @returns {x, y} PIXI.Point
  */
 function* iteratePoints({close = true} = {}) {
-  const dropped = (!this.isClosed || close) ? 0 : 2;
-  const ln = this.points.length - dropped;
-  for (let i = 0; i < ln; i += 2) {
+  const ln = this.points.length;
+  if ( ln < 2 ) return;
+
+  const num = ln - (this.isClosed ? 2 : 0)
+  for (let i = 0; i < num; i += 2) {
     yield new PIXI.Point(this.points[i], this.points[i + 1]);
   }
+
+  if ( close ) yield new PIXI.Point(this.points[0], this.points[1]);
 }
 
 
@@ -501,7 +505,8 @@ function signedArea() {
   // (last + first) * (last - first)
 
   let area = 0;
-  for ( let i = 0; i < ln; i += 1 ) {
+  const iter = ln - 2;
+  for ( let i = 0; i < iter; i += 1 ) {
     const iPt = pts[i];
     const jPt = pts[i + 1];
     area += (iPt.x + jPt.x) * (iPt.y - jPt.y)
