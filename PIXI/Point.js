@@ -1,7 +1,11 @@
 /* globals
+CONFIG,
+PIXI,
 
 */
 "use strict";
+
+import { Point3d } from "../3d/Point3d.js";
 
 // Add methods to PIXI.Point
 export function registerPIXIPointMethods() {
@@ -30,7 +34,7 @@ export function registerPIXIPointMethods() {
   });
 
   Object.defineProperty(PIXI.Point, "distanceSquaredBetween", {
-    value: distanceBetween,
+    value: distanceSquaredBetween,
     writable: true,
     configurable: true
   });
@@ -183,13 +187,13 @@ function key() {
 function flatMapPoints(ptsArr, transformFn) {
   const N = ptsArr.length;
   const ln = N * 2;
-    const newArr = Array(ln);
-    for ( let i = 0; i < N; i += 1 ) {
-      const j = i * 2;
-      const pt = transformFn(ptsArr[i], i);
-      newArr[j] = pt.x;
-      newArr[j + 1] = pt.y;
-    }
+  const newArr = Array(ln);
+  for ( let i = 0; i < N; i += 1 ) {
+    const j = i * 2;
+    const pt = transformFn(ptsArr[i], i);
+    newArr[j] = pt.x;
+    newArr[j + 1] = pt.y;
+  }
   return newArr;
 }
 
@@ -341,9 +345,7 @@ function almostEqual2d(other, epsilon = 1e-08) {
  * @returns {PIXI.Point}
  */
 function normalize(outPoint) {
-  outPoint ??= new this.constructor();
-  this.multiplyScalar(1 / this.magnitude(), outPoint);
-  return outPoint;
+  return this.multiplyScalar(1 / this.magnitude(), outPoint);
 }
 
 /**
@@ -392,8 +394,10 @@ function rotate(angle, outPoint) {
 
   const cAngle = Math.cos(angle);
   const sAngle = Math.sin(angle);
-  outPoint.x = (this.x * cAngle) - (this.y * sAngle);
-  outPoint.y = (this.y * cAngle) + (this.x * sAngle);
+  const { x, y } = this; // Avoid accidentally using the outPoint values when calculating new y.
+
+  outPoint.x = (x * cAngle) - (y * sAngle);
+  outPoint.y = (y * cAngle) + (x * sAngle);
   return outPoint;
 }
 

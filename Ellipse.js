@@ -216,7 +216,7 @@ export class Ellipse extends PIXI.Ellipse {
       const cirPt = new PIXI.Point(cirPts[i], cirPts[i + 1]);
       const ePt = new PIXI.Point();
 
-      this.fromCircleCoords(cirPt, cirPt);
+      this.fromCircleCoords(cirPt, ePt);
       this.toCartesianCoords(ePt, ePt);
 
       pts[i] = ePt.x;
