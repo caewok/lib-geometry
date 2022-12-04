@@ -9,6 +9,9 @@ import { registerPIXICircleMethods } from "./PIXI/Circle.js";
 import { registerPIXIRectangleMethods } from "./PIXI/Rectangle.js";
 import { registerPIXIPointMethods } from "./PIXI/Point.js";
 
+// Foundry utils
+import { registerFoundryUtilsMethods } from "./util.js";
+
 // Regular Polygons
 import { RegularPolygon } from "./RegularPolygon/RegularPolygon.js";
 import { EquilateralTriangle } from "./RegularPolygon/EquilateralTriangle.js";
@@ -17,14 +20,14 @@ import { Hexagon } from "./RegularPolygon/Hexagon.js";
 import { RegularStar } from "./RegularPolygon/RegularStar.js";
 
 // Centered Polygons
-import { CenteredPolygonBase } from "./CenteredPolygon/CenteredPolygonBase";
-import { CenteredPolygon } from "./CenteredPolygon/CenteredPolygon";
-import { CenteredRectangle } from "./CenteredPolygon/CenteredRectangle";
+import { CenteredPolygonBase } from "./CenteredPolygon/CenteredPolygonBase.js";
+import { CenteredPolygon } from "./CenteredPolygon/CenteredPolygon.js";
+import { CenteredRectangle } from "./CenteredPolygon/CenteredRectangle.js";
 
 // 3d
 import { Plane } from "./3d/Plane.js";
 import { Point3d } from "./3d/Point3d.js";
-import { Ray3d } from "./3d/Plane.js";
+import { Ray3d } from "./3d/Ray3d.js";
 
 // Draw
 import { Draw } from "./Draw.js";
@@ -33,7 +36,7 @@ import { Draw } from "./Draw.js";
 import { Ellipse } from "./Ellipse.js";
 
 // WeilerAtherton
-import { WeilerAtherton } from "./WeilerAtherton.js";
+import { WeilerAthertonClipper } from "./WeilerAtherton.js";
 
 // Matrix
 import { Matrix } from "./Matrix.js";
@@ -41,15 +44,22 @@ import { Matrix } from "./Matrix.js";
 // Shadow
 import { Shadow } from "./Shadow.js";
 
+// ClipperPaths
+import { ClipperPaths } from "./ClipperPaths.js";
+
 export function registerGeometry(categories = []) {
-  for ( category of categories ) REGISTER[category]();
+  // Always register additions to methods
+
+  registerPIXIPolygonMethods();
+  registerPIXICircleMethods();
+  registerPIXIRectangleMethods();
+  registerPIXIPointMethods();
+  registerFoundryUtilsMethods();
+
+  for ( const category of categories ) REGISTER[category]();
 }
 
 const REGISTER = {
-  PIXIPolygon: registerPIXIPolygonMethods,
-  PIXICircle: registerPIXICircleMethods,
-  PIXIRectangle: registerPIXIRectangleMethods,
-  PIXIPoint: registerPIXIPointMethods,
   CenteredPolygons: registerCenteredPolygons,
   RegularPolygons: registerRegularPolygons,
   Draw: registerDraw,
@@ -57,7 +67,8 @@ const REGISTER = {
   Ellipse: registerEllipse,
   Shadow: registerShadow,
   Matrix: registerMatrix,
-  WeilerAtherton: registerWeilerAtherton
+  WeilerAthertonClipper: registerWeilerAthertonClipper,
+  ClipperPaths: registerClipperPaths
 }
 
 
@@ -111,11 +122,11 @@ export function registerEllipse() {
   foundry.utils.GeometryLib.Ellipse = Ellipse;
 }
 
-export function registerWeilerAtherton() {
+export function registerWeilerAthertonClipper() {
   foundry.utils.GeometryLib ??= {};
-  if ( foundry.utils.GeometryLib.WeilerAtherton ) return;
+  if ( foundry.utils.GeometryLib.WeilerAthertonClipper ) return;
 
-  foundry.utils.GeometryLib.WeilerAtherton = WeilerAtherton;
+  foundry.utils.GeometryLib.WeilerAthertonClipper = WeilerAthertonClipper;
 }
 
 export function registerShadow() {
@@ -130,4 +141,11 @@ export function registerMatrix() {
   if ( foundry.utils.GeometryLib.Matrix ) return;
 
   foundry.utils.GeometryLib.Matrix = Matrix;
+}
+
+export function registerClipperPaths() {
+  foundry.utils.GeometryLib ??= {};
+  if ( foundry.utils.GeometryLib.ClipperPaths ) return;
+
+  foundry.utils.GeometryLib.ClipperPaths = ClipperPaths;
 }
