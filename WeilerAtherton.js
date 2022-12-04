@@ -182,8 +182,6 @@ export class WeilerAthertonClipper extends PIXI.Polygon {
     const points = this.points;
     if ( points.length < 6 ) return [];
 
-//     closePoints(points);
-
     // Option 1: Polygon contained within circle
     const polygonInClipObject = clipObject.contains(points[0], points[1]);
     if ( polygonInClipObject ) return union ? [clipObject] : [this];
@@ -255,43 +253,6 @@ export class WeilerAthertonClipper extends PIXI.Polygon {
 
     return pointsIxs;
   }
-
-   // ptsIter = los.iteratePoints({close: true});
-//    let a = ptsIter.next().value;
-//    console.log(`${a.x},${a.y}`)
-//    for ( const b of ptsIter ) {
-//      console.log(`a: ${a.x},${a.y}; b: ${b.x},${b.y}`);
-//      a = b;
-//    }
-
-
-//   _buildPointIntersectionArray(clipObject) {
-//
-//     if ( this.points.length < 6 ) return []; // Minimum 3 Points required
-//
-//     const points = duplicate(this.points);
-//     closePoints(points);
-//     const ln = points.length;
-//
-//     let a = new PIXI.Point(points[0], points[1]);
-//     const pointsIxs = [a];
-//
-//     // Closed polygon, so we can use the last point to circle back
-//     for ( let i = 2; i < ln; i += 2) {
-//       const b = new PIXI.Point(points[i], points[i + 1])
-//       const ixs = this._findIntersections(a, b, clipObject);
-//       const ixsLn = ixs.length;
-//       if ( ixsLn ) {
-//         if ( a.almostEqual(ixs[0]) ) pointsIxs.pop();
-//         if ( b.almostEqual(ixs[ixsLn - 1]) ) ixs.pop(); // Get next round
-//         pointsIxs.push(...ixs);
-//       }
-//       pointsIxs.push(b);
-//
-//       a = b;
-//     }
-//     return pointsIxs;
-//   }
 
   /**
    * Given a set of points that are either endpoints or intersections of this polygon,
@@ -398,10 +359,3 @@ export class WeilerAthertonClipper extends PIXI.Polygon {
     });
   }
 }
-
-// function closePoints(points) {
-//   const ln = points.length;
-//   if ( ln < 2 ) return;
-//   if ( points[0] !== points[ln - 2] || points[1] !== points[ln - 1] ) points.push(points[0], points[1]);
-//   return points;
-// }
