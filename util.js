@@ -190,22 +190,3 @@ function lineCircleIntersection(a, b, center, radius, epsilon=1e-8) {
     intersections
   };
 }
-
-
-
-/**
- * Build a geometric shape given a set of angles.
- * @param {Number[]} angles      Array of angles, in degrees, indicating vertex positions.
- * @param {Point}    origin      Center of the shape.
- * @param {Number}   radius      Distance from origin to each vertex.
- * @param {Number}   rotation    Angle in degrees describing rotation from due east.
- * @returns {Points[]} Array of vertices.
- */
-export function geometricShapePoints(angles, origin, radius, rotation = 0) {
-  const a_translated = angles.map(a => Math.toRadians(Math.normalizeDegrees(a + rotation)));
-  return a_translated.map(a => pointFromAngle(origin, a, radius));
-}
-
-
-
-
