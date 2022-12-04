@@ -147,22 +147,26 @@ export function registerPIXIPointMethods() {
 
 /**
  * Distance between two 2d points
- * @param {PIXI.Point} a
- * @param {PIXI.Point} b
+ * @param {object} a    Any object with x,y properties
+ * @param {object} b    Any object with x,y properties
  * @returns {number}
  */
 function distanceBetween(a, b) {
-  return b.subtract(a).magnitude();
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  return Math.hypot(dx, dy);
 }
 
 /**
  * Distance squared between two 2d points
- * @param {PIXI.Point} a
- * @param {PIXI.Point} b
+ * @param {object} a    Any object with x,y properties
+ * @param {object} b    Any object with x,y properties
  * @returns {number}
  */
 function distanceSquaredBetween(a, b) {
-  return b.subtract(a).magnitudeSquared();
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  return Math.pow(dx, 2) + Math.pow(dy, 2);
 }
 
 /**

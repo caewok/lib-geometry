@@ -45,6 +45,32 @@ export class Point3d extends PIXI.Point {
   }
 
   /**
+   * Distance between two 3d points
+   * @param {object} a    Any object with x,y,z properties
+   * @param {object} b    Any object with x,y,z properties
+   * @returns {number}
+   */
+  static distanceBetween(a, b) {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const dz = b.z - a.z;
+    return Math.hypot(dx, dy, dz);
+  }
+
+  /**
+   * Distance squared between two 3d points
+   * @param {object} a    Any object with x,y,z properties
+   * @param {object} b    Any object with x,y,z properties
+   * @returns {number}
+   */
+  static distanceSquaredBetween(a, b) {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const dz = b.z - a.z;
+    return Math.pow(dx, 2) + Math.pow(dy, 2) + Math.pow(dz, 2);
+  }
+
+  /**
    * Hash key for this point, with coordinates rounded to nearest integer.
    * Ordered, so sortable.
    * @returns {BigInt}
