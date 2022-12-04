@@ -1,11 +1,10 @@
 /* globals
 PIXI,
 ClipperLib,
-foundry
+foundry,
+CONFIG
 */
 "use strict";
-
-
 
 // --------- ADD METHODS TO THE PIXI.POLYGON PROTOTYPE ----- //
 export function registerPIXIPolygonMethods() {
@@ -141,7 +140,7 @@ export function registerPIXIPolygonMethods() {
  * @returns {number}  Positive rea
  */
 function area() {
-  return Math.abs(this.signedArea)
+  return Math.abs(this.signedArea);
 }
 
 /**
@@ -152,9 +151,9 @@ function area() {
 function centroid() {
   const pts = [...this.iteratePoints({close: true})];
   const ln = pts.length;
-  switch ( ln  ) {
+  switch ( ln ) {
     case 0: return undefined;
-    case 1: return pts[0]; // should not happen if close is true
+    case 1: return pts[0]; // Should not happen if close is true
     case 2: return pts[0];
     case 3: return PIXI.Point.midPoint(pts[0], pts[1]);
   }
@@ -307,7 +306,6 @@ function isSegmentEnclosed(segment, { epsilon = 1e-08 } = {}) {
 function* iterateEdges({close = true} = {}) {
   const dropped = this.isClosed ? 2 : 0;
   const ln = this.points.length;
-  const iter = ln - dropped;
   if ( ln < 4 ) return;
 
   const firstA = new PIXI.Point(this.points[0], this.points[1]);
@@ -346,8 +344,6 @@ function* iteratePoints({close = true} = {}) {
  * @returns {boolean}
  */
 function linesCross(lines) {
-  const fu = foundry.utils;
-
   for ( const edge of this.iterateEdges() ) {
     for ( const line of lines ) {
       if ( lineSegmentCrosses(edge.A, edge.B, line.A, line.B) ) return true;
@@ -483,7 +479,7 @@ function reverseOrientation() {
  * @returns {number}  Positive if clockwise. (b/c y-axis is reversed in Foundry)
  */
 function signedArea() {
-  const pts = [...this.iteratePoints(close: true)]
+  const pts = [...this.iteratePoints({close: true})]
   const ln = pts.length;
   if ( ln < 3 ) return 0;
 
