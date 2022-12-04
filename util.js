@@ -13,8 +13,30 @@ export function registerFoundryUtilsMethods() {
     quadraticIntersection,
     lineCircleIntersection,
     lineSegment3dPlaneIntersects,
-    lineSegmentCrosses
+    lineSegmentCrosses,
+    gridUnitsToPixels,
+    pixelsToGridUnits
   }
+}
+
+/**
+ * Convert a grid units value to pixel units, for equivalency with x,y values.
+ * @param {number} value
+ * @returns {number}
+ */
+export function gridUnitsToPixels(value) {
+  const { distance, size } = canvas.scene.grid;
+  return (value * size) / distance;
+}
+
+/**
+ * Convert pixel units (x,y,z) to grid units
+ * @param {number} pixels
+ * @returns {number}
+ */
+export function pixelsToGridUnits(pixels) {
+  const { distance, size } = canvas.scene.grid;
+  return (pixels * distance) / size;
 }
 
 /**
