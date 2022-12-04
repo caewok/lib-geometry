@@ -4,7 +4,6 @@ PIXI
 */
 "use strict";
 
-import { rotatePoint } from "./util.js";
 import { RegularPolygon } from "./RegularPolygon.js";
 
 /**
@@ -80,7 +79,8 @@ export class RegularStar extends RegularPolygon {
         // Rotate the inner points by half the angle between the outer points
         // So the inner point lies halfway between two outerpoints
         const angle = Math.PI / (numPoints);
-        const pt = rotatePoint({ x: pts[i], y: pts[i+1] }, angle);
+        const pt = new PIXI.Point(pts[i], pts[i + 1]);
+        pt.rotate(angle, pt);
         this._innerPoints.push(pt);
       }
     }
