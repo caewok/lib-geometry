@@ -1,7 +1,8 @@
 /* globals
 PIXI,
 ClipperLib,
-libWrapper
+CONFIG,
+foundry
 */
 "use strict";
 
@@ -9,10 +10,10 @@ import { WeilerAthertonClipper } from "../WeilerAtherton.js";
 
 // ----------------  ADD METHODS TO THE PIXI.CIRCLE PROTOTYPE ------------------------
 export function registerPIXICircleMethods() {
-  CONFIG.Geometry ??= {};
-  CONFIG.Geometry.Registered ??= {};
-  if ( CONFIG.Geometry.Registered.PIXIPolygon ) return;
-  CONFIG.Geometry.Registered.PIXIPolygon = true;
+  CONFIG.GeometryLib ??= {};
+  CONFIG.GeometryLib.Registered ??= {};
+  if ( CONFIG.GeometryLib.Registered.PIXICircle ) return;
+  CONFIG.GeometryLib.Registered.PIXICircle = true;
 
   // ----- Getters/Setters ----- //
   if ( !Object.hasOwn(PIXI.Circle.prototype, "area") ) {
@@ -40,7 +41,7 @@ export function registerPIXICircleMethods() {
    */
   Object.defineProperty(PIXI.Circle.prototype, "segmentIntersections", {
     value: function(a, b) {
-      const ixs = lineCircleIntersection(a, b, this, this.radius);
+      const ixs = CONFIG.GeometryLib.utils.lineCircleIntersection(a, b, this, this.radius);
       return ixs.intersections;
     },
     writable: true,
@@ -88,7 +89,7 @@ export function registerPIXICircleMethods() {
   });
 
   Object.defineProperty(PIXI.Circle.prototype, "intersectPolygon", {
-    value: intersectPolygonPIXICircle,
+    value: intersectPolygon,
     writable: true,
     configurable: true
   });
@@ -104,6 +105,14 @@ export function registerPIXICircleMethods() {
     writable: true,
     configurable: true
   });
+}
+
+/**
+ * Determine the area of this circle
+ * @returns {number}
+ */
+function area() {
+  return Math.pow(this.radius * 2) * Math.PI;
 }
 
 /**
@@ -187,7 +196,7 @@ function intersectPolygon(polygon, {density, ...options} = {}) {
 
   if ( options.clipType !== ClipperLib.ClipType.ctIntersection
     && options.clipType !== ClipperLib.ClipType.ctUnion) {
-    const approx = this.toPolygon({density})
+    const approx = this.toPolygon({density});
     return polygon.intersectPolygon(approx, options);
   }
 

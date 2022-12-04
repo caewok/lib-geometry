@@ -116,7 +116,7 @@ export class RegularPolygon extends PIXI.Polygon {
 
     const angles = Array.fromRange(numSides).map(i => (360 / numSides) * i);
     const radAngles = angles.map(a => Math.toRadians(a));
-    return radAngles.map(angle => PIXI.Point.pointFromAngle({x: 0, y: 0}, angle, radius));
+    return radAngles.map(angle => PIXI.Point.fromAngle({x: 0, y: 0}, angle, radius));
   }
 
   /**

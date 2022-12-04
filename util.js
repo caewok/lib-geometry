@@ -3,39 +3,18 @@
 */
 "use strict";
 
-// Store some functions in foundry.utils for general use
+// Functions that would go in foundry.utils if that object were extensible
 export function registerFoundryUtilsMethods() {
-  if ( foundry.utils.orient3dFast ) return;
+  CONFIG.GeometryLib ??= {};
+  if ( CONFIG.GeometryLib.utils ) return;
 
-  Object.defineProperty(foundry.utils, "orient3dFast", {
-    value: orient3dFast,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(foundry.utils, "quadraticIntersection", {
-    value: quadraticIntersection,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(foundry.utils, "lineCircleIntersection", {
-    value: lineCircleIntersection,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(foundry.utils, "lineSegment3dPlaneIntersects", {
-    value: lineSegment3dPlaneIntersects,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(foundry.utils, "lineSegmentCrosses", {
-    value: lineSegmentCrosses,
-    writable: true,
-    configurable: true
-  });
+  CONFIG.GeometryLib.utils = {
+    orient3dFast,
+    quadraticIntersection,
+    lineCircleIntersection,
+    lineSegment3dPlaneIntersects,
+    lineSegmentCrosses
+  }
 }
 
 /**
@@ -85,8 +64,8 @@ export function lineSegmentCrosses(a, b, c, d) {
 export function lineSegment3dPlaneIntersects(a, b, c, d, e = { x: c.x, y: c.y, z: c.z + 1 }) {
   // A and b must be on opposite sides.
   // Parallels the 2d case.
-  const xa = foundry.utils.orient3dFast(a, c, d, e);
-  const xb = foundry.utils.orient3dFast(b, c, d, e);
+  const xa = CONFIG.GeometryLib.utils.orient3dFast(a, c, d, e);
+  const xb = CONFIG.GeometryLib.utils.orient3dFast(b, c, d, e);
   return xa * xb <= 0;
 }
 
@@ -198,7 +177,7 @@ function lineCircleIntersection(a, b, center, radius, epsilon=1e-8) {
   // Find quadratic intersection points
   const contained = aInside && bInside;
   if ( !contained ) {
-    intersections = foundry.utils.quadraticIntersection(a, b, center, radius, epsilon);
+    intersections = CONFIG.GeometryLib.utils.quadraticIntersection(a, b, center, radius, epsilon);
   }
 
   // Return the intersection data

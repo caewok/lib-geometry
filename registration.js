@@ -49,7 +49,6 @@ import { ClipperPaths } from "./ClipperPaths.js";
 
 export function registerGeometry(categories = []) {
   // Always register additions to methods
-
   registerPIXIPolygonMethods();
   registerPIXICircleMethods();
   registerPIXIRectangleMethods();
@@ -74,8 +73,8 @@ const REGISTER = {
 
 // Store new geometry classes in foundry.utils
 export function registerCenteredPolygons() {
-  foundry.utils.GeometryLib ??= {};
-  if ( foundry.utils.GeometryLib.CenteredPolygons ) return;
+  CONFIG.GeometryLib ??= {};
+  if ( CONFIG.GeometryLib.CenteredPolygons ) return;
 
   foundry.utils.GeometryLib.CenteredPolygons = {
     CenteredPolygonBase,
@@ -85,10 +84,10 @@ export function registerCenteredPolygons() {
 }
 
 export function registerRegularPolygons() {
-  foundry.utils.GeometryLib ??= {};
-  if ( foundry.utils.GeometryLib.RegularPolygons ) return;
+  CONFIG.GeometryLib ??= {};
+  if ( CONFIG.GeometryLib.RegularPolygons ) return;
 
-  foundry.utils.GeometryLib.RegularPolygons = {
+  CONFIG.GeometryLib.RegularPolygons = {
     RegularPolygon,
     EquilateralTriangle,
     Square,
@@ -98,17 +97,17 @@ export function registerRegularPolygons() {
 }
 
 export function registerDraw() {
-  foundry.utils.GeometryLib ??= {};
-  if ( foundry.utils.GeometryLib.Draw ) return;
+  CONFIG.GeometryLib ??= {};
+  if ( CONFIG.GeometryLib.Draw ) return;
 
-  foundry.utils.GeometryLib.Draw = Draw;
+  CONFIG.GeometryLib.Draw = Draw;
 }
 
 export function register3d() {
-  foundry.utils.GeometryLib ??= {};
-  if ( foundry.utils.GeometryLib.threeD ) return;
+  CONFIG.GeometryLib ??= {};
+  if ( CONFIG.GeometryLib.threeD ) return;
 
-  foundry.utils.GeometryLib.threeD = {
+  CONFIG.GeometryLib.threeD = {
     Plane,
     Point3d,
     Ray3d
@@ -116,36 +115,36 @@ export function register3d() {
 }
 
 export function registerEllipse() {
-  foundry.utils.GeometryLib ??= {};
-  if ( foundry.utils.GeometryLib.Ellipse ) return;
+  CONFIG.GeometryLib ??= {};
+  if ( CONFIG.GeometryLib.Ellipse ) return;
 
-  foundry.utils.GeometryLib.Ellipse = Ellipse;
+  CONFIG.GeometryLib.Ellipse = Ellipse;
 }
 
 export function registerWeilerAthertonClipper() {
-  foundry.utils.GeometryLib ??= {};
-  if ( foundry.utils.GeometryLib.WeilerAthertonClipper ) return;
+  CONFIG.GeometryLib ??= {};
+  if ( CONFIG.GeometryLib.WeilerAthertonClipper ) return;
 
-  foundry.utils.GeometryLib.WeilerAthertonClipper = WeilerAthertonClipper;
+  CONFIG.GeometryLib.WeilerAthertonClipper = WeilerAthertonClipper;
 }
 
 export function registerShadow() {
-  foundry.utils.GeometryLib ??= {};
-  if ( foundry.utils.GeometryLib.Shadow ) return;
+  CONFIG.GeometryLib ??= {};
+  if ( CONFIG.GeometryLib.Shadow ) return;
 
-  foundry.utils.GeometryLib.Shadow = Shadow;
+  CONFIG.GeometryLib.Shadow = Shadow;
 }
 
 export function registerMatrix() {
-  foundry.utils.GeometryLib ??= {};
-  if ( foundry.utils.GeometryLib.Matrix ) return;
+  CONFIG.GeometryLib ??= {};
+  if ( CONFIG.GeometryLib.Matrix ) return;
 
-  foundry.utils.GeometryLib.Matrix = Matrix;
+  CONFIG.GeometryLib.Matrix = Matrix;
 }
 
 export function registerClipperPaths() {
-  foundry.utils.GeometryLib ??= {};
-  if ( foundry.utils.GeometryLib.ClipperPaths ) return;
+  CONFIG.GeometryLib ??= {};
+  if ( CONFIG.GeometryLib.ClipperPaths ) return;
 
-  foundry.utils.GeometryLib.ClipperPaths = ClipperPaths;
+  CONFIG.GeometryLib.ClipperPaths = ClipperPaths;
 }

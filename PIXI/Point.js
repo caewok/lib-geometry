@@ -5,10 +5,10 @@
 
 // Add methods to PIXI.Point
 export function registerPIXIPointMethods() {
-  CONFIG.Geometry ??= {};
-  CONFIG.Geometry.Registered ??= {};
-  if ( CONFIG.Geometry.Registered.PIXIPolygon ) return;
-  CONFIG.Geometry.Registered.PIXIPolygon = true;
+  CONFIG.GeometryLib ??= {};
+  CONFIG.GeometryLib.Registered ??= {};
+  if ( CONFIG.GeometryLib.Registered.PIXIPoint ) return;
+  CONFIG.GeometryLib.Registered.PIXIPoint = true;
 
   // ----- Static Methods ----- //
   Object.defineProperty(PIXI.Point, "midPoint", {
@@ -200,7 +200,7 @@ function flatMapPoints(ptsArr, transformFn) {
  * @param {Number}  distance  Distance to travel from the starting point.
  * @returns {Point}  Coordinates of point that lies distance away from origin along angle.
  */
-function pointFromAngle(origin, radians, distance) {
+function fromAngle(origin, radians, distance) {
   const dx = Math.cos(radians);
   const dy = Math.sin(radians);
   return new this(origin.x + (dx * distance), origin.y + (dy * distance));
@@ -330,7 +330,7 @@ function magnitudeSquared2d() {
  * @param {number} epsilon
  * @returns {boolean}
  */
-function almostEqual2d(other, epsilon = EPSILON) {
+function almostEqual2d(other, epsilon = 1e-08) {
   return this.x.almostEqual(other.x, epsilon) && this.y.almostEqual(other.y, epsilon);
 }
 

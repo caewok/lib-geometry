@@ -68,7 +68,6 @@ export class WeilerAthertonClipper extends PIXI.Polygon {
   constructor(points = [], { union = true, clippingOpts = {} } = {}) {
     super(points);
 
-    this.close();
     if ( !this.isClockwise ) this.reverseOrientation();
 
     /**
@@ -183,6 +182,8 @@ export class WeilerAthertonClipper extends PIXI.Polygon {
     const points = this.points;
     if ( points.length < 6 ) return [];
 
+    closePoints(points);
+
     // Option 1: Polygon contained within circle
     const polygonInClipObject = clipObject.contains(points[0], points[1]);
     if ( polygonInClipObject ) return union ? [clipObject] : [this];
@@ -236,6 +237,8 @@ export class WeilerAthertonClipper extends PIXI.Polygon {
     const points = this.points;
     const ln = points.length;
     if ( ln < 6 ) return []; // Minimum 3 Points required
+
+    closePoints(points);
 
     let a = new PIXI.Point(points[0], points[1]);
     const pointsIxs = [a];
@@ -361,4 +364,13 @@ export class WeilerAthertonClipper extends PIXI.Polygon {
       return ix;
     });
   }
+}
+
+/**
+ * If points do not include the starting point, add.
+ */
+function closePoints(points) {
+  const ln = points.length;
+  if ( points[0] !== points[ln - 2] || points[1] !== points[ln -1] ) points.push(points[0], points[1]);
+  return points;
 }

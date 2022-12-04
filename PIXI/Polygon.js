@@ -8,10 +8,10 @@ CONFIG
 
 // --------- ADD METHODS TO THE PIXI.POLYGON PROTOTYPE ----- //
 export function registerPIXIPolygonMethods() {
-  CONFIG.Geometry ??= {};
-  CONFIG.Geometry.Registered ??= {};
-  if ( CONFIG.Geometry.Registered.PIXIPolygon ) return;
-  CONFIG.Geometry.Registered.PIXIPolygon = true;
+  CONFIG.GeometryLib ??= {};
+  CONFIG.GeometryLib.Registered ??= {};
+  if ( CONFIG.GeometryLib.Registered.PIXIPolygon ) return;
+  CONFIG.GeometryLib.Registered.PIXIPolygon = true;
 
   // ----- Getters/Setters ----- //
 

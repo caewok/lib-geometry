@@ -155,7 +155,7 @@ export class Plane {
   lineSegmentIntersects(a, b) {
     const vs = this.getVectorsOnPlane();
     const p0 = this.point;
-    return foundry.utils.lineSegment3dPlaneIntersects(a, b, p0, p0.add(vs.u), p0.add(vs.v));
+    return CONFIG.GeometryLib.utils.lineSegment3dPlaneIntersects(a, b, p0, p0.add(vs.u), p0.add(vs.v));
   }
 
 }
