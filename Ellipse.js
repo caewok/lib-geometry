@@ -103,6 +103,17 @@ export class Ellipse extends PIXI.Ellipse {
   get area() { return Math.PI * this.width * this.height; }
 
   /**
+   * Area that matches clipper measurements, so it can be compared with Clipper Polygon versions.
+   * Used to match what Clipper would measure as area, by scaling the points.
+   * @param {object} [options]
+   * @param {number} [scalingFactor]  Scale like with PIXI.Polygon.prototype.toClipperPoints.
+   * @returns {number}  Positive if clockwise. (b/c y-axis is reversed in Foundry)
+   */
+  scaledArea({scalingFactor = 1} = {}) {
+    return this.toPolygon().scaledArea({scalingFactor});
+  }
+
+  /**
    * Shift from cartesian coordinates to the shape space.
    * @param {PIXI.Point} a
    * @param {PIXI.Point} [outPoint] A point-like object to store the result.

@@ -126,6 +126,12 @@ export function registerPIXIPolygonMethods() {
     configurable: true
   });
 
+  Object.defineProperty(PIXI.Polygon.prototype, "scaledArea", {
+    value: scaledArea,
+    writable: true,
+    configurable: true
+  });
+
   Object.defineProperty(PIXI.Polygon.prototype, "signedArea", {
     value: signedArea,
     writable: true,
@@ -476,6 +482,17 @@ function reverseOrientation() {
   this.points = reversed_pts;
   if ( typeof this._isClockwise !== "undefined" ) this._isClockwise = !this._isClockwise;
   return this;
+}
+
+/**
+ * Scaled area of a polygon.
+ * Used to match what Clipper would measure as area, by scaling the points.
+ * @param {object} [options]
+ * @param {number} [scalingFactor]  Scale like with PIXI.Polygon.prototype.toClipperPoints.
+ * @returns {number}  Positive if clockwise. (b/c y-axis is reversed in Foundry)
+ */
+function scaledArea({ scalingFactor = 1 } = {}) {
+  return signedArea({ scalingFactor });
 }
 
 /**

@@ -106,6 +106,12 @@ export function registerPIXICircleMethods() {
     writable: true,
     configurable: true
   });
+
+  Object.defineProperty(PIXI.Circle.prototype, "scaledArea", {
+    value: scaledArea,
+    writable: true,
+    configurable: true
+  });
 }
 
 /**
@@ -302,4 +308,15 @@ function quadraticIntersection(p0, p1, center, radius, epsilon=0) {
     });
   }
   return intersections;
+}
+
+/**
+ * Area that matches clipper measurements, so it can be compared with Clipper Polygon versions.
+ * Used to match what Clipper would measure as area, by scaling the points.
+ * @param {object} [options]
+ * @param {number} [scalingFactor]  Scale like with PIXI.Polygon.prototype.toClipperPoints.
+ * @returns {number}  Positive if clockwise. (b/c y-axis is reversed in Foundry)
+ */
+function scaledArea({scalingFactor = 1} = {}) {
+  return this.toPolygon().scaledArea({scalingFactor});
 }

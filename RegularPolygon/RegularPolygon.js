@@ -117,6 +117,17 @@ export class RegularPolygon extends PIXI.Polygon {
   get interiorAngle() { return (180 + (180 * (this.numSides - 3))) / this.numSides; }
 
   /**
+   * Area that matches clipper measurements, so it can be compared with Clipper Polygon versions.
+   * Used to match what Clipper would measure as area, by scaling the points.
+   * @param {object} [options]
+   * @param {number} [scalingFactor]  Scale like with PIXI.Polygon.prototype.toClipperPoints.
+   * @returns {number}  Positive if clockwise. (b/c y-axis is reversed in Foundry)
+   */
+  scaledArea({scalingFactor = 1} = {}) {
+    return this.toPolygon().scaledArea({scalingFactor});
+  }
+
+  /**
    * Shift this polygon to a new position.
    * @param {number} dx   Change in x position
    * @param {number} dy   Change in y position

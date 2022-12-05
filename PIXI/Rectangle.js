@@ -93,6 +93,12 @@ export function registerPIXIRectangleMethods() {
     writable: true,
     configurable: true
   });
+
+  Object.defineProperty(PIXI.Rectangle.prototype, "scaledArea", {
+    value: scaledArea,
+    writable: true,
+    configurable: true
+  });
 }
 
 /**
@@ -333,6 +339,17 @@ function overlapsRectangle(other) {
  */
 function translate(dx, dy) {
   return new PIXI.Rectangle(this.x + dx, this.y + dy, this.width, this.height);
+}
+
+/**
+ * Area that matches clipper measurements, so it can be compared with Clipper Polygon versions.
+ * Used to match what Clipper would measure as area, by scaling the points.
+ * @param {object} [options]
+ * @param {number} [scalingFactor]  Scale like with PIXI.Polygon.prototype.toClipperPoints.
+ * @returns {number}  Positive if clockwise. (b/c y-axis is reversed in Foundry)
+ */
+function scaledArea({scalingFactor = 1} = {}) {
+  return this.toPolygon().scaledArea({scalingFactor});
 }
 
 /**
