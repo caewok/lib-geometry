@@ -355,22 +355,6 @@ export class Shadow extends PIXI.Polygon {
       return null;
     }
 
-    // Tests for debugging
-    // Surface intersection must be further from origin than the wall point
-//     const distWallA = distanceSquaredBetweenPoints(origin, A);
-//     const distIxWallA = distanceSquaredBetweenPoints(origin, ixWallA);
-//     if ( !distWallA.almostEqual(distIxWallA, 1e-04) && distWallA > distIxWallA ) {
-//       console.warn("complexSurfaceOriginAbove distWallA >= distIxWallA");
-//       return null;
-//     }
-//
-//     const distWallB = distanceSquaredBetweenPoints(origin, B);
-//     const distIxWallB = distanceSquaredBetweenPoints(origin, ixWallB);
-//     if ( !distWallB.almostEqual(distIxWallB, 1e-04) && distWallB > distIxWallB ) {
-//       console.warn("complexSurfaceOriginAbove distWallB >= distIxWallB");
-//       return null;
-//     }
-
     // Surface intersection must be below the origin
     if ( origin.z < ixOriginA.z ) {
       console.warn("complexSurfaceOriginAbove origin.z < ixOriginA.z");
