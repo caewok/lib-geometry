@@ -250,7 +250,10 @@ export class ClipperPaths {
     cPaths.scalingFactor = firstPath.scalingFactor;
 
     for ( let i = 1; i < ln; i += 1 ) {
-      cPaths.paths.push(...pathsArr[i].paths);
+      const obj = pathsArr[i];
+      if ( cPaths.scalingFactor !== obj.scalingFactor ) console.warn("ClipperPaths|combinePaths scalingFactor not equal.");
+
+      cPaths.paths.push(...obj.paths);
     }
 
     return cPaths.combine();
