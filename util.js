@@ -3,6 +3,10 @@
 */
 "use strict";
 
+import { CenteredRectangle } from "./CenteredPolygon/CenteredRectangle.js";
+import { CenteredPolygon } from "./CenteredPolygon/CenteredPolygon.js";
+import { Ellipse } from "./Ellipse.js";
+
 // Functions that would go in foundry.utils if that object were extensible
 export function registerFoundryUtilsMethods() {
   CONFIG.GeometryLib ??= {};
@@ -16,7 +20,26 @@ export function registerFoundryUtilsMethods() {
     lineSegmentCrosses,
     gridUnitsToPixels,
     pixelsToGridUnits,
-    perpendicularPoint
+    perpendicularPoint,
+    centeredPolygonFromDrawing
+  }
+}
+
+/**
+ * Construct a centered polygon using the values in drawing shape.
+ * @param {Drawing} drawing
+ * @returns {CenteredPolygonBase}
+ */
+function centeredPolygonFromDrawing(drawing) {
+  switch ( drawing.document.shape.type ) {
+    case CONST.DRAWING_TYPES.RECTANGLE:
+      return CenteredRectangle.fromDrawing(drawing);
+    case CONST.DRAWING_TYPES.ELLIPSE:
+      return Ellipse.fromDrawing(drawing);
+    case CONST.DRAWING_TYPES.POLYGON:
+      return CenteredPolygon.fromDrawing(drawing);
+    default:
+      console.error("fromDrawing shape type not supported");
   }
 }
 
@@ -30,7 +53,7 @@ export function registerFoundryUtilsMethods() {
  * @return {Point} The point on line AB or null if a,b,c are collinear. Not
  *                 guaranteed to be within the line segment a|b.
  */
-export function perpendicularPoint(a, b, c) {
+function perpendicularPoint(a, b, c) {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const dab = Math.pow(dx, 2) + Math.pow(dy, 2);
@@ -48,7 +71,7 @@ export function perpendicularPoint(a, b, c) {
  * @param {number} value
  * @returns {number}
  */
-export function gridUnitsToPixels(value) {
+function gridUnitsToPixels(value) {
   const { distance, size } = canvas.scene.grid;
   return (value * size) / distance;
 }
@@ -58,7 +81,7 @@ export function gridUnitsToPixels(value) {
  * @param {number} pixels
  * @returns {number}
  */
-export function pixelsToGridUnits(pixels) {
+function pixelsToGridUnits(pixels) {
   const { distance, size } = canvas.scene.grid;
   return (pixels * distance) / size;
 }
@@ -73,7 +96,7 @@ export function pixelsToGridUnits(pixels) {
  *
  * @returns {boolean}                 Do the line segments cross?
  */
-export function lineSegmentCrosses(a, b, c, d) {
+function lineSegmentCrosses(a, b, c, d) {
   const xa = foundry.utils.orient2dFast(a, b, c);
   if ( !xa ) return false;
 
@@ -107,7 +130,7 @@ export function lineSegmentCrosses(a, b, c, d) {
  * @returns {boolean} Does the line segment intersect the plane?
  * Note that if the segment is part of the plane, this returns false.
  */
-export function lineSegment3dPlaneIntersects(a, b, c, d, e = { x: c.x, y: c.y, z: c.z + 1 }) {
+function lineSegment3dPlaneIntersects(a, b, c, d, e = { x: c.x, y: c.y, z: c.z + 1 }) {
   // A and b must be on opposite sides.
   // Parallels the 2d case.
   const xa = CONFIG.GeometryLib.utils.orient3dFast(a, c, d, e);
@@ -127,7 +150,7 @@ export function lineSegment3dPlaneIntersects(a, b, c, d, e = { x: c.x, y: c.y, z
  *   - Returns a negative value if d lies below the plane.
  *   - Returns zero if the points are coplanar.
  */
-export function orient3dFast(a, b, c, d) {
+function orient3dFast(a, b, c, d) {
   const adx = a.x - d.x;
   const bdx = b.x - d.x;
   const cdx = c.x - d.x;
