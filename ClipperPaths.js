@@ -17,8 +17,9 @@ export class ClipperPaths {
   * @param paths {ClipperLib.Path[]|Set<ClipperLib.Path>|Map<ClipperLib.Path>}
   * @returns {ClipperPaths}
   */
-  constructor(paths = []) {
+  constructor(paths = [], { scalingFactor = 1 } = {}) {
     this.paths = [...paths]; // Ensure these are arrays
+    this.scalingFactor = scalingFactor;
   }
 
   /**
@@ -39,8 +40,7 @@ export class ClipperPaths {
    * @returns {ClipperPaths}
    */
   static fromPolygons(polygons, { scalingFactor = 1 } = {}) {
-    const out = new ClipperPaths(polygons.map(p => p.toClipperPoints({scalingFactor})));
-    out.scalingFactor = scalingFactor;
+    const out = new ClipperPaths(polygons.map(p => p.toClipperPoints({scalingFactor})), { scalingFactor });
     return out;
   }
 
@@ -74,6 +74,15 @@ export class ClipperPaths {
     }
 
     return polygon;
+  }
+
+  /**
+   * Calculate the area for this set of paths.
+   * Use getter to correspond with PIXI.Polygon.prototype.area and other polygon types.
+   * @returns {number}
+   */
+  get area() {
+    return ClipperLib.JS.AreaOfPolygons(this.paths) / Math.pow(this.scalingFactor, 2);
   }
 
   /**
@@ -245,14 +254,6 @@ export class ClipperPaths {
     }
 
     return cPaths.combine();
-  }
-
-  /**
-   * Calculate the area for this set of paths
-   * @returns {number}
-   */
-  area() {
-    return ClipperLib.JS.AreaOfPolygons(this.paths);
   }
 
   /**

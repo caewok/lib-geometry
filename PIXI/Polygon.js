@@ -137,6 +137,8 @@ export function registerPIXIPolygonMethods() {
 /**
  * Calculate the area of this polygon.
  * Same approach as ClipperLib.Clipper.Area.
+ * @param {object} options
+ * @param {number|undefined} [scalingFactor]  If defined, will scale like with PIXI.Polygon.prototype.toClipperPoints.
  * @returns {number}  Positive rea
  */
 function area() {
@@ -305,7 +307,6 @@ function isSegmentEnclosed(segment, { epsilon = 1e-08 } = {}) {
  * Edges link, such that edge0.B === edge.1.A.
  */
 function* iterateEdges({close = true} = {}) {
-  const dropped = this.isClosed ? 2 : 0;
   const ln = this.points.length;
   if ( ln < 4 ) return;
 
@@ -333,7 +334,7 @@ function* iteratePoints({close = true} = {}) {
   const ln = this.points.length;
   if ( ln < 2 ) return;
 
-  const num = ln - (this.isClosed ? 2 : 0)
+  const num = ln - (this.isClosed ? 2 : 0);
   for (let i = 0; i < num; i += 2) {
     yield new PIXI.Point(this.points[i], this.points[i + 1]);
   }
@@ -350,7 +351,7 @@ function* iteratePoints({close = true} = {}) {
 function linesCross(lines) {
   for ( const edge of this.iterateEdges() ) {
     for ( const line of lines ) {
-      if ( lineSegmentCrosses(edge.A, edge.B, line.A, line.B) ) return true;
+      if ( CONFIG.GeometryLib.utils.lineSegmentCrosses(edge.A, edge.B, line.A, line.B) ) return true;
     }
   }
 
@@ -480,24 +481,34 @@ function reverseOrientation() {
 /**
  * Signed area of polygon
  * Similar approach to ClipperLib.Clipper.Area.
+ * @param {object} [options]
+ * @param {number|undefined} [scalingFactor]  If defined, will scale like with PIXI.Polygon.prototype.toClipperPoints.
  * @returns {number}  Positive if clockwise. (b/c y-axis is reversed in Foundry)
  */
-function signedArea() {
-  const pts = [...this.iteratePoints({close: true})]
+function signedArea({ scalingFactor } = {}) {
+  const pts = [...this.iteratePoints({close: true})];
+
+  if ( scalingFactor ) pts.forEach(pt => {
+    pt.x = Math.roundFast(pt.x * scalingFactor);
+    pt.y = Math.roundFast(pt.y * scalingFactor);
+  });
+
   const ln = pts.length;
-  if ( ln < 3 ) return 0;
+  if ( ln < 4 ) return 0; // Incl. closing point, should have 4
 
   // (first + second) * (first - second)
   // ...
   // (last + first) * (last - first)
 
   let area = 0;
-  const iter = ln - 2;
+  const iter = ln - 1;
   for ( let i = 0; i < iter; i += 1 ) {
     const iPt = pts[i];
     const jPt = pts[i + 1];
-    area += (iPt.x + jPt.x) * (iPt.y - jPt.y)
+    area += (iPt.x + jPt.x) * (iPt.y - jPt.y);
   }
+
+  if ( scalingFactor ) area /= Math.pow(scalingFactor, 2);
 
   return -area * 0.5;
 }
@@ -593,4 +604,15 @@ function viewablePoints(origin, { returnKeys = false, outermostOnly = false } = 
   let keys = [...endKeys, ...startKeys];
   if ( outermostOnly ) keys = [keys[0], keys[keys.length - 1]];
   return returnKeys ? keys : elementsByIndex(pts, keys);
+}
+
+/**
+ * Get elements of an array by a list of indices
+ * https://stackoverflow.com/questions/43708721/how-to-select-elements-from-an-array-based-on-the-indices-of-another-array-in-ja
+ * @param {Array} arr       Array with elements to select
+ * @param {number[]} indices   Indices to choose from arr. Indices not in arr will be undefined.
+ * @returns {Array}
+ */
+export function elementsByIndex(arr, indices) {
+  return indices.map(aIndex => arr[aIndex]);
 }
