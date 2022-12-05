@@ -39,6 +39,13 @@ export function registerPIXIPointMethods() {
     configurable: true
   });
 
+  Object.defineProperty(PIXI.Point, "angleBetween", {
+    value: angleBetween,
+    writable: true,
+    configurable: true
+  });
+
+
   // ----- Methods ----- //
 
   Object.defineProperty(PIXI.Point.prototype, "add", {
@@ -143,6 +150,27 @@ export function registerPIXIPointMethods() {
     writable: true,
     configurable: true
   });
+}
+
+/**
+ * Get the angle between three 2d points, A --> B --> C.
+ * Assumes A|B and B|C have lengths > 0.
+ * @param {Point} a   First point
+ * @param {Point} b   Second point
+ * @param {Point} c   Third point
+ * @param {object} [options]  Options that affect the calculation
+ * @param {boolean} [options.clockwiseAngle]  If true, return the clockwise angle.
+ * @returns {number}  Angle, in radians
+ */
+function angleBetween(a, b, c, { clockwiseAngle = false } = {}) {
+  const ba = new PIXI.Point(a.x - b.x, a.y - b.y);
+  const bc = new PIXI.Point(c.x - b.x, c.y - b.y);
+  const dot = ba.dot(bc);
+  const denom = PIXI.Point.distanceBetween(a, b) * PIXI.Point.distanceBetween(b, c);
+
+  let angle = Math.acos(dot / denom);
+  if ( clockwiseAngle && foundry.utils.orient2dFast(a, b, c) > 0 ) angle = (Math.PI * 2) - angle;
+  return angle;
 }
 
 /**
