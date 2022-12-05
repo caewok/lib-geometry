@@ -492,7 +492,7 @@ function reverseOrientation() {
  * @returns {number}  Positive if clockwise. (b/c y-axis is reversed in Foundry)
  */
 function scaledArea({ scalingFactor = 1 } = {}) {
-  return signedArea({ scalingFactor });
+  return signedArea.call(this, { scalingFactor });
 }
 
 /**
