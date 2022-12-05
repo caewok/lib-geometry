@@ -237,11 +237,11 @@ function lineCircleIntersection(a, b, center, radius, epsilon=1e-8) {
 
   // Test whether endpoint A is contained
   const ar2 = Math.pow(a.x - center.x, 2) + Math.pow(a.y - center.y, 2);
-  const aInside = ar2 <= r2 + epsilon;
+  const aInside = ar2 <= r2 - epsilon;
 
   // Test whether endpoint B is contained
   const br2 = Math.pow(b.x - center.x, 2) + Math.pow(b.y - center.y, 2);
-  const bInside = br2 <= r2 + epsilon;
+  const bInside = br2 <= r2 - epsilon;
 
   // Find quadratic intersection points
   const contained = aInside && bInside;
