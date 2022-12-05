@@ -25,11 +25,11 @@ target = _token
 
 
 let [wall] = canvas.walls.placeables
-s0 = Shadow.construct(wall, visionSource, Shadow.zValue(0))
-s10 = Shadow.construct(wall, visionSource, Shadow.zValue(10))
+s0 = Shadow.construct(wall, visionSource, CONFIG.GeometryLib.utils.gridUnitsToPixels(0))
+s10 = Shadow.construct(wall, visionSource, CONFIG.GeometryLib.utils.gridUnitsToPixels(10))
 
 
-s30 = Shadow.construct(wall, visionSource, Shadow.zValue(30))
+s30 = Shadow.construct(wall, visionSource, CONFIG.GeometryLib.utils.gridUnitsToPixels(30))
 
 // Project to bottom surface.
 Token losHeight = 30; elevation = 25
@@ -100,15 +100,6 @@ export class Shadow extends PIXI.Polygon {
       this.addPoint({ x: this.points[ln - 2], y: this.points[ln -1] });
     }
 
-  }
-
-  /**
-   * Convert grid unit elevation to a pixel value that aligns with x,y coords.
-   * @returns {number}
-   */
-  static zValue() {
-    const { distance, size } = canvas.scene.grid;
-    return (value * size) / distance;
   }
 
   static upV = new Point3d(0, 0, 1);
