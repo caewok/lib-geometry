@@ -76,7 +76,7 @@ export class Point3d extends PIXI.Point {
    * @returns {BigInt}
    */
   key() {
-    const z = Math.round(p.z);
+    const z = Math.round(this.z);
     const key2d = super.key();
     return (BigInt(key2d) << 32n) ^ BigInt(z);
   }

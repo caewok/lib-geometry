@@ -1,5 +1,8 @@
 /* globals
-
+CONFIG,
+canvas,
+foundry,
+CONST
 */
 "use strict";
 
@@ -22,7 +25,7 @@ export function registerFoundryUtilsMethods() {
     pixelsToGridUnits,
     perpendicularPoint,
     centeredPolygonFromDrawing
-  }
+  };
 }
 
 /**

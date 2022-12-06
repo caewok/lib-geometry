@@ -2,7 +2,8 @@
 PIXI,
 canvas,
 ClipperLib,
-Ray
+Ray,
+CONFIG
 */
 "use strict";
 

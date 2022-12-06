@@ -1,8 +1,8 @@
 /* globals
 PIXI,
 foundry,
-libWrapper,
-ClipperLib
+ClipperLib,
+CONFIG
 */
 "use strict";
 
@@ -42,7 +42,7 @@ export function registerPIXIRectangleMethods() {
     value: intersectPolygonPIXIRectangle,
     writable: true,
     configurable: true
-  })
+  });
 
   Object.defineProperty(PIXI.Rectangle.prototype, "overlaps", {
     value: overlaps,
@@ -361,9 +361,6 @@ function scaledArea({scalingFactor = 1} = {}) {
  * @returns {Point[]|null}
  */
 function viewablePoints(origin, { outermostOnly = true } = {}) {
-  const zones = PIXI.Rectangle.CS_ZONES;
-  const bbox = this;
-
   const pts = getViewablePoints(this, origin);
 
   if ( !pts || !outermostOnly ) return pts;
@@ -381,7 +378,6 @@ function viewablePoints(origin, { outermostOnly = true } = {}) {
 function getViewablePoints(bbox, origin) {
   const zones = PIXI.Rectangle.CS_ZONES;
 
-  let pts;
   switch ( bbox._getZone(origin) ) {
     case zones.INSIDE: return null;
     case zones.TOPLEFT: return [{ x: bbox.left, y: bbox.bottom },  { x: bbox.left, y: bbox.top }, { x: bbox.right, y: bbox.top }];

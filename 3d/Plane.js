@@ -1,5 +1,5 @@
 /* globals
-
+CONFIG
 */
 "use strict";
 
