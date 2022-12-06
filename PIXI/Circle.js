@@ -41,8 +41,7 @@ export function registerPIXICircleMethods() {
    */
   Object.defineProperty(PIXI.Circle.prototype, "segmentIntersections", {
     value: function(a, b) {
-//       const ixs = CONFIG.GeometryLib.utils.lineCircleIntersection(a, b, this, this.radius);
-      const ixs = lineCircleIntersection(a, b, this, this.radius);
+      const ixs = CONFIG.GeometryLib.utils.lineCircleIntersection(a, b, this, this.radius);
       return ixs.intersections;
     },
     writable: true,
@@ -231,32 +230,32 @@ function intersectPolygon(polygon, options = {}) {
  *
  * @returns {LineCircleIntersection}  The intersection of the segment AB with the circle
  */
-function lineCircleIntersection(a, b, center, radius, epsilon=1e-8) {
-  const r2 = Math.pow(radius, 2);
-  let intersections = [];
-
-  // Test whether endpoint A is contained
-  const ar2 = Math.pow(a.x - center.x, 2) + Math.pow(a.y - center.y, 2);
-  const aInside = ar2 <= r2 + epsilon;
-
-  // Test whether endpoint B is contained
-  const br2 = Math.pow(b.x - center.x, 2) + Math.pow(b.y - center.y, 2);
-  const bInside = br2 <= r2 + epsilon;
-
-  // Find quadratic intersection points
-  const contained = aInside && bInside;
-  if ( !contained ) {
-    intersections = quadraticIntersection(a, b, center, radius, epsilon);
-  }
-
-  // Return the intersection data
-  return {
-    aInside,
-    bInside,
-    contained,
-    intersections
-  };
-}
+// function lineCircleIntersection(a, b, center, radius, epsilon=1e-8) {
+//   const r2 = Math.pow(radius, 2);
+//   let intersections = [];
+//
+//   // Test whether endpoint A is contained
+//   const ar2 = Math.pow(a.x - center.x, 2) + Math.pow(a.y - center.y, 2);
+//   const aInside = ar2 <= r2 - epsilon;
+//
+//   // Test whether endpoint B is contained
+//   const br2 = Math.pow(b.x - center.x, 2) + Math.pow(b.y - center.y, 2);
+//   const bInside = br2 <= r2 - epsilon;
+//
+//   // Find quadratic intersection points
+//   const contained = aInside && bInside;
+//   if ( !contained ) {
+//     intersections = quadraticIntersection(a, b, center, radius, epsilon);
+//   }
+//
+//   // Return the intersection data
+//   return {
+//     aInside,
+//     bInside,
+//     contained,
+//     intersections
+//   };
+// }
 
 
 /**
@@ -271,44 +270,44 @@ function lineCircleIntersection(a, b, center, radius, epsilon=1e-8) {
  * @param {number} radius       The radius of the circle
  * @param {number} [epsilon=0]  A small tolerance for floating point precision
  */
-function quadraticIntersection(p0, p1, center, radius, epsilon=0) {
-  const dx = p1.x - p0.x;
-  const dy = p1.y - p0.y;
-  // Quadratic terms where at^2 + bt + c = 0
-  const a = Math.pow(dx, 2) + Math.pow(dy, 2);
-  const b = (2 * dx * (p0.x - center.x)) + (2 * dy * (p0.y - center.y));
-  const c = Math.pow(p0.x - center.x, 2) + Math.pow(p0.y - center.y, 2) - Math.pow(radius, 2);
-
-  // Discriminant
-  const disc2 = Math.pow(b, 2) - (4 * a * c);
-  if ( disc2 < 0 ) return []; // No intersections
-
-  // Roots
-  const disc = Math.sqrt(disc2);
-  const t1 = (-b - disc) / (2 * a);
-  const t2 = (-b + disc) / (2 * a);
-  // If t1 hits (between 0 and 1) it indicates an "entry"
-  const intersections = [];
-  if ( t1.between(0-epsilon, 1+epsilon) ) {
-    intersections.push({
-      x: p0.x + (dx * t1),
-      y: p0.y + (dy * t1)
-    });
-  }
-
-  // If the discriminant is exactly 0, a segment endpoint touches the circle
-  // (and only one intersection point)
-  if ( disc2 === 0 ) return intersections;
-
-  // If t2 hits (between 0 and 1) it indicates an "exit"
-  if ( t2.between(0-epsilon, 1+epsilon) ) {
-    intersections.push({
-      x: p0.x + (dx * t2),
-      y: p0.y + (dy * t2)
-    });
-  }
-  return intersections;
-}
+// function quadraticIntersection(p0, p1, center, radius, epsilon=0) {
+//   const dx = p1.x - p0.x;
+//   const dy = p1.y - p0.y;
+//   // Quadratic terms where at^2 + bt + c = 0
+//   const a = Math.pow(dx, 2) + Math.pow(dy, 2);
+//   const b = (2 * dx * (p0.x - center.x)) + (2 * dy * (p0.y - center.y));
+//   const c = Math.pow(p0.x - center.x, 2) + Math.pow(p0.y - center.y, 2) - Math.pow(radius, 2);
+//
+//   // Discriminant
+//   const disc2 = Math.pow(b, 2) - (4 * a * c);
+//   if ( disc2 < 0 ) return []; // No intersections
+//
+//   // Roots
+//   const disc = Math.sqrt(disc2);
+//   const t1 = (-b - disc) / (2 * a);
+//   const t2 = (-b + disc) / (2 * a);
+//   // If t1 hits (between 0 and 1) it indicates an "entry"
+//   const intersections = [];
+//   if ( t1.between(0-epsilon, 1+epsilon) ) {
+//     intersections.push({
+//       x: p0.x + (dx * t1),
+//       y: p0.y + (dy * t1)
+//     });
+//   }
+//
+//   // If the discriminant is exactly 0, a segment endpoint touches the circle
+//   // (and only one intersection point)
+//   if ( disc2 === 0 ) return intersections;
+//
+//   // If t2 hits (between 0 and 1) it indicates an "exit"
+//   if ( t2.between(0-epsilon, 1+epsilon) ) {
+//     intersections.push({
+//       x: p0.x + (dx * t2),
+//       y: p0.y + (dy * t2)
+//     });
+//   }
+//   return intersections;
+// }
 
 /**
  * Area that matches clipper measurements, so it can be compared with Clipper Polygon versions.
