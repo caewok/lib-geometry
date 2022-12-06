@@ -1,5 +1,6 @@
 /* globals
-PIXI
+PIXI,
+canvas
 */
 "use strict";
 

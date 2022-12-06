@@ -1,6 +1,7 @@
 /* globals
 Ray,
-canvas
+canvas,
+CONST
 */
 "use strict";
 

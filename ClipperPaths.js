@@ -274,7 +274,7 @@ export class ClipperPaths {
   /**
    * Draw the clipper paths, to the extent possible
    */
-  draw({ color = drawing.COLORS.black, width = 1, fill, fillAlpha = 1 } = {}) {
+  draw({ color = Draw.COLORS.black, width = 1, fill, fillAlpha = 1 } = {}) {
     if ( !fill ) fill = color;
     const polys = this.toPolygons();
 

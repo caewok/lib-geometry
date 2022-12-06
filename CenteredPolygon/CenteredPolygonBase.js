@@ -1,6 +1,5 @@
 /* globals
-PIXI,
-CONST
+PIXI
 */
 "use strict";
 

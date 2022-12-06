@@ -1,8 +1,7 @@
 /* globals
 PIXI,
 ClipperLib,
-CONFIG,
-foundry
+CONFIG
 */
 "use strict";
 
