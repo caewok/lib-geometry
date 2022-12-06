@@ -1,8 +1,8 @@
 /* globals
 PIXI,
 foundry,
-libWrapper,
-ClipperLib
+ClipperLib,
+CONFIG
 */
 "use strict";
 
@@ -10,10 +10,10 @@ import { WeilerAthertonClipper } from "../WeilerAtherton.js";
 
 // ----------------  ADD METHODS TO THE PIXI.RECTANGLE PROTOTYPE ------------------------
 export function registerPIXIRectangleMethods() {
-  CONFIG.Geometry ??= {};
-  CONFIG.Geometry.Registered ??= {};
-  if ( CONFIG.Geometry.Registered.PIXIPolygon ) return;
-  CONFIG.Geometry.Registered.PIXIPolygon = true;
+  CONFIG.GeometryLib ??= {};
+  CONFIG.GeometryLib.Registered ??= {};
+  if ( CONFIG.GeometryLib.Registered.PIXIRectangle ) return;
+  CONFIG.GeometryLib.Registered.PIXIRectangle = true;
 
   // ----- Getters/Setters ----- //
   if ( !Object.hasOwn(PIXI.Rectangle.prototype, "area") ) {
@@ -42,7 +42,7 @@ export function registerPIXIRectangleMethods() {
     value: intersectPolygonPIXIRectangle,
     writable: true,
     configurable: true
-  })
+  });
 
   Object.defineProperty(PIXI.Rectangle.prototype, "overlaps", {
     value: overlaps,
@@ -90,6 +90,12 @@ export function registerPIXIRectangleMethods() {
 
   Object.defineProperty(PIXI.Rectangle.prototype, "_overlapsRectangle", {
     value: overlapsRectangle,
+    writable: true,
+    configurable: true
+  });
+
+  Object.defineProperty(PIXI.Rectangle.prototype, "scaledArea", {
+    value: scaledArea,
     writable: true,
     configurable: true
   });
@@ -336,6 +342,17 @@ function translate(dx, dy) {
 }
 
 /**
+ * Area that matches clipper measurements, so it can be compared with Clipper Polygon versions.
+ * Used to match what Clipper would measure as area, by scaling the points.
+ * @param {object} [options]
+ * @param {number} [scalingFactor]  Scale like with PIXI.Polygon.prototype.toClipperPoints.
+ * @returns {number}  Positive if clockwise. (b/c y-axis is reversed in Foundry)
+ */
+function scaledArea({scalingFactor = 1} = {}) {
+  return this.toPolygon().scaledArea({scalingFactor});
+}
+
+/**
  * Returns the viewable of the rectangle that make up the viewable perimeter
  * as seen from an origin.
  * @param {Point} origin                  Location of the viewer, in 2d.
@@ -344,9 +361,6 @@ function translate(dx, dy) {
  * @returns {Point[]|null}
  */
 function viewablePoints(origin, { outermostOnly = true } = {}) {
-  const zones = PIXI.Rectangle.CS_ZONES;
-  const bbox = this;
-
   const pts = getViewablePoints(this, origin);
 
   if ( !pts || !outermostOnly ) return pts;
@@ -364,7 +378,6 @@ function viewablePoints(origin, { outermostOnly = true } = {}) {
 function getViewablePoints(bbox, origin) {
   const zones = PIXI.Rectangle.CS_ZONES;
 
-  let pts;
   switch ( bbox._getZone(origin) ) {
     case zones.INSIDE: return null;
     case zones.TOPLEFT: return [{ x: bbox.left, y: bbox.bottom },  { x: bbox.left, y: bbox.top }, { x: bbox.right, y: bbox.top }];

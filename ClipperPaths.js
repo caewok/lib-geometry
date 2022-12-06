@@ -5,7 +5,7 @@ canvas
 */
 "use strict";
 
-import * as drawing from "../drawing.js";
+import { Draw } from "./Draw.js";
 
 /**
  * Class to manage ClipperPaths for multiple polygons.
@@ -17,8 +17,9 @@ export class ClipperPaths {
   * @param paths {ClipperLib.Path[]|Set<ClipperLib.Path>|Map<ClipperLib.Path>}
   * @returns {ClipperPaths}
   */
-  constructor(paths = []) {
+  constructor(paths = [], { scalingFactor = 1 } = {}) {
     this.paths = [...paths]; // Ensure these are arrays
+    this.scalingFactor = scalingFactor;
   }
 
   /**
@@ -39,8 +40,7 @@ export class ClipperPaths {
    * @returns {ClipperPaths}
    */
   static fromPolygons(polygons, { scalingFactor = 1 } = {}) {
-    const out = new ClipperPaths(polygons.map(p => p.toClipperPoints({scalingFactor})));
-    out.scalingFactor = scalingFactor;
+    const out = new ClipperPaths(polygons.map(p => p.toClipperPoints({scalingFactor})), { scalingFactor });
     return out;
   }
 
@@ -74,6 +74,27 @@ export class ClipperPaths {
     }
 
     return polygon;
+  }
+
+  /**
+   * Calculate the area for this set of paths.
+   * Use getter to correspond with PIXI.Polygon.prototype.area and other polygon types.
+   * @returns {number}
+   */
+  get area() {
+    return ClipperLib.JS.AreaOfPolygons(this.paths) / Math.pow(this.scalingFactor, 2);
+  }
+
+  /**
+   * Area that matches clipper measurements, so it can be compared with Clipper Polygon versions.
+   * Used to match what Clipper would measure as area, by scaling the points.
+   * @param {object} [options]
+   * @param {number} [scalingFactor]  Scale like with PIXI.Polygon.prototype.toClipperPoints.
+   * @returns {number}  Positive if clockwise. (b/c y-axis is reversed in Foundry)
+   */
+  scaledArea({scalingFactor = 1} = {}) {
+    if ( scalingFactor !== this.scalingFactor ) console.warn("ClipperPaths|scaledArea requested scalingFactor does not match.");
+    return this.area;
   }
 
   /**
@@ -241,24 +262,19 @@ export class ClipperPaths {
     cPaths.scalingFactor = firstPath.scalingFactor;
 
     for ( let i = 1; i < ln; i += 1 ) {
-      cPaths.paths.push(...pathsArr[i].paths);
+      const obj = pathsArr[i];
+      if ( cPaths.scalingFactor !== obj.scalingFactor ) console.warn("ClipperPaths|combinePaths scalingFactor not equal.");
+
+      cPaths.paths.push(...obj.paths);
     }
 
     return cPaths.combine();
   }
 
   /**
-   * Calculate the area for this set of paths
-   * @returns {number}
-   */
-  area() {
-    return ClipperLib.JS.AreaOfPolygons(this.paths);
-  }
-
-  /**
    * Draw the clipper paths, to the extent possible
    */
-  draw({ color = drawing.COLORS.black, width = 1, fill, fillAlpha = 1 } = {}) {
+  draw({ color = Draw.COLORS.black, width = 1, fill, fillAlpha = 1 } = {}) {
     if ( !fill ) fill = color;
     const polys = this.toPolygons();
 

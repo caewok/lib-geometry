@@ -1,34 +1,144 @@
 /* globals
-
+CONFIG,
+canvas,
+foundry,
+CONST
 */
 "use strict";
 
-import { Point3d } from "./Point3d.js";
+import { CenteredRectangle } from "./CenteredPolygon/CenteredRectangle.js";
+import { CenteredPolygon } from "./CenteredPolygon/CenteredPolygon.js";
+import { Ellipse } from "./Ellipse.js";
 
-// Store √3 as a constant
-Math.SQRT3 = Math.sqrt(3);
-
-// Store some functions in foundry.utils for general use
+// Functions that would go in foundry.utils if that object were extensible
 export function registerFoundryUtilsMethods() {
-  if ( foundry.utils.orient3dFast ) return;
+  CONFIG.GeometryLib ??= {};
+  if ( CONFIG.GeometryLib.utils ) return;
 
-  Object.defineProperty(foundry.utils, "orient3dFast", {
-    value: orient3dFast,
-    writable: true,
-    configurable: true
-  });
+  CONFIG.GeometryLib.utils = {
+    orient3dFast,
+    quadraticIntersection,
+    lineCircleIntersection,
+    lineSegment3dPlaneIntersects,
+    lineSegmentCrosses,
+    gridUnitsToPixels,
+    pixelsToGridUnits,
+    perpendicularPoint,
+    centeredPolygonFromDrawing
+  };
+}
 
-  Object.defineProperty(foundry.utils, "quadraticIntersection", {
-    value: quadraticIntersection,
-    writable: true,
-    configurable: true
-  });
+/**
+ * Construct a centered polygon using the values in drawing shape.
+ * @param {Drawing} drawing
+ * @returns {CenteredPolygonBase}
+ */
+function centeredPolygonFromDrawing(drawing) {
+  switch ( drawing.document.shape.type ) {
+    case CONST.DRAWING_TYPES.RECTANGLE:
+      return CenteredRectangle.fromDrawing(drawing);
+    case CONST.DRAWING_TYPES.ELLIPSE:
+      return Ellipse.fromDrawing(drawing);
+    case CONST.DRAWING_TYPES.POLYGON:
+      return CenteredPolygon.fromDrawing(drawing);
+    default:
+      console.error("fromDrawing shape type not supported");
+  }
+}
 
-  Object.defineProperty(foundry.utils, "lineCircleIntersection", {
-    value: lineCircleIntersection,
-    writable: true,
-    configurable: true
-  });
+/**
+ * Get the point on a line AB that forms a perpendicular line to a point C.
+ * From https://stackoverflow.com/questions/10301001/perpendicular-on-a-line-segment-from-a-given-point
+ * This is basically simplified vector projection: https://en.wikipedia.org/wiki/Vector_projection
+ * @param {Point} a
+ * @param {Point} b
+ * @param {Point} c
+ * @return {Point} The point on line AB or null if a,b,c are collinear. Not
+ *                 guaranteed to be within the line segment a|b.
+ */
+function perpendicularPoint(a, b, c) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const dab = Math.pow(dx, 2) + Math.pow(dy, 2);
+  if ( !dab ) return null;
+
+  const u = (((c.x - a.x) * dx) + ((c.y - a.y) * dy)) / dab;
+  return {
+    x: a.x + (u * dx),
+    y: a.y + (u * dy)
+  };
+}
+
+/**
+ * Convert a grid units value to pixel units, for equivalency with x,y values.
+ * @param {number} value
+ * @returns {number}
+ */
+function gridUnitsToPixels(value) {
+  const { distance, size } = canvas.scene.grid;
+  return (value * size) / distance;
+}
+
+/**
+ * Convert pixel units (x,y,z) to grid units
+ * @param {number} pixels
+ * @returns {number}
+ */
+function pixelsToGridUnits(pixels) {
+  const { distance, size } = canvas.scene.grid;
+  return (pixels * distance) / size;
+}
+
+/**
+ * Like foundry.utils.lineSegmentIntersects but requires the two segments cross.
+ * In other words, sharing endpoints or an endpoint on the other segment does not count.
+ * @param {Point} a                   The first endpoint of segment AB
+ * @param {Point} b                   The second endpoint of segment AB
+ * @param {Point} c                   The first endpoint of segment CD
+ * @param {Point} d                   The second endpoint of segment CD
+ *
+ * @returns {boolean}                 Do the line segments cross?
+ */
+function lineSegmentCrosses(a, b, c, d) {
+  const xa = foundry.utils.orient2dFast(a, b, c);
+  if ( !xa ) return false;
+
+  const xb = foundry.utils.orient2dFast(a, b, d);
+  if ( !xb ) return false;
+
+  const xc = foundry.utils.orient2dFast(c, d, a);
+  if ( !xc ) return false;
+
+  const xd = foundry.utils.orient2dFast(c, d, b);
+  if ( !xd ) return false;
+
+  const xab = (xa * xb) < 0; // Cannot be equal to 0.
+  const xcd = (xc * xd) < 0; // Cannot be equal to 0.
+
+  return xab && xcd;
+}
+
+/**
+ * Quickly test whether the line segment AB intersects with a plane.
+ * This method does not determine the point of intersection, for that use lineLineIntersection.
+ * Each Point3d should have {x, y, z} coordinates.
+ *
+ * @param {Point3d} a   The first endpoint of segment AB
+ * @param {Point3d} b   The second endpoint of segment AB
+ * @param {Point3d} c   The first point defining the plane
+ * @param {Point3d} d   The second point defining the plane
+ * @param {Point3d} e   The third point defining the plane.
+ *                      Optional. Default is for the plane to go up in the z direction.
+ *
+ * @returns {boolean} Does the line segment intersect the plane?
+ * Note that if the segment is part of the plane, this returns false.
+ */
+function lineSegment3dPlaneIntersects(a, b, c, d, e = { x: c.x, y: c.y, z: c.z + 1 }) {
+  // A and b must be on opposite sides.
+  // Parallels the 2d case.
+  const xa = CONFIG.GeometryLib.utils.orient3dFast(a, c, d, e);
+  const xb = CONFIG.GeometryLib.utils.orient3dFast(b, c, d, e);
+  return xa * xb <= 0;
 }
 
 /**
@@ -43,7 +153,7 @@ export function registerFoundryUtilsMethods() {
  *   - Returns a negative value if d lies below the plane.
  *   - Returns zero if the points are coplanar.
  */
-export function orient3dFast(a, b, c, d) {
+function orient3dFast(a, b, c, d) {
   const adx = a.x - d.x;
   const bdx = b.x - d.x;
   const cdx = c.x - d.x;
@@ -130,16 +240,16 @@ function lineCircleIntersection(a, b, center, radius, epsilon=1e-8) {
 
   // Test whether endpoint A is contained
   const ar2 = Math.pow(a.x - center.x, 2) + Math.pow(a.y - center.y, 2);
-  const aInside = ar2 <= r2 + epsilon;
+  const aInside = ar2 <= r2 - epsilon;
 
   // Test whether endpoint B is contained
   const br2 = Math.pow(b.x - center.x, 2) + Math.pow(b.y - center.y, 2);
-  const bInside = br2 <= r2 + epsilon;
+  const bInside = br2 <= r2 - epsilon;
 
   // Find quadratic intersection points
   const contained = aInside && bInside;
   if ( !contained ) {
-    intersections = foundry.utils.quadraticIntersection(a, b, center, radius, epsilon);
+    intersections = CONFIG.GeometryLib.utils.quadraticIntersection(a, b, center, radius, epsilon);
   }
 
   // Return the intersection data
@@ -152,22 +262,3 @@ function lineCircleIntersection(a, b, center, radius, epsilon=1e-8) {
     intersections
   };
 }
-
-
-
-/**
- * Build a geometric shape given a set of angles.
- * @param {Number[]} angles      Array of angles, in degrees, indicating vertex positions.
- * @param {Point}    origin      Center of the shape.
- * @param {Number}   radius      Distance from origin to each vertex.
- * @param {Number}   rotation    Angle in degrees describing rotation from due east.
- * @returns {Points[]} Array of vertices.
- */
-export function geometricShapePoints(angles, origin, radius, rotation = 0) {
-  const a_translated = angles.map(a => Math.toRadians(Math.normalizeDegrees(a + rotation)));
-  return a_translated.map(a => pointFromAngle(origin, a, radius));
-}
-
-
-
-

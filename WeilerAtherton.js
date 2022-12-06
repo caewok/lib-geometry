@@ -68,7 +68,6 @@ export class WeilerAthertonClipper extends PIXI.Polygon {
   constructor(points = [], { union = true, clippingOpts = {} } = {}) {
     super(points);
 
-    this.close();
     if ( !this.isClockwise ) this.reverseOrientation();
 
     /**
@@ -233,16 +232,13 @@ export class WeilerAthertonClipper extends PIXI.Polygon {
    * @returns {Point[]}
    */
   _buildPointIntersectionArray(clipObject) {
-    const points = this.points;
-    const ln = points.length;
-    if ( ln < 6 ) return []; // Minimum 3 Points required
+    if ( this.points.length < 6 ) return []; // Minimum 3 Points required
 
-    let a = new PIXI.Point(points[0], points[1]);
+    const ptsIter = this.iteratePoints({ close: true });
+    let a = ptsIter.next().value;
     const pointsIxs = [a];
 
-    // Closed polygon, so we can use the last point to circle back
-    for ( let i = 2; i < ln; i += 2) {
-      const b = new PIXI.Point(points[i], points[i + 1])
+    for ( const b of ptsIter ) {
       const ixs = this._findIntersections(a, b, clipObject);
       const ixsLn = ixs.length;
       if ( ixsLn ) {
@@ -254,6 +250,7 @@ export class WeilerAthertonClipper extends PIXI.Polygon {
 
       a = b;
     }
+
     return pointsIxs;
   }
 

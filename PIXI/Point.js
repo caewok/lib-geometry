@@ -1,14 +1,18 @@
 /* globals
-
+CONFIG,
+PIXI,
+foundry
 */
 "use strict";
 
+import { Point3d } from "../3d/Point3d.js";
+
 // Add methods to PIXI.Point
 export function registerPIXIPointMethods() {
-  CONFIG.Geometry ??= {};
-  CONFIG.Geometry.Registered ??= {};
-  if ( CONFIG.Geometry.Registered.PIXIPolygon ) return;
-  CONFIG.Geometry.Registered.PIXIPolygon = true;
+  CONFIG.GeometryLib ??= {};
+  CONFIG.GeometryLib.Registered ??= {};
+  if ( CONFIG.GeometryLib.Registered.PIXIPoint ) return;
+  CONFIG.GeometryLib.Registered.PIXIPoint = true;
 
   // ----- Static Methods ----- //
   Object.defineProperty(PIXI.Point, "midPoint", {
@@ -30,10 +34,17 @@ export function registerPIXIPointMethods() {
   });
 
   Object.defineProperty(PIXI.Point, "distanceSquaredBetween", {
-    value: distanceBetween,
+    value: distanceSquaredBetween,
     writable: true,
     configurable: true
   });
+
+  Object.defineProperty(PIXI.Point, "angleBetween", {
+    value: angleBetween,
+    writable: true,
+    configurable: true
+  });
+
 
   // ----- Methods ----- //
 
@@ -142,23 +153,48 @@ export function registerPIXIPointMethods() {
 }
 
 /**
+ * Get the angle between three 2d points, A --> B --> C.
+ * Assumes A|B and B|C have lengths > 0.
+ * @param {Point} a   First point
+ * @param {Point} b   Second point
+ * @param {Point} c   Third point
+ * @param {object} [options]  Options that affect the calculation
+ * @param {boolean} [options.clockwiseAngle]  If true, return the clockwise angle.
+ * @returns {number}  Angle, in radians
+ */
+function angleBetween(a, b, c, { clockwiseAngle = false } = {}) {
+  const ba = new PIXI.Point(a.x - b.x, a.y - b.y);
+  const bc = new PIXI.Point(c.x - b.x, c.y - b.y);
+  const dot = ba.dot(bc);
+  const denom = PIXI.Point.distanceBetween(a, b) * PIXI.Point.distanceBetween(b, c);
+
+  let angle = Math.acos(dot / denom);
+  if ( clockwiseAngle && foundry.utils.orient2dFast(a, b, c) > 0 ) angle = (Math.PI * 2) - angle;
+  return angle;
+}
+
+/**
  * Distance between two 2d points
- * @param {PIXI.Point} a
- * @param {PIXI.Point} b
+ * @param {object} a    Any object with x,y properties
+ * @param {object} b    Any object with x,y properties
  * @returns {number}
  */
 function distanceBetween(a, b) {
-  return b.subtract(a).magnitude();
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  return Math.hypot(dx, dy);
 }
 
 /**
  * Distance squared between two 2d points
- * @param {PIXI.Point} a
- * @param {PIXI.Point} b
+ * @param {object} a    Any object with x,y properties
+ * @param {object} b    Any object with x,y properties
  * @returns {number}
  */
 function distanceSquaredBetween(a, b) {
-  return b.subtract(a).magnitudeSquared();
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  return Math.pow(dx, 2) + Math.pow(dy, 2);
 }
 
 /**
@@ -183,13 +219,13 @@ function key() {
 function flatMapPoints(ptsArr, transformFn) {
   const N = ptsArr.length;
   const ln = N * 2;
-    const newArr = Array(ln);
-    for ( let i = 0; i < N; i += 1 ) {
-      const j = i * 2;
-      const pt = transformFn(ptsArr[i], i);
-      newArr[j] = pt.x;
-      newArr[j + 1] = pt.y;
-    }
+  const newArr = Array(ln);
+  for ( let i = 0; i < N; i += 1 ) {
+    const j = i * 2;
+    const pt = transformFn(ptsArr[i], i);
+    newArr[j] = pt.x;
+    newArr[j + 1] = pt.y;
+  }
   return newArr;
 }
 
@@ -200,7 +236,7 @@ function flatMapPoints(ptsArr, transformFn) {
  * @param {Number}  distance  Distance to travel from the starting point.
  * @returns {Point}  Coordinates of point that lies distance away from origin along angle.
  */
-function pointFromAngle(origin, radians, distance) {
+function fromAngle(origin, radians, distance) {
   const dx = Math.cos(radians);
   const dy = Math.sin(radians);
   return new this(origin.x + (dx * distance), origin.y + (dy * distance));
@@ -330,7 +366,7 @@ function magnitudeSquared2d() {
  * @param {number} epsilon
  * @returns {boolean}
  */
-function almostEqual2d(other, epsilon = EPSILON) {
+function almostEqual2d(other, epsilon = 1e-08) {
   return this.x.almostEqual(other.x, epsilon) && this.y.almostEqual(other.y, epsilon);
 }
 
@@ -341,9 +377,7 @@ function almostEqual2d(other, epsilon = EPSILON) {
  * @returns {PIXI.Point}
  */
 function normalize(outPoint) {
-  outPoint ??= new this.constructor();
-  this.multiplyScalar(1 / this.magnitude(), outPoint);
-  return outPoint;
+  return this.multiplyScalar(1 / this.magnitude(), outPoint);
 }
 
 /**
@@ -392,8 +426,10 @@ function rotate(angle, outPoint) {
 
   const cAngle = Math.cos(angle);
   const sAngle = Math.sin(angle);
-  outPoint.x = (this.x * cAngle) - (this.y * sAngle);
-  outPoint.y = (this.y * cAngle) + (this.x * sAngle)
+  const { x, y } = this; // Avoid accidentally using the outPoint values when calculating new y.
+
+  outPoint.x = (x * cAngle) - (y * sAngle);
+  outPoint.y = (y * cAngle) + (x * sAngle);
   return outPoint;
 }
 

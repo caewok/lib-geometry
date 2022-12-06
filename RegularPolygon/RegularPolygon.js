@@ -20,6 +20,36 @@ import { WeilerAthertonClipper } from "../WeilerAtherton.js";
 export class RegularPolygon extends PIXI.Polygon {
 
   /**
+   * Vertices when the polygon is centered on 0,0.
+   * @type {PIXI.Point[]}
+   */
+  _fixedPoints;
+
+  /**
+   * Vertices taking into account the origin {x, y}.
+   * @type {number[]}
+   */
+  _points;
+
+  /** @type {boolean} */
+  _isClockwise = true;
+
+  /** @type {number} */
+  x = 0;
+
+  /** @type {number} */
+  y = 0;
+
+  /** @type {number} */
+  numSides = 3;
+
+  /** @type {number} */
+  rotation = 0;
+
+  /** @type {number} */
+  radians = 0;
+
+  /**
    * @param {Point} origin   Center point of the polygon.
    * @param {number} radius  Circumscribed circle radius.
    * @param {object} options Options that affect the polygon shape
@@ -34,14 +64,6 @@ export class RegularPolygon extends PIXI.Polygon {
     this.radius = radius;
     this.rotation = Math.normalizeDegrees(rotation);
     this.radians = Math.toRadians(this.rotation);
-
-    // Placeholders for getters
-    this._fixedPoints = undefined; // So that subclasses can override generateFixedPoints
-    this._points = undefined;
-
-    // Polygon properties
-    this._isClosed = true;
-    this._isClockwise = true;
   }
 
   get center() { return { x: this.x, y: this.y }; }
@@ -95,6 +117,17 @@ export class RegularPolygon extends PIXI.Polygon {
   get interiorAngle() { return (180 + (180 * (this.numSides - 3))) / this.numSides; }
 
   /**
+   * Area that matches clipper measurements, so it can be compared with Clipper Polygon versions.
+   * Used to match what Clipper would measure as area, by scaling the points.
+   * @param {object} [options]
+   * @param {number} [scalingFactor]  Scale like with PIXI.Polygon.prototype.toClipperPoints.
+   * @returns {number}  Positive if clockwise. (b/c y-axis is reversed in Foundry)
+   */
+  scaledArea({scalingFactor = 1} = {}) {
+    return this.toPolygon().scaledArea({scalingFactor});
+  }
+
+  /**
    * Shift this polygon to a new position.
    * @param {number} dx   Change in x position
    * @param {number} dy   Change in y position
@@ -116,7 +149,7 @@ export class RegularPolygon extends PIXI.Polygon {
 
     const angles = Array.fromRange(numSides).map(i => (360 / numSides) * i);
     const radAngles = angles.map(a => Math.toRadians(a));
-    return radAngles.map(angle => PIXI.Point.pointFromAngle({x: 0, y: 0}, angle, radius));
+    return radAngles.map(angle => PIXI.Point.fromAngle({x: 0, y: 0}, angle, radius));
   }
 
   /**

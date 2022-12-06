@@ -2,7 +2,8 @@
 PIXI,
 canvas,
 ClipperLib,
-Ray
+Ray,
+CONFIG
 */
 "use strict";
 
@@ -25,11 +26,11 @@ target = _token
 
 
 let [wall] = canvas.walls.placeables
-s0 = Shadow.construct(wall, visionSource, Shadow.zValue(0))
-s10 = Shadow.construct(wall, visionSource, Shadow.zValue(10))
+s0 = Shadow.construct(wall, visionSource, CONFIG.GeometryLib.utils.gridUnitsToPixels(0))
+s10 = Shadow.construct(wall, visionSource, CONFIG.GeometryLib.utils.gridUnitsToPixels(10))
 
 
-s30 = Shadow.construct(wall, visionSource, Shadow.zValue(30))
+s30 = Shadow.construct(wall, visionSource, CONFIG.GeometryLib.utils.gridUnitsToPixels(30))
 
 // Project to bottom surface.
 Token losHeight = 30; elevation = 25
@@ -102,16 +103,170 @@ export class Shadow extends PIXI.Polygon {
 
   }
 
+  static upV = new Point3d(0, 0, 1);
+
   /**
-   * Convert grid unit elevation to a pixel value that aligns with x,y coords.
-   * @returns {number}
+   * Build the parallelogram representing a shadow cast from a wall.
+   * Looking top-down with a light or other source object at a given elevation
+   * above a wall.
+   * This method used by Elevated Vision.
+   * TODO: Replace with better version using projection that handles planes.
+   * @param {Wall} w
+   * @param {LightSource} source
+   * @return {Shadow}
    */
-  static zValue() {
-    const { distance, size } = canvas.scene.grid;
-    return (value * size) / distance;
+  static constructShadow(wall, source, surfaceElevation = 0) {
+    /*
+     Looking at a cross-section:
+      V----------T----O-----?
+      | \ Ø      |    |
+    Ve|    \     |    |
+      |       \  |    |
+      |          \    |
+      |        Te|  \ | <- point O where obj can be seen by V for given elevations
+      ----------------•----
+      |<-   VO      ->|
+     e = height of V (vision object)
+     Ø = theta
+     T = terrain wall
+
+     Looking from above:
+                  •
+                 /| 𝜶 is the angle VT to VT.A
+              •/ -|
+             /|   |
+           /  | S | B
+         /    |   |
+       / 𝜶  B |   |
+     V -------T---• O
+     (and mirrored on bottom)
+     S = shadow area
+     B = bright area
+
+     naming:
+     - single upper case: point. e.g. V
+     - double upper case: ray/segment. e.g. VT
+     - lower case: descriptor. e.g., Ve for elevation of V.
+
+    */
+
+    // Note: elevation should already be in grid pixel units
+    let Oe = surfaceElevation;
+    let Te = wall.topZ; // TO-DO: allow floating walls to let light through the bottom portion
+//     let Oe = 0; // TO-DO: allow this to be modified by terrain elevation
+    let Ve = source.elevationZ;
+    if ( Ve <= Te ) return null; // Vision object blocked completely by wall
+
+    // Need the point of the wall that forms a perpendicular line to the vision object
+    const Tix = CONFIG.GeometryLib.utils.perpendicularPoint(wall.A, wall.B, source);
+    if ( !Tix ) return null; // Line collinear with vision object
+    const VT = new Ray(source, Tix);
+
+    // If any elevation is negative, normalize so that the lowest elevation is 0
+    const min_elevation = Math.min(Ve, Oe, Te);
+    if ( min_elevation < 0 ) {
+      const adder = Math.abs(min_elevation);
+      Ve = Ve + adder;
+      Oe = Oe + adder;
+      Te = Te + adder;
+    }
+
+    // Theta is the angle between the 3-D sight line and the sight line in 2-D
+    const theta = Math.atan((Ve - Te) / VT.distance); // Theta is in radians
+    const TOdist = (Te - Oe) / Math.tan(theta); // Tan wants radians
+    const VOdist = VT.distance + TOdist;
+
+    /* Testing
+    // Ray extending out V --> T --> O
+    api.drawing.drawPoint(source, {color: api.drawing.COLORS.yellow})
+
+    VO = Ray.towardsPoint(source, Tix, VOdist)
+    api.drawing.drawPoint(VO.B, {color: api.drawing.COLORS.lightblue})
+    */
+
+    // We know the small triangle on each side:
+    // V --> T --> wall.A and
+    // V --> T --> wall.B
+    // We need the larger encompassing triangle:
+    // V --> O --> ? (wall.A side and wall.B side)
+
+    // Get the distances between Tix and the wall endpoints.
+    const distA = PIXI.Point.distanceBetween(wall.A, Tix);
+    const distB = PIXI.Point.distanceBetween(wall.B, Tix);
+
+
+    /* Testing
+    // Ray extending Tix --> Wall.A
+    rayTA = new Ray(wall.A, Tix);
+    rayTA.distance
+
+    rayTB = new Ray(wall.B, Tix);
+    rayTB.distance;
+    */
+
+    // Calculate the hypotenuse of the big triangle on each side.
+    // That hypotenuse is used to extend a line from V past each endpoint.
+    // First get the angle
+    const alphaA = Math.atan(distA / VT.distance);
+    const alphaB = Math.atan(distB / VT.distance);
+
+    // Now calculate the hypotenuse
+    const hypA = VOdist / Math.cos(alphaA);
+    const hypB = VOdist / Math.cos(alphaB);
+
+    // Extend a line from V past wall T at each endpoint.
+    // Each distance is the hypotenuse ont he side.
+    // given angle alpha.
+    // Should form the parallelogram with wall T on one parallel side
+    const VOa = Ray.towardsPoint(source, wall.A, hypA);
+    const VOb = Ray.towardsPoint(source, wall.B, hypB);
+
+    /* Testing
+    // Rays extending V --> T.A or T.B --> end of shadow
+    api.drawing.drawSegment(VOa, {color: api.drawing.COLORS.green})
+    api.drawing.drawSegment(VOb, {color: api.drawing.COLORS.orange})
+    api.drawing.drawSegment({A: VOa.B, B: VOb.B}, {color: api.drawing.COLORS.gray})
+    */
+
+    const shadow = new this([wall.A, VOa.B, VOb.B, wall.B]);
+
+    /* Testing
+    api.drawing.drawShape(shadow)
+    */
+
+    // Cache some values
+    shadow.wall = wall;
+    shadow.source = source;
+    shadow.VT = VT;
+    shadow.theta = theta;
+    shadow.alpha = { A: alphaA, B: alphaB };
+
+    return shadow;
   }
 
-  static upV = new Point3d(0, 0, 1);
+  /**
+   * Intersect this shadow against a polygon and return a new shadow.
+   * Copy relevant data from this shadow.
+   * Used primarily by ElevatedVision to intersect against the sweep.
+   */
+  intersectPolygon(poly) {
+    // Cannot rely on the super.intersectPolygon because we need to retrieve all the holes.
+    const solution = this.clipperClip(poly, { cliptype: ClipperLib.ClipType.ctIntersection });
+
+    return solution.map(pts => {
+      const polyIx = PIXI.Polygon.fromClipperPoints(pts);
+      const model = new this.constructor();
+      Object.assign(model, polyIx);
+
+      model.wall = this.wall;
+      model.source = this.source;
+      model.VT = this.VT;
+      model.theta = this.theta;
+      model.alpha = this.alpha;
+
+      return model;
+    });
+  }
 
   /**
    * Construct a shadow using the following assumptions
@@ -191,22 +346,6 @@ export class Shadow extends PIXI.Polygon {
       console.warn("complexSurfaceOriginAbove ixWallA or ixWallB is null");
       return null;
     }
-
-    // Tests for debugging
-    // Surface intersection must be further from origin than the wall point
-//     const distWallA = distanceSquaredBetweenPoints(origin, A);
-//     const distIxWallA = distanceSquaredBetweenPoints(origin, ixWallA);
-//     if ( !distWallA.almostEqual(distIxWallA, 1e-04) && distWallA > distIxWallA ) {
-//       console.warn("complexSurfaceOriginAbove distWallA >= distIxWallA");
-//       return null;
-//     }
-//
-//     const distWallB = distanceSquaredBetweenPoints(origin, B);
-//     const distIxWallB = distanceSquaredBetweenPoints(origin, ixWallB);
-//     if ( !distWallB.almostEqual(distIxWallB, 1e-04) && distWallB > distIxWallB ) {
-//       console.warn("complexSurfaceOriginAbove distWallB >= distIxWallB");
-//       return null;
-//     }
 
     // Surface intersection must be below the origin
     if ( origin.z < ixOriginA.z ) {

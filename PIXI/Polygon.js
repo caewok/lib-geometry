@@ -1,18 +1,17 @@
 /* globals
 PIXI,
 ClipperLib,
-foundry
+foundry,
+CONFIG
 */
 "use strict";
 
-
-
 // --------- ADD METHODS TO THE PIXI.POLYGON PROTOTYPE ----- //
 export function registerPIXIPolygonMethods() {
-  CONFIG.Geometry ??= {};
-  CONFIG.Geometry.Registered ??= {};
-  if ( CONFIG.Geometry.Registered.PIXIPolygon ) return;
-  CONFIG.Geometry.Registered.PIXIPolygon = true;
+  CONFIG.GeometryLib ??= {};
+  CONFIG.GeometryLib.Registered ??= {};
+  if ( CONFIG.GeometryLib.Registered.PIXIPolygon ) return;
+  CONFIG.GeometryLib.Registered.PIXIPolygon = true;
 
   // ----- Getters/Setters ----- //
 
@@ -127,6 +126,12 @@ export function registerPIXIPolygonMethods() {
     configurable: true
   });
 
+  Object.defineProperty(PIXI.Polygon.prototype, "scaledArea", {
+    value: scaledArea,
+    writable: true,
+    configurable: true
+  });
+
   Object.defineProperty(PIXI.Polygon.prototype, "signedArea", {
     value: signedArea,
     writable: true,
@@ -138,10 +143,12 @@ export function registerPIXIPolygonMethods() {
 /**
  * Calculate the area of this polygon.
  * Same approach as ClipperLib.Clipper.Area.
+ * @param {object} options
+ * @param {number|undefined} [scalingFactor]  If defined, will scale like with PIXI.Polygon.prototype.toClipperPoints.
  * @returns {number}  Positive rea
  */
 function area() {
-  return Math.abs(this.signedArea)
+  return Math.abs(this.signedArea());
 }
 
 /**
@@ -152,16 +159,17 @@ function area() {
 function centroid() {
   const pts = [...this.iteratePoints({close: true})];
   const ln = pts.length;
-  switch ( ln  ) {
+  switch ( ln ) {
     case 0: return undefined;
-    case 1: return pts[0]; // should not happen if close is true
+    case 1: return pts[0]; // Should not happen if close is true
     case 2: return pts[0];
     case 3: return PIXI.Point.midPoint(pts[0], pts[1]);
   }
 
   const outPoint = new PIXI.Point();
   let area = 0;
-  for ( let i = 0; i < ln; i += 1 ) {
+  const iter = ln - 2;
+  for ( let i = 0; i < iter; i += 1 ) {
     const iPt = pts[i];
     const jPt = pts[i + 1];
     const mult = (iPt.x * jPt.y) - (jPt.x * iPt.y);
@@ -257,7 +265,7 @@ function convexHullCmpFn(a, b) {
 function isClockwise() {
   if ( this.points.length < 6 ) return (this._isClockwise = undefined);
 
-  if ( typeof this._isClockwise === "undefined") this._isClockwise = this.area > 0;
+  if ( typeof this._isClockwise === "undefined") this._isClockwise = this.signedArea() > 0;
   return this._isClockwise;
 }
 
@@ -305,9 +313,7 @@ function isSegmentEnclosed(segment, { epsilon = 1e-08 } = {}) {
  * Edges link, such that edge0.B === edge.1.A.
  */
 function* iterateEdges({close = true} = {}) {
-  const dropped = this.isClosed ? 2 : 0;
   const ln = this.points.length;
-  const iter = ln - dropped;
   if ( ln < 4 ) return;
 
   const firstA = new PIXI.Point(this.points[0], this.points[1]);
@@ -326,17 +332,20 @@ function* iterateEdges({close = true} = {}) {
 
 /**
  * Iterate over the polygon's {x, y} points in order.
- * If the polygon is closed and close is false,
- * the last two points (which should equal the first two points) will be dropped.
- * Otherwise, all points will be returned regardless of the close value.
+ * @param {object} [options]
+ * @param {boolean} [close]   If close, include the first point again.
  * @returns {x, y} PIXI.Point
  */
 function* iteratePoints({close = true} = {}) {
-  const dropped = (!this.isClosed || close) ? 0 : 2;
-  const ln = this.points.length - dropped;
-  for (let i = 0; i < ln; i += 2) {
+  const ln = this.points.length;
+  if ( ln < 2 ) return;
+
+  const num = ln - (this.isClosed ? 2 : 0);
+  for (let i = 0; i < num; i += 2) {
     yield new PIXI.Point(this.points[i], this.points[i + 1]);
   }
+
+  if ( close ) yield new PIXI.Point(this.points[0], this.points[1]);
 }
 
 
@@ -346,11 +355,9 @@ function* iteratePoints({close = true} = {}) {
  * @returns {boolean}
  */
 function linesCross(lines) {
-  const fu = foundry.utils;
-
   for ( const edge of this.iterateEdges() ) {
     for ( const line of lines ) {
-      if ( lineSegmentCrosses(edge.A, edge.B, line.A, line.B) ) return true;
+      if ( CONFIG.GeometryLib.utils.lineSegmentCrosses(edge.A, edge.B, line.A, line.B) ) return true;
     }
   }
 
@@ -478,25 +485,47 @@ function reverseOrientation() {
 }
 
 /**
- * Signed area of polygon
- * Similar approach to ClipperLib.Clipper.Area.
+ * Scaled area of a polygon.
+ * Used to match what Clipper would measure as area, by scaling the points.
+ * @param {object} [options]
+ * @param {number} [scalingFactor]  Scale like with PIXI.Polygon.prototype.toClipperPoints.
  * @returns {number}  Positive if clockwise. (b/c y-axis is reversed in Foundry)
  */
-function signedArea() {
-  const pts = [...this.iteratePoints(close: true)]
+function scaledArea({ scalingFactor = 1 } = {}) {
+  return signedArea({ scalingFactor });
+}
+
+/**
+ * Signed area of polygon
+ * Similar approach to ClipperLib.Clipper.Area.
+ * @param {object} [options]
+ * @param {number|undefined} [scalingFactor]  If defined, will scale like with PIXI.Polygon.prototype.toClipperPoints.
+ * @returns {number}  Positive if clockwise. (b/c y-axis is reversed in Foundry)
+ */
+function signedArea({ scalingFactor } = {}) {
+  const pts = [...this.iteratePoints({close: true})];
+
+  if ( scalingFactor ) pts.forEach(pt => {
+    pt.x = Math.roundFast(pt.x * scalingFactor);
+    pt.y = Math.roundFast(pt.y * scalingFactor);
+  });
+
   const ln = pts.length;
-  if ( ln < 3 ) return 0;
+  if ( ln < 4 ) return 0; // Incl. closing point, should have 4
 
   // (first + second) * (first - second)
   // ...
   // (last + first) * (last - first)
 
   let area = 0;
-  for ( let i = 0; i < ln; i += 1 ) {
+  const iter = ln - 1;
+  for ( let i = 0; i < iter; i += 1 ) {
     const iPt = pts[i];
     const jPt = pts[i + 1];
-    area += (iPt.x + jPt.x) * (iPt.y - jPt.y)
+    area += (iPt.x + jPt.x) * (iPt.y - jPt.y);
   }
+
+  if ( scalingFactor ) area /= Math.pow(scalingFactor, 2);
 
   return -area * 0.5;
 }
@@ -592,4 +621,15 @@ function viewablePoints(origin, { returnKeys = false, outermostOnly = false } = 
   let keys = [...endKeys, ...startKeys];
   if ( outermostOnly ) keys = [keys[0], keys[keys.length - 1]];
   return returnKeys ? keys : elementsByIndex(pts, keys);
+}
+
+/**
+ * Get elements of an array by a list of indices
+ * https://stackoverflow.com/questions/43708721/how-to-select-elements-from-an-array-based-on-the-indices-of-another-array-in-ja
+ * @param {Array} arr       Array with elements to select
+ * @param {number[]} indices   Indices to choose from arr. Indices not in arr will be undefined.
+ * @returns {Array}
+ */
+export function elementsByIndex(arr, indices) {
+  return indices.map(aIndex => arr[aIndex]);
 }

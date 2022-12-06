@@ -1,9 +1,13 @@
 /* globals
-PIXI
+PIXI,
+canvas
 */
 "use strict";
 
 import { RegularPolygon } from "./RegularPolygon.js";
+
+// Store √3 as a constant
+Math.SQRT3 = Math.sqrt(3);
 
 /**
  * "Column" hexagon with points at W and E
@@ -98,12 +102,12 @@ export class Hexagon extends RegularPolygon {
 
     // Points at W and E
     return [
-      { x: radius, y: 0 },
-      { x: r1_2, y: apothem },
-      { x: -r1_2, y: apothem },
-      { x: -radius, y: 0 },
-      { x: -r1_2, y: -apothem },
-      { x: r1_2, y: -apothem }
+      new PIXI.Point(radius, 0),
+      new PIXI.Point(r1_2, apothem),
+      new PIXI.Point(-r1_2, apothem),
+      new PIXI.Point(-radius, 0),
+      new PIXI.Point(-r1_2, -apothem),
+      new PIXI.Point(r1_2, -apothem)
     ];
   }
 
