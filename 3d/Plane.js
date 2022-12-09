@@ -55,6 +55,27 @@ export class Plane {
     return Math.acos(V1.dot(V2) / (V1.magnitude() * V2.magnitude()));
   }
 
+  /**
+   * Which side of the plane lies a 3d point.
+   * The returned value may be negative or positive depending on specific orientation of
+   * the plane and point, but the value should remain the same sign for other points on that side.
+   * @param {Point3d} p
+   * @returns {number}
+   *   - Positive: p is above the plane
+   *   - Negative: p is below the plane
+   *   - Zero: p is on the plane ()
+   * Point nearly on the plane will return very small values.
+   */
+  whichSide(p) {
+    const { u, v } = this.getVectorsOnPlane();
+    const p0 = this.point;
+
+    // Assuming p0, u, v are CCW:
+    // - Positive if p0, u, v are seen as CCW from p
+    // - Negative if p0, u, v are seen as CW from p
+    return CONFIG.GeometryLib.utils.orient3dFast(p0, u, v, p)
+  }
+
   isPointOnPlane(p) {
     // https://math.stackexchange.com/questions/684141/check-if-a-point-is-on-a-plane-minimize-the-use-of-multiplications-and-divisio
     const vs = this.getVectorsOnPlane();
@@ -112,6 +133,37 @@ export class Plane {
       [n.x, n.y, n.z, 0], // Z-axis
       [p0.x, p0.y, p0.z, 1] // Translation
     ]);
+  }
+
+  /**
+   * Intersection point between ray and the plane
+   * @param {Point3d} v  Point (or vertex) on the ray, representing 1 unit of movement along the ray
+   * @param {Point3d} l  Origin of the ray.
+   * @returns {Point3d|null}
+   */
+  rayIntersection(v, l) {
+    // Eisemann, Real-Time Shadows, p. 24 (Projection Matrix for Planar Shadows)
+
+    const { normal, point } = this;
+
+    const dotNV = normal.dot(v);
+    const dotNL = normal.dot(l);
+    const denom = dotNL - dotNV;
+
+    if ( denom.almostEqual(0) ) return null;
+
+    const d = normal.dot(point);
+    const delta = v.subtract(l);
+
+    const outPoint = new Point3d();
+
+    v.multiplyScalar(dotNL + d, outPoint);
+    const b = l.multiplyScalar(dotNV + d);
+
+    outPoint.subtract(b, outPoint);
+    outPoint.multiplyScalar(1 / denom, outPoint);
+
+    return outPoint;
   }
 
   /**
