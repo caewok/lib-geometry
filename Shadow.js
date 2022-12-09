@@ -102,24 +102,17 @@ export class ShadowProjection {
   /** @type {PointSource} */
   source;
 
-  /** @type {object} */
-  planeObject;
-
-  /** @type {Point3d} */
-  _sourceOrigin;
-
   /** @type {Matrix} */
   _planarProjectionMatrix;
 
   /** @type {number} */
   _sourceSide;
 
-  constructor(plane, source, planeObject) {
+  constructor(plane, source) {
     this.plane = plane;
     this.source = source;
-    this.planeObject = planeObject;
 
-    if ( planeObject ) _cache.set(planeObject, this.sourceOrigin);
+    this.updateSourceOrigin(); // Set the cache
   }
 
   /**
@@ -127,7 +120,8 @@ export class ShadowProjection {
    * @type {Point3d}
    */
   get sourceOrigin() {
-    return this._sourceOrigin ?? (this._sourceOrigin = Point3d.fromPointSource(this.source));
+    // Don't cache so that the source origin is always up-to-date with current source location.
+    return Point3d.fromPointSource(this.source);
   }
 
   /**
@@ -135,6 +129,9 @@ export class ShadowProjection {
    * @type {Matrix}
    */
   get planarProjectionMatrix() {
+    const priorOrigin = ShadowProjection._cache.get(this.source);
+    if ( !priorOrigin || !priorOrigin.equals(this.sourceOrigin) ) this.updateSourceOrigin();
+
     return this._planarProjectionMatrix ?? (this._planarProjectionMatrix = this._calculatePlanarProjectionMatrix());
   }
 
@@ -143,6 +140,9 @@ export class ShadowProjection {
    * @type {number}
    */
   get sourceSide() {
+    const priorOrigin = ShadowProjection._cache.get(this.source);
+    if ( !priorOrigin || !priorOrigin.equals(this.sourceOrigin) ) this.updateSourceOrigin();
+
     return this._sourceSide ?? (this._sourceSide = this.plane.whichSide(this.sourceOrigin));
   }
 
@@ -163,6 +163,8 @@ export class ShadowProjection {
     this._sourceOrigin = undefined;
     this._planarProjectionMatrix = undefined;
     this._sourceSide = undefined;
+
+    ShadowProjection._cache.set(this.source, this.sourceOrigin.clone());
   }
 
   /**
