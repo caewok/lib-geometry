@@ -71,6 +71,48 @@ export class Point3d extends PIXI.Point {
   }
 
   /**
+   * Determine the center point for the source.
+   * @param {PointSource} source
+   * @returns {Point3d}
+   */
+  static fromPointSource(source) {
+    const { x, y, elevationZ } = source;
+    return new Point3d(x, y, elevationZ);
+  }
+
+  /**
+   * Determine the token top and bottom center points.
+   * @param {Token} token
+   * @returns {object} { top, bottom }
+   */
+  static fromToken(token) {
+    const { x, y } = token.center;
+    return {
+      top: new Point3d(x, y, token.topZ),
+      bottom: new Point3d(x, y, token.bottomZ)
+    };
+  }
+
+  /**
+   * Determine the wall top and bottom points
+   * @param {Wall} wall
+   * @returns {object} { A: { top, bottom }, B: { top, bottom } }
+   */
+  static fromWall(wall) {
+    const { topZ, bottomZ, A, B } = wall;
+    return {
+      A: {
+        top: new Point3d(A.x, A.y, topZ),
+        bottom: new Point3d(A.x, A.y, bottomZ)
+      },
+      B: {
+        top: new Point3d(B.x, B.y, topZ),
+        bottom: new Point3d(B.x, B.y, bottomZ)
+      }
+    };
+  }
+
+  /**
    * Hash key for this point, with coordinates rounded to nearest integer.
    * Ordered, so sortable.
    * @returns {BigInt}
@@ -195,6 +237,22 @@ export class Point3d extends PIXI.Point {
     outPoint ??= new this.constructor();
     super.multiply(other, outPoint);
     outPoint.z = this.z * (other.z ?? 0);
+
+    return outPoint;
+  }
+
+  /**
+   * Divide `this` point by another.
+   * Based on https://api.pixijs.io/@pixi/math-extras/src/pointExtras.ts.html
+   * @param {Point3d|PIXI.Point} other    The point to subtract from `this`.
+   * @param {Point3d} [outPoint]    A point-like object in which to store the value.
+   *   (Will create new point if none provided.)
+   * @returns {Point3d}
+   */
+  divide(other, outPoint) {
+    outPoint ??= new this.constructor();
+    super.divide(other, outPoint);
+    outPoint.z = this.z / other.z;
 
     return outPoint;
   }
