@@ -10,8 +10,8 @@ CONFIG
 import { Point3d } from "./3d/Point3d.js";
 import { ClipperPaths } from "./ClipperPaths.js";
 import { Plane } from "./3d/Plane.js";
-// import { TokenPoints3d } from "./TokenPoints3d.js";
 import { Draw } from "./Draw.js";
+import { Matrix } from "./Matrix.js";
 
 /* Testing
 api = game.modules.get("tokenvisibility").api
@@ -89,6 +89,311 @@ Ve| K  \   We|    |
 
 */
 
+export class ShadowProjection {
+  /**
+   * Cache values for each source
+   * @type {WeakMap}
+   */
+  static _cache = new WeakMap();
+
+  /** @type {Plane} */
+  plane;
+
+  /** @type {PointSource} */
+  source;
+
+  /** @type {object} */
+  planeObject;
+
+  /** @type {Point3d} */
+  _sourceOrigin;
+
+  /** @type {Matrix} */
+  _planarProjectionMatrix;
+
+  /** @type {number} */
+  _sourceSide;
+
+  constructor(plane, source, planeObject) {
+    this.plane = plane;
+    this.source = source;
+    this.planeObject = planeObject;
+
+    if ( planeObject ) _cache.set(planeObject, this.sourceOrigin);
+  }
+
+  /**
+   * 3d origin (center) point for the source.
+   * @type {Point3d}
+   */
+  get sourceOrigin() {
+    return this._sourceOrigin ?? (this._sourceOrigin = Point3d.fromPointSource(this.source));
+  }
+
+  /**
+   * Cached planar projection matrix.
+   * @type {Matrix}
+   */
+  get planarProjectionMatrix() {
+    return this._planarProjectionMatrix ?? (this._planarProjectionMatrix = this._calculatePlanarProjectionMatrix());
+  }
+
+  /**
+   * Determine which side of the plane the source lies. See Plane.prototype.which.Side
+   * @type {number}
+   */
+  get sourceSide() {
+    return this._sourceSide ?? (this._sourceSide = this.plane.whichSide(this.sourceOrigin));
+  }
+
+  /**
+   * Test whether the plane is parallel to the canvas, which allows us to simplify
+   * wall shadow calculations.
+   * @type {boolean}
+   */
+  get isCanvasParallel() {
+    return this.plane.normal.equals({x: 0, y: 0, z: 1});
+  }
+
+  /**
+   * Force a reset of the source origin point, used when the source position or elevation changes.
+   * Another option is to construct a new ShadowProjection using the plane from this one.
+   */
+  updateSourceOrigin() {
+    this._sourceOrigin = undefined;
+    this._planarProjectionMatrix = undefined;
+    this._sourceSide = undefined;
+  }
+
+  /**
+   * Matrix M such that v' = Mv, where v is a vertex of an object and v' its projection
+   * onto the plane.
+   */
+  _calculatePlanarProjectionMatrix() {
+    // Eisemann, Real-Time Shadows, p. 24 (Projection Matrix for Planar Shadows)
+    const { normal: n, point } = this.plane;
+    const l = this.sourceOrigin;
+    const d = n.dot(point);
+
+    const dotNL = n.dot(l);
+    const scaledDotNL = dotNL + d;
+
+    // Reversed from Eisemann b/c this Matrix is row-ordered.
+    return new Matrix([
+      [scaledDotNL - (n.x * l.x),  -n.x * l.y,                 -n.x * l.z,                 -n.x],
+      [-n.y * l.x,                 scaledDotNL - (n.y * l.y),  -n.y * l.z,                 -n.y],
+      [-n.z * l.x,                 -n.z * l.y,                 scaledDotNL - (n.z * l.z),  -n.z],
+      [-d * l.x,                   -d * l.y,                   -d * l.z,                   dotNL]
+    ]);
+  }
+
+  /**
+   * Shadow points for a wall where the source is below the plane.
+   * (Shadow cast up on the plane)
+   * @param {Wall} wall
+   * @returns {Point3d[]}
+   */
+  _shadowPointsFromWallPointsSourceBelowPlane(pts, planeZ, sourceZ) {
+    // Turn everything upside down
+    pts.A.top.z *= -1;
+    pts.B.top.z *= -1;
+    pts.A.bottom.z *= -1;
+    pts.B.bottom.z *= -1;
+
+    planeZ *= -1;
+    sourceZ *= -1;
+
+    return this._shadowPointsFromWallPointsSourceAbovePlane(pts, planeZ, sourceZ);
+  }
+
+  /**
+   * Shadow points for a wall where the source is above the plane.
+   * @param {Wall} wall
+   * @returns {Point3d[]}  Empty array if no shadow
+   */
+  _shadowPointsFromWallPointsSourceAbovePlane(pts, planeZ, sourceZ) {
+    // Not currently possible: wall A and B have different Z values
+    if ( pts.A.top.z !== pts.B.top.z ) {
+      console.error("_shadowPointsForWallSourceAbove wall top elevations differ.");
+    }
+
+    if ( pts.A.bottom.z !== pts.B.bottom.z ) {
+      console.error("_shadowPointsForWallSourceAbove wall bottom elevations differ.");
+    }
+
+    // No shadow if the top of the wall is below the plane.
+    if ( pts.A.top.z <= planeZ ) return [];
+
+    // No shadow if the bottom of the wall is above the source.
+    if ( pts.A.bottom.z >= sourceZ ) return [];
+
+    const maxR2 = Math.pow(canvas.dimensions.maxR, 2);
+    let shadowA = new Point3d();
+    let shadowB = new Point3d();
+    let shadowC = pts.A.bottom.clone();
+    let shadowD = pts.B.bottom.clone();
+    if ( pts.A.top.z >= sourceZ ) {
+      // Source is below the top of the wall; shadow is infinite
+      // Project the point sufficiently far to cover the canvas
+      this.sourceOrigin.towardsPointSquared(pts.A.top, maxR2, shadowA);
+      this.sourceOrigin.towardsPointSquared(pts.B.top, maxR2, shadowB);
+    } else {
+      // Determine the plane intersection
+      this._intersectionWith(pts.A.top, shadowA);
+      this._intersectionWith(pts.B.top, shadowB);
+    }
+
+    if ( pts.A.bottom.z <= planeZ ) {
+      // Source is below the plane; use the wall intersection point with the plane
+      shadowC.z = planeZ;
+      shadowD.z = planeZ;
+    } else {
+      this._intersectionWith(pts.A.bottom, shadowC);
+      this._intersectionWith(pts.B.bottom, shadowD);
+    }
+
+    // Force clockwise
+    return foundry.utils.orient2dFast(shadowB, shadowD, shadowC) < 0
+      ? [ shadowB, shadowD, shadowC, shadowA ]
+      : [ shadowA, shadowC, shadowD, shadowB ];
+  }
+
+  /**
+   * Use Point3d.fromWall to get the 3d points, but replace any infinite z values.
+   * @param {Wall}
+   * @returns {object} Same as Point3d.prototype.fromWall
+   */
+  static wallPoints(wall) {
+    const pts = Point3d.fromWall(wall);
+    if ( !isFinite(pts.A.top.z) ) pts.A.top.z = Number.MAX_SAFE_INTEGER;
+    if ( !isFinite(pts.A.bottom.z) ) pts.A.bottom.z = Number.MIN_SAFE_INTEGER;
+    if ( !isFinite(pts.B.top.z) ) pts.B.top.z = Number.MAX_SAFE_INTEGER;
+    if ( !isFinite(pts.B.bottom.z) ) pts.B.bottom.z = Number.MIN_SAFE_INTEGER;
+
+    return pts;
+  }
+
+
+  /**
+   * Construct a shadow from this source cast by the wall onto this plane.
+   * @param {Wall} wall
+   * @returns {Point3d[]}
+   */
+  constructShadowPointsForWall(wall) {
+    const pts = ShadowProjection.wallPoints(wall);
+    if ( this.isCanvasParallel ) {
+      const planeZ = this.plane.point.z;
+      const sourceZ = this.sourceOrigin.z;
+      if ( planeZ.almostEqual(sourceZ) ) return [];
+
+      return planeZ < sourceZ
+        ? this._shadowPointsFromWallPointsSourceAbovePlane(pts, planeZ, sourceZ)
+        : this._shadowPointsFromWallPointsSourceBelowPlane(pts, planeZ, sourceZ);
+    }
+
+    return this._shadowPointsForWallPoints(pts);
+  }
+
+  /**
+   * Construct a shadow form this source cast by the wall onto this plane.
+   * This helper assume nothing about the plane orientation.
+   * @param {object} pts     Result of ShadowProjection.wallPoints()
+   * @returns {Point3d[]}
+   */
+  _shadowPointsForWallPoints(pts) {
+    const { plane, sourceSide } = this;
+
+    // Which wall points are on the same side of the plane as the light and thus
+    // possibly cast a shadow?
+    const sides = {
+      A: {
+        top: plane.whichSide(pts.A.top),
+        bottom: plane.whichSide(pts.A.bottom)
+      },
+      B: {
+        top: plane.whichSide(pts.B.top),
+        bottom: plane.whichSide(pts.B.bottom)
+      }
+    };
+
+    // Move Atop --> Btop --> Bbottom --> Abottom
+    const shadowPoints = [];
+    const iterPoints = ["A", "B", "B", "A", "A"];
+    const iterDir = ["top", "top", "bottom", "bottom", "top"];
+
+    for ( let i = 0, j = 1; i < 4; i += 1, j += 1 ) {
+      const side = sides[iterPoints[i]][iterDir[i]];
+      const pt = pts[iterPoints[i]][iterDir[i]];
+      const nextSide = sides[iterPoints[j]][iterDir[j]];
+      const nextPt = pts[iterPoints[j]][iterDir[j]];
+
+      // First check if the current point could be an intersection
+      if ( side.almostEqual(0) ) {
+        // Point is on the plane, so use it.
+        shadowPoints.push(pt);
+      } else if ( side * sourceSide < 0 ) {
+        // Point is behind the plane, relative to the source.
+        // source --> plane --> Atop
+      } else {
+        // Point is on the side of the plane with the source.
+        const ix = this._intersectionWith(pt);
+        if ( ix ) {
+          // Need to check whether we have source --> Atop --> plane
+          // Or we might have Atop --> source --> plane, in which is not a shadow
+          shadowPoints.push(ix);
+        }
+      }
+
+      // Second, check if we need the intersection between this point and next point
+      if ( side * nextSide < 0 ) {
+        // pt and nextPt are on different sides of the plane
+        // We need to use the intersection
+        const ix = plane.lineSegmentIntersection(pt, nextPt);
+        if ( ix ) shadowPoints.push(ix);
+      }
+    }
+
+    // Force clockwise
+    return foundry.utils.orient2dFast(shadowPoints[0], shadowPoints[1], shadowPoints[2]) < 0
+      ? shadowPoints : shadowPoints.reverse();
+  }
+
+  /**
+   * Calculate the intersection point on the plane from the source through v.
+   * @param {Point3d} v
+   * @returns {Point3d}
+   */
+  _intersectionWith(v, outPoint = new Point3d()) {
+    return this.planarProjectionMatrix.multiplyPoint3d(v, outPoint);
+  }
+
+  /**
+   * Just for testing / debugging
+   */
+  _calculateIntersectionMatrix(v) {
+    const { normal: n, point } = this.plane;
+    const l = this.sourceOrigin;
+    const d = n.dot(point);
+
+    const dotNL = n.dot(l);
+    const scaledDotNL = dotNL + d;
+
+    const dotNV = n.dot(v);
+    const scaledDotNV = dotNV + d;
+
+    return new Matrix([[
+      (scaledDotNL * v.x) - (scaledDotNV * l.x),
+      (scaledDotNL * v.y) - (scaledDotNV * l.y),
+      (scaledDotNL * v.z) - (scaledDotNV * l.z),
+      dotNL - dotNV
+    ]]);
+  }
+}
+
+/**
+ * Represent a trapezoid "shadow" using a polygon.
+ * Walls in Foundry create trapezoids, but other shapes are possible.
+ */
 export class Shadow extends PIXI.Polygon {
   constructor(...points) {
     super(...points);
