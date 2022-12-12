@@ -34,6 +34,16 @@ export class Plane {
   }
 
   /**
+   * Construct a plane from a wall
+   * @param {Wall} wall
+   * @returns {Plane}
+   */
+  static fromWall(wall) {
+    const pts = Point3d.fromWall(wall)
+    return Plane.fromPoints(pts.A.top, pts.A.bottom, pts.B.bottom);
+  }
+
+  /**
    * Determine the angle between two vectors
    * @param {Point3d} v1
    * @param {Point3d} v2
@@ -53,6 +63,23 @@ export class Plane {
     if ( !mag ) return 0;
 
     return Math.acos(V1.dot(V2) / (V1.magnitude() * V2.magnitude()));
+  }
+
+  /**
+   * Return representation of plane as ax + by + cx + d
+   * a, b, c is the plane's normal
+   * @returns {object} Object with a, b, c, d
+   */
+  get equation() {
+    const N = this.normal;
+    const P = this.point;
+
+    return {
+      a: N.x,
+      b: N.y,
+      c: N.z,
+      d: - N.dot(P)
+    }
   }
 
   /**
@@ -141,19 +168,20 @@ export class Plane {
    * @param {Point3d} l  Origin of the ray.
    * @returns {Point3d|null}
    */
-  rayIntersection(v, l) {
+  rayIntersection(v, l, N, P) {
     // Eisemann, Real-Time Shadows, p. 24 (Projection Matrix for Planar Shadows)
 
-    const { normal, point } = this;
+    // const { normal, point } = this;
 
-    const dotNV = normal.dot(v);
-    const dotNL = normal.dot(l);
-    const denom = dotNL - dotNV;
+    const dotNV = N.dot(v);
+    const dotNL = N.dot(l);
+    //const denom = dotNL - dotNV; right-handed system
+    const denom = dotNV - dotNL;
 
     if ( denom.almostEqual(0) ) return null;
 
-    const d = normal.dot(point);
-    const delta = v.subtract(l);
+    const d = N.dot(P);
+    const delta = v.subtract(l)
 
     const outPoint = new Point3d();
 
@@ -173,20 +201,38 @@ export class Plane {
    * @param {Point3d} l0
    * @returns {Point3d|null}
    */
-  lineIntersection(l0, l) {
-    const p_no = this.normal;
-    const p_co = this.point;
+  lineIntersection(l0, l, N, P) {
+    //const N = this.normal;
+    //const P = this.point;
 
-    const dot = p_no.dot(l);
+    const dot = N.dot(l);
 
     // Test if line and plane are parallel and do not intersect.
     if ( dot.almostEqual(0) ) return null;
 
-    const w = l0.subtract(p_co);
-    const fac = -p_no.dot(w) / dot;
+    const w = l0.subtract(P);
+    const fac = -N.dot(w) / dot;
     const u = l.multiplyScalar(fac);
     return l0.add(u);
   }
+
+  projectOnGround(v, l, N, P) {
+    const delta = v.subtract(l);
+    const M = new Matrix([
+      [1, 0, 0, 0],
+      [0, 1, 0, 0],
+      [0, 0, 1, 0],
+      [0, 0, 1/(-l.z), 1]
+    ]);
+
+    p = M.multiplyPoint3d(delta).add(l)
+
+
+  }
+
+
+
+
 
   /**
    * Line segment, defined by two points

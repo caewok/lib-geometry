@@ -103,7 +103,7 @@ export class ShadowProjection {
   source;
 
   /** @type {Matrix} */
-  _planarProjectionMatrix;
+  _shadowMatrix;
 
   /** @type {number} */
   _sourceSide;
@@ -128,11 +128,11 @@ export class ShadowProjection {
    * Cached planar projection matrix.
    * @type {Matrix}
    */
-  get planarProjectionMatrix() {
+  get shadowMatrix() {
     const priorOrigin = ShadowProjection._cache.get(this.source);
     if ( !priorOrigin || !priorOrigin.equals(this.sourceOrigin) ) this.updateSourceOrigin();
 
-    return this._planarProjectionMatrix ?? (this._planarProjectionMatrix = this._calculatePlanarProjectionMatrix());
+    return this._shadowMatrix ?? (this._shadowMatrix = this._calculateShadowMatrix());
   }
 
   /**
@@ -153,6 +153,23 @@ export class ShadowProjection {
    */
   get isCanvasParallel() {
     return this.plane.normal.equals({x: 0, y: 0, z: 1});
+  }
+
+  _calculateShadowMatrix() {
+    // http://www.it.hiof.no/~borres/j3d/explain/shadow/p-shadow.html
+
+    const P = this.plane.equation
+    const L = this.sourceOrigin;
+
+
+    const dot = P.a * L.x + P.b * L.y + P.c * L.z + P.d;
+
+    return new Matrix([
+     [dot - L.x * P.a, -L.y * P.a, -L.z * P.a, -1 * P.a],
+     [-L.x * P.b, dot - L.y * P.b, -L.z * P.b, -1 * P.b],
+     [-L.x * P.c, -L.y * P.c, dot - L.z * P.c, -1 * P.c],
+     [-L.x * P.d, -L.y * P.d, -L.z * P.d, dot - 1 * P.d]
+    ]);
   }
 
   /**
@@ -215,6 +232,7 @@ export class ShadowProjection {
    */
   _shadowPointsFromWallPointsSourceAbovePlane(pts, planeZ, sourceZ) {
     // Not currently possible: wall A and B have different Z values
+    // TODO: Can we lose these tests?
     if ( pts.A.top.z !== pts.B.top.z ) {
       console.error("_shadowPointsForWallSourceAbove wall top elevations differ.");
     }
@@ -372,25 +390,236 @@ export class ShadowProjection {
   /**
    * Just for testing / debugging
    */
-  _calculateIntersectionMatrix(v) {
-    const { normal: n, point } = this.plane;
-    const l = this.sourceOrigin;
-    const d = n.dot(point);
+  _calculateIntersectionMatrix(v, l, N, P) {
+//     const { normal: N, point: P } = this.plane;
+//     const l = this.sourceOrigin;
+    const d = N.dot(P);
 
-    const dotNL = n.dot(l);
+    const dotNL = N.dot(l);
     const scaledDotNL = dotNL + d;
 
-    const dotNV = n.dot(v);
+    const dotNV = N.dot(v);
     const scaledDotNV = dotNV + d;
 
     return new Matrix([[
-      (scaledDotNL * v.x) - (scaledDotNV * l.x),
-      (scaledDotNL * v.y) - (scaledDotNV * l.y),
-      (scaledDotNL * v.z) - (scaledDotNV * l.z),
-      dotNL - dotNV
+      -(scaledDotNL * v.x) + (scaledDotNV * l.x),
+      -(scaledDotNL * v.y) + (scaledDotNV * l.y),
+      -(scaledDotNL * v.z) + (scaledDotNV * l.z),
+      dotNV - dotNL
     ]]);
   }
+
+  _calculateIntersectionMatrix2(l0, delta, N, P) {
+     const dotNdelta = N.dot(delta);
+     if ( dotNdelta.almostEqual(0) ) return null;
+
+     const w = l0.subtract(P);
+     const dotNw = N.dot(w);
+//      const fac = -dotNw / dotNdelta
+
+//      return new Point3d(
+//        l0.x + delta.x * fac,
+//        l0.y + delta.y * fac,
+//        l0.z + delta.z * fac
+//      )
+     return new Matrix([[
+       l0.x * dotNdelta + delta.x * -dotNw,
+       l0.y * dotNdelta + delta.y * -dotNw,
+       l0.z * dotNdelta + delta.z * -dotNw,
+       dotNdelta
+     ]]);
+  }
+
+
+  /*
+
+
+
+
+
+    A = n • l
+    B = (nx * vx + ny * vy + nz * vz)
+    d = N.dot(P)
+
+    v'x = (n • l + d) * vx - ((nx * vx + ny * vy + nz * vz + d) * lx)
+    v'y = (n • l + d) * vy - ((nx * vx + ny * vy + nz * vz + d) * ly)
+    v'z = (n • l + d) * vz - ((nx * vx + ny * vy + nz * vz + d) * lz)
+    v'w = (n • l) - (nx * vx + ny * vy + nz * vz)
+
+    [1 0 0 0]
+
+    x: (n • l + d) * 1 - ((nx * 1 + d) * lx) => n • l + d - nx * lx - d * lx
+    y: - (nx + d) * ly => -nx * ly - d * ly
+    z: - (nx + d) * lz => -nx * lz - d * lz
+    w: (n • l) - nx    =>
+
+    [0 1 0 0]
+    x: -(ny + d) * lx
+    y: (n • l + d) - ((ny + d) * ly)
+    z: -(ny + d) * lz
+    w: (n • l) - ny
+
+    [0 0 1 0]
+    x: -(nz + d) * lx
+    y: -(nz + d) * ly
+    z: (n • l + d) - ((nz + d) * lz)
+    w: (n • l) - nz
+
+    [0 0 0 1]
+    x: 0
+    y: 0
+    z: 0
+    w: n • l
+
+
+
+
+  */
+
+
+//   _calculatePlanarProjectionMatrix(l, N, P) {
+    // Eisemann, Real-Time Shadows, p. 24 (Projection Matrix for Planar Shadows)
+    // Modified to work in right-hand system with row-major matrices
+
+    /* In Eisemann:
+    A = n • l
+    B = (nx * vx + ny * vy + nz * vz)
+    d = N.dot(P)
+
+    Intersection matrix is:
+    v'x = (A + d) * vx - (B + d) * lx
+    v'y = (A + d) * vy - (B + d) * ly
+    v'z = (A + d) * vz - (B + d) * lz
+    v'w = A - B
+
+ vx   a b c d
+ vy   e f g h
+ vz   i j k l
+ vw   m n o p
+
+    v'x = a * vx + e * vy + i * vz + m * vw
+    v'y = b * vx + f * vy + j * vz + n * vw
+
+
+    C = A + d
+
+    C * vx + D = v'x
+    C * vy + E = v'y
+    C * vz + F = v'z
+    A - B = v'w
+
+
+
+
+
+
+
+    Using the above _calculateIntersectionMatrix, we have
+    v'x = (-N•w  * delta.x) - (N•delta * l0.x)
+    v'y = (-N•w  * delta.y) - (N•delta * l0.y)
+    v'z = (-N•w  * delta.z) - (N•delta * l0.z)
+    v'w = N•delta
+
+    where
+    N • delta = n.x * delta.x + n.y * delta.y + n.z * delta.z
+    w = l0 - P
+    N•w = n.x * w.x + n.y * w.y + n.z * w.z
+    delta = v - l
+
+
+    (-N•w  * delta.x) = (-n.x * w.x - n.y * w.y - n.z * w.z) * (v.x - l.x)
+    => v.x * (-n.x * w.x - n.y * w.y - n.z * w.z) - l.x * (-n.x * w.x - n.y * w.y - n.z * w.z
+    => -n.x * w.x * v.x - n.y * w.y * v.x - n.z * w.z * v.x + n.x * w.x * l.x + n.y * w.y * lx + n.z * w.z * l.x
+
+    (n.x * delta.x + n.y * delta.y + n.z * delta.z) * l.x =
+    => (n.x * (v.x - l.x) + n.y * (v.y - l.y) + n.z * (v.z - l.z)) * l.x
+    => (n.x * v.x - n.x * l.x + n.y * v.y - n.y * l.y + n.z * v.z - n.z * l.z) * l.x
+    => (n.x * v.x * l.x - n.x * l.x * l.x + n.y * v.y * l.x - n.y * l.y * l.x + n.z * v.z * l.x - n.z * l.z * l.x)
+
+
+    -n.x * w.x * v.x - n.y * w.y * v.x - n.z * w.z * v.x + n.x * w.x * l.x + n.y * w.y * lx + n.z * w.z * l.x
+    - (n.x * v.x * l.x - n.x * l.x * l.x + n.y * v.y * l.x - n.y * l.y * l.x + n.z * v.z * l.x - n.z * l.z * l.x)
+
+    =>  -n.x * w.x * v.x - n.y * w.y * v.x - n.z * w.z * v.x + n.x * w.x * l.x + n.y * w.y * lx + n.z * w.z * l.x
+    - n.x * v.x * l.x + n.x * l.x * l.x - n.y * v.y * l.x + n.y * l.y * l.x - n.z * v.z * l.x + n.z * l.z * l.x
+
+        =>  n.x * w.x * l.x + n.y * w.y * l.x + n.z * w.z * l.x
+     + n.x * l.x * l.x + n.y * l.y * l.x  + n.z * l.z * l.x
+
+    => v.x * (-n.x * w.x - n.y * w.y - n.z * w.z - n.x * l.x ) + n.x * w.x * l.x + n.y * w.y * lx + n.z * w.z * l.x
+
+    + l.x * (-n.x * v.x - n.y * v.y - n.z * v.z)
+
+    -n.x * w.x * v.x  - n.x * v.x * l.x - n.y * w.y * v.x
+
+
+
+
+
+
+
+
+
+    v'w = n.x * delta.x + n.y * delta.y + n.z * delta.z
+
+
+
+
+
+
+
+
+
+
+
+
+    dotNdelta = A - B // v'w
+    dotNdelta = B + d // second-half of v'x, v'y, or v'z
+    -dotNw = A + d // first-half of v'x, v'y, or v'z
+
+    where vx = delta.x, etc. and
+          lx = l0.x, etc.
+
+    A - B = B + d
+    A = 2B + d
+
+    A = -dotNw - d
+
+    2B + d = -dotNw - d
+    2B = -dotNw - 2d
+    B = -0.5*dotNw - d
+
+    or
+
+    B = dotNdelta - d
+    */
+    // const l = this.sourceOrigin;
+//     const d = N.dot(P);
+//     const w = l.subtract(P);
+//     const dotNw = N.dot(w)
+//     const A = -dotNw + d;
+//     const Ad = A + d;
+//
+//
+//     // Reversed from Eisemann b/c this Matrix is row-ordered.
+//     return new Matrix([
+//       [Ad - (N.x * l.x),  -N.x * l.y,        -N.x * l.z,        -N.x],
+//       [-N.y * l.x,        Ad - (N.y * l.y),  -N.y * l.z,        -N.y],
+//       [-N.z * l.x,        -N.z * l.y,        Ad - (N.z * l.z),  -N.z],
+//       [-d * l.x,          -d * l.y,          -d * l.z,          A]
+//     ]);
+//
+//
+//   }
+
+
+
+
+
+
+
 }
+
 
 /**
  * Represent a trapezoid "shadow" using a polygon.
