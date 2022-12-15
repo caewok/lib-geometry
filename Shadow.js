@@ -3,7 +3,8 @@ PIXI,
 canvas,
 ClipperLib,
 Ray,
-CONFIG
+CONFIG,
+foundry
 */
 "use strict";
 
@@ -90,11 +91,6 @@ Ve| K  \   We|    |
 */
 
 export class ShadowProjection {
-  /**
-   * Cache values for each source
-   * @type {WeakMap}
-   */
-  static _cache = new WeakMap();
 
   /** @type {Plane} */
   plane;
@@ -108,7 +104,10 @@ export class ShadowProjection {
   /** @type {number} */
   _sourceSide;
 
-  constructor(plane, source) {
+  /** @type {BigInt} */
+  _cacheKey;
+
+  constructor(plane , source) {
     this.plane = plane;
     this.source = source;
 
@@ -129,9 +128,7 @@ export class ShadowProjection {
    * @type {Matrix}
    */
   get shadowMatrix() {
-    const priorOrigin = ShadowProjection._cache.get(this.source);
-    if ( !priorOrigin || !priorOrigin.equals(this.sourceOrigin) ) this.updateSourceOrigin();
-
+    if ( this._cacheKey !== this.sourceOrigin.key() ) this.updateSourceOrigin();
     return this._shadowMatrix ?? (this._shadowMatrix = this._calculateShadowMatrix());
   }
 
@@ -140,9 +137,7 @@ export class ShadowProjection {
    * @type {number}
    */
   get sourceSide() {
-    const priorOrigin = ShadowProjection._cache.get(this.source);
-    if ( !priorOrigin || !priorOrigin.equals(this.sourceOrigin) ) this.updateSourceOrigin();
-
+    if ( this._cacheKey !== this.sourceOrigin.key() ) this.updateSourceOrigin();
     return this._sourceSide ?? (this._sourceSide = this.plane.whichSide(this.sourceOrigin));
   }
 
@@ -157,18 +152,16 @@ export class ShadowProjection {
 
   _calculateShadowMatrix() {
     // http://www.it.hiof.no/~borres/j3d/explain/shadow/p-shadow.html
-
-    const P = this.plane.equation
+    const P = this.plane.equation;
     const L = this.sourceOrigin;
 
-
-    const dot = P.a * L.x + P.b * L.y + P.c * L.z + P.d;
+    const dot = (P.a * L.x) + (P.b * L.y) + (P.c * L.z) + P.d;
 
     return new Matrix([
-     [dot - L.x * P.a, -L.y * P.a, -L.z * P.a, -1 * P.a],
-     [-L.x * P.b, dot - L.y * P.b, -L.z * P.b, -1 * P.b],
-     [-L.x * P.c, -L.y * P.c, dot - L.z * P.c, -1 * P.c],
-     [-L.x * P.d, -L.y * P.d, -L.z * P.d, dot - 1 * P.d]
+      [dot - (L.x * P.a), -(L.y * P.a), -(L.z * P.a), -1 * P.a],
+      [-(L.x * P.b), dot - (L.y * P.b), -(L.z * P.b), -1 * P.b],
+      [-(L.x * P.c), -(L.y * P.c), dot - (L.z * P.c), -1 * P.c],
+      [-(L.x * P.d), -(L.y * P.d), -(L.z * P.d), dot - P.d]
     ]);
   }
 
@@ -177,33 +170,9 @@ export class ShadowProjection {
    * Another option is to construct a new ShadowProjection using the plane from this one.
    */
   updateSourceOrigin() {
-    this._sourceOrigin = undefined;
-    this._planarProjectionMatrix = undefined;
+    this._shadowMatrix = undefined;
     this._sourceSide = undefined;
-
-    ShadowProjection._cache.set(this.source, this.sourceOrigin.clone());
-  }
-
-  /**
-   * Matrix M such that v' = Mv, where v is a vertex of an object and v' its projection
-   * onto the plane.
-   */
-  _calculatePlanarProjectionMatrix() {
-    // Eisemann, Real-Time Shadows, p. 24 (Projection Matrix for Planar Shadows)
-    const { normal: n, point } = this.plane;
-    const l = this.sourceOrigin;
-    const d = n.dot(point);
-
-    const dotNL = n.dot(l);
-    const scaledDotNL = dotNL + d;
-
-    // Reversed from Eisemann b/c this Matrix is row-ordered.
-    return new Matrix([
-      [scaledDotNL - (n.x * l.x),  -n.x * l.y,                 -n.x * l.z,                 -n.x],
-      [-n.y * l.x,                 scaledDotNL - (n.y * l.y),  -n.y * l.z,                 -n.y],
-      [-n.z * l.x,                 -n.z * l.y,                 scaledDotNL - (n.z * l.z),  -n.z],
-      [-d * l.x,                   -d * l.y,                   -d * l.z,                   dotNL]
-    ]);
+    this._cacheKey = this.sourceOrigin.key();
   }
 
   /**
@@ -274,25 +243,9 @@ export class ShadowProjection {
 
     // Force clockwise
     return foundry.utils.orient2dFast(shadowB, shadowD, shadowC) < 0
-      ? [ shadowB, shadowD, shadowC, shadowA ]
-      : [ shadowA, shadowC, shadowD, shadowB ];
+      ? [shadowB, shadowD, shadowC, shadowA]
+      : [shadowA, shadowC, shadowD, shadowB];
   }
-
-  /**
-   * Use Point3d.fromWall to get the 3d points, but replace any infinite z values.
-   * @param {Wall}
-   * @returns {object} Same as Point3d.prototype.fromWall
-   */
-  static wallPoints(wall) {
-    const pts = Point3d.fromWall(wall);
-    if ( !isFinite(pts.A.top.z) ) pts.A.top.z = Number.MAX_SAFE_INTEGER;
-    if ( !isFinite(pts.A.bottom.z) ) pts.A.bottom.z = Number.MIN_SAFE_INTEGER;
-    if ( !isFinite(pts.B.top.z) ) pts.B.top.z = Number.MAX_SAFE_INTEGER;
-    if ( !isFinite(pts.B.bottom.z) ) pts.B.bottom.z = Number.MIN_SAFE_INTEGER;
-
-    return pts;
-  }
-
 
   /**
    * Construct a shadow from this source cast by the wall onto this plane.
@@ -300,22 +253,105 @@ export class ShadowProjection {
    * @returns {Point3d[]}
    */
   constructShadowPointsForWall(wall) {
-    const pts = ShadowProjection.wallPoints(wall);
-    if ( this.isCanvasParallel ) {
+    const pts = Point3d.fromWall(wall);
+    return this._constructShadowPointsForWallPoints(pts);
+  }
+
+  /**
+   * Construct a shadow from this source cast by the wall points onto this plane
+   * @param {object} wallPoints    Set of points from Point3d.fromWall
+   * @returns {Point3d[]}
+   */
+  _constructShadowPointsForWallPoints(wallPoints) {
+    if ( this.isCanvasParallel
+      && wallPoints.A.top.z === wallPoints.B.top.z
+      && wallPoints.A.top.z === wallPoints.B.top.z  ) {
+
       const planeZ = this.plane.point.z;
       const sourceZ = this.sourceOrigin.z;
       if ( planeZ.almostEqual(sourceZ) ) return [];
 
       return planeZ < sourceZ
-        ? this._shadowPointsFromWallPointsSourceAbovePlane(pts, planeZ, sourceZ)
-        : this._shadowPointsFromWallPointsSourceBelowPlane(pts, planeZ, sourceZ);
+        ? this._shadowPointsFromWallPointsSourceAbovePlane(wallPoints, planeZ, sourceZ)
+        : this._shadowPointsFromWallPointsSourceBelowPlane(wallPoints, planeZ, sourceZ);
     }
 
-    return this._shadowPointsForWallPoints(pts);
+    return this._shadowPointsForWallPoints(wallPoints);
   }
 
   /**
-   * Construct a shadow form this source cast by the wall onto this plane.
+   * Construct a shadow from this source cast by a flat object, like a wall,
+   * represented by an array of points.
+   * @param {Point3d[]} pts
+   * @returns {Point3d[]}
+   */
+  _shadowPointsForPoints(pts) {
+    const { plane, sourceSide, sourceOrigin } = this;
+    const maxR2 = Math.pow(canvas.dimensions.maxR, 2);
+    const ln = pts.length;
+    if ( ln < 3 ) return [];
+
+    let shadowPoints = [];
+    let prevSide = plane.whichSide(pts[ln - 1]);
+    let prevPt = pts[ln - 1];
+    for ( const pt of pts ) {
+      const ptSide = plane.whichSide(pt);
+
+      if ( !ptSide ) shadowPoints.push(pt);
+      else if ( ptSide * prevSide < 0  ) {
+        // We switched sides of the plane
+        // Locate the intersection of the plane with this and the previous point.
+        const ix = plane.lineSegmentIntersection(prevPt, pt);
+        shadowPoints.push(ix);
+      }
+
+      if ( ptSide * sourceSide > 0 ) {
+        const ix = this._intersectionWith(pt);
+
+        // Is the intersection on the correct side of the point?
+        // Should be further from the source than the point.
+        const dist2Pt = Point3d.distanceSquaredBetween(sourceOrigin, pt);
+        const dist2Ix = Point3d.distanceSquaredBetween(sourceOrigin, ix)
+
+        if ( dist2Pt < dist2Ix ) {
+          // We have source --> pt --> ix
+          shadowPoints.push(ix); // TODO: Do we need if ( ix ) here?
+        } else {
+          // We have ix --> source --> plane or source --> ix --> plane
+          // Object blocks plane completely; shadow extends infinitely far
+          // Get a suitably far point to stand in for infinity
+          const tmp = pt.clone(); // Don't change the origin point.
+
+          // Use the sourceOrigin elevation in most cases
+          // typical case: wall extends below and above source; we are projecting to
+          // a plane below source and so we want to look straight out from source.
+          if ( pt.z > sourceOrigin.z ) tmp.z = sourceOrigin.z;
+          sourceOrigin.towardsPointSquared(tmp, maxR2, tmp);
+
+          // Use the plane normal to intersect the tmp point with the plane.
+          const tmpIx = plane.lineIntersection(tmp, plane.normal);
+          shadowPoints.push(tmpIx);
+        }
+      }
+
+      prevSide = ptSide;
+      prevPt = pt;
+    }
+
+    // Force clockwise
+    if ( shadowPoints.length < 3 ) return [];
+
+    // Round to avoid numeric inconsistencies
+    const PLACES = 4;
+    shadowPoints.forEach(pt => pt.roundDecimals(PLACES));
+
+    // TODO: Is the forcing clockwise necessary, or is it always the same?
+    const orient = foundry.utils.orient2dFast(shadowPoints[0], shadowPoints[1], shadowPoints[2]);
+//     if ( orient <= 0 ) console.warn(`_shadowPointsForPoints|orientation ${orient < 0 ? "cw" : orient > 0 ? "ccw" : "0" }`);
+    return orient < 0 ? shadowPoints : shadowPoints.reverse();
+  }
+  /**
+   * Construct a shadow from this source cast by the wall onto this plane.
    * This helper assume nothing about the plane orientation.
    * @param {object} pts     Result of ShadowProjection.wallPoints()
    * @returns {Point3d[]}
@@ -366,7 +402,7 @@ export class ShadowProjection {
 
       // Second, check if we need the intersection between this point and next point
       if ( side * nextSide < 0 ) {
-        // pt and nextPt are on different sides of the plane
+        // Pt and nextPt are on different sides of the plane
         // We need to use the intersection
         const ix = plane.lineSegmentIntersection(pt, nextPt);
         if ( ix ) shadowPoints.push(ix);
@@ -374,6 +410,8 @@ export class ShadowProjection {
     }
 
     // Force clockwise
+    if ( shadowPoints.length < 3 ) return [];
+
     return foundry.utils.orient2dFast(shadowPoints[0], shadowPoints[1], shadowPoints[2]) < 0
       ? shadowPoints : shadowPoints.reverse();
   }
@@ -384,15 +422,15 @@ export class ShadowProjection {
    * @returns {Point3d}
    */
   _intersectionWith(v, outPoint = new Point3d()) {
-    return this.planarProjectionMatrix.multiplyPoint3d(v, outPoint);
+    return this.shadowMatrix.multiplyPoint3d(v, outPoint);
   }
 
   /**
    * Just for testing / debugging
    */
-  _calculateIntersectionMatrix(v, l, N, P) {
-//     const { normal: N, point: P } = this.plane;
-//     const l = this.sourceOrigin;
+  _calculateIntersectionMatrix(v) {
+    const { normal: N, point: P } = this.plane;
+    const l = this.sourceOrigin;
     const d = N.dot(P);
 
     const dotNL = N.dot(l);
@@ -409,217 +447,32 @@ export class ShadowProjection {
     ]]);
   }
 
-  _calculateIntersectionMatrix2(l0, delta, N, P) {
-     const dotNdelta = N.dot(delta);
-     if ( dotNdelta.almostEqual(0) ) return null;
-
-     const w = l0.subtract(P);
-     const dotNw = N.dot(w);
-//      const fac = -dotNw / dotNdelta
-
-//      return new Point3d(
-//        l0.x + delta.x * fac,
-//        l0.y + delta.y * fac,
-//        l0.z + delta.z * fac
-//      )
-     return new Matrix([[
-       l0.x * dotNdelta + delta.x * -dotNw,
-       l0.y * dotNdelta + delta.y * -dotNw,
-       l0.z * dotNdelta + delta.z * -dotNw,
-       dotNdelta
-     ]]);
-  }
-
-
-  /*
-
-
-
-
-
-    A = n • l
-    B = (nx * vx + ny * vy + nz * vz)
-    d = N.dot(P)
-
-    v'x = (n • l + d) * vx - ((nx * vx + ny * vy + nz * vz + d) * lx)
-    v'y = (n • l + d) * vy - ((nx * vx + ny * vy + nz * vz + d) * ly)
-    v'z = (n • l + d) * vz - ((nx * vx + ny * vy + nz * vz + d) * lz)
-    v'w = (n • l) - (nx * vx + ny * vy + nz * vz)
-
-    [1 0 0 0]
-
-    x: (n • l + d) * 1 - ((nx * 1 + d) * lx) => n • l + d - nx * lx - d * lx
-    y: - (nx + d) * ly => -nx * ly - d * ly
-    z: - (nx + d) * lz => -nx * lz - d * lz
-    w: (n • l) - nx    =>
-
-    [0 1 0 0]
-    x: -(ny + d) * lx
-    y: (n • l + d) - ((ny + d) * ly)
-    z: -(ny + d) * lz
-    w: (n • l) - ny
-
-    [0 0 1 0]
-    x: -(nz + d) * lx
-    y: -(nz + d) * ly
-    z: (n • l + d) - ((nz + d) * lz)
-    w: (n • l) - nz
-
-    [0 0 0 1]
-    x: 0
-    y: 0
-    z: 0
-    w: n • l
-
-
-
-
-  */
-
-
-//   _calculatePlanarProjectionMatrix(l, N, P) {
-    // Eisemann, Real-Time Shadows, p. 24 (Projection Matrix for Planar Shadows)
-    // Modified to work in right-hand system with row-major matrices
-
-    /* In Eisemann:
-    A = n • l
-    B = (nx * vx + ny * vy + nz * vz)
-    d = N.dot(P)
-
-    Intersection matrix is:
-    v'x = (A + d) * vx - (B + d) * lx
-    v'y = (A + d) * vy - (B + d) * ly
-    v'z = (A + d) * vz - (B + d) * lz
-    v'w = A - B
-
- vx   a b c d
- vy   e f g h
- vz   i j k l
- vw   m n o p
-
-    v'x = a * vx + e * vy + i * vz + m * vw
-    v'y = b * vx + f * vy + j * vz + n * vw
-
-
-    C = A + d
-
-    C * vx + D = v'x
-    C * vy + E = v'y
-    C * vz + F = v'z
-    A - B = v'w
-
-
-
-
-
-
-
-    Using the above _calculateIntersectionMatrix, we have
-    v'x = (-N•w  * delta.x) - (N•delta * l0.x)
-    v'y = (-N•w  * delta.y) - (N•delta * l0.y)
-    v'z = (-N•w  * delta.z) - (N•delta * l0.z)
-    v'w = N•delta
-
-    where
-    N • delta = n.x * delta.x + n.y * delta.y + n.z * delta.z
-    w = l0 - P
-    N•w = n.x * w.x + n.y * w.y + n.z * w.z
-    delta = v - l
-
-
-    (-N•w  * delta.x) = (-n.x * w.x - n.y * w.y - n.z * w.z) * (v.x - l.x)
-    => v.x * (-n.x * w.x - n.y * w.y - n.z * w.z) - l.x * (-n.x * w.x - n.y * w.y - n.z * w.z
-    => -n.x * w.x * v.x - n.y * w.y * v.x - n.z * w.z * v.x + n.x * w.x * l.x + n.y * w.y * lx + n.z * w.z * l.x
-
-    (n.x * delta.x + n.y * delta.y + n.z * delta.z) * l.x =
-    => (n.x * (v.x - l.x) + n.y * (v.y - l.y) + n.z * (v.z - l.z)) * l.x
-    => (n.x * v.x - n.x * l.x + n.y * v.y - n.y * l.y + n.z * v.z - n.z * l.z) * l.x
-    => (n.x * v.x * l.x - n.x * l.x * l.x + n.y * v.y * l.x - n.y * l.y * l.x + n.z * v.z * l.x - n.z * l.z * l.x)
-
-
-    -n.x * w.x * v.x - n.y * w.y * v.x - n.z * w.z * v.x + n.x * w.x * l.x + n.y * w.y * lx + n.z * w.z * l.x
-    - (n.x * v.x * l.x - n.x * l.x * l.x + n.y * v.y * l.x - n.y * l.y * l.x + n.z * v.z * l.x - n.z * l.z * l.x)
-
-    =>  -n.x * w.x * v.x - n.y * w.y * v.x - n.z * w.z * v.x + n.x * w.x * l.x + n.y * w.y * lx + n.z * w.z * l.x
-    - n.x * v.x * l.x + n.x * l.x * l.x - n.y * v.y * l.x + n.y * l.y * l.x - n.z * v.z * l.x + n.z * l.z * l.x
-
-        =>  n.x * w.x * l.x + n.y * w.y * l.x + n.z * w.z * l.x
-     + n.x * l.x * l.x + n.y * l.y * l.x  + n.z * l.z * l.x
-
-    => v.x * (-n.x * w.x - n.y * w.y - n.z * w.z - n.x * l.x ) + n.x * w.x * l.x + n.y * w.y * lx + n.z * w.z * l.x
-
-    + l.x * (-n.x * v.x - n.y * v.y - n.z * v.z)
-
-    -n.x * w.x * v.x  - n.x * v.x * l.x - n.y * w.y * v.x
-
-
-
-
-
-
-
-
-
-    v'w = n.x * delta.x + n.y * delta.y + n.z * delta.z
-
-
-
-
-
-
-
-
-
-
-
-
-    dotNdelta = A - B // v'w
-    dotNdelta = B + d // second-half of v'x, v'y, or v'z
-    -dotNw = A + d // first-half of v'x, v'y, or v'z
-
-    where vx = delta.x, etc. and
-          lx = l0.x, etc.
-
-    A - B = B + d
-    A = 2B + d
-
-    A = -dotNw - d
-
-    2B + d = -dotNw - d
-    2B = -dotNw - 2d
-    B = -0.5*dotNw - d
-
-    or
-
-    B = dotNdelta - d
+  _calculateIntersectionMatrix2(l0, delta) {
+    const { normal: N, point: P } = this.plane;
+
+    const dotNdelta = N.dot(delta);
+    if ( dotNdelta.almostEqual(0) ) return null;
+
+    const w = l0.subtract(P);
+    const dotNw = N.dot(w);
+
+    /* Point3d version
+    const fac = -dotNw / dotNdelta
+
+    return new Point3d(
+      l0.x + delta.x * fac,
+      l0.y + delta.y * fac,
+      l0.z + delta.z * fac
+    )
     */
-    // const l = this.sourceOrigin;
-//     const d = N.dot(P);
-//     const w = l.subtract(P);
-//     const dotNw = N.dot(w)
-//     const A = -dotNw + d;
-//     const Ad = A + d;
-//
-//
-//     // Reversed from Eisemann b/c this Matrix is row-ordered.
-//     return new Matrix([
-//       [Ad - (N.x * l.x),  -N.x * l.y,        -N.x * l.z,        -N.x],
-//       [-N.y * l.x,        Ad - (N.y * l.y),  -N.y * l.z,        -N.y],
-//       [-N.z * l.x,        -N.z * l.y,        Ad - (N.z * l.z),  -N.z],
-//       [-d * l.x,          -d * l.y,          -d * l.z,          A]
-//     ]);
-//
-//
-//   }
-
-
-
-
-
-
-
+    return new Matrix([[
+      (l0.x * dotNdelta) + (delta.x * -dotNw),
+      (l0.y * dotNdelta) + (delta.y * -dotNw),
+      (l0.z * dotNdelta) + (delta.z * -dotNw),
+      dotNdelta
+    ]]);
+  }
 }
-
 
 /**
  * Represent a trapezoid "shadow" using a polygon.
@@ -689,7 +542,9 @@ export class Shadow extends PIXI.Polygon {
     // Note: elevation should already be in grid pixel units
     let Oe = surfaceElevation;
     let Te = wall.topZ; // TO-DO: allow floating walls to let light through the bottom portion
-//     let Oe = 0; // TO-DO: allow this to be modified by terrain elevation
+
+    // TO-DO: allow this to be modified by terrain elevation
+    // let Oe = 0;
     let Ve = source.elevationZ;
     if ( Ve <= Te ) return null; // Vision object blocked completely by wall
 
@@ -872,10 +727,14 @@ export class Shadow extends PIXI.Polygon {
 
     // Find the intersection points of the wall with the surfacePlane
     const ixWallA = surfacePlane.lineIntersection(A, upV);
-//     if ( !ixWallA ) return null; // Unlikely, but possible?
+
+    // Unlikely, but possible?
+    // if ( !ixWallA ) return null;
 
     const ixWallB = surfacePlane.lineIntersection(B, upV);
-//     if ( !ixWallB ) return null; // Unlikely, but possible?
+
+    // Unlikely, but possible?
+    // if ( !ixWallB ) return null;
 
     // Debugging
     if ( !ixWallA || !ixWallB ) {
@@ -906,17 +765,6 @@ export class Shadow extends PIXI.Polygon {
     return out;
   }
 
-
-//   static simpleFromPoints3d(A, B, C, D, origin, surfacePlane) {
-//     // Determine whether origin is above or below surface plane
-//     const ixOrigin = surfacePlane.lineIntersection(origin, Shadow.upV);
-//     if ( !ixOrigin ) return null;
-//     const diff = origin.z - ixOrigin.z;
-//     return diff > 0 ? Shadow.buildFromPoints3dXYOrientationOriginAbove(A, B, C, D, origin, surfacePlane)
-//       : diff < 0 ? Shadow.buildFromPoints3dXYOrientationOriginBelow(A, B, C, D, origin, surfacePlane)
-//       : null;
-//   }
-
   /**
    * Construct shadow using strong assumptions about the set-up.
    * - Origin is above the shadow surface.
@@ -944,11 +792,7 @@ export class Shadow extends PIXI.Polygon {
 
     if ( origin.z <= C.z ) return null; // Viewer is below the wall bottom.
 
-//     const upV = Shadow.upV;
-
     // Because the surfacePlane is parallel to XY, we can infer the intersection of the wall.
-    // const ixAC = surfacePlane.lineIntersection(A, upV);
-    // const ixBD = surfacePlane.lineIntersection(B, upV);
     const ixAC = new Point3d(A.x, A.y, surfacePlane.point.z);
     const ixBD = new Point3d(B.x, B.y, surfacePlane.point.z);
 
@@ -1080,56 +924,6 @@ export class Shadow extends PIXI.Polygon {
       ? Shadow.simpleSurfaceOriginAbove(pointA, pointB, pointC, pointD, origin, surfacePlane)
       : Shadow.simpleSurfaceOriginBelow(pointA, pointB, pointC, pointD, origin, surfacePlane);
   }
-
-  /**
-   * In top-down view, construct shadows for a token on the scene.
-   * @param {Token} token               Token in the scene
-   * @param {Point3d} origin            Viewer location in 3d space
-   * @param {object} options
-   * @param {number} [surfaceElevation] Elevation of the surface onto which to project shadows
-   * @param {string} [type]             Wall restriction type, for token constrained border
-   * @param {boolean} [halfHeight]      Whether to use half the token height
-   * @returns {Shadow[]|null}
-   */
-//   static constructfromToken(token, origin, { surfaceElevation = 0, type = "sight", halfHeight = false } = {}) {
-//     // If the viewer elevation equals the surface elevation, no shadows to be seen
-//     if ( origin.z.almostEqual(surfaceElevation) ) return null;
-//
-//     // Need Token3dPoints to find the sides that face the origin.
-//     const token3d = new TokenPoints3d(token, { type, halfHeight });
-//     const { bottomZ, topZ } = token3d;
-//
-//     // Run simple tests to avoid further computation
-//     // Viewer and the surface elevation both above the wall, so no shadow
-//     if ( origin.z >= topZ && surfaceElevation >= topZ ) return null;
-//
-//     // Viewer and the surface elevation both below the wall, so no shadow
-//     else if ( origin.z <= bottomZ && surfaceElevation <= bottomZ ) return null;
-//
-//     // Projecting downward from source; if below bottom of wall, no shadow.
-//     else if ( origin.z >= surfaceElevation && origin.z <= bottomZ ) return null;
-//
-//     // Projecting upward from source; if above bottom of wall, no shadow.
-//     else if ( origin.z <= surfaceElevation && origin.z >= topZ ) return null;
-//
-//     const sides = token3d._viewableSides(origin);
-//
-//     const shadows = [];
-//     for ( const side of sides ) {
-//       // Build a "wall" based on side points
-//       // Need bottomZ, topZ, A, B
-//       const wall = {
-//         A: side.points[0],
-//         B: side.points[3],
-//         topZ,
-//         bottomZ
-//       };
-//       const shadow = Shadow.constructFromWall(wall, origin, surfaceElevation);
-//       if ( shadow ) shadows.push(shadow);
-//     }
-//
-//     return shadows;
-//   }
 
   /**
    * Draw a shadow shape on canvas. Used for debugging.
