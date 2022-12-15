@@ -95,19 +95,30 @@ export class Point3d extends PIXI.Point {
 
   /**
    * Determine the wall top and bottom points
-   * @param {Wall} wall
+   * @param {Wall} wall         Wall to convert to points object
+   * @param {object} [options]  Options that affect the conversion
+   * @param {boolean} [finite]  Force infinite z values to finite min/max safe integers
    * @returns {object} { A: { top, bottom }, B: { top, bottom } }
    */
-  static fromWall(wall) {
+  static fromWall(wall, { finite = false } = {}) {
     const { topZ, bottomZ, A, B } = wall;
+
+    // Use MAX instead of Number.MAX_SAFE_INTEGER to improve numerical accuracy
+    // particularly when converting to/from 2d.
+    const numDigits = numPositiveDigits(canvas.dimensions.maxR);
+    const MAX = Number(`1e0${numDigits}`);
+
+    const top = (finite && !isFinite(topZ)) ? MAX : topZ;
+    const bottom = (finite && !isFinite(bottomZ)) ? -MAX : bottomZ;
+
     return {
       A: {
-        top: new Point3d(A.x, A.y, topZ),
-        bottom: new Point3d(A.x, A.y, bottomZ)
+        top: new Point3d(A.x, A.y, top),
+        bottom: new Point3d(A.x, A.y, bottom)
       },
       B: {
-        top: new Point3d(B.x, B.y, topZ),
-        bottom: new Point3d(B.x, B.y, bottomZ)
+        top: new Point3d(B.x, B.y, top),
+        bottom: new Point3d(B.x, B.y, bottom)
       }
     };
   }
@@ -190,6 +201,17 @@ export class Point3d extends PIXI.Point {
   set(x = 0, y = x, z = 0) {
     super.set(x, y);
     this.z = z;
+    return this;
+  }
+
+  /**
+   * Use Math.roundDecimals to round the point coordinates to a certain number of decimals
+   * @param {number} places   Number of decimals places to use when rounding.
+   * @returns {this}
+   */
+  roundDecimals(places = 0) {
+    super.roundDecimals(places);
+    this.z = Math.roundDecimals(this.z, places);
     return this;
   }
 
@@ -337,3 +359,16 @@ export class Point3d extends PIXI.Point {
     return super.normalize(outPoint);
   }
 }
+
+/**
+ * Count the number of positive integer digits.
+ * Will return 0 for negative numbers.
+ * Will truncate any decimals.
+ * https://stackoverflow.com/questions/14879691/get-number-of-digits-with-javascript
+ * @param {number}      A positive number
+ * @returns {number}    The number of digits before the decimal
+ */
+export function numPositiveDigits(n) {
+  return Math.log(n) * Math.LOG10E + 1 | 0
+}
+
