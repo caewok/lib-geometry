@@ -45,6 +45,11 @@ export function registerPIXIPointMethods() {
     configurable: true
   });
 
+  Object.defineProperty(PIXI.Point, "flatMapPoints", {
+    value: flatMapPoints,
+    writable: true,
+    configurable: true
+  });
 
   // ----- Methods ----- //
 
@@ -157,17 +162,28 @@ export function registerPIXIPointMethods() {
     configurable: true
   });
 
-  Object.defineProperty(PIXI.Point, "flatMapPoints", {
-    value: flatMapPoints,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Point, "key", {
+  Object.defineProperty(PIXI.Point.prototype, "key", {
     value: key,
     writable: true,
     configurable: true
   });
+
+  Object.defineProperty(PIXI.Point.prototype, "roundDecimals", {
+    value: roundDecimals,
+    writable: true,
+    configurable: true
+  });
+}
+
+/**
+ * Use Math.roundDecimals to round the point coordinates to a certain number of decimals
+ * @param {number} places   Number of decimals places to use when rounding.
+ * @returns {this}
+ */
+function roundDecimals(places = 0) {
+  this.x = Math.roundDecimals(this.x, places);
+  this.y = Math.roundDecimals(this.y, places);
+  return this;
 }
 
 /**
