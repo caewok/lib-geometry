@@ -115,6 +115,17 @@ export class Plane {
     return this._axisVectors || (this._axisVectors = this._calculateAxisVectors());
   }
 
+  /** @type {Point3d[3]} */
+  get threePoints() {
+    return this._threePoints || (this._threePoints = this._findThreePoints());
+  }
+
+  _findThreePoints() {
+    const { u, v } = this.axisVectors;
+    const p0 = this.point;
+    return [p0, p0.add(u), p0.add(v)];
+  }
+
   /**
    * Cache the denominator calculation for to2d().
    * Denominator value chosen based on highest magnitude, to increase numerical stability
@@ -170,13 +181,13 @@ export class Plane {
    * Point nearly on the plane will return very small values.
    */
   whichSide(p) {
-    const { u, v } = this.axisVectors;
-    const p0 = this.point;
+    const threePoints = this.threePoints;
 
     // Assuming p0, u, v are CCW:
     // - Positive if p0, u, v are seen as CCW from p
     // - Negative if p0, u, v are seen as CW from p
-    return CONFIG.GeometryLib.utils.orient3dFast(p0, u, v, p);
+    return CONFIG.GeometryLib.utils.orient3dFast(threePoints[0], threePoints[1], threePoints[2], p);
+
   }
 
   isPointOnPlane(p) {
