@@ -30,7 +30,9 @@ export class Plane {
     const vAC = c.subtract(a);
 
     const normal = vAB.cross(vAC);
-    return new Plane(a, normal);
+    const plane = new Plane(a, normal);
+    plane._threePoints = [a, vAB, vAC];
+    return plane;
   }
 
   /**
