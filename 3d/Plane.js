@@ -39,7 +39,17 @@ export class Plane {
    * @returns {Plane}
    */
   static fromWall(wall) {
-    const pts = Point3d.fromWall(wall)
+    const pts = Point3d.fromWall(wall, { finite: true }); // Need finite so Normal can be calculated
+
+    // To keep the points simple, use different Z values
+    const A = pts.A.top;
+    const B = pts.A.bottom;
+    const C = pts.B.bottom;
+
+    B.z = (A.z + B.z) * 0.5;
+    A.z = B.z + 1;
+    C.z = B.z;
+
     return Plane.fromPoints(pts.A.top, pts.A.bottom, pts.B.bottom);
   }
 
@@ -78,8 +88,74 @@ export class Plane {
       a: N.x,
       b: N.y,
       c: N.z,
-      d: - N.dot(P)
+      d: -N.dot(P)
+    };
+  }
+
+  /**
+   * Matrix to convert planar points to 2d
+   */
+  get conversion2dMatrix() {
+    if ( !this._conversion2dMatrix ) {
+      this._conversion2dMatrix = this._calculateConversion2dMatrix();
+      this._conversion2dMatrixInverse = this._conversion2dMatrix.invert();
     }
+    return this._conversion2dMatrix;
+  }
+
+  get conversion2dMatrixInverse() {
+    if ( !this._conversion2dMatrixInverse ) {
+      this._conversion2dMatrixInverse = this.conversion2dMatrix.invert();
+    }
+    return this._conversion2dMatrixInverse;
+  }
+
+  /** @type {object} { u: Point3d, v: Point3d } */
+  get axisVectors() {
+    return this._axisVectors || (this._axisVectors = this._calculateAxisVectors());
+  }
+
+  /**
+   * Cache the denominator calculation for to2d().
+   * Denominator value chosen based on highest magnitude, to increase numerical stability
+   * by using a larger-magnitude divisor.
+   * @type {number}
+   */
+  get denom2d() {
+    if ( typeof this._denom2d === "undefined" ) {
+      const { u, v } = this.axisVectors;
+
+      const denom1 = (u.x * v.y) - (v.x * u.y);
+      const denom2 = (u.x * v.z) - (v.x * u.z);
+      const denom3 = (u.y * v.z) - (v.y * u.z);
+
+      const absDenom1 = Math.abs(denom1);
+      const absDenom2 = Math.abs(denom2);
+      const absDenom3 = Math.abs(denom3);
+
+      if ( absDenom1 > absDenom2 && absDenom1 && absDenom3) {
+        this._denom2d = denom1;
+        this._numeratorFn2d = numerator2dv1;
+      } else if ( absDenom2 > absDenom1 && absDenom2 > absDenom3 ) {
+        this._denom2d = denom2;
+        this._numeratorFn2d = numerator2dv2;
+      } else {
+        this._denom2d = denom3;
+        this._numeratorFn2d = numerator2dv3;
+      }
+    }
+
+    return this._denom2d;
+  }
+
+  /**
+   * Cache the function used to calculate the numerator for to2d().
+   * See this.denom2d
+   * @type {Function}
+   */
+  get numeratorFn2d() {
+    if ( typeof this._numeratorFn2d === "undefined" ) this.denom2d;
+    return this._numeratorFn2d;
   }
 
   /**
@@ -94,18 +170,18 @@ export class Plane {
    * Point nearly on the plane will return very small values.
    */
   whichSide(p) {
-    const { u, v } = this.getVectorsOnPlane();
+    const { u, v } = this.axisVectors;
     const p0 = this.point;
 
     // Assuming p0, u, v are CCW:
     // - Positive if p0, u, v are seen as CCW from p
     // - Negative if p0, u, v are seen as CW from p
-    return CONFIG.GeometryLib.utils.orient3dFast(p0, u, v, p)
+    return CONFIG.GeometryLib.utils.orient3dFast(p0, u, v, p);
   }
 
   isPointOnPlane(p) {
     // https://math.stackexchange.com/questions/684141/check-if-a-point-is-on-a-plane-minimize-the-use-of-multiplications-and-divisio
-    const vs = this.getVectorsOnPlane();
+    const vs = this.axisVectors;
     const a = this.point;
     const b = this.point.add(vs.v);
     const c = this.point.add(vs.u);
@@ -122,12 +198,10 @@ export class Plane {
 
 
   /**
-   * Get vectors on the plane.
-   * @param {number} x    X coordinate on the plane.
-   * @param {number} y    Y coordinate on the plane.
+   * Calculate axis vectors for the plane.
    * @returns {object} {u: Point3d, v: Point3d} Two vectors on the plane, normalized
    */
-  getVectorsOnPlane() {
+  _calculateAxisVectors() {
     // https://math.stackexchange.com/questions/64430/find-extra-arbitrary-two-points-for-a-plane-given-the-normal-and-a-point-that-l
     // Find the minimum index
     const n = this.normal;
@@ -143,24 +217,108 @@ export class Plane {
   }
 
   /**
+   * Convert a 3d point on the plane to 2d
+   * https://math.stackexchange.com/questions/3528493/convert-3d-point-onto-a-2d-coordinate-plane-of-any-angle-and-location-within-the
+   * More numerically stable than _calculateConversion2dMatrix
+   */
+  to2d(pt) {
+    const point = this.point;
+    const denom = this.denom2d;
+    const { numU, numV } = this.numeratorFn2d.call(this, pt);
+
+    return new PIXI.Point(numU / denom, numV / denom);
+  }
+
+  /**
+   * Convert a 2d point in plane coordinates to a 3d point.
+   * Inverse of to2d()
+   * More numerically stable than using the inverse of _calculateConversion2dMatrix
+   */
+  to3d(pt) {
+    const { u, v } = this.axisVectors;
+    const point = this.point;
+
+    return new Point3d(
+      point.x + (pt.x * u.x) + (pt.y * v.x),
+      point.y + (pt.x * u.y) + (pt.y * v.y),
+      point.z + (pt.x * u.z) + (pt.y * v.z)
+    );
+  }
+
+  /**
+   * 2d conversion matrix, take two.
+   * Matrix should take points on the plane and shift to 2d: {x,y,z} * M = {x, y, 0}
+   * Inverse of matrix should reverse the operation: {x, y, 0} * Minv = {x, y, z}
+   * https://stackoverflow.com/questions/49769459/convert-points-on-a-3d-plane-to-2d-coordinates
+   * @returns {Matrix} 4x4 matrix
+   */
+  _calculateConversion2dMatrix() {
+    const { normal: N, point: P } = this;
+    const vs = this.axisVectors;
+
+    const u = P.add(vs.u);
+    const v = P.subtract(vs.v);
+    const A = P;
+    const n = P.add(N);
+
+    // Three points
+    /* Original version, for testing
+    A = terrainWallPoints.A.top
+    B = terrainWallPoints.A.bottom
+    C = terrainWallPoints.B.bottom
+
+    AB = B.subtract(A);
+    AC = C.subtract(A);
+    N = AB.cross(AC);
+    U = AB.normalize()
+    uN = N.normalize();
+    V = U.cross(uN);
+    u = A.add(U);
+    v = A.add(V);
+    n = A.add(uN);
+    */
+
+    // Adjust for row-major matrix and left-hand coordinate system
+
+    const S = new Matrix([
+      [A.x, A.y, A.z, 1],
+      [u.x, u.y, u.z, 1],
+      [v.x, v.y, v.z, 1],
+      [n.x, n.y, n.z, 1]
+    ]);
+
+    const D = new Matrix([
+      [0, 0, 0, 1],
+      [1, 0, 0, 1],
+      [0, 1, 0, 1],
+      [0, 0, 1, 1]
+    ]);
+
+    const Sinv = S.invert();
+    return Sinv.multiply4x4(D);
+  }
+
+
+  /**
    * Calculate the rotation matrix to shift points on the plane to a 2d version.
+   * https://stackoverflow.com/questions/49769459/convert-points-on-a-3d-plane-to-2d-coordinates
    * @returns {Matrix} 4x4 rotation matrix
    */
-  calculate2dRotationMatrix() {
-    const n = this.normal;
-    const p0 = this.point;
-    const vs = this.getVectorsOnPlane();
-    const u = vs.u;
-    const v = vs.v;
-
-    // Translate such that 0,0,0 in world is the pl.point
-    return new Matrix([
-      [u.x, u.y, u.z, 0], // X-axis
-      [v.x, v.y, v.z, 0], // Y-axis
-      [n.x, n.y, n.z, 0], // Z-axis
-      [p0.x, p0.y, p0.z, 1] // Translation
-    ]);
-  }
+//   calculate2dRotationMatrix() {
+//     const n = this.normal;
+//     const p0 = this.point;
+//     const vs = this.axisVectors;
+//     const u = vs.u;
+//     const v = vs.v;
+//
+//     // Translate such that 0,0,0 in world is the pl.point
+//     return new Matrix([
+//       [u.x, u.y, u.z, 0], // X-axis
+//       [v.x, v.y, v.z, 0], // Y-axis
+//       [n.x, n.y, n.z, 0], // Z-axis
+//       [p0.x, p0.y, p0.z, 1] // Translation
+//     ]);
+//   }
 
   /**
    * Intersection point between ray and the plane
@@ -168,20 +326,19 @@ export class Plane {
    * @param {Point3d} l  Origin of the ray.
    * @returns {Point3d|null}
    */
-  rayIntersection(v, l, N, P) {
+  rayIntersection(v, l) {
     // Eisemann, Real-Time Shadows, p. 24 (Projection Matrix for Planar Shadows)
 
-    // const { normal, point } = this;
+    const { normal: N, point: P } = this;
 
     const dotNV = N.dot(v);
     const dotNL = N.dot(l);
-    //const denom = dotNL - dotNV; right-handed system
+    // Right-handed system: const denom = dotNL - dotNV;
     const denom = dotNV - dotNL;
 
     if ( denom.almostEqual(0) ) return null;
 
     const d = N.dot(P);
-    const delta = v.subtract(l)
 
     const outPoint = new Point3d();
 
@@ -201,9 +358,9 @@ export class Plane {
    * @param {Point3d} l0
    * @returns {Point3d|null}
    */
-  lineIntersection(l0, l, N, P) {
-    //const N = this.normal;
-    //const P = this.point;
+  lineIntersection(l0, l) {
+    const N = this.normal;
+    const P = this.point;
 
     const dot = N.dot(l);
 
@@ -215,24 +372,6 @@ export class Plane {
     const u = l.multiplyScalar(fac);
     return l0.add(u);
   }
-
-  projectOnGround(v, l, N, P) {
-    const delta = v.subtract(l);
-    const M = new Matrix([
-      [1, 0, 0, 0],
-      [0, 1, 0, 0],
-      [0, 0, 1, 0],
-      [0, 0, 1/(-l.z), 1]
-    ]);
-
-    p = M.multiplyPoint3d(delta).add(l)
-
-
-  }
-
-
-
-
 
   /**
    * Line segment, defined by two points
@@ -251,9 +390,56 @@ export class Plane {
    * @returns {boolean}
    */
   lineSegmentIntersects(a, b) {
-    const vs = this.getVectorsOnPlane();
+    const vs = this.axisVectors;
     const p0 = this.point;
     return CONFIG.GeometryLib.utils.lineSegment3dPlaneIntersects(a, b, p0, p0.add(vs.u), p0.add(vs.v));
   }
 
+}
+
+
+/**
+ * Helper to calculate numerator for to2d()
+ * @param {Point3d} pt    Point to convert to 2d
+ * @param {Point3d} point Origin point of plane
+ * @returns {object} {numU: number, numV: number}
+ */
+function numerator2dv1(pt) {
+  const { u, v } = this.axisVectors;
+  const point = this.point;
+
+  return {
+    numU: (pt.x - point.x) * v.y - (pt.y - point.y) * v.x,
+    numV: (pt.y - point.y) * u.x - (pt.x - point.x) * u.y
+  }
+}
+
+/**
+ * Helper to calculate numerator for to2d()
+ * @param {Point3d} pt    Point to convert to 2d
+ * @returns {object} {numU: number, numV: number}
+ */
+function numerator2dv2(pt) {
+  const { u, v } = this.axisVectors;
+  const point = this.point;
+
+  return {
+    numU: (pt.x - point.x) * v.z - (pt.z - point.z) * v.x,
+    numV: (pt.z - point.z) * u.x - (pt.x - point.x) * u.z
+  }
+}
+
+/**
+ * Helper to calculate numerator for to2d()
+ * @param {Point3d} pt    Point to convert to 2d
+ * @returns {object} {numU: number, numV: number}
+ */
+function numerator2dv3(pt) {
+  const { u, v } = this.axisVectors;
+  const point = this.point;
+
+  return {
+    numU: (pt.y - point.y) * v.z - (pt.z - point.z) * v.y,
+    numV: (pt.z - point.z) * u.y - (pt.y - point.y) * u.z
+  }
 }
