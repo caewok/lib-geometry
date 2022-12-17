@@ -31,7 +31,7 @@ export class Plane {
 
     const normal = vAB.cross(vAC);
     const plane = new Plane(a, normal);
-    plane._threePoints = [a, vAB, vAC];
+    plane._threePoints = [a, b, c];
     return plane;
   }
 
@@ -367,8 +367,8 @@ export class Plane {
   /**
    * Line, defined by a point and a vector
    * https://www.wikiwand.com/en/Line%E2%80%93plane_intersection
-   * @param {Point3d} vector
-   * @param {Point3d} l0
+   * @param {Point3d} l0  point
+   * @param {Point3d} l   vector
    * @returns {Point3d|null}
    */
   lineIntersection(l0, l) {
