@@ -31,7 +31,7 @@ export class Plane {
 
     const normal = vAB.cross(vAC);
     const plane = new Plane(a, normal);
-    plane._threePoints = [a, b, c];
+    plane._threePoints = {a, b, c};
     return plane;
   }
 
@@ -125,7 +125,7 @@ export class Plane {
   _findThreePoints() {
     const { u, v } = this.axisVectors;
     const p0 = this.point;
-    return [p0, p0.add(u), p0.add(v)];
+    return { a: p0, b: p0.add(u), c: p0.add(v) };
   }
 
   /**
@@ -183,12 +183,12 @@ export class Plane {
    * Point nearly on the plane will return very small values.
    */
   whichSide(p) {
-    const threePoints = this.threePoints;
+    const {a, b, c} = this.threePoints;
 
     // Assuming p0, u, v are CCW:
     // - Positive if p0, u, v are seen as CCW from p
     // - Negative if p0, u, v are seen as CW from p
-    return CONFIG.GeometryLib.utils.orient3dFast(threePoints[0], threePoints[1], threePoints[2], p);
+    return CONFIG.GeometryLib.utils.orient3dFast(a, b, c, p);
 
   }
 
@@ -402,10 +402,9 @@ export class Plane {
    * @param {Point3d} b   Second point of the segment
    * @returns {boolean}
    */
-  lineSegmentIntersects(a, b) {
-    const vs = this.axisVectors;
-    const p0 = this.point;
-    return CONFIG.GeometryLib.utils.lineSegment3dPlaneIntersects(a, b, p0, p0.add(vs.u), p0.add(vs.v));
+ lineSegmentIntersects(a, b) {
+   const pts = this.threePoints;
+   return CONFIG.GeometryLib.utils.lineSegment3dPlaneIntersects(a, b, pts.a, pts.b, pts.c);
   }
 
 }
