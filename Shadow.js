@@ -107,7 +107,7 @@ export class ShadowProjection {
   /** @type {BigInt} */
   _cacheKey;
 
-  constructor(plane , source) {
+  constructor(plane, source) {
     this.plane = plane;
     this.source = source;
 
@@ -150,8 +150,12 @@ export class ShadowProjection {
     return this.plane.normal.equals({x: 0, y: 0, z: 1});
   }
 
+  /**
+   * Faster calculation of a shadow projection matrix.
+   * http://www.it.hiof.no/~borres/j3d/explain/shadow/p-shadow.html
+   * @returns {Matrix}
+   */
   _calculateShadowMatrix() {
-    // http://www.it.hiof.no/~borres/j3d/explain/shadow/p-shadow.html
     const P = this.plane.equation;
     const L = this.sourceOrigin;
 
@@ -163,6 +167,56 @@ export class ShadowProjection {
       [-(L.x * P.c), -(L.y * P.c), dot - (L.z * P.c), -1 * P.c],
       [-(L.x * P.d), -(L.y * P.d), -(L.z * P.d), dot - P.d]
     ]);
+  }
+
+  /**
+   * Create a new shadow matrix, based on the old one,
+   * with the plane raised or lowered by a distance in the z direction.
+   * @param {number} newZ     The new z value of the plane on which the shadow is projected.
+   * @returns {Matrix}
+   */
+  _changeShadowMatrixByZ(newZ) {
+    const plane = this.plane;
+    const P = plane.equation;
+    const L = this.sourceOrigin;
+
+    const newP0 = plane.point.clone();
+    newP0.z = newZ;
+    const newPd = -plane.normal.dot(newP0);
+
+    // TODO: If this is getting used a lot, could cache the dotPL and the P.d calcs.
+    const dotPL = (P.a * L.x) + (P.b * L.y) + (P.c * L.z);
+    const oldDot = dotPL + P.d;
+    const newDot = dotPL + newPd;
+
+    const dotDiff = newDot - oldDot;
+
+    const M = this.shadowMatrix.clone();
+    M.arr[0][0] += dotDiff;
+    M.arr[1][1] += dotDiff;
+    M.arr[2][2] += dotDiff;
+
+    M.arr[3][3] = newDot - newPd;
+
+    M.arr[3][0] = -(L.x * newPd);
+    M.arr[3][1] = -(L.y * newPd);
+    M.arr[3][2] = -(L.z * newPd);
+
+    return M;
+  }
+
+  /**
+   * Assuming this projection is for a horizontal plane, calculate a new shadow point
+   * for a plane that is higher or lower along the z axis.
+   * @param {Point3d} pt
+   * @param {number} z
+   * @returns {Point3d} Shifted point or null if point would be on the other side.
+   */
+  shiftShadowPointAlongZ(pt, z) {
+    const sourceOrigin = this.sourceOrigin;
+    const origZ = this.plane.point.z;
+    const percentShift = 1 - ((z - origZ) / (sourceOrigin.z - origZ));
+    return sourceOrigin.projectToward(pt, percentShift);
   }
 
   /**
@@ -265,7 +319,7 @@ export class ShadowProjection {
   _constructShadowPointsForWallPoints(wallPoints) {
     if ( this.isCanvasParallel
       && wallPoints.A.top.z === wallPoints.B.top.z
-      && wallPoints.A.top.z === wallPoints.B.top.z  ) {
+      && wallPoints.A.top.z === wallPoints.B.top.z ) {
 
       const planeZ = this.plane.point.z;
       const sourceZ = this.sourceOrigin.z;
@@ -298,7 +352,7 @@ export class ShadowProjection {
       const ptSide = plane.whichSide(pt);
 
       if ( !ptSide ) shadowPoints.push(pt);
-      else if ( ptSide * prevSide < 0  ) {
+      else if ( ptSide * prevSide < 0 ) {
         // We switched sides of the plane
         // Locate the intersection of the plane with this and the previous point.
         const ix = plane.lineSegmentIntersection(prevPt, pt);
@@ -311,7 +365,7 @@ export class ShadowProjection {
         // Is the intersection on the correct side of the point?
         // Should be further from the source than the point.
         const dist2Pt = Point3d.distanceSquaredBetween(sourceOrigin, pt);
-        const dist2Ix = Point3d.distanceSquaredBetween(sourceOrigin, ix)
+        const dist2Ix = Point3d.distanceSquaredBetween(sourceOrigin, ix);
 
         if ( dist2Pt < dist2Ix ) {
           // We have source --> pt --> ix
@@ -350,6 +404,7 @@ export class ShadowProjection {
 //     if ( orient <= 0 ) console.warn(`_shadowPointsForPoints|orientation ${orient < 0 ? "cw" : orient > 0 ? "ccw" : "0" }`);
     return orient < 0 ? shadowPoints : shadowPoints.reverse();
   }
+
   /**
    * Construct a shadow from this source cast by the wall onto this plane.
    * This helper assume nothing about the plane orientation.
