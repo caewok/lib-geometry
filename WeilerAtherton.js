@@ -262,6 +262,13 @@ export class WeilerAthertonClipper extends PIXI.Polygon {
    * @return {Point[]} Labeled array of points
    */
   _buildLabeledIntersectionsArray(points, clipObject) {
+    // TODO: If intersections were stored in a set, the lookup for findIndex would be
+    //   O(1) instead of O(n).
+    // One option would be for findIntersections to return a Set of intersections, and then
+    //   _buildPointIntersectionArray could also return the ix Set.
+    //   If the ix set has a point, then it must be an intersection.
+    // This may or may not help, depending on what is done about startIdx.
+
     const startIdx = points.findIndex(pt => !pt.isIntersection);
     if ( !~startIdx ) return []; // All intersections, so all tangent
 
