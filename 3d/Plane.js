@@ -314,6 +314,7 @@ export class Plane {
    * @param {Point3d} v1
    * @param {Point3d} v2
    * @param {Point3d} v3
+   * @returns {number|null}  Null if no intersection. If negative, the intersection is behind the ray origin.
    */
   static rayIntersectionQuad3dLD(rayOrigin, rayDirection, v0, v1, v2, v3) {
     // Reject rays using the barycentric coordinates of the intersection point with respect to T
@@ -321,17 +322,17 @@ export class Plane {
     const E03 = v3.subtract(v0);
     const P = rayDirection.cross(E03);
     const det = E01.dot(P);
-    if ( Math.abs(det) < Number.EPSILON ) return false;
+    if ( Math.abs(det) < Number.EPSILON ) return null;
 
     const T = rayOrigin.subtract(v0);
     const alpha = T.dot(P) / det;
-    if ( alpha < 0 ) return false;
-    if ( alpha > 1 ) return false;
+    if ( alpha < 0 ) return null;
+    if ( alpha > 1 ) return null;
 
     const Q = T.cross(E01);
     const beta = rayDirection.dot(Q) / det;
-    if ( beta < 0 ) return false;
-    if ( beta > 1 ) return false;
+    if ( beta < 0 ) return null;
+    if ( beta > 1 ) return null;
 
     // Reject rays using the barycentric coordinates of the intersection point with respect to T'
     if ( (alpha + beta) > 1 ) {
@@ -339,21 +340,19 @@ export class Plane {
       const E21 = v1.subtract(v2);
       const Pprime = rayDirection.cross(E21);
       const detprime = E23.dot(Pprime);
-      if ( Math.abs(detprime) < Number.EPSILON ) return false;
+      if ( Math.abs(detprime) < Number.EPSILON ) return null;
 
       const Tprime = rayOrigin.subtract(v2);
       const alphaprime = Tprime.dot(Pprime) / detprime;
-      if ( alphaprime < 0 ) return false;
+      if ( alphaprime < 0 ) return null;
       const Qprime = Tprime.cross(E23);
       const betaprime = rayDirection.dot(Qprime) / detprime;
-      if ( betaprime < 0 ) return false;
+      if ( betaprime < 0 ) return null;
     }
 
     // Compute the ray parameter of the intersection point
-    const t = E03.dot(Q) / det;
-    if ( t < 0 ) return false;
-
-    return t;
+    return E03.dot(Q) / det;
+    // if ( t < 0 ) return null;
 
     // If barycentric coordinates of the intersection point are needed, this would be done here.
     // See the original Lagae-Dutré paper.
