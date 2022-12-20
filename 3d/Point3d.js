@@ -19,6 +19,35 @@ export class Point3d extends PIXI.Point {
   }
 
   /**
+   * Check if 3d points are oriented clockwise.
+   * ChatGPT
+   * This function calculates the cross product of the two edge vectors of the triangle
+   * formed by the three points using the subtract and cross functions. It then checks
+   * if the z component of the cross product is greater than zero, which indicates that
+   * the points are oriented clockwise. If the z component is less than or equal to zero,
+   * the points are oriented counter-clockwise.
+   *
+   * Note that this function assumes that the points are given in a right-handed coordinate system,
+   * where the positive z-axis points out of the screen. If the points are given in a
+   * left-handed coordinate system, the function should be modified to check if the z
+   * component of the cross product is less than zero.
+   * @param {Point3d} a
+   * @param {Point3d} b
+   * @param {Point3d} c
+   * @returns {number} The z-component of the cross. Comparable to foundry.utils.orient2d
+   *   0: colinear
+   *   positive: CCW (right-handed system, incl. Foundry)
+   *   negative: CW (right-handed system, incl. Foundry)
+   */
+  static orient(a, b, c) {
+    const dBA = b.subtract(a);
+    const dCB = c.subtract(b);
+    const crossProduct = dBA.cross(dCB);
+
+    return -crossProduct.z
+  }
+
+  /**
    * Point between two points on a line
    * @param {Point3d} a
    * @param {Point3d} b

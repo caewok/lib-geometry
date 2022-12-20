@@ -289,6 +289,20 @@ export class Matrix {
   }
 
   /**
+   * Copy this matrix to a new matrix object
+   * @returns {Matrix}
+   */
+  clone() {
+    // See https://jsbench.me/gflbviyw69/1
+    const { dim1, arr } = this;
+	  const newMat = Array(dim1);
+    for ( let i = 0; i < dim1; i += 1 ) {
+      newMat[i] = arr[i].slice();
+    }
+    return new Matrix(newMat);
+  }
+
+  /**
    * Test if this matrix is exactly equal to another
    * @param {Matrix} other
    * @returns {boolean}

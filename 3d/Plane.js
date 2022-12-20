@@ -1,5 +1,6 @@
 /* globals
-CONFIG
+CONFIG,
+PIXI
 */
 "use strict";
 
@@ -162,12 +163,204 @@ export class Plane {
   }
 
   /**
+   * Distance from a point to the plane
+   * @param {Point3d} a
+   * @returns {number}
+   */
+  distanceToPoint(a) {
+    const { normal, point } = this;
+    return normal.dot(a.subtract(point));
+  }
+
+  /**
+   * Möller-Trumbore intersection algorithm for a triangle.
+   * ChatGPT assist
+   * This function first calculates the edge vectors of the triangle and the determinant
+   * of the triangle using the cross product and dot product. It then uses the Möller–Trumbore
+   * intersection algorithm to calculate the intersection point using barycentric coordinates,
+   * and checks if the intersection point is within the bounds of the triangle. If it is,
+   * the function returns the distance from ray origin to point of intersection.
+   * If the ray is parallel to the triangle or the intersection point is outside of the triangle,
+   * the function returns null.
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @param {Point3d} v0            First vertex of the triangle
+   * @param {Point3d} v1            Second vertex of the triangle, CCW
+   * @param {Point3d} v2            Third vertex of the triangle, CCW
+   * @returns {number} Distance from ray origin to the point of intersection.
+   *
+   */
+  static rayIntersectionTriangle3d(rayOrigin, rayDirection, v0, v1, v2) {
+    // Calculate the edge vectors of the triangle
+    const edge1 = v1.subtract(v0);
+    const edge2 = v2.subtract(v0);
+
+    // Calculate the determinant of the triangle
+    const pvec = rayDirection.cross(edge2);
+
+    // If the determinant is near zero, ray lies in plane of triangle
+    const det = edge1.dot(pvec);
+    if (det > -Number.EPSILON && det < Number.EPSILON) return null;  // Ray is parallel to triangle
+    const invDet = 1 / det;
+
+    // Calculate the intersection point using barycentric coordinates
+    const tvec = rayOrigin.subtract(v0);
+    const u = invDet * tvec.dot(pvec);
+    if (u < 0 || u > 1) return null;  // Intersection point is outside of triangle
+
+    const qvec = tvec.cross(edge1);
+    const v = invDet * rayDirection.dot(qvec);
+    if (v < 0 || u + v > 1) return null;  // Intersection point is outside of triangle
+
+    // Calculate the distance to the intersection point
+    const t = invDet * edge2.dot(qvec);
+    return t > Number.EPSILON ? t : null;
+  }
+
+  /**
+   * Triangulate polygon
+   * This can be done using a variety of algorithms, such as ear clipping or Delaunay triangulation
+   * For the sake of simplicity, we will just split the polygon into triangles using a simple fan triangulation
+   */
+  static polygon3dToTriangles3d(vertices) {
+    const ln = vertices.length;
+    const triangles = [ln - 2];
+    for ( let i = 2, j = 0; i < ln; i += 1, j += 1 ) {
+      triangles[j] = [vertices[0], vertices[i - 1], vertices[i]];
+    }
+    return triangles;
+  }
+
+  /**
+   * Möller-Trumbore intersection algorithm for a polygon.
+   * ChatGPT assist
+   * For a set of polygon points in counter-clockwise direction, check for intersection.
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @param {Point3d[]} vertices
+   * @returns {number} The distance from the ray origin to the intersection point.
+   */
+  static rayIntersectsPolygon3d(rayOrigin, rayDirection, vertices) {
+    const triangles = Plane.polygonToTriangles(vertices);
+
+    // Test for intersection with each triangle
+    const ln = triangles.length;
+    for ( let i = 0; i < ln; i += 1 ) {
+      const tri = triangles[i];
+      const t = Plane.rayIntersectionTriangle(rayOrigin, rayDirection, tri[0], tri[1], tri[2]);
+      if ( t ) return t;
+
+      // Alternatively, could store the minimum t value among the various triangles and
+      // return it. Should be roughly equivalent to this version, b/c the triangles share a plane
+      // and there should be only 1 intersection point on that plane.
+    }
+
+    return null;
+  }
+
+  /**
+   * Intersection of a ray with this plane.
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @returns {number|null} Distance to the intersection along the ray, or null if none.
+   *   Note: if negative, the intersection lies behind the ray origin (and thus may not be an intersection)
+   */
+  rayIntersection(rayOrigin, rayDirection) {
+    const { normal, point } = this;
+
+    const denom = normal.dot(rayDirection);
+
+    // Check if the ray is parallel to the plane (denom is close to 0)
+    if ( Math.abs(denom) < Number.EPSILON ) return null;
+
+    // Calculate the distance along the ray
+    return point.subtract(rayOrigin).dot(normal) / denom;
+  }
+
+  /**
+   * Determine if a 3d point lies inside a 3d planar rectangle
+   * @param {Point3d} point
+   * @param {Point3d[3]} vertices
+   * @returns {boolean}
+   */
+  static pointInsideRectangle3d(point, vertices) {
+    // Find the two axes of the rectangle
+    const v0 = vertices[0];
+    const v1 = vertices[1];
+    const v2 = vertices[2];
+    const axis1 = v1.subtract(v0).normalize();
+    const axis2 = v2.subtract(v0).normalize();
+
+    // Calculate the rectangle bounds
+    const dot01 = v0.dot(axis1);
+    const dot02 = v0.dot(axis2);
+    const dot11 = v1.dot(axis1);
+    const dot22 = v2.dot(axis2);
+
+    const min1 = Math.min(dot01, dot11);
+    const max1 = Math.max(dot01, dot11);
+    const min2 = Math.min(dot02, dot22);
+    const max2 = Math.max(dot02, dot22);
+
+    // Project the point onto the axes
+    const projection1 = point.dot(axis1);
+    const projection2 = point.dot(axis2);
+
+    return projection1 >= min1 && projection1 <= max1
+      && projection2 >= min2 && projection2 <= max2;
+  }
+
+  /**
+   * Get the intersection of a ray with a 3d rectangle.
+   * ChatGPT assist
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @param {Point3d[3]} vertices   3 of the vertices of the rectangle
+   */
+  static rayIntersectsRectangle3d(rayOrigin, rayDirection, vertices) {
+    // Find the normal of the rectangle
+    const v0 = vertices[0];
+    const v10 = vertices[1].subtract(v0);
+    const v20 = vertices[2].subtract(v0);
+    const normal = v10.cross(v20);
+
+    // Check for intersection with the plane defined by the rectangle
+    const rectPlane = new Plane(normal, v0);
+    const t = rectPlane.rayIntersection();
+    if ( t === null || t < 0 ) return null;
+
+    // Check if intersection point lies inside the rectangle
+    const ix = rayOrigin.add(rayDirection.multiplyScalar(t));
+    return Plane.pointInsideRectangle(ix, vertices) ? t : null;
+  }
+
+  /**
+   * Möller-Trumbore intersection algorithm for a quad.
+   * Test the two triangles of the quad.
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @param {Point3d[4]} vertices     Must have 4
+   */
+  static rayIntersectsQuad3d(rayOrigin, rayDirection, vertices) {
+    // Triangles are 0 - 1 - 2 and 1-2-3
+
+    const t0 = Plane.rayIntersectionTriangle(rayOrigin, rayDirection, vertices[0], vertices[1], vertices[2]);
+    if ( t0 ) return t0;
+
+    const t1 = Plane.rayIntersectionTriangle(rayOrigin, rayDirection, vertices[1], vertices[2], vertices[3]);
+    if ( t1 ) return t1;
+
+    return null;
+  }
+
+
+  /**
    * Cache the function used to calculate the numerator for to2d().
    * See this.denom2d
    * @type {Function}
    */
   get numeratorFn2d() {
-    if ( typeof this._numeratorFn2d === "undefined" ) this.denom2d;
+    if ( typeof this._numeratorFn2d === "undefined" ) { const denom = this.denom2d; }
     return this._numeratorFn2d;
   }
 
@@ -235,9 +428,8 @@ export class Plane {
    * More numerically stable than _calculateConversion2dMatrix
    */
   to2d(pt) {
-    const point = this.point;
     const denom = this.denom2d;
-    const { numU, numV } = this.numeratorFn2d.call(this, pt);
+    const { numU, numV } = (this.numeratorFn2d).call(this, pt);
 
     return new PIXI.Point(numU / denom, numV / denom);
   }
@@ -311,35 +503,13 @@ export class Plane {
     return Sinv.multiply4x4(D);
   }
 
-
-  /**
-   * Calculate the rotation matrix to shift points on the plane to a 2d version.
-   * https://stackoverflow.com/questions/49769459/convert-points-on-a-3d-plane-to-2d-coordinates
-   * @returns {Matrix} 4x4 rotation matrix
-   */
-//   calculate2dRotationMatrix() {
-//     const n = this.normal;
-//     const p0 = this.point;
-//     const vs = this.axisVectors;
-//     const u = vs.u;
-//     const v = vs.v;
-//
-//     // Translate such that 0,0,0 in world is the pl.point
-//     return new Matrix([
-//       [u.x, u.y, u.z, 0], // X-axis
-//       [v.x, v.y, v.z, 0], // Y-axis
-//       [n.x, n.y, n.z, 0], // Z-axis
-//       [p0.x, p0.y, p0.z, 1] // Translation
-//     ]);
-//   }
-
   /**
    * Intersection point between ray and the plane
    * @param {Point3d} v  Point (or vertex) on the ray, representing 1 unit of movement along the ray
    * @param {Point3d} l  Origin of the ray.
    * @returns {Point3d|null}
    */
-  rayIntersection(v, l) {
+  rayIntersectionEisemann(v, l) {
     // Eisemann, Real-Time Shadows, p. 24 (Projection Matrix for Planar Shadows)
 
     const { normal: N, point: P } = this;
@@ -402,13 +572,11 @@ export class Plane {
    * @param {Point3d} b   Second point of the segment
    * @returns {boolean}
    */
- lineSegmentIntersects(a, b) {
-   const pts = this.threePoints;
-   return CONFIG.GeometryLib.utils.lineSegment3dPlaneIntersects(a, b, pts.a, pts.b, pts.c);
+  lineSegmentIntersects(a, b) {
+    const pts = this.threePoints;
+    return CONFIG.GeometryLib.utils.lineSegment3dPlaneIntersects(a, b, pts.a, pts.b, pts.c);
   }
-
 }
-
 
 /**
  * Helper to calculate numerator for to2d()
@@ -421,9 +589,9 @@ function numerator2dv1(pt) {
   const point = this.point;
 
   return {
-    numU: (pt.x - point.x) * v.y - (pt.y - point.y) * v.x,
-    numV: (pt.y - point.y) * u.x - (pt.x - point.x) * u.y
-  }
+    numU: ((pt.x - point.x) * v.y) - ((pt.y - point.y) * v.x),
+    numV: ((pt.y - point.y) * u.x) - ((pt.x - point.x) * u.y)
+  };
 }
 
 /**
@@ -436,9 +604,9 @@ function numerator2dv2(pt) {
   const point = this.point;
 
   return {
-    numU: (pt.x - point.x) * v.z - (pt.z - point.z) * v.x,
-    numV: (pt.z - point.z) * u.x - (pt.x - point.x) * u.z
-  }
+    numU: ((pt.x - point.x) * v.z) - ((pt.z - point.z) * v.x),
+    numV: ((pt.z - point.z) * u.x) - ((pt.x - point.x) * u.z)
+  };
 }
 
 /**
@@ -451,7 +619,7 @@ function numerator2dv3(pt) {
   const point = this.point;
 
   return {
-    numU: (pt.y - point.y) * v.z - (pt.z - point.z) * v.y,
-    numV: (pt.z - point.z) * u.y - (pt.y - point.y) * u.z
-  }
+    numU: ((pt.y - point.y) * v.z) - ((pt.z - point.z) * v.y),
+    numV: ((pt.z - point.z) * u.y) - ((pt.y - point.y) * u.z)
+  };
 }
