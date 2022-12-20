@@ -15,8 +15,8 @@ export class Plane {
    * @param {Point3d} point     Point on the plane
    */
   constructor(point = new Point3d(0, 0, 0), normal = new Point3d(0, 0, 1)) {
-    this.normal = normal.normalize(normal);
-    this.point = point;
+    this.normal = normal.normalize();
+    this.point = point.clone();
   }
 
   /**
@@ -27,6 +27,10 @@ export class Plane {
    * @returns {Plane}
    */
   static fromPoints(a, b, c) {
+    a = a.clone();
+    b = b.clone();
+    c = c.clone();
+
     const vAB = b.subtract(a);
     const vAC = c.subtract(a);
 
