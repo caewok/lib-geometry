@@ -244,14 +244,14 @@ export class Plane {
    * @param {Point3d[]} vertices
    * @returns {number} The distance from the ray origin to the intersection point.
    */
-  static rayIntersectsPolygon3d(rayOrigin, rayDirection, vertices) {
-    const triangles = Plane.polygonToTriangles(vertices);
+  static rayIntersectionPolygon3d(rayOrigin, rayDirection, vertices) {
+    const triangles = Plane.polygon3dToTriangles3d(vertices);
 
     // Test for intersection with each triangle
     const ln = triangles.length;
     for ( let i = 0; i < ln; i += 1 ) {
       const tri = triangles[i];
-      const t = Plane.rayIntersectionTriangle(rayOrigin, rayDirection, tri[0], tri[1], tri[2]);
+      const t = Plane.rayIntersectionTriangle3d(rayOrigin, rayDirection, tri[0], tri[1], tri[2]);
       if ( t ) return t;
 
       // Alternatively, could store the minimum t value among the various triangles and
@@ -278,64 +278,7 @@ export class Plane {
     if ( Math.abs(denom) < Number.EPSILON ) return null;
 
     // Calculate the distance along the ray
-    return point.subtract(rayOrigin).dot(normal) / denom;
-  }
-
-  /**
-   * Determine if a 3d point lies inside a 3d planar rectangle
-   * @param {Point3d} point
-   * @param {Point3d[3]} vertices
-   * @returns {boolean}
-   */
-  static pointInsideRectangle3d(point, vertices) {
-    // Find the two axes of the rectangle
-    const v0 = vertices[0];
-    const v1 = vertices[1];
-    const v2 = vertices[2];
-    const axis1 = v1.subtract(v0).normalize();
-    const axis2 = v2.subtract(v0).normalize();
-
-    // Calculate the rectangle bounds
-    const dot01 = v0.dot(axis1);
-    const dot02 = v0.dot(axis2);
-    const dot11 = v1.dot(axis1);
-    const dot22 = v2.dot(axis2);
-
-    const min1 = Math.min(dot01, dot11);
-    const max1 = Math.max(dot01, dot11);
-    const min2 = Math.min(dot02, dot22);
-    const max2 = Math.max(dot02, dot22);
-
-    // Project the point onto the axes
-    const projection1 = point.dot(axis1);
-    const projection2 = point.dot(axis2);
-
-    return projection1 >= min1 && projection1 <= max1
-      && projection2 >= min2 && projection2 <= max2;
-  }
-
-  /**
-   * Get the intersection of a ray with a 3d rectangle.
-   * ChatGPT assist
-   * @param {Point3d} rayOrigin
-   * @param {Point3d} rayDirection
-   * @param {Point3d[3]} vertices   3 of the vertices of the rectangle
-   */
-  static rayIntersectsRectangle3d(rayOrigin, rayDirection, vertices) {
-    // Find the normal of the rectangle
-    const v0 = vertices[0];
-    const v10 = vertices[1].subtract(v0);
-    const v20 = vertices[2].subtract(v0);
-    const normal = v10.cross(v20);
-
-    // Check for intersection with the plane defined by the rectangle
-    const rectPlane = new Plane(normal, v0);
-    const t = rectPlane.rayIntersection();
-    if ( t === null || t < 0 ) return null;
-
-    // Check if intersection point lies inside the rectangle
-    const ix = rayOrigin.add(rayDirection.multiplyScalar(t));
-    return Plane.pointInsideRectangle(ix, vertices) ? t : null;
+    return normal.dot(point.subtract(rayOrigin)) / denom;
   }
 
   /**
@@ -343,20 +286,79 @@ export class Plane {
    * Test the two triangles of the quad.
    * @param {Point3d} rayOrigin
    * @param {Point3d} rayDirection
-   * @param {Point3d[4]} vertices     Must have 4
+   * @param {Point3d} v0
+   * @param {Point3d} v1
+   * @param {Point3d} v2
+   * @param {Point3d} v3
    */
-  static rayIntersectsQuad3d(rayOrigin, rayDirection, vertices) {
+  static rayIntersectionQuad3d(rayOrigin, rayDirection, v0, v1, v2, v3) {
     // Triangles are 0 - 1 - 2 and 1-2-3
 
-    const t0 = Plane.rayIntersectionTriangle(rayOrigin, rayDirection, vertices[0], vertices[1], vertices[2]);
+    const t0 = Plane.rayIntersectionTriangle3d(rayOrigin, rayDirection, v0, v1, v2);
     if ( t0 ) return t0;
 
-    const t1 = Plane.rayIntersectionTriangle(rayOrigin, rayDirection, vertices[1], vertices[2], vertices[3]);
+    const t1 = Plane.rayIntersectionTriangle3d(rayOrigin, rayDirection, v1, v2, v3);
     if ( t1 ) return t1;
 
     return null;
   }
 
+  /**
+   * Lagae-Dutré intersection algorithm for a quad
+   * https://graphics.cs.kuleuven.be/publications/LD04ERQIT/LD04ERQIT_paper.pdf
+   * Appears a bit faster than doing rayIntersectionTriangle3d twice, but depends on setup.
+   * Usually does equal or better.
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @param {Point3d} v0
+   * @param {Point3d} v1
+   * @param {Point3d} v2
+   * @param {Point3d} v3
+   */
+  static rayIntersectionQuad3dLD(rayOrigin, rayDirection, v0, v1, v2, v3) {
+    // Reject rays using the barycentric coordinates of the intersection point with respect to T
+    const E01 = v1.subtract(v0);
+    const E03 = v3.subtract(v0);
+    const P = rayDirection.cross(E03);
+    const det = E01.dot(P);
+    if ( Math.abs(det) < Number.EPSILON ) return false;
+
+    const T = rayOrigin.subtract(v0);
+    const alpha = T.dot(P) / det;
+    if ( alpha < 0 ) return false;
+    if ( alpha > 1 ) return false;
+
+    const Q = T.cross(E01);
+    const beta = rayDirection.dot(Q) / det;
+    if ( beta < 0 ) return false;
+    if ( beta > 1 ) return false;
+
+    // Reject rays using the barycentric coordinates of the intersection point with respect to T'
+    if ( (alpha + beta) > 1 ) {
+      const E23 = v3.subtract(v2);
+      const E21 = v1.subtract(v2);
+      const Pprime = rayDirection.cross(E21);
+      const detprime = E23.dot(Pprime);
+      if ( Math.abs(detprime) < Number.EPSILON ) return false;
+
+      const Tprime = rayOrigin.subtract(v2);
+      const alphaprime = Tprime.dot(Pprime) / detprime;
+      if ( alphaprime < 0 ) return false;
+      const Qprime = Tprime.cross(E23);
+      const betaprime = rayDirection.dot(Qprime) / detprime;
+      if ( betaprime < 0 ) return false;
+    }
+
+    // Compute the ray parameter of the intersection point
+    const t = E03.dot(Q) / det;
+    if ( t < 0 ) return false;
+
+    return t;
+
+    // If barycentric coordinates of the intersection point are needed, this would be done here.
+    // See the original Lagae-Dutré paper.
+    // For current purposes, the estimated point using the ray is likely sufficient.
+  }
 
   /**
    * Cache the function used to calculate the numerator for to2d().
