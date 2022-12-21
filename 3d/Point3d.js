@@ -19,6 +19,35 @@ export class Point3d extends PIXI.Point {
   }
 
   /**
+   * Check if 3d points are oriented clockwise.
+   * ChatGPT
+   * This function calculates the cross product of the two edge vectors of the triangle
+   * formed by the three points using the subtract and cross functions. It then checks
+   * if the z component of the cross product is greater than zero, which indicates that
+   * the points are oriented clockwise. If the z component is less than or equal to zero,
+   * the points are oriented counter-clockwise.
+   *
+   * Note that this function assumes that the points are given in a right-handed coordinate system,
+   * where the positive z-axis points out of the screen. If the points are given in a
+   * left-handed coordinate system, the function should be modified to check if the z
+   * component of the cross product is less than zero.
+   * @param {Point3d} a
+   * @param {Point3d} b
+   * @param {Point3d} c
+   * @returns {number} The z-component of the cross. Comparable to foundry.utils.orient2d
+   *   0: colinear
+   *   positive: CCW (right-handed system, incl. Foundry)
+   *   negative: CW (right-handed system, incl. Foundry)
+   */
+  static orient(a, b, c) {
+    const dBA = b.subtract(a);
+    const dCB = c.subtract(b);
+    const crossProduct = dBA.cross(dCB);
+
+    return -crossProduct.z
+  }
+
+  /**
    * Point between two points on a line
    * @param {Point3d} a
    * @param {Point3d} b
@@ -68,6 +97,59 @@ export class Point3d extends PIXI.Point {
     const dy = b.y - a.y;
     const dz = b.z - a.z;
     return Math.pow(dx, 2) + Math.pow(dy, 2) + Math.pow(dz, 2);
+  }
+
+  /**
+   * Determine the center point for the source.
+   * @param {PointSource} source
+   * @returns {Point3d}
+   */
+  static fromPointSource(source) {
+    const { x, y, elevationZ } = source;
+    return new Point3d(x, y, elevationZ);
+  }
+
+  /**
+   * Determine the token top and bottom center points.
+   * @param {Token} token
+   * @returns {object} { top, bottom }
+   */
+  static fromToken(token) {
+    const { x, y } = token.center;
+    return {
+      top: new Point3d(x, y, token.topZ),
+      bottom: new Point3d(x, y, token.bottomZ)
+    };
+  }
+
+  /**
+   * Determine the wall top and bottom points
+   * @param {Wall} wall         Wall to convert to points object
+   * @param {object} [options]  Options that affect the conversion
+   * @param {boolean} [finite]  Force infinite z values to finite min/max safe integers
+   * @returns {object} { A: { top, bottom }, B: { top, bottom } }
+   */
+  static fromWall(wall, { finite = false } = {}) {
+    const { topZ, bottomZ, A, B } = wall;
+
+    // Use MAX instead of Number.MAX_SAFE_INTEGER to improve numerical accuracy
+    // particularly when converting to/from 2d.
+    const numDigits = numPositiveDigits(canvas.dimensions.maxR);
+    const MAX = Number(`1e0${numDigits}`);
+
+    const top = (finite && !isFinite(topZ)) ? MAX : topZ;
+    const bottom = (finite && !isFinite(bottomZ)) ? -MAX : bottomZ;
+
+    return {
+      A: {
+        top: new Point3d(A.x, A.y, top),
+        bottom: new Point3d(A.x, A.y, bottom)
+      },
+      B: {
+        top: new Point3d(B.x, B.y, top),
+        bottom: new Point3d(B.x, B.y, bottom)
+      }
+    };
   }
 
   /**
@@ -152,6 +234,17 @@ export class Point3d extends PIXI.Point {
   }
 
   /**
+   * Use Math.roundDecimals to round the point coordinates to a certain number of decimals
+   * @param {number} places   Number of decimals places to use when rounding.
+   * @returns {this}
+   */
+  roundDecimals(places = 0) {
+    super.roundDecimals(places);
+    this.z = Math.roundDecimals(this.z, places);
+    return this;
+  }
+
+  /**
    * Add a point to this one.
    * Based on https://api.pixijs.io/@pixi/math-extras/src/pointExtras.ts.html
    * @param {PIXI.Point} other    The point to add to `this`.
@@ -195,6 +288,22 @@ export class Point3d extends PIXI.Point {
     outPoint ??= new this.constructor();
     super.multiply(other, outPoint);
     outPoint.z = this.z * (other.z ?? 0);
+
+    return outPoint;
+  }
+
+  /**
+   * Divide `this` point by another.
+   * Based on https://api.pixijs.io/@pixi/math-extras/src/pointExtras.ts.html
+   * @param {Point3d|PIXI.Point} other    The point to subtract from `this`.
+   * @param {Point3d} [outPoint]    A point-like object in which to store the value.
+   *   (Will create new point if none provided.)
+   * @returns {Point3d}
+   */
+  divide(other, outPoint) {
+    outPoint ??= new this.constructor();
+    super.divide(other, outPoint);
+    outPoint.z = this.z / other.z;
 
     return outPoint;
   }
@@ -279,3 +388,16 @@ export class Point3d extends PIXI.Point {
     return super.normalize(outPoint);
   }
 }
+
+/**
+ * Count the number of positive integer digits.
+ * Will return 0 for negative numbers.
+ * Will truncate any decimals.
+ * https://stackoverflow.com/questions/14879691/get-number-of-digits-with-javascript
+ * @param {number}      A positive number
+ * @returns {number}    The number of digits before the decimal
+ */
+export function numPositiveDigits(n) {
+  return Math.log(n) * Math.LOG10E + 1 | 0
+}
+

@@ -24,8 +24,55 @@ export function registerFoundryUtilsMethods() {
     gridUnitsToPixels,
     pixelsToGridUnits,
     perpendicularPoint,
-    centeredPolygonFromDrawing
+    centeredPolygonFromDrawing,
+    shortestRouteBetween3dLines
   };
+}
+
+/**
+ * Shortest line segment between two 3d lines
+ * http://paulbourke.net/geometry/pointlineplane/
+ * http://paulbourke.net/geometry/pointlineplane/lineline.c
+ * @param {Point3d} a   Endpoint of line AB
+ * @param {Point3d} b   Endpoint of line AB
+ * @param {Point3d} c   Endpoint of line CD
+ * @param {Point3d} d   Endpoint of line CD
+ * @param {number} epsilon  Consider this value or less to be zero
+ * @returns {object|null} {A: Point3d, B: Point3d}
+ */
+function shortestRouteBetween3dLines(a, b, c, d, epsilon = 1e-08) {
+  const deltaDC = d.subtract(c);
+  if ( Math.abs(deltaDC.x) < epsilon
+    && Math.abs(deltaDC.y) < epsilon
+    && Math.abs(deltaDC.z) < epsilon ) return null;
+
+
+  const deltaBA = b.subtract(a);
+  if ( Math.abs(deltaBA.x) < epsilon
+    && Math.abs(deltaBA.y) < epsilon
+    && Math.abs(deltaBA.z) < epislon ) return null;
+
+  const deltaAC = a.subtract(c);
+
+  const dotACDC = deltaAC.dot(deltaDC);
+  const dotDCBA = deltaDC.dot(deltaBA);
+  const dotACBA = deltaAC.dot(deltaBA);
+  const dotDCDC = deltaDC.dot(deltaDC);
+  const dotBABA = deltaBA.dot(deltaBA);
+
+  const denom = (dotBABA * dotDCDC) - (dotDCBA * dotDCBA);
+  if ( Math.abs(denom) < epsilon ) return null;
+
+  const numer = (dotACBC * dotDCBA) - (dotACBA * dotDCDC);
+  const mua = numer / denom;
+  const mub = (dotACDC + (dotDCBA * mua)) / dotDCDC;
+
+  return {
+    A: deltaBA.multiplyScalar(mua).add(a),
+    B: deltaDC.multiplyScalar(mub).add(c),
+    mua,
+    mub
+  }
 }
 
 /**

@@ -87,15 +87,13 @@ export class Matrix {
   }
 
   static fromPoint3d(p, { homogenous = true } = {}) {
-    const arr = [p.x, p.y, p.z];
-    if ( homogenous ) arr.push(1);
-    return Matrix.fromFlatArray(arr, 1, homogenous ? 4 : 3);
+    const arr = homogenous ? [p.x, p.y, p.z, 1] : [p.x, p.y, p.z];
+    return new Matrix([arr]);
   }
 
   static fromPoint2d(p, { homogenous = true } = {}) {
-    const arr = [p.x, p.y];
-    if ( homogenous ) arr.push(1);
-    return Matrix.fromFlatArray(arr, 1, homogenous ? 3 : 2);
+    const arr = homogenous ? [p.x, p.y, 1] : [p.x, p.y];
+    return new Matrix([arr]);
   }
 
   /**
@@ -291,6 +289,20 @@ export class Matrix {
   }
 
   /**
+   * Copy this matrix to a new matrix object
+   * @returns {Matrix}
+   */
+  clone() {
+    // See https://jsbench.me/gflbviyw69/1
+    const { dim1, arr } = this;
+	  const newMat = Array(dim1);
+    for ( let i = 0; i < dim1; i += 1 ) {
+      newMat[i] = arr[i].slice();
+    }
+    return new Matrix(newMat);
+  }
+
+  /**
    * Test if this matrix is exactly equal to another
    * @param {Matrix} other
    * @returns {boolean}
@@ -353,19 +365,22 @@ export class Matrix {
    * @param {number} [options.xIndex]       Column for the x variable.
    * @param {number} [options.yIndex]       Column for the y variable.
    * @param {boolean} [options.homogenous]  Whether to convert homogenous coordinates.
+   * @param {Point3d} [options.outPoint]    Placeholder for the new Point.
    * @returns {PIXI.Point}
    */
-  toPoint2d({ xIndex = 0, yIndex = 1, homogenous = true } = {}) {
-    let x = this.arr[0][xIndex];
-    let y = this.arr[0][yIndex];
+  toPoint2d({ xIndex = 0, yIndex = 1, homogenous = true, outPoint = new PIXI.Point() } = {}) {
+    const row = this.arr[0];
+
+    outPoint.x = row[xIndex];
+    outPoint.y = row[yIndex];
 
     if ( homogenous ) {
-      const h = this.arr[0][this.dim2 - 1];
-      x /= h;
-      y /= h;
+      const h = row[this.dim2 - 1];
+      outPoint.x /= h;
+      outPoint.y /= h;
     }
 
-    return new PIXI.Point(x, y);
+    return outPoint;
   }
 
   /**
@@ -377,21 +392,24 @@ export class Matrix {
    * @param {number} [options.yIndex]       Column for the y variable.
    * @param {number} [options.zIndex]       Column for the z variable.
    * @param {boolean} [options.homogenous]  Whether to convert homogenous coordinates.
+   * @param {Point3d} [options.outPoint]    Placeholder for the new Point3d.
    * @returns {PIXI.Point}
    */
-  toPoint3d({ xIndex = 0, yIndex = 1, zIndex = 2, homogenous = true } = {}) {
-    let x = this.arr[0][xIndex];
-    let y = this.arr[0][yIndex];
-    let z = this.arr[0][zIndex];
+  toPoint3d({ xIndex = 0, yIndex = 1, zIndex = 2, homogenous = true, outPoint = new Point3d() } = {}) {
+    const row = this.arr[0];
+
+    outPoint.x = row[xIndex];
+    outPoint.y = row[yIndex];
+    outPoint.z = row[zIndex];
 
     if ( homogenous ) {
-      const h = this.arr[0][this.dim2 - 1];
-      x /= h;
-      y /= h;
-      z /= h;
+      const h = row[this.dim2 - 1];
+      outPoint.x /= h;
+      outPoint.y /= h;
+      outPoint.z /= h;
     }
 
-    return new Point3d(x, y, z);
+    return outPoint;
   }
 
   /**
@@ -485,6 +503,97 @@ export class Matrix {
   }
 
   /**
+   * Faster 1x4 multiplication
+   * Foundry bench puts this at ~ 75% of multiply.
+   * @param {Matrix} other    A 1x4 matrix, like Matrix.prototype.fromPoint3d
+   * @returns Matrix
+   */
+  multiply1x4(other, outMatrix = Matrix.empty(1, 4)) {
+    const a0 = other.arr[0];
+    const a1 = other.arr[1];
+    const a2 = other.arr[2];
+    const a3 = other.arr[3];
+
+    const a00 = a0[0];
+    const a01 = a0[1];
+    const a02 = a0[2];
+    const a03 = a0[3];
+    const a10 = a1[0];
+    const a11 = a1[1];
+    const a12 = a1[2];
+    const a13 = a1[3];
+    const a20 = a2[0];
+    const a21 = a2[1];
+    const a22 = a2[2];
+    const a23 = a2[3];
+    const a30 = a3[0];
+    const a31 = a3[1];
+    const a32 = a3[2];
+    const a33 = a3[3];
+
+    const b0 = this.arr[0];
+    const b00 = b0[0];
+    const b01 = b0[1];
+    const b02 = b0[2];
+    const b03 = b0[3];
+
+    outMatrix.arr[0][0] = a00 * b00 + a10 * b01 + a20 * b02 + a30 * b03;
+    outMatrix.arr[0][1] = a01 * b00 + a11 * b01 + a21 * b02 + a31 * b03;
+    outMatrix.arr[0][2] = a02 * b00 + a12 * b01 + a22 * b02 + a32 * b03;
+    outMatrix.arr[0][3] = a03 * b00 + a13 * b01 + a23 * b02 + a33 * b03;
+
+    return outMatrix;
+  }
+
+  /**
+   * Multiply a Point3d by this matrix and output a different Point3d.
+   * For speed, the input is not checked against the matrix for correct dimensionality.
+   * Foundry bench puts this at ~ 68% of multiply.
+   * @param {Point3d} point    The point to multiply
+   * @param {Point3d} outPoint Optional point in which to store the result.
+   * @returns {Point3d}
+   */
+  multiplyPoint3d(point, outPoint = new Point3d()) {
+    const a0 = this.arr[0];
+    const a1 = this.arr[1];
+    const a2 = this.arr[2];
+    const a3 = this.arr[3];
+
+    const a00 = a0[0];
+    const a01 = a0[1];
+    const a02 = a0[2];
+    const a03 = a0[3];
+    const a10 = a1[0];
+    const a11 = a1[1];
+    const a12 = a1[2];
+    const a13 = a1[3];
+    const a20 = a2[0];
+    const a21 = a2[1];
+    const a22 = a2[2];
+    const a23 = a2[3];
+    const a30 = a3[0];
+    const a31 = a3[1];
+    const a32 = a3[2];
+    const a33 = a3[3];
+
+    const b00 = point.x;
+    const b01 = point.y;
+    const b02 = point.z;
+    const b03 = 1;
+
+    outPoint.x = a00 * b00 + a10 * b01 + a20 * b02 + a30 * b03;
+    outPoint.y = a01 * b00 + a11 * b01 + a21 * b02 + a31 * b03;
+    outPoint.z = a02 * b00 + a12 * b01 + a22 * b02 + a32 * b03;
+    const w = a03 * b00 + a13 * b01 + a23 * b02 + a33 * b03;
+
+    outPoint.x /= w;
+    outPoint.y /= w;
+    outPoint.z /= w;
+
+    return outPoint;
+  }
+
+  /**
    * Faster 2x2 multiplication
    * Strassen's algorithm
    * JSBench.me: ~ 30% slower to multiply, versus this multiply2x2
@@ -493,23 +602,29 @@ export class Matrix {
    * @returns {Matrix}
    */
   multiply2x2(other, outMatrix = Matrix.empty(2, 2)) {
-    const a1 = this.arr[0][0];
-    const a2 = this.arr[0][1];
-    const a3 = this.arr[1][0];
-    const a4 = this.arr[1][1];
+    const a0 = this.arr[0];
+    const a1 = this.arr[1];
 
-    const b1 = other.arr[0][0];
-    const b2 = other.arr[0][1];
-    const b3 = other.arr[1][0];
-    const b4 = other.arr[1][1];
+    const a00 = a0[0];
+    const a01 = a0[1];
+    const a10 = a1[0];
+    const a11 = a1[1];
 
-    const m1 = (a1 + a4) * (b1 + b4);
-    const m2 = (a3 + a4) * b1;
-    const m3 = a1 * (b2 - b4);
-    const m4 = a4 * (b3 - b1);
-    const m5 = (a1 + a2) * b4;
-    const m6 = (a3 - a1) * (b1 + b2);
-    const m7 = (a2 - a4) * (b3 + b4);
+    const b0 = other.arr[0];
+    const b1 = other.arr[1];
+
+    const b00 = b0[0];
+    const b01 = b0[1];
+    const b10 = b1[0];
+    const b11 = b1[1];
+
+    const m1 = (a00 + a11) * (b00 + b11);
+    const m2 = (a10 + a11) * b00;
+    const m3 = a00 * (b01 - b11);
+    const m4 = a11 * (b10 - b00);
+    const m5 = (a00 + a01) * b11;
+    const m6 = (a10 - a00) * (b00 + b01);
+    const m7 = (a01 - a11) * (b10 + b11);
 
     outMatrix.arr[0][0] = m1 + m4 - m5 + m7;
     outMatrix.arr[0][1] = m3 + m5;
@@ -529,25 +644,33 @@ export class Matrix {
    * @returns {Matrix}
    */
   multiply3x3(other, outMatrix = Matrix.empty(3, 3)) {
-    const a00 = this.arr[0][0];
-    const a01 = this.arr[0][1];
-    const a02 = this.arr[0][2];
-    const a10 = this.arr[1][0];
-    const a11 = this.arr[1][1];
-    const a12 = this.arr[1][2];
-    const a20 = this.arr[2][0];
-    const a21 = this.arr[2][1];
-    const a22 = this.arr[2][2];
+    const a0 = this.arr[0];
+    const a1 = this.arr[1];
+    const a2 = this.arr[2];
 
-    const b00 = other.arr[0][0];
-    const b01 = other.arr[0][1];
-    const b02 = other.arr[0][2];
-    const b10 = other.arr[1][0];
-    const b11 = other.arr[1][1];
-    const b12 = other.arr[1][2];
-    const b20 = other.arr[2][0];
-    const b21 = other.arr[2][1];
-    const b22 = other.arr[2][2];
+    const a00 = a0[0];
+    const a01 = a0[1];
+    const a02 = a0[2];
+    const a10 = a1[0];
+    const a11 = a1[1];
+    const a12 = a1[2];
+    const a20 = a2[0];
+    const a21 = a2[1];
+    const a22 = a2[2];
+
+    const b0 = other.arr[0];
+    const b1 = other.arr[1];
+    const b2 = other.arr[2];
+
+    const b00 = b0[0];
+    const b01 = b0[1];
+    const b02 = b0[2];
+    const b10 = b1[0];
+    const b11 = b1[1];
+    const b12 = b1[2];
+    const b20 = b2[0];
+    const b21 = b2[1];
+    const b22 = b2[2];
 
     const m1 = (a00 + a01 + a02 - a10 - a11 - a21 - a22) * b11;
     const m2 = (a00 - a10) * (b11 - b01);
@@ -598,39 +721,49 @@ export class Matrix {
    * @returns {Matrix}
    */
   multiply4x4(other, outMatrix = Matrix.empty(4, 4)) {
-    const a00 = this.arr[0][0];
-    const a01 = this.arr[0][1];
-    const a02 = this.arr[0][2];
-    const a03 = this.arr[0][3];
-    const a10 = this.arr[1][0];
-    const a11 = this.arr[1][1];
-    const a12 = this.arr[1][2];
-    const a13 = this.arr[1][3];
-    const a20 = this.arr[2][0];
-    const a21 = this.arr[2][1];
-    const a22 = this.arr[2][2];
-    const a23 = this.arr[2][3];
-    const a30 = this.arr[3][0];
-    const a31 = this.arr[3][1];
-    const a32 = this.arr[3][2];
-    const a33 = this.arr[3][3];
+    const a0 = this.arr[0];
+    const a1 = this.arr[1];
+    const a2 = this.arr[2];
+    const a3 = this.arr[3];
 
-    const b00 = other.arr[0][0];
-    const b01 = other.arr[0][1];
-    const b02 = other.arr[0][2];
-    const b03 = other.arr[0][3];
-    const b10 = other.arr[1][0];
-    const b11 = other.arr[1][1];
-    const b12 = other.arr[1][2];
-    const b13 = other.arr[1][3];
-    const b20 = other.arr[2][0];
-    const b21 = other.arr[2][1];
-    const b22 = other.arr[2][2];
-    const b23 = other.arr[2][3];
-    const b30 = other.arr[3][0];
-    const b31 = other.arr[3][1];
-    const b32 = other.arr[3][2];
-    const b33 = other.arr[3][3];
+    const a00 = a0[0];
+    const a01 = a0[1];
+    const a02 = a0[2];
+    const a03 = a0[3];
+    const a10 = a1[0];
+    const a11 = a1[1];
+    const a12 = a1[2];
+    const a13 = a1[3];
+    const a20 = a2[0];
+    const a21 = a2[1];
+    const a22 = a2[2];
+    const a23 = a2[3];
+    const a30 = a3[0];
+    const a31 = a3[1];
+    const a32 = a3[2];
+    const a33 = a3[3];
+
+    const b0 = other.arr[0];
+    const b1 = other.arr[1];
+    const b2 = other.arr[2];
+    const b3 = other.arr[3];
+
+    const b00 = b0[0];
+    const b01 = b0[1];
+    const b02 = b0[2];
+    const b03 = b0[3];
+    const b10 = b1[0];
+    const b11 = b1[1];
+    const b12 = b1[2];
+    const b13 = b1[3];
+    const b20 = b2[0];
+    const b21 = b2[1];
+    const b22 = b2[2];
+    const b23 = b2[3];
+    const b30 = b3[0];
+    const b31 = b3[1];
+    const b32 = b3[2];
+    const b33 = b3[3];
 
     outMatrix.arr[0][0] = (a00 * b00) + (a01 * b10) + (a02 * b20) + (a03 * b30);
     outMatrix.arr[0][1] = (a00 * b01) + (a01 * b11) + (a02 * b21) + (a03 * b31);
