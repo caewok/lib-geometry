@@ -981,6 +981,54 @@ export class Shadow extends PIXI.Polygon {
   }
 
   /**
+   * In top-down view, construct shadows for a token on the scene.
+   * @param {TokenPoints3d} token3d     Token in the scene, represented as an object of points
+   *                                    (see Alternative Token Visibility)
+   * @param {Point3d} origin            Viewer location in 3d space
+   * @param {object} options
+   * @param {number} [surfaceElevation] Elevation of the surface onto which to project shadows
+   * @returns {Shadow[]|null}
+   */
+  static constructfromTokenPoints3d(token3d, origin, { surfaceElevation = 0 } = {}) {
+    // If the viewer elevation equals the surface elevation, no shadows to be seen
+    if ( origin.z.almostEqual(surfaceElevation) ) return null;
+
+    // Need Token3dPoints to find the sides that face the origin.
+    const { bottomZ, topZ } = token3d;
+
+    // Run simple tests to avoid further computation
+    // Viewer and the surface elevation both above the wall, so no shadow
+    if ( origin.z >= topZ && surfaceElevation >= topZ ) return null;
+
+    // Viewer and the surface elevation both below the wall, so no shadow
+    else if ( origin.z <= bottomZ && surfaceElevation <= bottomZ ) return null;
+
+    // Projecting downward from source; if below bottom of wall, no shadow.
+    else if ( origin.z >= surfaceElevation && origin.z <= bottomZ ) return null;
+
+    // Projecting upward from source; if above bottom of wall, no shadow.
+    else if ( origin.z <= surfaceElevation && origin.z >= topZ ) return null;
+
+    const sides = token3d._viewableSides(origin);
+
+    const shadows = [];
+    for ( const side of sides ) {
+      // Build a "wall" based on side points
+      // Need bottomZ, topZ, A, B
+      const wall = {
+        A: side.points[0],
+        B: side.points[3],
+        topZ,
+        bottomZ
+      };
+      const shadow = Shadow.constructFromWall(wall, origin, surfaceElevation);
+      if ( shadow ) shadows.push(shadow);
+    }
+
+    return shadows;
+  }
+
+  /**
    * Draw a shadow shape on canvas. Used for debugging.
    * Optional:
    * @param {HexString} color   Color of outline shape
