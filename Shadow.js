@@ -942,90 +942,51 @@ export class Shadow extends PIXI.Polygon {
    * @returns {Shadow|null}
    */
   static constructFromWall(wall, origin, surfaceElevation = 0) {
-    // If the viewer elevation equals the surface elevation, no shadows to be seen.
-    if ( origin.z.almostEqual(surfaceElevation) ) return null;
-
-    const { A, B } = wall;
-    let { topZ, bottomZ } = wall;
-
-    // Run simple tests to avoid further computation
-    // Viewer and the surface elevation both above the wall, so no shadow
-    if ( origin.z >= topZ && surfaceElevation >= topZ ) return null;
-
-    // Viewer and the surface elevation both below the wall, so no shadow
-    else if ( origin.z <= bottomZ && surfaceElevation <= bottomZ ) return null;
-
-    // Projecting downward from source; if below bottom of wall, no shadow.
-    else if ( origin.z >= surfaceElevation && origin.z <= bottomZ ) return null;
-
-    // Projecting upward from source; if above bottom of wall, no shadow.
-    else if ( origin.z <= surfaceElevation && origin.z >= topZ ) return null;
-
-    const bottomInfinite = !isFinite(bottomZ);
-    const topInfinite = !isFinite(topZ);
-    if ( bottomInfinite && topInfinite ) return null; // Infinite shadow
-
-    const maxR = canvas.dimensions.maxR;
-    if ( bottomInfinite ) bottomZ = -maxR;
-    if ( topInfinite ) topZ = maxR;
-
-    const pointA = new Point3d(A.x, A.y, topZ);
-    const pointB = new Point3d(B.x, B.y, topZ);
-    const pointC = new Point3d(A.x, A.y, bottomZ);
-    const pointD = new Point3d(B.x, B.y, bottomZ);
-    const surfacePlane = new Plane(new Point3d(0, 0, surfaceElevation), Shadow.upV);
-
-    return origin.z > surfaceElevation
-      ? Shadow.simpleSurfaceOriginAbove(pointA, pointB, pointC, pointD, origin, surfacePlane)
-      : Shadow.simpleSurfaceOriginBelow(pointA, pointB, pointC, pointD, origin, surfacePlane);
+    const wallPoints = Points3d.fromWall(wall, { finite: true });
+    return Shadow.constructFromPoints3d(
+      wallPoints.top.A,
+      wallPoints.top.B,
+      wallPoints.bottom.A,
+      wallPoints.bottom.B,
+      origin,
+      surfaceElevation);
   }
 
   /**
-   * In top-down view, construct shadows for a token on the scene.
-   * @param {TokenPoints3d} token3d     Token in the scene, represented as an object of points
-   *                                    (see Alternative Token Visibility)
-   * @param {Point3d} origin            Viewer location in 3d space
-   * @param {object} options
-   * @param {number} [surfaceElevation] Elevation of the surface onto which to project shadows
-   * @returns {Shadow[]|null}
+   * Construct shadows from four 3d points, representing a wall.
+   * @param {Point3d} A                 Top point of the wall
+   * @param {Point3d} B                 Top point of the wall. AB are parallel to XY plane.
+   * @param {Point3d} C                 Bottom point of the wall.
+   * @param {Point3d} D                 Bottom point of the wall. CD are parallel to XY plane.
+   *                                    AC and BD are parallel.
+   * @param {Point3d} origin            Viewer location in 3d space.
+   * @param {Plane}   surfaceElevation  Elevation of the surface onto which to project shadow.
    */
-  static constructfromTokenPoints3d(token3d, origin, { surfaceElevation = 0 } = {}) {
-    // If the viewer elevation equals the surface elevation, no shadows to be seen
+  static constructFromPoints3d(A, B, C, D, origin, surfaceElevation) {
+    // If the viewer elevation equals the surface elevation, no shadows to be seen.
     if ( origin.z.almostEqual(surfaceElevation) ) return null;
 
-    // Need Token3dPoints to find the sides that face the origin.
-    const { bottomZ, topZ } = token3d;
+    const topZ = A.z;
+    const bottomZ = C.z;
 
     // Run simple tests to avoid further computation
+
     // Viewer and the surface elevation both above the wall, so no shadow
-    if ( origin.z >= topZ && surfaceElevation >= topZ ) return null;
+    if ( origin.z >= topZ && surfaceElevation >= topZ
 
-    // Viewer and the surface elevation both below the wall, so no shadow
-    else if ( origin.z <= bottomZ && surfaceElevation <= bottomZ ) return null;
+      // Viewer and the surface elevation both below the wall, so no shadow
+      || origin.z <= bottomZ && surfaceElevation <= bottomZ
 
-    // Projecting downward from source; if below bottom of wall, no shadow.
-    else if ( origin.z >= surfaceElevation && origin.z <= bottomZ ) return null;
+      // Projecting downward from source; if below bottom of wall, no shadow.
+      || origin.z >= surfaceElevation && origin.z <= bottomZ
 
-    // Projecting upward from source; if above bottom of wall, no shadow.
-    else if ( origin.z <= surfaceElevation && origin.z >= topZ ) return null;
+      // Projecting upward from source; if above bottom of wall, no shadow.
+      || origin.z <= surfaceElevation && origin.z >= topZ ) return null;
 
-    const sides = token3d._viewableSides(origin);
-
-    const shadows = [];
-    for ( const side of sides ) {
-      // Build a "wall" based on side points
-      // Need bottomZ, topZ, A, B
-      const wall = {
-        A: side.points[0],
-        B: side.points[3],
-        topZ,
-        bottomZ
-      };
-      const shadow = Shadow.constructFromWall(wall, origin, surfaceElevation);
-      if ( shadow ) shadows.push(shadow);
-    }
-
-    return shadows;
+    const surfacePlane = new Plane(new Point3d(0, 0, surfaceElevation), Shadow.upV);
+    return origin.z > surfaceElevation
+      ? Shadow.simpleSurfaceOriginAbove(A, B, C, D, origin, surfacePlane)
+      : Shadow.simpleSurfaceOriginBelow(A, B, C, D, origin, surfacePlane);
   }
 
   /**
