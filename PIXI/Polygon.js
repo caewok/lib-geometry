@@ -393,30 +393,22 @@ function overlapsPolygon(other) {
 
   if ( !polyBounds.overlaps(otherBounds) ) return false;
 
-  this.close();
-  other.close();
-  const pts1 = this.points;
-  const pts2 = other.points;
-  const ln1 = pts1.length;
-  const ln2 = pts2.length;
-  let a = { x: pts1[0], y: pts1[1] };
+  const pts1 = this.iteratePoints({ close: true });
+  let a = pts1.next().value;
   if ( other.contains(a.x, a.y) ) return true;
 
-  for ( let i = 2; i < ln1; i += 2 ) {
-    const b = { x: pts1[i], y: pts1[i+1] };
+  for ( const b of pts1 ) {
     if ( other.contains(b.x, b.y) ) return true;
 
-    let c = { x: pts2[0], y: pts2[1] };
-    if ( this.contains(c.x, c.y) ) return true;
-
-    for ( let j = 2; j < ln2; j += 2 ) {
-      const d = { x: pts2[j], y: pts2[j+1] };
+    const pts2 = this.iteratePoints({ close: true });
+    let c = pts2.next().value;
+    for ( const d of pts2 ) {
       if ( foundry.utils.lineSegmentIntersects(a, b, c, d) || this.contains(d.x, d.y) ) return true;
       c = d;
     }
-
     a = b;
   }
+
   return false;
 }
 
@@ -428,17 +420,13 @@ function overlapsPolygon(other) {
  */
 function overlapsCircle(circle) {
   const polyBounds = this.getBounds();
-
   if ( !polyBounds.overlaps(circle) ) return false;
 
-  this.close();
-  const pts = this.points;
-  const ln = pts.length;
-  let a = { x: pts[0], y: pts[1] };
+  const pts = this.iteratePoints({ close: true });
+  let a = pts.next().value;
   if ( circle.contains(a.x, a.y) ) return true;
-  for ( let i = 2; i < ln; i += 2 ) {
-    const b = { x: pts[i], y: pts[i+1] };
 
+  for ( const b of pts ) {
     // Get point on the line closest to a|b (might be a or b)
     const c = foundry.utils.closestPointToSegment(c, a, b);
     if ( circle.contains(c.x, c.y) ) return true;
