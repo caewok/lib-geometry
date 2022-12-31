@@ -581,6 +581,33 @@ export class Plane {
     const pts = this.threePoints;
     return CONFIG.GeometryLib.utils.lineSegment3dPlaneIntersects(a, b, pts.a, pts.b, pts.c);
   }
+
+  /**
+   * Intersect this plane with another
+   * Algorithm taken from http://geomalgorithms.com/a05-_intersect-1.html. See the
+   * section 'Intersection of 2 Planes' and specifically the subsection
+   * (A) Direct Linear Equation
+   * @param {Plane} other   Other plane to intersect
+   * @returns {object|null} { point: Point3d, direction: Point3d } The resulting line or null if planes are parallel.
+   *   The line is returned as point, direction
+   */
+  intersectPlane(other) {
+    const { normal: N1, point: P1 } = this;
+    const { normal: N2, point: P2 } = other;
+
+    // Cross product of the two normals is the direction of the line.
+    const direction = N1.cross(N2);
+
+    // Parallel planes have a cross product with zero magnitude
+    if ( !direction.magnitudeSquared() ) return null;
+
+    // Intersect a line of this plane with the second plane to get a point shared by both
+    const thisPoints = this.threePoints;
+
+    const ix = other.lineSegmentIntersection(thisPoints.a, thisPoints.b);
+
+    return { point: ix, direction };
+  }
 }
 
 /**
