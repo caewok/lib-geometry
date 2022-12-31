@@ -76,6 +76,12 @@ export function registerPIXIPolygonMethods() {
     configurable: true
   });
 
+  Object.defineProperty(PIXI.Polygon.prototype, "lineSegmentIntersects", {
+    value: lineSegmentIntersects,
+    writable: true,
+    configurable: true
+  });
+
   Object.defineProperty(PIXI.Polygon.prototype, "reverseOrientation", {
     value: reverseOrientation,
     writable: true,
@@ -90,6 +96,18 @@ export function registerPIXIPolygonMethods() {
 
   Object.defineProperty(PIXI.Polygon.prototype, "pad", {
     value: pad,
+    writable: true,
+    configurable: true
+  });
+
+  Object.defineProperty(PIXI.Polygon.prototype, "pointsBetween", {
+    value: pointsBetween,
+    writable: true,
+    configurable: true
+  });
+
+  Object.defineProperty(PIXI.Polygon.prototype, "segmentIntersections", {
+    value: segmentIntersections,
     writable: true,
     configurable: true
   });
@@ -362,6 +380,97 @@ function linesCross(lines) {
   }
 
   return false;
+}
+
+/**
+ * Test whether line segment AB intersects this polygon.
+ * Equivalent to PIXI.Rectangle.prototype.lineSegmentIntersects.
+ * @param {Point} a                       The first endpoint of segment AB
+ * @param {Point} b                       The second endpoint of segment AB
+ * @param {object} [options]              Options affecting the intersect test.
+ * @param {boolean} [options.inside]      If true, a line contained within the rectangle will
+ *                                        return true.
+ * @returns {boolean} True if intersects.
+ */
+function lineSegmentIntersects(a, b, { inside = false } = {}) {
+  if (this.contains(a.x, a.y) && this.contains(b.x, b.y) ) return inside;
+
+  const edges = this.iterateEdges({ close: true });
+  for ( const edge of edges ) {
+    if ( foundry.utils.lineSegmentIntersects(a, b, edge.A, edge.B) ) return true;
+  }
+
+  return false;
+}
+
+/**
+ * Get all intersection points for a segment A|B
+ * Intersections are sorted from A to B.
+ * @param {Point} a   Endpoint A of the segment
+ * @param {Point} b   Endpoint B of the segment
+ * @param {object} [options]    Optional parameters
+ * @param {object[]} [options.edges]  Array of edges for this polygon, from this.iterateEdges.
+ * @param {boolean} [options.indices] If true, return the indices for the edges instead of intersections
+ * @returns {Point[]} Array of intersections or empty.
+ */
+function segmentIntersections(a, b, { edges, indices = false } = {}) {
+  edges ??= [...this.iterateEdges({ close: true })];
+  const ixIndices = [];
+  edges.forEach((e, ix) => {
+    if ( foundry.utils.lineSegmentIntersects(e.A, e.B, a, b) ) ixIndices.push(ix);
+  });
+
+  if ( indices ) return ixIndices;
+
+  return ixIndices.map(i => {
+    const edge = edges[i];
+    return foundry.utils.lineLineIntersection(edge.A, edge.B, a, b);
+  });
+}
+
+/**
+ * Get all the points for this polygon between two points on the polygon
+ * Points are clockwise from a to b.
+ * @param { Point } a
+ * @param { Point } b
+ * @param {object} [options]    Optional parameters
+ * @param {object[]} [options.edges]  Array of edges for this polygon, from this.iterateEdges.
+ * @return { Point[]}
+ */
+function pointsBetween(a, b, { edges } = {}) {
+  edges ??= [...this.iterateEdges({ close: true })];
+  const ixIndices = this.segmentIntersections(a, b, { edges, indices: true });
+
+  // A is the closest ix
+  // B is the further ix
+  // Anything else can be ignored
+  let ixA = { t: Number.POSITIVE_INFINITY };
+  let ixB = { t: Number.NEGATIVE_INFINITY };
+  ixIndices.forEach(ix => {
+    if ( ix.t < ixA.t ) ixA = ix;
+    if ( ix.t > ixB.t ) ixB = ix;
+  });
+
+  // Start at ixA, and get intersection point at start and end
+  const out = [];
+  const startEdge = edges[ixA];
+  const startIx = foundry.utils.lineLineIntersection(startEdge.A, startEdge.B, a, b);
+  out.push(startIx);
+  if ( !startEdge.B.almostEqual(startIx) ) out.push(startEdge.B);
+
+  const ln = edges.length;
+  for ( let i = startIx + 1; i < ln; i += 1 ) out.push(edges[i].B);
+
+  if ( ixB < ixA ) {
+    // Must circle around to the starting edge
+    for ( let i = 0; i < ixB; i += 1 ) out.push(edges[i].B);
+  }
+
+  const endEdge = edges[ixB];
+  const endIx = foundry.utils.lineLineIntersection(endEdge.A, endEdge.B, a, b);
+  if ( !endEdge.A.almostEqual(endIx) ) out.push(endIx);
+
+  return out;
 }
 
 /**
