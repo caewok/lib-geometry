@@ -52,6 +52,13 @@ export function registerPIXIPolygonMethods() {
 
   // ----- Methods ----- //
 
+  // For compatibility with other shapes
+  Object.defineProperty(PIXI.Polygon.prototype, "toPolygon", {
+    value: function() { return this; },
+    writable: true,
+    configurable: true
+  });
+
   Object.defineProperty(PIXI.Polygon.prototype, "clipperClip", {
     value: clipperClip,
     writable: true,
