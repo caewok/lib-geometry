@@ -4,6 +4,26 @@ PIXI
 "use strict";
 
 /**
+ * An object representing top and bottom points, like that for a Token.
+ * @typedef {object} Point3dToken
+ * @property {Point3d} top
+ * @property {Point3d} bottom
+ */
+
+/**
+ * An object representing points of a vertical Wall
+ * TODO: Flip these, so top and bottom represent segments A|B
+ * @typedef {object} Point3dWall
+ * @property {object} [A]
+ * @property {Point3d} [A.top]
+ * @property {Point3d} [A.bottom]
+ * @property {object} [B]
+ * @property {Point3d} [B.top]
+ * @property {Point3d} [B.bottom]
+ */
+
+
+/**
  * 3-D version of PIXI.Point
  * See https://pixijs.download/dev/docs/packages_math_src_Point.ts.html
  */
@@ -112,7 +132,7 @@ export class Point3d extends PIXI.Point {
   /**
    * Determine the token top and bottom center points.
    * @param {Token} token
-   * @returns {object} { top, bottom }
+   * @returns {Point3dToken}
    */
   static fromToken(token) {
     const { x, y } = token.center;
@@ -123,11 +143,23 @@ export class Point3d extends PIXI.Point {
   }
 
   /**
+   * Determine the token exact center point in 3d.
+   * For height, uses the average between token bottom and top.
+   * @param {Token} token
+   * @returns {Point3d}
+   */
+  static fromTokenCenter(token) {
+    const { center, bottomZ, topZ } = token;
+    const e = bottomZ + ((topZ - bottomZ) * 0.5);
+    return new Point3d(center.x, center.y, e);
+  }
+
+  /**
    * Determine the wall top and bottom points
    * @param {Wall} wall         Wall to convert to points object
    * @param {object} [options]  Options that affect the conversion
    * @param {boolean} [finite]  Force infinite z values to finite min/max safe integers
-   * @returns {object} { A: { top, bottom }, B: { top, bottom } }
+   * @returns {Point3dWall}
    */
   static fromWall(wall, { finite = false } = {}) {
     const { topZ, bottomZ, A, B } = wall;
