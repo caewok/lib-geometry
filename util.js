@@ -25,8 +25,37 @@ export function registerFoundryUtilsMethods() {
     pixelsToGridUnits,
     perpendicularPoint,
     centeredPolygonFromDrawing,
-    shortestRouteBetween3dLines
+    shortestRouteBetween3dLines,
+    isOnSegment
   };
+}
+
+/**
+ * Determine if a point is on a segment, with a tolerance for nearly on the segment.
+ * @param {Point} a   Endpoint A of the segment A|B
+ * @param {Point} b   Endpoint B of the segment A|B
+ * @param {Point} c   Point to test
+ * @param {epsilon}   Tolerance for near zero.
+ * @returns {boolean}
+ */
+function isOnSegment(a, b, c, epsilon = 1e-08) {
+  // Confirm point is with bounding box formed by A|B
+  const minX = Math.min(a.x, b.x);
+  const minY = Math.min(a.y, b.y);
+  const maxX = Math.max(a.x, b.x);
+  const maxY = Math.max(a.y, b.y);
+
+  if ( (c.x < minX || c.x > maxX || c.y < minY || c.y > maxY)
+    && !(c.x.almostEqual(minX) && c.x.almostEqual(maxX) && c.y.almostEqual(minY) && c.y.almostEqual(maxY)) ) {
+    return false;
+  }
+
+  // If not collinear, then not on segment.
+  const orient = foundry.utils.orient2dFast(a, b, c);
+  if ( !orient.almostEqual(0, epsilon) ) return false;
+
+  // We already know we are within the bounding box, so if collinear, must be on the segment.
+  return true;
 }
 
 /**
@@ -143,21 +172,21 @@ function pixelsToGridUnits(pixels) {
  * @param {Point} b                   The second endpoint of segment AB
  * @param {Point} c                   The first endpoint of segment CD
  * @param {Point} d                   The second endpoint of segment CD
- *
+ * @param {epsilon}   Tolerance for near zero.
  * @returns {boolean}                 Do the line segments cross?
  */
-function lineSegmentCrosses(a, b, c, d) {
-  const xa = foundry.utils.orient2dFast(a, b, c);
-  if ( !xa ) return false;
+function lineSegmentCrosses(a, b, c, d, epsilon = 1e-08) {
+  let xa = foundry.utils.orient2dFast(a, b, c);
+  if ( xa.almostEqual(0, epsilon) ) return false;
 
-  const xb = foundry.utils.orient2dFast(a, b, d);
-  if ( !xb ) return false;
+  let xb = foundry.utils.orient2dFast(a, b, d);
+  if ( xb.almostEqual(0, epsilon) ) return false;
 
-  const xc = foundry.utils.orient2dFast(c, d, a);
-  if ( !xc ) return false;
+  let xc = foundry.utils.orient2dFast(c, d, a);
+  if ( xc.almostEqual(0, epsilon) ) return false;
 
-  const xd = foundry.utils.orient2dFast(c, d, b);
-  if ( !xd ) return false;
+  let xd = foundry.utils.orient2dFast(c, d, b);
+  if ( xd.almostEqual(0, epsilon) ) return false;
 
   const xab = (xa * xb) < 0; // Cannot be equal to 0.
   const xcd = (xc * xd) < 0; // Cannot be equal to 0.
