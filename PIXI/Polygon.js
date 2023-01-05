@@ -419,19 +419,19 @@ function lineSegmentIntersects(a, b, { inside = false } = {}) {
  * @param {object[]} [options.edges]  Array of edges for this polygon, from this.iterateEdges.
  * @param {boolean} [options.indices] If true, return the indices for the edges instead of intersections
  * @returns {Point[]} Array of intersections or empty.
+ *   If intersections returned, the t of each intersection is the distance along the a|b segment.
  */
 function segmentIntersections(a, b, { edges, indices = false } = {}) {
   edges ??= [...this.iterateEdges({ close: true })];
   const ixIndices = [];
-  edges.forEach((e, ix) => {
-    if ( foundry.utils.lineSegmentIntersects(e.A, e.B, a, b) ) ixIndices.push(ix);
+  edges.forEach((e, i) => {
+    if ( foundry.utils.lineSegmentIntersects(a, b, e.A, e.B) ) ixIndices.push(i);
   });
-
   if ( indices ) return ixIndices;
 
   return ixIndices.map(i => {
     const edge = edges[i];
-    return foundry.utils.lineLineIntersection(edge.A, edge.B, a, b);
+    return foundry.utils.lineLineIntersection(a, b, edge.A, edge.B);
   });
 }
 
