@@ -169,12 +169,13 @@ function _getEdgeZone(p) {
  * @param {number} [options.scalingFactor]  A scaling factor passed to Polygon#toClipperPoints to preserve precision
  * @returns {PIXI.Polygon|null}       The intersected polygon or null if no solution was present
  */
-function intersectPolygonPIXIRectangle(polygon, {clipType, scalingFactor}={}) {
+function intersectPolygonPIXIRectangle(polygon, {clipType, scalingFactor, disableWA = false }={}) {
   if ( !this.width || !this.height ) return new PIXI.Polygon([]);
   clipType ??= ClipperLib.ClipType.ctIntersection;
 
-  if ( clipType !== ClipperLib.ClipType.ctIntersection
-    && clipType !== ClipperLib.ClipType.ctUnion) {
+  // TODO: Fix so WA works when unioning two shapes that share only an edge.
+  if ( disableWA || (clipType !== ClipperLib.ClipType.ctIntersection
+    && clipType !== ClipperLib.ClipType.ctUnion)) {
     return polygon.intersectPolygon(this.toPolygon(), {clipType, scalingFactor});
   }
 
@@ -458,7 +459,7 @@ function getViewablePoints(bbox, origin) {
  *   A: portion of this rectangle
  *   B: portion of other rectangle
  */
-function difference(other) {
+function difference(other, recurse = true) {
   if ( this.right < other.x ) return null; // Left
   if ( this.bottom < other.y ) return null; // Top
   if ( this.x > other.right ) return null; // Right
@@ -479,19 +480,18 @@ function difference(other) {
   const Bcontained = this.contains(other.right, other.y);
   const Ccontained = this.contains(other.right, other.bottom);
   const Dcontained = this.contains(other.x, other.bottom);
+  const nContained = Acontained + Bcontained + Ccontained + Dcontained;
+
+  if ( nContained === 0 && recurse ) {
+    // Other contains this rectangle
+    const out = other.difference(this, false); // Set recurse = false to avoid endless loops if there is an error.
+    [out.thisDiff, out.otherDiff] = [out.otherDiff, out.thisDiff];
+    return out;
+  }
 
   const g = PIXI.Rectangle.gridRectangles(this, other);
   const out = { thisDiff: [], otherDiff: [], g };
-  const nContained = Acontained + Bcontained + Ccontained + Dcontained;
   switch ( nContained ) {
-    case 0:
-      // Other contains this rectangle
-      out.otherDiff = [
-        g.topLeft, g.topMiddle, g.topRight,
-        g.centerLeft, g.centerRight,
-        g.bottomLeft, g.bottomMiddle, g.bottomRight
-      ];
-      break;
     case 1:
       if ( Acontained ) {
         out.thisDiff = [g.topLeft, g.topMiddle, g.centerLeft];
