@@ -26,8 +26,80 @@ export function registerFoundryUtilsMethods() {
     perpendicularPoint,
     centeredPolygonFromDrawing,
     shortestRouteBetween3dLines,
-    isOnSegment
+    isOnSegment,
+    categorizePointsInOutConvexPolygon
   };
+
+
+  // Simple extensions
+  Math.minMax = function(...args) {
+    return args.reduce((acc, curr) => {
+      acc.min = Math.min(acc.min, curr);
+      acc.max = Math.max(acc.max, curr);
+      return acc;
+    }, { min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY});
+  }
+}
+
+
+
+
+/**
+ * This method is only guaranteed to work for convex polygons
+ * Determine if one or more points are within the polygon.
+ * On the edge does not count.
+ * Note: will force the polygon to clockwise orientation.
+ * @param {PIXI.Polygon} poly   Convex polygon to test.
+ * @param {Point[]} points
+ * @param {epsilon}   Tolerance for near zero.
+ * @returns {object} Object containing the points, with arrays of inside, on edge, outside points.
+ */
+function categorizePointsInOutConvexPolygon(poly, points, epsilon = 1e-08) {
+   const isOnSegment = CONFIG.GeometryLib.utils.isOnSegment;
+
+  // Need to walk around the edges in clockwise order.
+  if ( !poly.isClockwise ) poly.reverseOrientation();
+  const edges = poly.iterateEdges({ close: true });
+  const out = {
+    inside: [],
+    on: [],
+    outside: []
+  }
+
+  // For each point, test if the point is on the edge ("on").
+  // If not on edge, test if clockwise. If not CW, then it is outside.
+  const nPts = points.length;
+  const isCW = new Array(nPts).fill(true);
+  let found = 0;
+  for ( const edge of edges ) {
+    for ( let i = 0; i < nPts; i += 1 ) {
+      const ptIsCW = isCW[i];
+      if ( !ptIsCW ) continue;
+
+      const pt = points[i];
+      if ( isOnSegment(edge.A, edge.B, pt, epsilon) ) {
+        ptIsCW = false;
+        out.on.push(pt);
+        found += 1;
+      } else {
+        const oPt = foundry.utils.orient2dFast(edge.A, edge.B, pt);
+        if  ( oPt.almostEqual(0, epsilon) ) oPt = 0;
+        ptIsCW &&= oPt < 0;
+        if ( !ptIsCW ) {
+          out.outside.push(pt);
+          found += 1;
+        }
+      }
+    }
+    if ( found === nPts ) return out;
+  }
+
+  // The remaining CW points are all inside.
+  for ( let i = 0; i < nPts; i += 1 ) {
+    if ( isCW[i] ) inside.push(pt[i]);
+  }
+
+  return out;
 }
 
 /**
