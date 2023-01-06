@@ -358,7 +358,7 @@ function* iterateEdges({close = true} = {}) {
 /**
  * Iterate over the polygon's {x, y} points in order.
  * @param {object} [options]
- * @param {boolean} [close]   If close, include the first point again.
+ * @param {boolean} [options.close]   If close, include the first point again.
  * @returns {x, y} PIXI.Point
  */
 function* iteratePoints({close = true} = {}) {
