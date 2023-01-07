@@ -1,3 +1,6 @@
+## 0.1.0
+Updates based on changes to Alternative Token Visibility
+
 ## 0.0.2
 Incorporate GeometryLib into Foundry modules:
 - Alternative Token Visibility
