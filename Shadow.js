@@ -942,12 +942,12 @@ export class Shadow extends PIXI.Polygon {
    * @returns {Shadow|null}
    */
   static constructFromWall(wall, origin, surfaceElevation = 0) {
-    const wallPoints = Points3d.fromWall(wall, { finite: true });
+    const wallPoints = Point3d.fromWall(wall, { finite: true });
     return Shadow.constructFromPoints3d(
-      wallPoints.top.A,
-      wallPoints.top.B,
-      wallPoints.bottom.A,
-      wallPoints.bottom.B,
+      wallPoints.A.top,
+      wallPoints.B.top,
+      wallPoints.A.bottom,
+      wallPoints.B.bottom,
       origin,
       surfaceElevation);
   }
