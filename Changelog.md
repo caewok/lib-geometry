@@ -1,5 +1,10 @@
+## 0.1.1
+Updates based on changes to Alternative Token Visibility 0.4.1.
+- Correct call to wallPoints in `Shadow.constructFromWall`.
+- Properly pass the scaling factor in `ClipperPaths.prototype.toPolygons`.
+
 ## 0.1.0
-Updates based on changes to Alternative Token Visibility
+Updates based on changes to Alternative Token Visibility 0.4.0
 
 ## 0.0.2
 Incorporate GeometryLib into Foundry modules:
