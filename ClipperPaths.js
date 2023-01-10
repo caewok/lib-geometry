@@ -206,7 +206,7 @@ export class ClipperPaths {
    */
   toPolygons() {
     return this.paths.map(pts => {
-      const poly = PIXI.Polygon.fromClipperPoints(pts, this.scalingFactor);
+      const poly = PIXI.Polygon.fromClipperPoints(pts, {scalingFactor: this.scalingFactor});
       poly.isHole = !ClipperLib.Clipper.Orientation(pts);
       return poly;
     });
