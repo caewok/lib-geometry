@@ -27,7 +27,8 @@ export function registerFoundryUtilsMethods() {
     centeredPolygonFromDrawing,
     shortestRouteBetween3dLines,
     isOnSegment,
-    categorizePointsInOutConvexPolygon
+    categorizePointsInOutConvexPolygon,
+    lineLineIntersection
   };
 
 
@@ -41,7 +42,28 @@ export function registerFoundryUtilsMethods() {
   }
 }
 
+// Just like foundry.utils.lineLineIntersection but with the typo in t1 calculation fixed.
+function lineLineIntersection(a, b, c, d, {t1=false}={}) {
 
+  // If either line is length 0, they cannot intersect
+  if (((a.x === b.x) && (a.y === b.y)) || ((c.x === d.x) && (c.y === d.y))) return null;
+
+  // Check denominator - avoid parallel lines where d = 0
+  const dnm = ((d.y - c.y) * (b.x - a.x) - (d.x - c.x) * (b.y - a.y));
+  if (dnm === 0) return null;
+
+  // Vector distances
+  const t0 = ((d.x - c.x) * (a.y - c.y) - (d.y - c.y) * (a.x - c.x)) / dnm;
+  t1 = t1 ? ((b.x - a.x) * (a.y - c.y) - (b.y - a.y) * (a.x - c.x)) / dnm : undefined;
+
+  // Return the point of intersection
+  return {
+    x: a.x + t0 * (b.x - a.x),
+    y: a.y + t0 * (b.y - a.y),
+    t0: t0,
+    t1: t1
+  }
+}
 
 
 /**

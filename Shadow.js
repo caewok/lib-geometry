@@ -128,7 +128,7 @@ export class ShadowProjection {
    * @type {Matrix}
    */
   get shadowMatrix() {
-    if ( this._cacheKey !== this.sourceOrigin.key() ) this.updateSourceOrigin();
+    if ( this._cacheKey !== this.sourceOrigin.key ) this.updateSourceOrigin();
     return this._shadowMatrix ?? (this._shadowMatrix = this._calculateShadowMatrix());
   }
 
@@ -137,7 +137,7 @@ export class ShadowProjection {
    * @type {number}
    */
   get sourceSide() {
-    if ( this._cacheKey !== this.sourceOrigin.key() ) this.updateSourceOrigin();
+    if ( this._cacheKey !== this.sourceOrigin.key ) this.updateSourceOrigin();
     return this._sourceSide ?? (this._sourceSide = this.plane.whichSide(this.sourceOrigin));
   }
 
@@ -226,7 +226,7 @@ export class ShadowProjection {
   updateSourceOrigin() {
     this._shadowMatrix = undefined;
     this._sourceSide = undefined;
-    this._cacheKey = this.sourceOrigin.key();
+    this._cacheKey = this.sourceOrigin.key;
   }
 
   /**
