@@ -59,14 +59,26 @@ export function registerPIXIPolygonMethods() {
     configurable: true
   });
 
+  Object.defineProperty(PIXI.Polygon.prototype, "clean", {
+    value: clean,
+    writable: true,
+    configurable: true
+  });
+
   Object.defineProperty(PIXI.Polygon.prototype, "clipperClip", {
     value: clipperClip,
     writable: true,
     configurable: true
   });
 
-  Object.defineProperty(PIXI.Polygon, "convexhull", {
+  Object.defineProperty(PIXI.Polygon.prototype, "convexhull", {
     value: convexhull,
+    writable: true,
+    configurable: true
+  });
+
+  Object.defineProperty(PIXI.Polygon.prototype, "equals", {
+    value: equals,
     writable: true,
     configurable: true
   });
@@ -736,4 +748,80 @@ function viewablePoints(origin, { returnKeys = false, outermostOnly = false } = 
  */
 export function elementsByIndex(arr, indices) {
   return indices.map(aIndex => arr[aIndex]);
+}
+
+/**
+ * "Clean" this polygon and return a new one:
+ * 1. No repeated points, including nearly equal points.
+ * 2. No collinear points
+ * 3. No closed point
+ * 4. Clockwise orientation
+ * @returns {PIXI.Polygon}    This polygon
+ */
+function clean({epsilon = 1e-8, epsilonCollinear = 1e-12} = {}) {
+  if ( this.points.length < 6 ) return this;
+
+  const pts = this.iteratePoints({close: true});
+  let prev = pts.next().value;
+  let curr = pts.next().value;
+  const cleanPoints = [prev.x, prev.y];
+  for ( const next of pts ) {
+    if ( curr.almostEqual(prev, epsilon) ) {
+      curr = next;
+      continue;
+    }
+    if ( foundry.utils.orient2dFast(prev, curr, next).almostEqual(0, epsilonCollinear) ) {
+      curr = next;
+      continue;
+    }
+    cleanPoints.push(curr.x, curr.y);
+    prev = curr;
+    curr = next;
+  }
+
+  // Check for and remove closing point.
+  const ln = cleanPoints.length;
+  if ( cleanPoints[0] === cleanPoints[ln - 2]
+    && cleanPoints[1] === cleanPoints[ln - 1] ) {
+
+    cleanPoints.pop();
+    cleanPoints.pop();
+  }
+
+  // Set the points and reset clockwise
+  this.points = cleanPoints;
+  this._isClockwise = undefined;
+  if ( !this.isClockwise ) this.reverseOrientation();
+  return this;
+}
+
+/**
+ * Test for equality between two polygons.
+ * 1. Same points
+ * 2. In any order, but orientation counts.
+ * @param {PIXI.Polygon} other
+ * @returns {boolean}
+ */
+function equals(other) {
+  if ( this.points.length !== other.points.length ) return false;
+  if ( this.isClockwise ^ other.isClockwise ) return false;
+
+  const thisPoints = this.iteratePoints({close: false});
+  const otherPoints = [...other.iteratePoints({close: false})];
+
+  // Find the matching point
+  const startPoint = thisPoints.next().value;
+  const startIdx = otherPoints.findIndex(pt => pt.equals(startPoint));
+  if ( !~startIdx ) return false;
+
+  // Test each point sequentially from each array
+  let k = startIdx + 1; // +1 b/c already tested startPoint.
+  const nPoints = otherPoints.length;
+  for ( const thisPoint of thisPoints ) {
+    k = k % nPoints;
+    if ( !thisPoint.equals(otherPoints[k]) ) return false;
+    k += 1;
+  }
+
+  return true;
 }
