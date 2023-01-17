@@ -36,6 +36,13 @@ export function registerPIXIPolygonMethods() {
     });
   }
 
+  if ( !Object.hasOwn(PIXI.Polygon.prototype, "key") ) {
+    Object.defineProperty(PIXI.Polygon.prototype, "key", {
+      get: key,
+      enumerable: false
+    });
+  }
+
   // ----- Iterators ----- //
 
   Object.defineProperty(PIXI.Polygon.prototype, "iterateEdges", {
@@ -793,6 +800,32 @@ function clean({epsilon = 1e-8, epsilonCollinear = 1e-12} = {}) {
   this._isClockwise = undefined;
   if ( !this.isClockwise ) this.reverseOrientation();
   return this;
+}
+
+/**
+ * Key the polygon by using JSON.stringify on the points.
+ * To ensure polygons are the same even if the starting vertex is rotated,
+ * find the minimum point as the start.
+ */
+function key() {
+  const points = [...this.points];
+  const ln = this.isClosed ? points.length - 2 : points.length;
+  let i;
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let minIndex = -1;
+  for ( let i = 0; i < ln; i += 2 ) {
+    const x = points[i];
+    const y = points[i + 1];
+    if ( x < minX || x === minX && y < minY ) {
+      minIndex = i;
+      minX = x;
+      minY = y;
+    }
+  }
+  const startPoints = points.splice(minIndex);
+  startPoints.push(...points);
+  return JSON.stringify(startPoints);
 }
 
 /**
