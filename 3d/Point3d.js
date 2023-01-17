@@ -1,5 +1,6 @@
 /* globals
-PIXI
+PIXI,
+canvas
 */
 "use strict";
 
@@ -64,7 +65,7 @@ export class Point3d extends PIXI.Point {
     const dCB = c.subtract(b);
     const crossProduct = dBA.cross(dCB);
 
-    return -crossProduct.z
+    return -crossProduct.z;
   }
 
   /**
@@ -193,6 +194,16 @@ export class Point3d extends PIXI.Point {
     const z = Math.round(this.z);
     const key2d = super.key;
     return (BigInt(key2d) << 32n) ^ BigInt(z);
+  }
+
+  /**
+   * Sort key. If z values are equal, will arrange points from north-west to south-east along z plane.
+   * @returns {number}
+   */
+  get sortKey() {
+    return (MAX_TEXTURE_SIZE2 * Math.roundFast(this.z))
+      + (MAX_TEXTURE_SIZE * Math.roundFast(this.x))
+      + Math.roundFast(this.y);
   }
 
   /**
@@ -422,6 +433,13 @@ export class Point3d extends PIXI.Point {
 }
 
 /**
+ * The effective maximum texture size that Foundry VTT "ever" has to worry about.
+ * @type {number}
+ */
+const MAX_TEXTURE_SIZE = Math.pow(2, 16);
+const MAX_TEXTURE_SIZE2 = Math.pow(MAX_TEXTURE_SIZE, 2);
+
+/**
  * Count the number of positive integer digits.
  * Will return 0 for negative numbers.
  * Will truncate any decimals.
@@ -430,6 +448,6 @@ export class Point3d extends PIXI.Point {
  * @returns {number}    The number of digits before the decimal
  */
 export function numPositiveDigits(n) {
-  return Math.log(n) * Math.LOG10E + 1 | 0
+  return (Math.log(n) * Math.LOG10E) + 1 | 0;
 }
 

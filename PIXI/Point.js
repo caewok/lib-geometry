@@ -19,7 +19,13 @@ export function registerPIXIPointMethods() {
   // Add key as a getter to
   if ( !Object.hasOwn(PIXI.Point.prototype, "key") ) {
     Object.defineProperty(PIXI.Point.prototype, "key", {
-      get: function() { return key(this.x, this.y); },
+      get: function() { return key(this.x, this.y); }
+    });
+  }
+
+  if ( !Object.hasOwn(PIXI.Point.prototype, "sortKey") ) {
+    Object.defineProperty(PIXI.Point.prototype, "sortKey", {
+      get: function() { return sortKey(this.x, this.y); }
     });
   }
 
@@ -530,4 +536,18 @@ function translate(dx, dy, outPoint) {
   outPoint.y = this.y + dy;
 
   return outPoint;
+}
+
+/**
+ * The effective maximum texture size that Foundry VTT "ever" has to worry about.
+ * @type {number}
+ */
+const MAX_TEXTURE_SIZE = Math.pow(2, 16);
+
+/**
+ * Sort key, arranging points from north-west to south-east
+ * @returns {number}
+ */
+function sortKey(x, y) {
+  return (MAX_TEXTURE_SIZE * Math.roundFast(x)) + Math.roundFast(y);
 }
