@@ -614,6 +614,7 @@ api = game.modules.get("elevatedvision").api
 WallTracerEdge = api.WallTracerEdge
 WallTracerVertex = api.WallTracerVertex
 WallTracer = api.WallTracer
+let { Graph, GraphVertex, GraphEdge } = CONFIG.GeometryLib.Graph
 ClipperPaths = CONFIG.GeometryLib.ClipperPaths
 Draw = CONFIG.GeometryLib.Draw
 draw = new Draw
