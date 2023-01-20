@@ -47,6 +47,9 @@ import { Shadow, ShadowProjection } from "./Shadow.js";
 // ClipperPaths
 import { ClipperPaths } from "./ClipperPaths.js";
 
+// Graph
+import { Graph, GraphVertex, GraphEdge } from "./Graph.js";
+
 export function registerGeometry() {
   registerPIXIPolygonMethods();
   registerPIXICircleMethods();
@@ -63,6 +66,18 @@ export function registerGeometry() {
   registerWeilerAthertonClipper();
   registerClipperPaths();
   register3d();
+  registerGraph();
+}
+
+export function registerGraph() {
+  CONFIG.GeometryLib ??= {};
+  if ( CONFIG.GeometryLib.Graph ) return;
+
+  CONFIG.GeometryLib.Graph = {
+    Graph,
+    GraphVertex,
+    GraphEdge
+  };
 }
 
 export function registerCenteredPolygons() {
