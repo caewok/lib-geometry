@@ -89,8 +89,7 @@ export class GraphVertex {
     return this.#edges.find(edge => edge.A === vertex || edge.B === vertex);
   }
 
-  // TODO: Change this to use integers or object index when available?
-  /** @type {string} */
+  /** @type {*} */
   get key() { return this.value; }
 
   /**
@@ -212,7 +211,18 @@ export class Graph {
   addEdge(edge) {
     const key = edge.key;
     if ( this.edges.has(key) ) return this.edges.get(key);
-    return this.addEdgeVertices(edge.A, edge.B, edge.weight);
+    this.edges.set(key, edge);
+
+    // Ensure the vertices are linked and stored in the vertices map.
+    edge.A = this.addVertex(edge.A);
+    edge.B = this.addVertex(edge.B);
+
+    // Add edge to the vertices.
+    // Undirected, so add to both.
+    edge.A.addEdge(edge);
+    edge.B.addEdge(edge);
+
+    return edge;
   }
 
   /**
@@ -338,6 +348,7 @@ export class Graph {
     // Add the vertex neighbors
     const visitedVertices = new Set();
     vertices.forEach(v => {
+//       visitedVertices.add(v.key);
       const spanningVertexMap = spanningTree.get(v.key);
       v.neighbors.forEach(neighbor => {
         if ( !visitedVertices.has(neighbor.key) ) {
@@ -348,6 +359,7 @@ export class Graph {
           if ( spanningVertexMap ) spanningVertexMap.set(neighbor.key, neighbor);  // TODO: Faster if we could drop this test when we know we have all vertices.
           if ( spanningNeighborMap ) spanningNeighborMap.set(v.key, v); // TODO: Faster if we could drop this test when we know we have all vertices.
         }
+//         visitedVertices.add(v.key);
       });
     });
 
@@ -510,6 +522,15 @@ function getCyclePath(start, end, current, parents) {
   cycle.push(start);
   return cycle;
 }
+
+/*
+verticesNoCycle
+verticesCycle
+treeNoCycle
+treeCycle
+
+
+/*
 
 // Testing
 
