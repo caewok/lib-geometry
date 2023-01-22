@@ -448,6 +448,132 @@ export class Graph {
 
     return rejectedEdges;
   }
+
+  kruskalsMST(weighted = true) {
+    // Initialize graph that'll contain the MST
+    const MST = new Map();
+    if ( !this.vertices.size ) return MST;
+
+    const vertexKeys = [...this.vertices.keys()];
+    for ( const key of vertexKeys ) MST.set(key, new Map());
+
+    // In lieu of priority queue, use an array sorted by weight.
+    const edgeArr = weighted ? radixSortObj([...this.edges.values()], "weight") : [...this.edges.values()];
+
+    // Union-Find set of vertex keys
+    const uf = new UnionFind(vertexKeys);
+
+    // Loop until all nodes are explored
+    for ( const edge of edgeArr ) {
+      const keyA = edge.A.key;
+      const keyB = edge.B.key;
+      if ( !uf.connected(keyA, keyB) ) {
+        MST.get(keyA).set(keyB, edge.B);
+        MST.get(keyB).set(keyA, edge.A);
+        uf.union(keyA, keyB);
+      }
+    }
+
+    return MST;
+  }
+
+  /**
+   * Print the vertices of the graph, with arrows showing connections between
+   * each vertex and the connected edge(s).
+   */
+  print() {
+    for ( const vertex of this.vertices.values() ) {
+      const connectedVertices = [];
+      for ( const edge of vertex._edgeSet ) {
+        connectedVertices.push(edge.otherVertex(vertex));
+      }
+      console.log(`${vertex} --> ${connectedVertices.join(", ")}`);
+    }
+  }
+}
+
+
+/**
+ * Disjoint set data structure, also called union-find or merge-find set.
+ * https://www.tutorialspoint.com/Kruskal-s-algorithm-in-Javascript
+ * Tracks a set of elements partitioned into a number of disjoint (non-overlapping) subsets.
+ */
+
+/* Example
+let uf = new UnionFind(["A", "B", "C", "D", "E"]);
+uf.union("A", "B");
+uf.union("A", "C");
+uf.union("C", "D");
+
+console.log(uf.connected("B", "E"));
+console.log(uf.connected("B", "D"));
+*/
+class UnionFind {
+  /** @type {number} */
+  count = 0;
+
+  /** @type {object} */
+  parent = new Map();
+
+  /**
+   * @param {*[]} elements    Values that can be used as indices in an object.
+   */
+  constructor(elements) {
+    // Number of disconnected components
+    this.count = elements.length;
+
+    // Initialize the data structure such that all
+    // elements have themselves as parents
+    elements.forEach(e => this.parent.set(e, e));
+   }
+
+   /**
+    * Union two nodes in this set.
+    * @param {*} a    First element
+    * @param {*} b    Second element
+    */
+   union(a, b) {
+      let rootA = this.find(a);
+      let rootB = this.find(b);
+
+      // Roots are same so these are already connected.
+      if ( rootA === rootB ) return;
+
+      // Always make the element with smaller root the parent.
+      const parentA = this.parent.get(a);
+      const parentB = this.parent.get(b);
+      if (rootA < rootB) {
+         if ( parentB !== b ) this.union(parentB, a);
+         this.parent.set(b, parentA);
+      } else {
+         if ( parentA !== a ) this.union(parentA, b);
+         this.parent.set(a, parentB);
+      }
+   }
+
+   /**
+    * Return final parent of a node
+    * @param {*} a    Node to check for parents.
+    * @returns {*}
+    */
+   find(a) {
+     while ( true ) {
+       const parent = this.parent.get(a);
+       if ( parent === a ) break;
+       a = parent;
+     }
+     return a;
+   }
+
+   /**
+    * Check connectivity of two nodes.
+    * @param {*} a    First element
+    * @param {*} b    Second element
+    * @returns {boolean}
+    */
+   connected(a, b) {
+      return this.find(a) === this.find(b);
+   }
 }
 
 /**
