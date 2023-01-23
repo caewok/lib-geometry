@@ -352,9 +352,9 @@ export class Graph {
    *                                            Least will prioritize least overlap between edges.
    * @returns {string[][]}  Keys of vertices in arrays. Each array represents a cycle.
    */
-  getAllCycles({ sortType = Graph.VERTEX_SORT.LEAST } = {}) {
+  getAllCycles({ sortType = Graph.VERTEX_SORT.LEAST, weighted = false } = {}) {
     const vertices = this.getSortedVertices({ sortType });
-    const spanningTree = this.kruskalsMST({ vertices, weighted: false });
+    const spanningTree = this.kruskalsMST({ vertices, weighted });
     return this._getCyclesForSpanningTree(spanningTree);
   }
 
