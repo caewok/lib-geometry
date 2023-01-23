@@ -172,6 +172,14 @@ export class Graph {
   edges = new Map();
 
   /**
+   * Remove all cached values for this graph
+   */
+  clear() {
+    this.vertices.clear();
+    this.edges.clear();
+  }
+
+  /**
    * Add a new vertex. If already added, this will keep the old vertex.
    * @param {GraphVertex} newVertex
    * @returns {GraphVertex} New or existing vertex, based on key.
