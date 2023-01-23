@@ -534,8 +534,7 @@ function overlapsPolygon(other) {
 
   for ( const b of pts1 ) {
     if ( other.contains(b.x, b.y) ) return true;
-
-    const pts2 = this.iteratePoints({ close: true });
+    const pts2 = other.iteratePoints({ close: true });
     let c = pts2.next().value;
     for ( const d of pts2 ) {
       if ( foundry.utils.lineSegmentIntersects(a, b, c, d) || this.contains(d.x, d.y) ) return true;
