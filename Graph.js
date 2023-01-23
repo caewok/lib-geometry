@@ -4,6 +4,8 @@
 
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 
+import { radixSortObj } from "./RadixSort.js";
+
 
 // GraphVertex, GraphEdge, and Graph initially based on
 // https://github.com/trekhleb/javascript-algorithms/tree/master/src/data-structures/graph
@@ -334,45 +336,12 @@ export class Graph {
   }
 
   /**
-   * Construct a spanning tree, meaning a map of vertex keys with values of neighboring vertices.
-   * @param {GraphVertex[]} vertices    Array of vertices, possibly sorted from getSortedVertices
-   * @returns {Map<*, Map<*, GraphVertex>>} spanningTree. Keys are keys of vertices; values are vertices
-   */
-  getSpanningTree(vertices) {
-    const spanningTree = new Map();
-
-    // Add a key for each vertex to the tree.
-    // Each key points to a set of keys.
-    vertices.forEach(v => spanningTree.set(v.key, new Map()));
-
-    // Add the vertex neighbors
-    const visitedVertices = new Set();
-    vertices.forEach(v => {
-//       visitedVertices.add(v.key);
-      const spanningVertexMap = spanningTree.get(v.key);
-      v.neighbors.forEach(neighbor => {
-        if ( !visitedVertices.has(neighbor.key) ) {
-          visitedVertices.add(neighbor.key); // TODO: Should be able to use neighbor directly
-
-          // If not all vertices provided, then the spanning tree may not contain vertex or neighbor.
-          const spanningNeighborMap = spanningTree.get(neighbor.key);
-          if ( spanningVertexMap ) spanningVertexMap.set(neighbor.key, neighbor);  // TODO: Faster if we could drop this test when we know we have all vertices.
-          if ( spanningNeighborMap ) spanningNeighborMap.set(v.key, v); // TODO: Faster if we could drop this test when we know we have all vertices.
-        }
-//         visitedVertices.add(v.key);
-      });
-    });
-
-    return spanningTree;
-  }
-
-  /**
    * Get cycles for a specified vertex or vertices.
    * @param {GraphVertex[]} vertices
    * @returns {string[][]}  Keys of vertices in arrays. Each array represents a cycle.
    */
   getCyclesForVertices(vertices) {
-    const spanningTree = this.getSpanningTree(vertices);
+    const spanningTree = this.kruskalsMST({ vertices, weighted: false });
     return this._getCyclesForSpanningTree(spanningTree);
   }
 
@@ -384,7 +353,7 @@ export class Graph {
    * @returns {string[][]}  Keys of vertices in arrays. Each array represents a cycle.
    */
   getAllCycles({ sortType = Graph.VERTEX_SORT.LEAST } = {}) {
-    const vertices = this.getSortedVertices({ sortType: Graph.VERTEX_SORT.LEAST });
+    const vertices = this.getSortedVertices({ sortType });
     const spanningTree = this.kruskalsMST({ vertices, weighted: false });
     return this._getCyclesForSpanningTree(spanningTree);
   }
@@ -431,24 +400,17 @@ export class Graph {
     return rejectedEdges;
   }
 
-  _getRejectedEdgesOrig(spanningTree) {
-    const rejectedEdges = new Set();
-    const vertices = this.getAllVertices();
-    vertices.forEach(v => {
-      if ( spanningTree.has(v.key) ) {
-        v.neighbors.forEach(neighbor => {
-          if ( !spanningTree.get(v.key).has(neighbor.key) ) {
-            if ( !rejectedEdges.has(`${neighbor.toString()}-${v.toString()}`) ) {
-              rejectedEdges.add(`${v.toString()}-${neighbor.toString()}`);
-            }
-          }
-        });
-      }
-    });
+  /**
+   * @typedef <Map<number, Map<number, GraphVertex>> MST
+   */
 
-    return rejectedEdges;
-  }
-
+  /**
+   * Kruskal's minimum-spanning tree for this graph.
+   * @param {object} [options]    Options that affect the algorithm
+   * @param {GraphVertex[]} [options.vertices]  Vertices to include in the resulting tree.
+   * @param {boolean} [options.weighted]        Whether to use weights when constructing the tree.
+   * @returns {MST}
+   */
   kruskalsMST({ vertices, weighted = true } = {}) {
     vertices ||= [...this.vertices.values()];
 
@@ -485,6 +447,10 @@ export class Graph {
     return MST;
   }
 
+  /**
+   * Print the tree to the console.
+   * @param {MST} MST
+   */
   static printMST(MST) {
     for ( const vertex of MST ) {
       const connectedVertices = [];
@@ -509,8 +475,6 @@ export class Graph {
       console.log(`${vertex} --> ${connectedVertices.join(", ")}`);
     }
   }
-
-
 }
 
 
@@ -546,116 +510,65 @@ class UnionFind {
     // Initialize the data structure such that all
     // elements have themselves as parents
     elements.forEach(e => this.parent.set(e, e));
-   }
+  }
 
-   /**
-    * Union two nodes in this set.
-    * @param {*} a    First element
-    * @param {*} b    Second element
-    */
-   union(a, b) {
-      let rootA = this.find(a);
-      let rootB = this.find(b);
+  /**
+   * Union two nodes in this set.
+   * @param {*} a    First element
+   * @param {*} b    Second element
+   */
+  union(a, b) {
+    let rootA = this.find(a);
+    let rootB = this.find(b);
 
-      // Roots are same so these are already connected.
-      if ( rootA === rootB ) return;
+    // Roots are same so these are already connected.
+    if ( rootA === rootB ) return;
 
-      // Always make the element with smaller root the parent.
-      const parentA = this.parent.get(a);
-      const parentB = this.parent.get(b);
-      if (rootA < rootB) {
-         if ( parentB !== b ) this.union(parentB, a);
-         this.parent.set(b, parentA);
-      } else {
-         if ( parentA !== a ) this.union(parentA, b);
-         this.parent.set(a, parentB);
-      }
-   }
+    // Always make the element with smaller root the parent.
+    const parentA = this.parent.get(a);
+    const parentB = this.parent.get(b);
+    if (rootA < rootB) {
+      if ( parentB !== b ) this.union(parentB, a);
+      this.parent.set(b, parentA);
+    } else {
+      if ( parentA !== a ) this.union(parentA, b);
+      this.parent.set(a, parentB);
+    }
+  }
 
-   /**
-    * Return final parent of a node
-    * @param {*} a    Node to check for parents.
-    * @returns {*}
-    */
-   find(a) {
-     while ( true ) {
-       const parent = this.parent.get(a);
-       if ( parent === a ) break;
-       a = parent;
-     }
-     return a;
-   }
+  /**
+   * Return final parent of a node
+   * @param {*} a    Node to check for parents.
+   * @returns {*}
+   */
+  find(a) {
+    let parent = this.parent.get(a);
 
-   /**
-    * Check connectivity of two nodes.
-    * @param {*} a    First element
-    * @param {*} b    Second element
-    * @returns {boolean}
-    */
-   connected(a, b) {
-      return this.find(a) === this.find(b);
-   }
+    while ( parent !== a ) {
+      a = parent;
+      parent = this.parent.get(a);
+    }
+    return a;
+  }
+
+  /**
+   * Check connectivity of two nodes.
+   * @param {*} a    First element
+   * @param {*} b    Second element
+   * @returns {boolean}
+   */
+  connected(a, b) {
+    return this.find(a) === this.find(b);
+  }
 }
 
 /**
  * Takes the start and end of the removed edge and performs DFS traversal
  * recursively on the spanning tree from start until it finds the end.
- * @param {GraphVertex} start               Start vertex
- * @param {GraphVertex} end                 End vertex
- * @param {Map<*, Map<*, GraphVertex>>} spanningTree      Spanning tree created by this.getSpanningTree
- * @param {Set<*>} visited        Holds the set of visited vertices while traversing
- *                                        the tree in order to find a cycle
- * @param {Map<string, string>} parents   Stores the immediate parent of a node while traversing the tree
- * @param {GraphVertex} current_node           Name (key) of the current vertex in the recursion
- * @param {GraphVertex} parent_node            Name (key) of the parent vertex in the recursion
- */
-function findCycle(
-  start,
-  end,
-  spanningTree,
-  visited = new Set(),
-  parents = new Map(),
-  current_node = start,
-  parent_node = null) {
-
-  let cycle = null;
-  visited.add(current_node.key);
-  parents.set(current_node.key, parent_node);
-  const destinationMap = spanningTree.get(current_node.key);
-  if ( !destinationMap ) return cycle; // If less than all vertices in spanningTree.
-
-  for ( const [destinationKey, destinationVertex] of destinationMap ) {
-    if ( destinationKey === end.key ) {
-      cycle = getCyclePath(start, end, current_node, parents);
-      return cycle;
-    }
-
-    const parentValue = parents.get(current_node.key);
-    if ( parentValue && destinationKey === parentValue.key ) continue;
-
-    if ( !visited.has(destinationKey) ) {
-      cycle = findCycle(
-        start,
-        end,
-        spanningTree,
-        visited,
-        parents,
-        destinationVertex,
-        current_node
-      );
-      if ( cycle ) return cycle;
-    }
-  }
-
-  return cycle;
-}
-
-/**
- * Find cycle
  * @param {MST} spanningTree
  * @param {GraphVertex} start
  * @param {GraphVertex} end
- * @returns {GraphVertex[]}
+ * @returns {GraphVertex[]} The cycle, if any.
  */
 function findCycle2(spanningTree, start, end) {
   const explored = new Set([start.key]);
@@ -676,33 +589,6 @@ function _findCycle2Recursion(spanningTree, start, end, explored) {
   }
   return null;
 }
-
-/**
- * Captures the cyclic path between the start and end vertices by backtracking the spanning tree
- * from the end vertex to the start. The parents map is used to get the reference of the
- * parent vertices.
- * @param {} start
- * @param {} end
- * @param {string} current
- * @param {Map<string, string>} parents
- * @returns {}  The cyclic path
- */
-function getCyclePath(start, end, current, parents) {
-  const cycle = [end];
-  while ( current.key !== start.key ) {
-    cycle.push(current);
-    current = parents.get(current.key);
-  }
-  cycle.push(start);
-  return cycle;
-}
-
-/*
-verticesNoCycle
-verticesCycle
-treeNoCycle
-treeCycle
-
 
 /*
 
