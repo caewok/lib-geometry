@@ -384,8 +384,8 @@ export class Graph {
    * @returns {string[][]}  Keys of vertices in arrays. Each array represents a cycle.
    */
   getAllCycles({ sortType = Graph.VERTEX_SORT.LEAST } = {}) {
-    const vertices = this.getSortedVertices({sortType});
-    const spanningTree = this.getSpanningTree(vertices);
+    const vertices = this.getSortedVertices({ sortType: Graph.VERTEX_SORT.LEAST });
+    const spanningTree = this.kruskalsMST({ vertices, weighted: false });
     return this._getCyclesForSpanningTree(spanningTree);
   }
 
@@ -400,8 +400,8 @@ export class Graph {
     for ( const edge of rejectedEdges.values() ) {
       const start = edge.A;
       const end = edge.B;
-      const cycle = findCycle(start, end, spanningTree);
-      if ( cycle && cycle.length > 2 ) cycles.push(cycle);
+      const cycle = findCycle2(spanningTree, start, end);
+      if ( cycle.length > 2 ) cycles.push(cycle);
     }
 
     return cycles;
@@ -449,13 +449,18 @@ export class Graph {
     return rejectedEdges;
   }
 
-  kruskalsMST(weighted = true) {
+  kruskalsMST({ vertices, weighted = true } = {}) {
+    vertices ||= [...this.vertices.values()];
+
     // Initialize graph that'll contain the MST
     const MST = new Map();
-    if ( !this.vertices.size ) return MST;
+    if ( !vertices.length ) return MST;
 
-    const vertexKeys = [...this.vertices.keys()];
-    for ( const key of vertexKeys ) MST.set(key, new Map());
+    const vertexKeys = vertices.map(v => {
+      const key = v.key;
+      MST.set(key, new Map());
+      return key;
+    });
 
     // In lieu of priority queue, use an array sorted by weight.
     const edgeArr = weighted ? radixSortObj([...this.edges.values()], "weight") : [...this.edges.values()];
@@ -468,13 +473,27 @@ export class Graph {
       const keyA = edge.A.key;
       const keyB = edge.B.key;
       if ( !uf.connected(keyA, keyB) ) {
-        MST.get(keyA).set(keyB, edge.B);
-        MST.get(keyB).set(keyA, edge.A);
+        // If not all vertices of the graph in MST, mapA or mapB may be undefined.
+        const mapA = MST.get(keyA);
+        const mapB = MST.get(keyB);
+        if ( mapA ) mapA.set(keyB, edge.B);
+        if ( mapB ) mapB.set(keyA, edge.A);
         uf.union(keyA, keyB);
       }
     }
 
     return MST;
+  }
+
+  static printMST(MST) {
+    for ( const vertex of MST ) {
+      const connectedVertices = [];
+      const m = vertex[1];
+      for ( const connectedVertex of m.keys() ) {
+        connectedVertices.push(connectedVertex);
+      }
+      console.log(`${vertex[0]} --> ${connectedVertices.join(", ")}`);
+    }
   }
 
   /**
@@ -490,6 +509,8 @@ export class Graph {
       console.log(`${vertex} --> ${connectedVertices.join(", ")}`);
     }
   }
+
+
 }
 
 
@@ -627,6 +648,33 @@ function findCycle(
   }
 
   return cycle;
+}
+
+/**
+ * Find cycle
+ * @param {MST} spanningTree
+ * @param {GraphVertex} start
+ * @param {GraphVertex} end
+ * @returns {GraphVertex[]}
+ */
+function findCycle2(spanningTree, start, end) {
+  const explored = new Set([start.key]);
+  const cycle = _findCycle2Recursion(spanningTree, start, end, explored);
+  if ( cycle ) return [start, ...cycle];
+  return [];
+}
+
+function _findCycle2Recursion(spanningTree, start, end, explored) {
+  if ( start.key === end.key ) return [];
+
+  const verticesMap = spanningTree.get(start.key);
+  for ( const nextVertex of verticesMap.values() ) {
+    if ( explored.has(nextVertex.key) ) continue;
+    explored.add(nextVertex.key);
+    const cycle = _findCycle2Recursion(spanningTree, nextVertex, end, explored);
+    if ( cycle ) return [nextVertex, ...cycle];
+  }
+  return null;
 }
 
 /**
