@@ -307,7 +307,7 @@ export class ShadowProjection {
    * @returns {Point3d[]}
    */
   constructShadowPointsForWall(wall) {
-    const pts = Point3d.fromWall(wall);
+    const pts = Point3d.fromWall(wall, { finite: true });
     return this._constructShadowPointsForWallPoints(pts);
   }
 
