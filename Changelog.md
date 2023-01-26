@@ -1,3 +1,7 @@
+## 0.1.3
+Updates based on changes to Elevation Ruler 0.6.4.
+- Fix the projection of a 3d ray to 2d when dx, dy, or dz is 0.
+
 ## 0.1.2
 Updates based on changes to Elevated Vision 0.3.3.
 - Add Graph classes with minimum spanning graph and detect cycles methods.
