@@ -70,7 +70,7 @@ export class Ray3d extends Ray {
   }
 
   /*
-    * Project the Ray onto the 2d XY canvas surface at the elevation of B.
+  * Project the Ray onto the 2d XY canvas surface at the elevation of B.
    * Preserves distance but not A or B location.
    * For gridless, will preserve B location.
    * Done in a manner to allow diagonal distance to be measured.
@@ -83,8 +83,9 @@ export class Ray3d extends Ray {
    * @returns {Ray} The new 2d ray
    */
   projectOntoCanvas() {
-    if ( !this.dz.almostEqual(0)
-      || (this.dx.almostEqual(0) && this.dy.almostEqual(0)) ) return new Ray(this.A.to2d(), this.B.to2d());
+    if ( this.dz.almostEqual(0) ) return new Ray(this.A.to2d({x: "x", y: "y"}), this.B.to2d({x: "x", y: "y"}));
+    if ( this.dx.almostEqual(0) ) return new Ray(this.A.to2d({x: "z", y: "y"}), this.B.to2d({x: "z", y: "y"}));
+    if ( this.dy.almostEqual(0) ) return new Ray(this.A.to2d({x: "x", y: "z"}), this.B.to2d({x: "x", y: "z"}));
 
     switch ( canvas.grid.type ) {
       case CONST.GRID_TYPES.GRIDLESS: return this._projectGridless();
