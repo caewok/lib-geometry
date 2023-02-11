@@ -503,6 +503,76 @@ export class Matrix {
   }
 
   /**
+   * Faster 1x3 multiplication
+   * @param {Matrix} other    A 1x3 matrix, like Matrix.prototype.fromPoint2d
+   * @returns Matrix
+   */
+  multiply1x3(other, outMatrix = Matrix.empty(1, 3)) {
+    const a0 = other.arr[0];
+    const a1 = other.arr[1];
+    const a2 = other.arr[2];
+
+    const a00 = a0[0];
+    const a01 = a0[1];
+    const a02 = a0[2];
+    const a10 = a1[0];
+    const a11 = a1[1];
+    const a12 = a1[2];
+    const a20 = a2[0];
+    const a21 = a2[1];
+    const a22 = a2[2];
+
+    const b0 = this.arr[0];
+    const b00 = b0[0];
+    const b01 = b0[1];
+    const b02 = b0[2];
+
+    outMatrix.arr[0][0] = a00 * b00 + a10 * b01 + a20 * b02;
+    outMatrix.arr[0][1] = a01 * b00 + a11 * b01 + a21 * b02;
+    outMatrix.arr[0][2] = a02 * b00 + a12 * b01 + a22 * b02;
+
+    return outMatrix;
+  }
+
+  /**
+   * Multiply a Point2d by this matrix and output a different Point3d.
+   * For speed, the input is not checked against the matrix for correct dimensionality.
+   * Foundry bench puts this at ~ 68% of multiply.
+   * @param {Point3d} point    The point to multiply
+   * @param {Point3d} outPoint Optional point in which to store the result.
+   * @returns {Point3d}
+   */
+  multiplyPoint2d(point, outPoint = new PIXI.Point()) {
+    const a0 = this.arr[0];
+    const a1 = this.arr[1];
+    const a2 = this.arr[2];
+
+    const a00 = a0[0];
+    const a01 = a0[1];
+    const a02 = a0[2];
+    const a10 = a1[0];
+    const a11 = a1[1];
+    const a12 = a1[2];
+    const a20 = a2[0];
+    const a21 = a2[1];
+    const a22 = a2[2];
+
+    const b0 = this.arr[0];
+    const b00 = point.x;
+    const b01 = point.y;
+    const b02 = 1;
+
+    outPoint.x = a00 * b00 + a10 * b01 + a20 * b02;
+    outPoint.y = a01 * b00 + a11 * b01 + a21 * b02;
+    const w = a02 * b00 + a12 * b01 + a22 * b02;
+
+    outPoint.x /= w;
+    outPoint.y /= w;
+
+    return outPoint;
+  }
+
+  /**
    * Faster 1x4 multiplication
    * Foundry bench puts this at ~ 75% of multiply.
    * @param {Matrix} other    A 1x4 matrix, like Matrix.prototype.fromPoint3d
