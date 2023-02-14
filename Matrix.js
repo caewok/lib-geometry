@@ -186,7 +186,7 @@ export class Matrix {
    * @returns {Matrix}
    */
   static rotationY(angle, d3 = true) {
-    if ( !angle ) return d3 ? Matrix.identity(4, 4) : Matrix.identify(3, 3);
+    if ( !angle ) return d3 ? Matrix.identity(4, 4) : Matrix.identity(3, 3);
 
     let c = Math.cos(angle);
     let s = Math.sin(angle);
@@ -219,7 +219,7 @@ export class Matrix {
    * @returns {Matrix}
    */
   static rotationZ(angle, d3 = true) {
-    if ( !angle ) return d3 ? Matrix.identity(4, 4) : Matrix.identify(3, 3);
+    if ( !angle ) return d3 ? Matrix.identity(4, 4) : Matrix.identity(3, 3);
 
     let c = Math.cos(angle);
     let s = Math.sin(angle);
