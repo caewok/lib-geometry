@@ -191,11 +191,10 @@ export class Ray3d extends Ray {
                                                    B
     */
 
-    // If we are using dnd5e, switch to gridSpaces = false if using Euclidean b/c true will not return Euclidean values.
-    const gridSpaces = (game.system.id === "dnd5e" && game.settings.get("dnd5e", "diagonalMovement") === "EUCL") ? false : true;
+    // Always measure Euclidean distances; only use gridSpaces later for the projected values.
     const A = this.A.to2d();
     const B = this.B.to2d();
-    const gridDistance = CONFIG.GeometryLib.utils.gridUnitsToPixels(canvas.grid.measureDistance(A, B, { gridSpaces: true }));
+    const gridDistance = CONFIG.GeometryLib.utils.gridUnitsToPixels(canvas.grid.measureDistance(A, B, { gridSpaces: false }));
     A.y = B.y - gridDistance;
     A.x = B.x - height;
 
@@ -220,11 +219,10 @@ export class Ray3d extends Ray {
                                                B
     */
 
-    // If we are using dnd5e, switch to gridSpaces = false if using Euclidean b/c true will not return Euclidean values.
-    const gridSpaces = (game.system.id === "dnd5e" && game.settings.get("dnd5e", "diagonalMovement") === "EUCL") ? false : true;
+    // Always measure Euclidean distances; only use gridSpaces later for the projected values.
     const A = this.A.to2d();
     const B = this.B.to2d();
-    const gridDistance = CONFIG.GeometryLib.utils.gridUnitsToPixels(canvas.grid.measureDistance(A, B, { gridSpaces: true }));
+    const gridDistance = CONFIG.GeometryLib.utils.gridUnitsToPixels(canvas.grid.measureDistance(A, B, { gridSpaces: false }));
     A.x = B.x - gridDistance;
     A.y = B.y - height;
 
