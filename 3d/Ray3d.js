@@ -146,11 +146,25 @@ export class Ray3d extends Ray {
     // If points are on vertical line
     // Set A to the east
     // B is either north or south from A
+    /*
+    A                    A
+    |                   /
+    |     ==>          /
+    |                 /
+    |                /
+    B---->Height    B--->Height
+    */
     if ( this.dx.almostEqual(0) ) A.x += height; // East
 
     // If points are on horizontal line
     // B is either west or east from A
     // Set A to the south
+    /*
+               • Height    A
+               |              \
+               |                \
+    A----------B    ==>           B
+    */
     else if ( this.dy.almostEqual(0) ) A.y += height; // South
 
     // Otherwise set B to point south, A pointing east
@@ -168,12 +182,22 @@ export class Ray3d extends Ray {
   _projectSouth() {
     const height = Math.abs(this.dz);
 
+    /*                   A
+    A                    |
+      \   • Height       |  <- Dist
+       \  |         ==>  |             ==>    A   <-- Height
+        \ |              |                      \
+          B              B----• height            \
+                                                   B
+    */
+
+    // If we are using dnd5e, switch to gridSpaces = false if using Euclidean b/c true will not return Euclidean values.
+    const gridSpaces = (game.system.id === "dnd5e" && game.settings.get("dnd5e", "diagonalMovement") === "EUCL") ? false : true;
     const A = this.A.to2d();
     const B = this.B.to2d();
-
-    const distance = canvas.grid.measureDistance(A, B, { gridSpaces: true });
-    A.y += height;
-    B.x -= distance;
+    const gridDistance = CONFIG.GeometryLib.utils.gridUnitsToPixels(canvas.grid.measureDistance(A, B, { gridSpaces: true }));
+    A.y = B.y - gridDistance;
+    A.x = B.x - height;
 
     // Debug: console.log(`Projecting South: A: (${this.A.x},${this.A.y},${this.A.z})->(${A.x},${A.y}); B: (${this.B.x},${this.B.y},${this.B.z})->(${B.x},${B.y})`);
 
@@ -187,12 +211,22 @@ export class Ray3d extends Ray {
   _projectEast() {
     const height = Math.abs(this.dz);
 
+    /*                           • Height
+    A                            |
+      \   • Height               |
+       \  |         ==>  A-------B   ==>    A   <-- Height
+        \ |                                  \
+          B                                   \
+                                               B
+    */
+
+    // If we are using dnd5e, switch to gridSpaces = false if using Euclidean b/c true will not return Euclidean values.
+    const gridSpaces = (game.system.id === "dnd5e" && game.settings.get("dnd5e", "diagonalMovement") === "EUCL") ? false : true;
     const A = this.A.to2d();
     const B = this.B.to2d();
-
-    const distance = canvas.grid.measureDistance(A, B, { gridSpaces: true });
-    A.x += height;
-    B.y += distance;
+    const gridDistance = CONFIG.GeometryLib.utils.gridUnitsToPixels(canvas.grid.measureDistance(A, B, { gridSpaces: true }));
+    A.x = B.x - gridDistance;
+    A.y = B.y - height;
 
     // Debug: log(`Projecting East: A: (${this.A.x},${this.A.y},${this.A.z})->(${A.x},${A.y}); B: (${this.B.x},${this.B.y},${this.B.z})->(${B.x},${B.y})`);
 
