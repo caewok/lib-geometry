@@ -123,7 +123,7 @@ export class Draw {
    */
   shape(shape, { color = Draw.COLORS.black, width = 1, fill = null, fillAlpha = 1 } = {}) {
     if ( fill ) this.g.beginFill(fill, fillAlpha);
-    canvas.controls.debug.lineStyle(width, color).drawShape(shape);
+    this.g.lineStyle(width, color).drawShape(shape);
     if ( fill ) this.g.endFill();
   }
 
