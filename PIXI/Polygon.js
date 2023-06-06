@@ -14,18 +14,26 @@ export function registerPIXIPolygonMethods() {
   addClassGetter(PIXI.Polygon.prototype, "area", area);
   addClassGetter(PIXI.Polygon.prototype, "center", centroid);
   addClassGetter(PIXI.Polygon.prototype, "isClockwise", isClockwise);
+  addClassGetter(PIXI.Polygon.prototype, "key", key);
 
   // ----- Iterators ----- //
   addClassMethod(PIXI.Polygon.prototype, "iterateEdges", iterateEdges);
   addClassMethod(PIXI.Polygon.prototype, "iteratePoints", iteratePoints);
 
   // ----- Methods ----- //
+  addClassMethod(PIXI.Polygon.prototype, "toPolygon", function() { return this; });
+  addClassMethod(PIXI.Polygon.prototype, "clean", clean);
   addClassMethod(PIXI.Polygon.prototype, "clipperClip", clipperClip);
   addClassMethod(PIXI.Polygon.prototype, "convexhull", convexhull);
+  addClassMethod(PIXI.Polygon.prototype, "equals", equals);
   addClassMethod(PIXI.Polygon.prototype, "isSegmentEnclosed", isSegmentEnclosed);
   addClassMethod(PIXI.Polygon.prototype, "linesCross", linesCross);
+  addClassMethod(PIXI.Polygon.prototype, "lineSegmentIntersects", lineSegmentIntersects);
+  // reverseOrientation - in v11
   addClassMethod(PIXI.Polygon.prototype, "overlaps", overlaps);
   addClassMethod(PIXI.Polygon.prototype, "pad", pad);
+  // pointsBetween - in v11
+  // segmentIntersections - in v11
   addClassMethod(PIXI.Polygon.prototype, "translate", translate);
   addClassMethod(PIXI.Polygon.prototype, "viewablePoints", viewablePoints);
 
@@ -33,6 +41,8 @@ export function registerPIXIPolygonMethods() {
   addClassMethod(PIXI.Polygon.prototype, "_overlapsPolygon", overlapsPolygon);
   addClassMethod(PIXI.Polygon.prototype, "_overlapsCircle", overlapsCircle);
   addClassMethod(PIXI.Polygon.prototype, "scaledArea", scaledArea);
+  // signedArea - in v11
+
 }
 
 /**
@@ -238,7 +248,6 @@ function* iteratePoints({close = true} = {}) {
   if ( close ) yield new PIXI.Point(this.points[0], this.points[1]);
 }
 
-
 /**
  * Test if a line or lines crosses a polygon edge
  * @param {object[]} lines    Array of lines, with A and B PIXI.Points.
@@ -249,6 +258,27 @@ function linesCross(lines) {
     for ( const line of lines ) {
       if ( CONFIG.GeometryLib.utils.lineSegmentCrosses(edge.A, edge.B, line.A, line.B) ) return true;
     }
+  }
+
+  return false;
+}
+
+/**
+ * Test whether line segment AB intersects this polygon.
+ * Equivalent to PIXI.Rectangle.prototype.lineSegmentIntersects.
+ * @param {Point} a                       The first endpoint of segment AB
+ * @param {Point} b                       The second endpoint of segment AB
+ * @param {object} [options]              Options affecting the intersect test.
+ * @param {boolean} [options.inside]      If true, a line contained within the rectangle will
+ *                                        return true.
+ * @returns {boolean} True if intersects.
+ */
+function lineSegmentIntersects(a, b, { inside = false } = {}) {
+  if (this.contains(a.x, a.y) && this.contains(b.x, b.y) ) return inside;
+
+  const edges = this.iterateEdges({ close: true });
+  for ( const edge of edges ) {
+    if ( foundry.utils.lineSegmentIntersects(a, b, edge.A, edge.B) ) return true;
   }
 
   return false;
@@ -283,32 +313,24 @@ function overlapsPolygon(other) {
 
   if ( !polyBounds.overlaps(otherBounds) ) return false;
 
-  this.close();
-  other.close();
-  const pts1 = this.points;
-  const pts2 = other.points;
-  const ln1 = pts1.length;
-  const ln2 = pts2.length;
-  let a = { x: pts1[0], y: pts1[1] };
+  const pts1 = this.iteratePoints({ close: true });
+  let a = pts1.next().value;
   if ( other.contains(a.x, a.y) ) return true;
 
-  for ( let i = 2; i < ln1; i += 2 ) {
-    const b = { x: pts1[i], y: pts1[i+1] };
+  for ( const b of pts1 ) {
     if ( other.contains(b.x, b.y) ) return true;
-
-    let c = { x: pts2[0], y: pts2[1] };
-    if ( this.contains(c.x, c.y) ) return true;
-
-    for ( let j = 2; j < ln2; j += 2 ) {
-      const d = { x: pts2[j], y: pts2[j+1] };
+    const pts2 = other.iteratePoints({ close: true });
+    let c = pts2.next().value;
+    for ( const d of pts2 ) {
       if ( foundry.utils.lineSegmentIntersects(a, b, c, d) || this.contains(d.x, d.y) ) return true;
       c = d;
     }
-
     a = b;
   }
+
   return false;
 }
+
 
 /**
  * Does this polygon overlap a circle?
@@ -318,17 +340,13 @@ function overlapsPolygon(other) {
  */
 function overlapsCircle(circle) {
   const polyBounds = this.getBounds();
-
   if ( !polyBounds.overlaps(circle) ) return false;
 
-  this.close();
-  const pts = this.points;
-  const ln = pts.length;
-  let a = { x: pts[0], y: pts[1] };
+  const pts = this.iteratePoints({ close: true });
+  let a = pts.next().value;
   if ( circle.contains(a.x, a.y) ) return true;
-  for ( let i = 2; i < ln; i += 2 ) {
-    const b = { x: pts[i], y: pts[i+1] };
 
+  for ( const b of pts ) {
     // Get point on the line closest to a|b (might be a or b)
     const c = foundry.utils.closestPointToSegment(c, a, b);
     if ( circle.contains(c.x, c.y) ) return true;
@@ -507,4 +525,105 @@ function viewablePoints(origin, { returnKeys = false, outermostOnly = false } = 
  */
 export function elementsByIndex(arr, indices) {
   return indices.map(aIndex => arr[aIndex]);
+}
+
+/**
+ * "Clean" this polygon and return a new one:
+ * 1. No repeated points, including nearly equal points.
+ * 2. No collinear points
+ * 3. No closed point
+ * 4. Clockwise orientation
+ * @returns {PIXI.Polygon}    This polygon
+ */
+function clean({epsilon = 1e-8, epsilonCollinear = 1e-12} = {}) {
+  if ( this.points.length < 6 ) return this;
+
+  const pts = this.iteratePoints({close: true});
+  let prev = pts.next().value;
+  let curr = pts.next().value;
+  const cleanPoints = [prev.x, prev.y];
+  for ( const next of pts ) {
+    if ( curr.almostEqual(prev, epsilon) ) {
+      curr = next;
+      continue;
+    }
+    if ( foundry.utils.orient2dFast(prev, curr, next).almostEqual(0, epsilonCollinear) ) {
+      curr = next;
+      continue;
+    }
+    cleanPoints.push(curr.x, curr.y);
+    prev = curr;
+    curr = next;
+  }
+
+  // Check for and remove closing point.
+  const ln = cleanPoints.length;
+  if ( cleanPoints[0] === cleanPoints[ln - 2]
+    && cleanPoints[1] === cleanPoints[ln - 1] ) {
+
+    cleanPoints.pop();
+    cleanPoints.pop();
+  }
+
+  // Set the points and reset clockwise
+  this.points = cleanPoints;
+  this._isClockwise = undefined;
+  if ( !this.isClockwise ) this.reverseOrientation();
+  return this;
+}
+
+/**
+ * Key the polygon by using JSON.stringify on the points.
+ * To ensure polygons are the same even if the starting vertex is rotated,
+ * find the minimum point as the start.
+ */
+function key() {
+  const points = [...this.points];
+  const ln = this.isClosed ? points.length - 2 : points.length;
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let minIndex = -1;
+  for ( let i = 0; i < ln; i += 2 ) {
+    const x = points[i];
+    const y = points[i + 1];
+    if ( x < minX || x === minX && y < minY ) {
+      minIndex = i;
+      minX = x;
+      minY = y;
+    }
+  }
+  const startPoints = points.splice(minIndex);
+  startPoints.push(...points);
+  return JSON.stringify(startPoints);
+}
+
+/**
+ * Test for equality between two polygons.
+ * 1. Same points
+ * 2. In any order, but orientation counts.
+ * @param {PIXI.Polygon} other
+ * @returns {boolean}
+ */
+function equals(other) {
+  if ( this.points.length !== other.points.length ) return false;
+  if ( this.isClockwise ^ other.isClockwise ) return false;
+
+  const thisPoints = this.iteratePoints({close: false});
+  const otherPoints = [...other.iteratePoints({close: false})];
+
+  // Find the matching point
+  const startPoint = thisPoints.next().value;
+  const startIdx = otherPoints.findIndex(pt => pt.equals(startPoint));
+  if ( !~startIdx ) return false;
+
+  // Test each point sequentially from each array
+  let k = startIdx + 1; // +1 b/c already tested startPoint.
+  const nPoints = otherPoints.length;
+  for ( const thisPoint of thisPoints ) {
+    k = k % nPoints;
+    if ( !thisPoint.equals(otherPoints[k]) ) return false;
+    k += 1;
+  }
+
+  return true;
 }
