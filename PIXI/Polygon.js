@@ -31,8 +31,8 @@ export function registerPIXIPolygonMethods() {
   addClassMethod(PIXI.Polygon.prototype, scaledArea, "scaledArea");
 
   // ----- Iterators ----- //
-  addClassMethod(PIXI.Polygon.prototype, iterateEdges, "iterateEdges");
-  addClassMethod(PIXI.Polygon.prototype, iteratePoints, "iteratePoints");
+//   addClassMethod(PIXI.Polygon.prototype, iterateEdges, "iterateEdges");
+//   addClassMethod(PIXI.Polygon.prototype, iteratePoints, "iteratePoints");
 }
 
 /**
