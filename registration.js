@@ -35,9 +35,6 @@ import { Draw } from "./Draw.js";
 // Ellipse
 import { Ellipse } from "./Ellipse.js";
 
-// WeilerAtherton
-import { WeilerAthertonClipper } from "./WeilerAtherton.js";
-
 // Matrix
 import { Matrix } from "./Matrix.js";
 
@@ -60,7 +57,6 @@ export function registerGeometry() {
   registerEllipse();
   registerShadow();
   registerMatrix();
-  registerWeilerAthertonClipper();
   registerClipperPaths();
 }
 
@@ -111,13 +107,6 @@ export function registerEllipse() {
   if ( CONFIG.GeometryLib.Ellipse ) return;
 
   CONFIG.GeometryLib.Ellipse = Ellipse;
-}
-
-export function registerWeilerAthertonClipper() {
-  CONFIG.GeometryLib ??= {};
-  if ( CONFIG.GeometryLib.WeilerAthertonClipper ) return;
-
-  CONFIG.GeometryLib.WeilerAthertonClipper = WeilerAthertonClipper;
 }
 
 export function registerShadow() {
