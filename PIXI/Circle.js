@@ -40,12 +40,6 @@ export function registerPIXICircleMethods() {
     configurable: true
   });
 
-  Object.defineProperty(PIXI.Circle.prototype, "pointsForArc", {
-    value: pointsForArc,
-    writable: true,
-    configurable: true
-  });
-
   Object.defineProperty(PIXI.Circle.prototype, "intersectPolygon", {
     value: intersectPolygon,
     writable: true,
@@ -81,39 +75,6 @@ function area() {
  */
 function translate(dx, dy) {
   return new PIXI.Circle(this.x + dx, this.y + dy, this.radius);
-}
-
-/**
- * Get the points that would approximate a circular arc along this circle, given
- * a starting and ending angle. Points returned are clockwise.
- * If from and to are the same, a full circle will be returned.
- *
- * @param {Point}   fromAngle     Starting angle, in radians. π is due north, π/2 is due east
- * @param {Point}   toAngle       Ending angle, in radians
- * @param {object}  [options]     Options which affect how the circle is converted
- * @param {number}  [options.density]           The number of points which defines the density of approximation
- * @param {boolean} [options.includeEndpoints]  Whether to include points at the circle
- *                                              where the arc starts and ends.
- * @returns {Point[]}
- */
-function pointsForArc(fromAngle, toAngle, {density, includeEndpoints=true} = {}) {
-  const pi2 = 2 * Math.PI;
-  density ??= this.constructor.approximateVertexDensity(this.radius);
-  const points = [];
-  const delta = pi2 / density;
-
-  if ( includeEndpoints ) points.push(this.pointAtAngle(fromAngle));
-
-  // Determine number of points to add
-  let dAngle = toAngle - fromAngle;
-  while ( dAngle <= 0 ) dAngle += pi2; // Angles may not be normalized, so normalize total.
-  const nPoints = Math.round(dAngle / delta);
-
-  // Construct padding rays (clockwise)
-  for ( let i = 1; i < nPoints; i++ ) points.push(this.pointAtAngle(fromAngle + (i * delta)));
-
-  if ( includeEndpoints ) points.push(this.pointAtAngle(toAngle));
-  return points;
 }
 
 /**
