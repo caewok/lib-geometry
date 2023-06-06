@@ -262,3 +262,31 @@ function lineCircleIntersection(a, b, center, radius, epsilon=1e-8) {
     intersections
   };
 }
+
+/**
+ * Helper to add a method to a class.
+ * @param {class} cl      Either Class.prototype or Class
+ * @param {string} name   Name of the method
+ * @param {function} fn   Function to use for the method
+ */
+export function addClassMethod(cl, name, fn) {
+  Object.defineProperty(cl, name, {
+    value: fn,
+    writable: true,
+    configurable: true
+  });
+}
+
+/**
+ * Helper to add a getter to a class.
+ * @param {class} cl      Either Class.prototype or Class
+ * @param {string} name   Name of the method
+ * @param {function} fn   Function to use for the method
+ */
+export function addClassGetter(cl, name, fn) {
+  if ( Object.hasOwn(cl, name) ) return;
+  Object.defineProperty(cl, name, {
+    get: fn,
+    configurable: true
+  });
+}
