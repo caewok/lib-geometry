@@ -25,6 +25,17 @@ export function registerFoundryUtilsMethods() {
   };
 }
 
+// Simple extensions
+Math.minMax = function(...args) {
+  return args.reduce((acc, curr) => {
+    acc.min = Math.min(acc.min, curr);
+    acc.max = Math.max(acc.max, curr);
+    return acc;
+  }, { min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY});
+}
+
+Math.PI_1_2 = Math.PI * 0.5;
+
 /**
  * Construct a centered polygon using the values in drawing shape.
  * @param {Drawing} drawing
