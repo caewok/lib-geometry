@@ -1,7 +1,8 @@
 /* globals
 PIXI,
 foundry,
-ClipperLib
+ClipperLib,
+WeilerAthertonClipper
 */
 "use strict";
 
@@ -14,8 +15,6 @@ Each are referenced in local space for the contains test:
 
 Each can be intersected quickly using WA
 */
-
-import { WeilerAthertonClipper } from "../WeilerAtherton.js";
 
 export class RegularPolygon extends PIXI.Polygon {
 

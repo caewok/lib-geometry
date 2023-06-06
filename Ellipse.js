@@ -1,10 +1,9 @@
 /* globals
 PIXI,
-ClipperLib
+ClipperLib,
+WeilerAthertonClipper
 */
 "use strict";
-
-import { WeilerAthertonClipper } from "./WeilerAtherton.js";
 
 /* Testing
 api = game.modules.get('tokenvisibility').api;
