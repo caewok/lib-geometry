@@ -260,15 +260,10 @@ function convexHullCmpFn(a, b) {
 /**
  * Test whether the polygon is oriented clockwise.
  * Cached property.
+ * In v11, this was renamed to isPositive; this provides backward-compatibility.
  * @returns {boolean}
  */
-function isClockwise() {
-  if ( this.points.length < 6 ) return (this._isClockwise = undefined);
-
-  if ( typeof this._isClockwise === "undefined") this._isClockwise = this.signedArea() > 0;
-  return this._isClockwise;
-}
-
+function isClockwise() { return this.isPositive; }
 
 /**
  * Test if a segment is enclosed by the polygon.
