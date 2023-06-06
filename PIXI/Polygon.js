@@ -76,11 +76,6 @@ export function registerPIXIPolygonMethods() {
     configurable: true
   });
 
-  Object.defineProperty(PIXI.Polygon.prototype, "reverseOrientation", {
-    value: reverseOrientation,
-    writable: true,
-    configurable: true
-  });
 
   Object.defineProperty(PIXI.Polygon.prototype, "overlaps", {
     value: overlaps,
@@ -455,22 +450,6 @@ function pad(delta, { miterLimit = 2, scalingFactor = 1 } = {}) {
   c.AddPath(this.toClipperPoints({scalingFactor}), ClipperLib.JoinType.jtMiter, ClipperLib.EndType.etClosedPolygon);
   c.Execute(solution, delta);
   return PIXI.Polygon.fromClipperPoints(solution.length ? solution[0] : [], {scalingFactor});
-}
-
-/**
- * Reverse the order of the polygon points.
- * @returns {PIXI.Polygon}
- */
-function reverseOrientation() {
-  const reversed_pts = [];
-  const pts = this.points;
-  const ln = pts.length - 2;
-  for (let i = ln; i >= 0; i -= 2) {
-    reversed_pts.push(pts[i], pts[i + 1]);
-  }
-  this.points = reversed_pts;
-  if ( typeof this._isClockwise !== "undefined" ) this._isClockwise = !this._isClockwise;
-  return this;
 }
 
 /**
