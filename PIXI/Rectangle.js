@@ -6,8 +6,6 @@ CONFIG
 */
 "use strict";
 
-import { WeilerAthertonClipper } from "../WeilerAtherton.js";
-
 // ----------------  ADD METHODS TO THE PIXI.RECTANGLE PROTOTYPE ------------------------
 export function registerPIXIRectangleMethods() {
   CONFIG.GeometryLib ??= {};
@@ -50,11 +48,6 @@ export function registerPIXIRectangleMethods() {
     configurable: true
   });
 
-  Object.defineProperty(PIXI.Rectangle.prototype, "pointsBetween", {
-    value: pointsBetween,
-    writable: true,
-    configurable: true
-  });
 
   Object.defineProperty(PIXI.Rectangle.prototype, "segmentIntersections", {
     value: segmentIntersections,
@@ -164,50 +157,6 @@ function intersectPolygonPIXIRectangle(polygon, {clipType, scalingFactor}={}) {
   return res instanceof PIXI.Polygon ? res : res.toPolygon();
 }
 
-/**
- * Get all the points (corners) for a polygon approximation of a rectangle between two points on the rectangle.
- * Points are clockwise from a to b.
- * @param { Point } a
- * @param { Point } b
- * @return { Point[]}
- */
-function pointsBetween(a, b) {
-  const CSZ = PIXI.Rectangle.CS_ZONES;
-
-  // Assume the point could be outside the rectangle but not inside (which would be undefined).
-  const zoneA = this._getEdgeZone(a);
-  if ( !zoneA ) return [];
-
-  const zoneB = this._getEdgeZone(b);
-  if ( !zoneB ) return [];
-
-  // If on the same wall, return none if b is counterclockwise to a.
-  if ( zoneA === zoneB && foundry.utils.orient2dFast(this.center, a, b) <= 0 ) return [];
-
-  let z = zoneA;
-  const pts = [];
-
-  for ( let i = 0; i < 4; i += 1) {
-    if ( (z & CSZ.LEFT) ) {
-      z !== CSZ.TOPLEFT && pts.push({ x: this.left, y: this.top }); // eslint-disable-line no-unused-expressions
-      z = CSZ.TOP;
-    } else if ( (z & CSZ.TOP) ) {
-      z !== CSZ.TOPRIGHT && pts.push({ x: this.right, y: this.top }); // eslint-disable-line no-unused-expressions
-      z = CSZ.RIGHT;
-    } else if ( (z & CSZ.RIGHT) ) {
-      z !== CSZ.BOTTOMRIGHT && pts.push({ x: this.right, y: this.bottom }); // eslint-disable-line no-unused-expressions
-      z = CSZ.BOTTOM;
-    } else if ( (z & CSZ.BOTTOM) ) {
-      z !== CSZ.BOTTOMLEFT && pts.push({ x: this.left, y: this.bottom }); // eslint-disable-line no-unused-expressions
-      z = CSZ.LEFT;
-    }
-
-    if ( z & zoneB ) break;
-
-  }
-
-  return pts;
-}
 
 /**
  * Get all intersection points for a segment A|B
