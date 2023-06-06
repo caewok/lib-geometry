@@ -8,11 +8,6 @@ import { addClassGetter, addClassMethod } from "../util.js";
 
 // ----------------  ADD METHODS TO THE PIXI.RECTANGLE PROTOTYPE ------------------------
 export function registerPIXIRectangleMethods() {
-  CONFIG.GeometryLib ??= {};
-  CONFIG.GeometryLib.Registered ??= {};
-  if ( CONFIG.GeometryLib.Registered.PIXIRectangle ) return;
-  CONFIG.GeometryLib.Registered.PIXIRectangle = true;
-
   // ----- Getters/Setters ----- //
   addClassGetter(PIXI.Rectangle.prototype, "area", area);
 
