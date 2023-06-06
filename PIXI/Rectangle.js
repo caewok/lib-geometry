@@ -1,6 +1,5 @@
 /* globals
 PIXI,
-ClipperLib,
 CONFIG
 */
 "use strict";
