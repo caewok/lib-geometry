@@ -10,9 +10,15 @@ import { addClassGetter, addClassMethod } from "../util.js";
 export function registerPIXICircleMethods() {
   // ----- Getters/Setters ----- //
   addClassGetter(PIXI.Circle.prototype, "area", area);
+  // center - in v11
 
   // ----- Methods ----- //
+  // segmentIntersections - in v11
+  // pointAtAngle - in v11
   addClassMethod(PIXI.Circle.prototype, "angleAtPoint", angleAtPoint);
+  // pointsForArc - in v11
+  // intersectPolygon - in v11
+  // pointsBetween - in v11
   addClassMethod(PIXI.Circle.prototype, "translate", translate);
   addClassMethod(PIXI.Circle.prototype, "scaledArea", scaledArea);
 }

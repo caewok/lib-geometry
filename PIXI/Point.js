@@ -1,21 +1,24 @@
 /* globals
-CONFIG,
 PIXI,
 foundry
 */
 "use strict";
 
 import { Point3d } from "../3d/Point3d.js";
-import { addClassMethod } from "../util.js";
+import { addClassGetter, addClassMethod } from "../util.js";
 
 // Add methods to PIXI.Point
 export function registerPIXIPointMethods() {
+  // ----- Getters/Setters ----- //
+  addClassGetter(PIXI.Point.prototype, "key", key);
+
   // ----- Static Methods ----- //
   addClassMethod(PIXI.Point, "midPoint", midPoint);
   addClassMethod(PIXI.Point, "fromAngle", fromAngle);
   addClassMethod(PIXI.Point, "distanceBetween", distanceBetween);
   addClassMethod(PIXI.Point, "distanceSquaredBetween", distanceSquaredBetween);
   addClassMethod(PIXI.Point, "angleBetween", angleBetween);
+  addClassMethod(PIXI.Point, "flatMapPoints", flatMapPoints);
   addClassMethod(PIXI.Point, "fromObject", fromObject);
 
   // ----- Methods ----- //
@@ -30,14 +33,13 @@ export function registerPIXIPointMethods() {
   addClassMethod(PIXI.Point.prototype, "normalize", normalize);
   addClassMethod(PIXI.Point.prototype, "to3d", to3d);
   addClassMethod(PIXI.Point.prototype, "projectToward", projectToward);
+  addClassMethod(PIXI.Point.prototype, "towardsPoint", towardsPoint);
+  addClassMethod(PIXI.Point.prototype, "towardsPointSquared", towardsPointSquared);
   addClassMethod(PIXI.Point.prototype, "projectToAxisValue", projectToAxisValue);
   addClassMethod(PIXI.Point.prototype, "translate", translate);
   addClassMethod(PIXI.Point.prototype, "rotate", rotate);
-  addClassMethod(PIXI.Point.prototype, "flatMapPoints", flatMapPoints);
-  addClassMethod(PIXI.Point.prototype, "key", key);
   addClassMethod(PIXI.Point.prototype, "roundDecimals", roundDecimals);
-  addClassMethod(PIXI.Point.prototype, "towardsPoint", towardsPoint);
-  addClassMethod(PIXI.Point.prototype, "towardsPointSquared", towardsPointSquared);
+
 
   // For parallel with Point3d
   addClassMethod(PIXI.Point.prototype, "to2d", function() { return this; });
