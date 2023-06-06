@@ -41,25 +41,6 @@ export function registerPIXICircleMethods() {
   });
 
   /**
-   * Calculate an x,y point on this circle's circumference given an angle
-   * 0: due east
-   * π / 2: due south
-   * π or -π: due west
-   * -π/2: due north
-   * @param {number} angle    Angle of the point, in radians.
-   * @returns {Point}
-   */
-  Object.defineProperty(PIXI.Circle.prototype, "pointAtAngle", {
-    value: function(angle) {
-      return {
-        x: this.x + (this.radius * Math.cos(angle)),
-        y: this.y + (this.radius * Math.sin(angle)) };
-    },
-    writable: true,
-    configurable: true
-  });
-
-  /**
    * Calculate the angle of a point in relation to a circle.
    * This is the angle of a line from the circle center to the point.
    * Reverse of PIXI.Circle.prototype.pointAtAngle.
