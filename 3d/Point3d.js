@@ -24,7 +24,7 @@ export class Point3d extends PIXI.Point {
    * @param {object} obj
    * @returns {Point3d}
    */
-  function fromObject(obj) {
+  fromObject(obj) {
     const pt = super.fromObject(obj);
     pt.z = obj.z ?? obj.elevationZ ?? obj.elevation ?? 0;
     return pt;
