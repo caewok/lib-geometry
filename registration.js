@@ -44,9 +44,7 @@ import { Shadow } from "./Shadow.js";
 // ClipperPaths
 import { ClipperPaths } from "./ClipperPaths.js";
 
-export function registerMethods(category, methods) {
-
-}
+CONFIG.GeometryLib = {};
 
 export function registerGeometry() {
   registerFoundryUtilsMethods();
