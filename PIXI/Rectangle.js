@@ -18,7 +18,6 @@ export function registerPIXIRectangleMethods() {
   addClassGetter(PIXI.Rectangle.prototype, "area", area);
 
   // ----- Methods ----- //
-  addClassMethod(PIXI.Rectangle.prototype, intersectPolygonPIXIRectangle, "intersectPolygon");
   addClassMethod(PIXI.Rectangle.prototype, overlaps, "overlaps");
   addClassMethod(PIXI.Rectangle.prototype, translate, "translate");
   addClassMethod(PIXI.Rectangle.prototype, viewablePoints, "viewablePoints");
@@ -36,31 +35,6 @@ export function registerPIXIRectangleMethods() {
  */
 function area() {
   return this.width * this.height;
-}
-
-/**
- * Intersect this PIXI.Rectangle with a PIXI.Polygon.
- * Currently uses the clipper library or the WeilerAtherton, depending on shape
- * @param {PIXI.Polygon} polygon      A PIXI.Polygon
- * @param {object} [options]          Options which configure how the intersection is computed
- * @param {number} [options.clipType]       The clipper clip type
- * @param {number} [options.scalingFactor]  A scaling factor passed to Polygon#toClipperPoints to preserve precision
- * @returns {PIXI.Polygon|null}       The intersected polygon or null if no solution was present
- */
-function intersectPolygonPIXIRectangle(polygon, {clipType, scalingFactor}={}) {
-  if ( !this.width || !this.height ) return new PIXI.Polygon([]);
-  clipType ??= ClipperLib.ClipType.ctIntersection;
-
-  if ( clipType !== ClipperLib.ClipType.ctIntersection
-    && clipType !== ClipperLib.ClipType.ctUnion) {
-    return polygon.intersectPolygon(this.toPolygon(), {clipType, scalingFactor});
-  }
-
-  const union = clipType === ClipperLib.ClipType.ctUnion;
-  const wa = WeilerAthertonClipper.fromPolygon(polygon, { union });
-  const res = wa.combine(this)[0];
-  if ( !res ) return new PIXI.Polygon([]);
-  return res instanceof PIXI.Polygon ? res : res.toPolygon();
 }
 
 /**
