@@ -52,12 +52,6 @@ export function registerPIXICircleMethods() {
     configurable: true
   });
 
-  Object.defineProperty(PIXI.Circle.prototype, "pointsBetween", {
-    value: pointsBetween,
-    writable: true,
-    configurable: true
-  });
-
   Object.defineProperty(PIXI.Circle.prototype, "translate", {
     value: translate,
     writable: true,
@@ -87,21 +81,6 @@ function area() {
  */
 function translate(dx, dy) {
   return new PIXI.Circle(this.x + dx, this.y + dy, this.radius);
-}
-
-/**
- * Get all the points for a polygon approximation of a circle between two points on the circle.
- * Points are clockwise from a to b.
- * @param {Point} a
- * @param {Point} b
- * @param {object} [options]
- * @param {number} [density]  How many points used to construct the approximation.
- * @return { Point[]}
- */
-function pointsBetween(a, b, { density } = {}) {
-  const fromAngle = this.angleAtPoint(a);
-  const toAngle = this.angleAtPoint(b);
-  return this.pointsForArc(fromAngle, toAngle, { density, includeEndpoints: false });
 }
 
 /**
