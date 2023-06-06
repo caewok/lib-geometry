@@ -22,13 +22,6 @@ export function registerPIXICircleMethods() {
     });
   }
 
-  if ( !Object.hasOwn(PIXI.Circle.prototype, "center") ) {
-    Object.defineProperty(PIXI.Circle.prototype, "center", {
-      get: center,
-      enumerable: false
-    });
-  }
-
   // ----- Methods ----- //
 
   /**
@@ -118,15 +111,6 @@ export function registerPIXICircleMethods() {
  */
 function area() {
   return Math.pow(this.radius * 2) * Math.PI;
-}
-
-/**
- * Determine the center of this circle.
- * Trivial, but used to match center method for other shapes.
- * @returns {PIXI.Point}
- */
-function center() {
-  return new PIXI.Point(this.x, this.y);
 }
 
 /**
