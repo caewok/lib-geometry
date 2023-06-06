@@ -12,9 +12,6 @@ import { Ellipse } from "./Ellipse.js";
 
 // Functions that would go in foundry.utils if that object were extensible
 export function registerFoundryUtilsMethods() {
-  CONFIG.GeometryLib ??= {};
-  if ( CONFIG.GeometryLib.utils ) return;
-
   CONFIG.GeometryLib.utils = {
     orient3dFast,
     quadraticIntersection,

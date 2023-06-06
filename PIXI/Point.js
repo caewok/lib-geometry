@@ -10,11 +10,6 @@ import { addClassMethod } from "../util.js";
 
 // Add methods to PIXI.Point
 export function registerPIXIPointMethods() {
-  CONFIG.GeometryLib ??= {};
-  CONFIG.GeometryLib.Registered ??= {};
-  if ( CONFIG.GeometryLib.Registered.PIXIPoint ) return;
-  CONFIG.GeometryLib.Registered.PIXIPoint = true;
-
   // ----- Static Methods ----- //
   addClassMethod(PIXI.Point, "midPoint", midPoint);
   addClassMethod(PIXI.Point, "fromAngle", fromAngle);

@@ -8,11 +8,6 @@ import { addClassGetter, addClassMethod } from "../util.js";
 
 // ----------------  ADD METHODS TO THE PIXI.CIRCLE PROTOTYPE ------------------------
 export function registerPIXICircleMethods() {
-  CONFIG.GeometryLib ??= {};
-  CONFIG.GeometryLib.Registered ??= {};
-  if ( CONFIG.GeometryLib.Registered.PIXICircle ) return;
-  CONFIG.GeometryLib.Registered.PIXICircle = true;
-
   // ----- Getters/Setters ----- //
   addClassGetter(PIXI.Circle.prototype, "area", area);
 
