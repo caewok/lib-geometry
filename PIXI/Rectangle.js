@@ -11,15 +11,15 @@ export function registerPIXIRectangleMethods() {
   addClassGetter(PIXI.Rectangle.prototype, "area", area);
 
   // ----- Methods ----- //
-  addClassMethod(PIXI.Rectangle.prototype, overlaps, "overlaps");
-  addClassMethod(PIXI.Rectangle.prototype, translate, "translate");
-  addClassMethod(PIXI.Rectangle.prototype, viewablePoints, "viewablePoints");
+  addClassMethod(PIXI.Rectangle.prototype, "overlaps", overlaps);
+  addClassMethod(PIXI.Rectangle.prototype, "translate", translate);
+  addClassMethod(PIXI.Rectangle.prototype, "viewablePoints", viewablePoints);
 
   // ----- Helper methods ----- //
-  addClassMethod(PIXI.Rectangle.prototype, overlapsCircle, "_overlapsCircle");
-  addClassMethod(PIXI.Rectangle.prototype, overlapsPolygon, "_overlapsPolygon");
-  addClassMethod(PIXI.Rectangle.prototype, overlapsRectangle, "_overlapsRectangle");
-  addClassMethod(PIXI.Rectangle.prototype, scaledArea, "scaledArea");
+  addClassMethod(PIXI.Rectangle.prototype, "_overlapsCircle", overlapsCircle);
+  addClassMethod(PIXI.Rectangle.prototype, "_overlapsPolygon", overlapsPolygon);
+  addClassMethod(PIXI.Rectangle.prototype, "_overlapsRectangle", overlapsRectangle);
+  addClassMethod(PIXI.Rectangle.prototype, "scaledArea", scaledArea);
 }
 
 /**

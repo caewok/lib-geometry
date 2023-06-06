@@ -15,24 +15,24 @@ export function registerPIXIPolygonMethods() {
   addClassGetter(PIXI.Polygon.prototype, "center", centroid);
   addClassGetter(PIXI.Polygon.prototype, "isClockwise", isClockwise);
 
+  // ----- Iterators ----- //
+  addClassMethod(PIXI.Polygon.prototype, "iterateEdges", iterateEdges);
+  addClassMethod(PIXI.Polygon.prototype, "iteratePoints", iteratePoints);
+
   // ----- Methods ----- //
-  addClassMethod(PIXI.Polygon.prototype, clipperClip, "clipperClip");
-  addClassMethod(PIXI.Polygon.prototype, convexhull, "convexhull");
-  addClassMethod(PIXI.Polygon.prototype, isSegmentEnclosed, "isSegmentEnclosed");
-  addClassMethod(PIXI.Polygon.prototype, linesCross, "linesCross");
-  addClassMethod(PIXI.Polygon.prototype, overlaps, "overlaps");
-  addClassMethod(PIXI.Polygon.prototype, pad, "pad");
-  addClassMethod(PIXI.Polygon.prototype, translate, "translate");
-  addClassMethod(PIXI.Polygon.prototype, viewablePoints, "viewablePoints");
+  addClassMethod(PIXI.Polygon.prototype, "clipperClip", clipperClip);
+  addClassMethod(PIXI.Polygon.prototype, "convexhull", convexhull);
+  addClassMethod(PIXI.Polygon.prototype, "isSegmentEnclosed", isSegmentEnclosed);
+  addClassMethod(PIXI.Polygon.prototype, "linesCross", linesCross);
+  addClassMethod(PIXI.Polygon.prototype, "overlaps", overlaps);
+  addClassMethod(PIXI.Polygon.prototype, "pad", pad);
+  addClassMethod(PIXI.Polygon.prototype, "translate", translate);
+  addClassMethod(PIXI.Polygon.prototype, "viewablePoints", viewablePoints);
 
   // ----- Helper/Internal Methods ----- //
-  addClassMethod(PIXI.Polygon.prototype, overlapsPolygon, "_overlapsPolygon");
-  addClassMethod(PIXI.Polygon.prototype, overlapsCircle, "_overlapsCircle");
-  addClassMethod(PIXI.Polygon.prototype, scaledArea, "scaledArea");
-
-  // ----- Iterators ----- //
-//   addClassMethod(PIXI.Polygon.prototype, iterateEdges, "iterateEdges");
-//   addClassMethod(PIXI.Polygon.prototype, iteratePoints, "iteratePoints");
+  addClassMethod(PIXI.Polygon.prototype, "_overlapsPolygon", overlapsPolygon);
+  addClassMethod(PIXI.Polygon.prototype, "_overlapsCircle", overlapsCircle);
+  addClassMethod(PIXI.Polygon.prototype, "scaledArea", scaledArea);
 }
 
 /**
