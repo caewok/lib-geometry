@@ -23,12 +23,6 @@ export function registerPIXIRectangleMethods() {
 
   // ----- Methods ----- //
 
-  Object.defineProperty(PIXI.Rectangle.prototype, "_getEdgeZone", {
-    value: _getEdgeZone,
-    writable: true,
-    configurable: true
-  });
-
   Object.defineProperty(PIXI.Rectangle.prototype, "intersectPolygon", {
     value: intersectPolygonPIXIRectangle,
     writable: true,
@@ -93,28 +87,6 @@ export function registerPIXIRectangleMethods() {
  */
 function area() {
   return this.width * this.height;
-}
-
-/**
- * Calculate the rectangle Zone for a given point located around, on, or in the rectangle.
- * https://en.wikipedia.org/wiki/Cohen%E2%80%93Sutherland_algorithm
- *
- * This differs from _getZone in how points on the edge are treated: they are not considered inside.
- *
- * @param {Point} p     Point to test for location relative to the rectangle
- * @returns {integer}
- */
-function _getEdgeZone(p) {
-  const CSZ = PIXI.Rectangle.CS_ZONES;
-  let code = CSZ.INSIDE;
-
-  if ( p.x < this.x || p.x.almostEqual(this.x) ) code |= CSZ.LEFT;
-  else if ( p.x > this.right || p.x.almostEqual(this.right) ) code |= CSZ.RIGHT;
-
-  if ( p.y < this.y || p.y.almostEqual(this.y) ) code |= CSZ.TOP;
-  else if ( p.y > this.bottom || p.y.almostEqual(this.bottom) ) code |= CSZ.BOTTOM;
-
-  return code;
 }
 
 /**
