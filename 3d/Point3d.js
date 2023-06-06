@@ -30,6 +30,18 @@ export class Point3d extends PIXI.Point {
     return pt;
   }
 
+
+  /**
+   * Use Math.roundDecimals to round the point coordinates to a certain number of decimals
+   * @param {number} places   Number of decimals places to use when rounding.
+   * @returns {this}
+   */
+  roundDecimals(places = 0) {
+    super.roundDecimals(places);
+    this.z = Math.roundDecimals(this.z, places);
+    return this;
+  }
+
   /**
    * Point between two points on a line
    * @param {Point3d} a

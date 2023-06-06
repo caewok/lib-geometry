@@ -35,9 +35,21 @@ export function registerPIXIPointMethods() {
   addClassMethod(PIXI.Point.prototype, "rotate", rotate);
   addClassMethod(PIXI.Point.prototype, "flatMapPoints", flatMapPoints);
   addClassMethod(PIXI.Point.prototype, "key", key);
+  addClassMethod(PIXI.Point.prototype, "roundDecimals", roundDecimals);
 
   // For parallel with Point3d
   addClassMethod(PIXI.Point.prototype, "to2d", function() { return this; });
+}
+
+/**
+ * Use Math.roundDecimals to round the point coordinates to a certain number of decimals
+ * @param {number} places   Number of decimals places to use when rounding.
+ * @returns {this}
+ */
+function roundDecimals(places = 0) {
+  this.x = Math.roundDecimals(this.x, places);
+  this.y = Math.roundDecimals(this.y, places);
+  return this;
 }
 
 /**
