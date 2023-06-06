@@ -40,12 +40,6 @@ export function registerPIXICircleMethods() {
     configurable: true
   });
 
-  Object.defineProperty(PIXI.Circle.prototype, "intersectPolygon", {
-    value: intersectPolygon,
-    writable: true,
-    configurable: true
-  });
-
   Object.defineProperty(PIXI.Circle.prototype, "translate", {
     value: translate,
     writable: true,
@@ -76,34 +70,6 @@ function area() {
 function translate(dx, dy) {
   return new PIXI.Circle(this.x + dx, this.y + dy, this.radius);
 }
-
-/**
- * Intersect this PIXI.Circle with a PIXI.Polygon.
- * Use the WeilerAtherton algorithm
- * @param {PIXI.Polygon} polygon      A PIXI.Polygon
- * @param {object} [options]          Options which configure how the intersection is computed
- * @param {number} [options.density]  The number of points which defines the density of approximation
- * @returns {PIXI.Polygon}            The intersected polygon
- */
-function intersectPolygon(polygon, options = {}) {
-  if ( !this.radius ) return new PIXI.Polygon([]);
-  options.clipType ??= ClipperLib.ClipType.ctIntersection;
-
-  if ( options.clipType !== ClipperLib.ClipType.ctIntersection
-    && options.clipType !== ClipperLib.ClipType.ctUnion) {
-    const approx = this.toPolygon({ density: options.density });
-    return polygon.intersectPolygon(approx, options);
-  }
-
-  const union = options.clipType === ClipperLib.ClipType.ctUnion;
-  const wa = WeilerAthertonClipper.fromPolygon(polygon, { union, density: options.density });
-  const res = wa.combine(this)[0];
-
-  if ( !res ) return new PIXI.Polygon([]);
-
-  return res instanceof PIXI.Polygon ? res : res.toPolygon();
-}
-
 
 // Needed to change 1 line in the quadraticIntersection, but cannot override, so...
 // May as well trim down lineCircleIntersection a bit while we are at it...
