@@ -1,10 +1,11 @@
 /* globals
 PIXI,
-foundry,
 ClipperLib,
 CONFIG
 */
 "use strict";
+
+import { addClassGetter, addClassMethod } from "../util.js";
 
 // ----------------  ADD METHODS TO THE PIXI.RECTANGLE PROTOTYPE ------------------------
 export function registerPIXIRectangleMethods() {
@@ -14,65 +15,19 @@ export function registerPIXIRectangleMethods() {
   CONFIG.GeometryLib.Registered.PIXIRectangle = true;
 
   // ----- Getters/Setters ----- //
-  if ( !Object.hasOwn(PIXI.Rectangle.prototype, "area") ) {
-    Object.defineProperty(PIXI.Rectangle.prototype, "area", {
-      get: area,
-      enumerable: false
-    });
-  }
+  addClassGetter(PIXI.Rectangle.prototype, "area", area);
 
   // ----- Methods ----- //
-
-  Object.defineProperty(PIXI.Rectangle.prototype, "intersectPolygon", {
-    value: intersectPolygonPIXIRectangle,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Rectangle.prototype, "overlaps", {
-    value: overlaps,
-    writable: true,
-    configurable: true
-  });
-
-
-  Object.defineProperty(PIXI.Rectangle.prototype, "translate", {
-    value: translate,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Rectangle.prototype, "viewablePoints", {
-    value: viewablePoints,
-    writable: true,
-    configurable: true
-  });
+  addClassMethod(PIXI.Rectangle.prototype, intersectPolygonPIXIRectangle, "intersectPolygon");
+  addClassMethod(PIXI.Rectangle.prototype, overlaps, "overlaps");
+  addClassMethod(PIXI.Rectangle.prototype, translate, "translate");
+  addClassMethod(PIXI.Rectangle.prototype, viewablePoints, "viewablePoints");
 
   // ----- Helper methods ----- //
-
-  Object.defineProperty(PIXI.Rectangle.prototype, "_overlapsCircle", {
-    value: overlapsCircle,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Rectangle.prototype, "_overlapsPolygon", {
-    value: overlapsPolygon,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Rectangle.prototype, "_overlapsRectangle", {
-    value: overlapsRectangle,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Rectangle.prototype, "scaledArea", {
-    value: scaledArea,
-    writable: true,
-    configurable: true
-  });
+  addClassMethod(PIXI.Rectangle.prototype, overlapsCircle, "_overlapsCircle");
+  addClassMethod(PIXI.Rectangle.prototype, overlapsPolygon, "_overlapsPolygon");
+  addClassMethod(PIXI.Rectangle.prototype, overlapsRectangle, "_overlapsRectangle");
+  addClassMethod(PIXI.Rectangle.prototype, scaledArea, "scaledArea");
 }
 
 /**
