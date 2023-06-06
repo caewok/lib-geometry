@@ -132,12 +132,6 @@ export function registerPIXIPolygonMethods() {
     configurable: true
   });
 
-  Object.defineProperty(PIXI.Polygon.prototype, "signedArea", {
-    value: signedArea,
-    writable: true,
-    configurable: true
-  });
-
 }
 
 /**
@@ -488,41 +482,6 @@ function reverseOrientation() {
  */
 function scaledArea({ scalingFactor = 1 } = {}) {
   return signedArea({ scalingFactor });
-}
-
-/**
- * Signed area of polygon
- * Similar approach to ClipperLib.Clipper.Area.
- * @param {object} [options]
- * @param {number|undefined} [scalingFactor]  If defined, will scale like with PIXI.Polygon.prototype.toClipperPoints.
- * @returns {number}  Positive if clockwise. (b/c y-axis is reversed in Foundry)
- */
-function signedArea({ scalingFactor } = {}) {
-  const pts = [...this.iteratePoints({close: true})];
-
-  if ( scalingFactor ) pts.forEach(pt => {
-    pt.x = Math.roundFast(pt.x * scalingFactor);
-    pt.y = Math.roundFast(pt.y * scalingFactor);
-  });
-
-  const ln = pts.length;
-  if ( ln < 4 ) return 0; // Incl. closing point, should have 4
-
-  // (first + second) * (first - second)
-  // ...
-  // (last + first) * (last - first)
-
-  let area = 0;
-  const iter = ln - 1;
-  for ( let i = 0; i < iter; i += 1 ) {
-    const iPt = pts[i];
-    const jPt = pts[i + 1];
-    area += (iPt.x + jPt.x) * (iPt.y - jPt.y);
-  }
-
-  if ( scalingFactor ) area /= Math.pow(scalingFactor, 2);
-
-  return -area * 0.5;
 }
 
 /**
