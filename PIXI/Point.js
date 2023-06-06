@@ -21,6 +21,7 @@ export function registerPIXIPointMethods() {
   addClassMethod(PIXI.Point, "distanceBetween", distanceBetween);
   addClassMethod(PIXI.Point, "distanceSquaredBetween", distanceSquaredBetween);
   addClassMethod(PIXI.Point, "angleBetween", angleBetween);
+  addClassMethod(PIXI.Point, "fromObject", fromObject);
 
   // ----- Methods ----- //
   addClassMethod(PIXI.Point.prototype, "add", add2d);
@@ -42,6 +43,17 @@ export function registerPIXIPointMethods() {
 
   // For parallel with Point3d
   addClassMethod(PIXI.Point.prototype, "to2d", function() { return this; });
+}
+
+/**
+ * Construct a PIXI point from any object that has x and y properties.
+ * @param {object} obj
+ * @returns {PIXI.Point}
+ */
+function fromObject(obj) {
+  const x = obj.x ?? 0;
+  const y = obj.y ?? 0;
+  return new this(x, y);
 }
 
 /**

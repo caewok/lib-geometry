@@ -19,6 +19,18 @@ export class Point3d extends PIXI.Point {
   }
 
   /**
+   * Construct a Point3d from any object that has x and y and z properties.
+   * Recognizes elevationZ and elevation as potential z properties.
+   * @param {object} obj
+   * @returns {Point3d}
+   */
+  function fromObject(obj) {
+    const pt = super.fromObject(obj);
+    pt.z = obj.z ?? obj.elevationZ ?? obj.elevation ?? 0;
+    return pt;
+  }
+
+  /**
    * Point between two points on a line
    * @param {Point3d} a
    * @param {Point3d} b
