@@ -6,6 +6,8 @@ CONFIG
 */
 "use strict";
 
+import { addClassGetter, addClassMethod } from "../util.js";
+
 // --------- ADD METHODS TO THE PIXI.POLYGON PROTOTYPE ----- //
 export function registerPIXIPolygonMethods() {
   CONFIG.GeometryLib ??= {};
@@ -14,119 +16,29 @@ export function registerPIXIPolygonMethods() {
   CONFIG.GeometryLib.Registered.PIXIPolygon = true;
 
   // ----- Getters/Setters ----- //
-
-  if ( !Object.hasOwn(PIXI.Polygon.prototype, "area") ) {
-    Object.defineProperty(PIXI.Polygon.prototype, "area", {
-      get: area,
-      enumerable: false
-    });
-  }
-
-  if ( !Object.hasOwn(PIXI.Polygon.prototype, "center") ) {
-    Object.defineProperty(PIXI.Polygon.prototype, "center", {
-      get: centroid,
-      enumerable: false
-    });
-  }
-
-  if ( !Object.hasOwn(PIXI.Polygon.prototype, "isClockwise") ) {
-    Object.defineProperty(PIXI.Polygon.prototype, "isClockwise", {
-      get: isClockwise,
-      enumerable: false
-    });
-  }
+  addClassGetter(PIXI.Polygon.prototype, "area", area);
+  addClassGetter(PIXI.Polygon.prototype, "center", centroid);
+  addClassGetter(PIXI.Polygon.prototype, "isClockwise", isClockwise);
 
   // ----- Iterators ----- //
-
-  Object.defineProperty(PIXI.Polygon.prototype, "iterateEdges", {
-    value: iterateEdges,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Polygon.prototype, "iteratePoints", {
-    value: iteratePoints,
-    writable: true,
-    configurable: true
-  });
+  addClassMethod(PIXI.Polygon.prototype, iterateEdges, "iterateEdges");
+  addClassMethod(PIXI.Polygon.prototype, iteratePoints, "iteratePoints");
 
   // ----- Methods ----- //
-
-  Object.defineProperty(PIXI.Polygon.prototype, "clipperClip", {
-    value: clipperClip,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Polygon, "convexhull", {
-    value: convexhull,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Polygon.prototype, "isSegmentEnclosed", {
-    value: isSegmentEnclosed,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Polygon.prototype, "linesCross", {
-    value: linesCross,
-    writable: true,
-    configurable: true
-  });
-
-
-  Object.defineProperty(PIXI.Polygon.prototype, "overlaps", {
-    value: overlaps,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Polygon.prototype, "pad", {
-    value: pad,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Polygon.prototype, "translate", {
-    value: translate,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Polygon.prototype, "viewablePoints", {
-    value: viewablePoints,
-    writable: true,
-    configurable: true
-  });
+  addClassMethod(PIXI.Polygon.prototype, clipperClip, "clipperClip");
+  addClassMethod(PIXI.Polygon.prototype, convexhull, "convexhull");
+  addClassMethod(PIXI.Polygon.prototype, isSegmentEnclosed, "isSegmentEnclosed");
+  addClassMethod(PIXI.Polygon.prototype, linesCross, "linesCross");
+  addClassMethod(PIXI.Polygon.prototype, overlaps, "overlaps");
+  addClassMethod(PIXI.Polygon.prototype, pad, "pad");
+  addClassMethod(PIXI.Polygon.prototype, translate, "translate");
+  addClassMethod(PIXI.Polygon.prototype, viewablePoints, "viewablePoints");
 
   // ----- Helper/Internal Methods ----- //
-
-  Object.defineProperty(PIXI.Polygon.prototype, "_overlapsPolygon", {
-    value: overlapsPolygon,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Polygon.prototype, "_overlapsCircle", {
-    value: overlapsCircle,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Polygon.prototype, "_overlapsCircle", {
-    value: overlapsCircle,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Polygon.prototype, "scaledArea", {
-    value: scaledArea,
-    writable: true,
-    configurable: true
-  });
-
+  addClassMethod(PIXI.Polygon.prototype, overlapsPolygon, "_overlapsPolygon");
+  addClassMethod(PIXI.Polygon.prototype, overlapsCircle, "_overlapsCircle");
+  addClassMethod(PIXI.Polygon.prototype, scaledArea, "scaledArea");
+  addClassMethod(PIXI.Polygon.prototype, signedArea, "signedArea");
 }
 
 /**
