@@ -45,11 +45,8 @@ import { Shadow } from "./Shadow.js";
 import { ClipperPaths } from "./ClipperPaths.js";
 
 export function registerGeometry() {
-  registerPIXIPolygonMethods();
-  registerPIXICircleMethods();
-  registerPIXIRectangleMethods();
-  registerPIXIPointMethods();
   registerFoundryUtilsMethods();
+  registerPIXIMethods();
 
   registerCenteredPolygons();
   registerRegularPolygons();
@@ -60,9 +57,19 @@ export function registerGeometry() {
   registerClipperPaths();
 }
 
+export function registerPIXIMethods() {
+  registerPIXIPolygonMethods();
+  registerPIXICircleMethods();
+  registerPIXIRectangleMethods();
+  registerPIXIPointMethods();
+}
+
 export function registerCenteredPolygons() {
   CONFIG.GeometryLib ??= {};
   if ( CONFIG.GeometryLib.CenteredPolygons ) return;
+
+  // Dependencies
+  registerRegularPolygons();
 
   CONFIG.GeometryLib.CenteredPolygons = {
     CenteredPolygonBase,
@@ -74,6 +81,10 @@ export function registerCenteredPolygons() {
 export function registerRegularPolygons() {
   CONFIG.GeometryLib ??= {};
   if ( CONFIG.GeometryLib.RegularPolygons ) return;
+
+  // Dependencies
+  registerFoundryUtilsMethods();
+  registerPIXIMethods();
 
   CONFIG.GeometryLib.RegularPolygons = {
     RegularPolygon,
