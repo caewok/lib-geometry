@@ -36,6 +36,8 @@ export function registerPIXIPointMethods() {
   addClassMethod(PIXI.Point.prototype, "flatMapPoints", flatMapPoints);
   addClassMethod(PIXI.Point.prototype, "key", key);
   addClassMethod(PIXI.Point.prototype, "roundDecimals", roundDecimals);
+  addClassMethod(PIXI.Point.prototype, "towardsPoint", towardsPoint);
+  addClassMethod(PIXI.Point.prototype, "towardsPointSquared", towardsPointSquared);
 
   // For parallel with Point3d
   addClassMethod(PIXI.Point.prototype, "to2d", function() { return this; });
@@ -304,6 +306,37 @@ function projectToward(other, t, outPoint) {
   this.add(delta.multiplyScalar(t, outPoint), outPoint);
   return outPoint;
 }
+
+/**
+ * Project a certain distance toward a known point.
+ * @param {PIXI.Point} other    The point toward which to project
+ * @param {number} distance     The distance to move from this toward other.
+ * @returns {Point3d|PIXI.Point}
+ */
+function towardsPoint(other, distance, outPoint) {
+  outPoint ??= new this.constructor();
+
+  const delta = other.subtract(this, outPoint);
+  const t = distance / delta.magnitude();
+  this.add(delta.multiplyScalar(t, outPoint), outPoint);
+  return outPoint;
+}
+
+/**
+ * Project a certain squared-distance toward a known point.
+ * @param {PIXI.Point} other    The point toward which to project
+ * @param {number} distance2     The distance-squared to move from this toward other.
+ * @returns {Point3d|PIXI.Point}
+ */
+function towardsPointSquared(other, distance2, outPoint) {
+  outPoint ??= new this.constructor();
+
+  const delta = other.subtract(this, outPoint);
+  const t = Math.sqrt(distance2 / delta.magnitudeSquared());
+  this.add(delta.multiplyScalar(t, outPoint), outPoint);
+  return outPoint;
+}
+
 
 /**
  * Find the point along a line from this point to another point
