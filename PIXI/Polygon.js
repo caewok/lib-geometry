@@ -38,7 +38,6 @@ export function registerPIXIPolygonMethods() {
   addClassMethod(PIXI.Polygon.prototype, overlapsPolygon, "_overlapsPolygon");
   addClassMethod(PIXI.Polygon.prototype, overlapsCircle, "_overlapsCircle");
   addClassMethod(PIXI.Polygon.prototype, scaledArea, "scaledArea");
-  addClassMethod(PIXI.Polygon.prototype, signedArea, "signedArea");
 }
 
 /**
@@ -372,8 +371,44 @@ function pad(delta, { miterLimit = 2, scalingFactor = 1 } = {}) {
  * @returns {number}  Positive if clockwise. (b/c y-axis is reversed in Foundry)
  */
 function scaledArea({ scalingFactor = 1 } = {}) {
-  return signedArea({ scalingFactor });
+  return signedArea.call(this, { scalingFactor });
 }
+
+/**
+ * Signed area of polygon
+ * Similar approach to ClipperLib.Clipper.Area.
+ * @param {object} [options]
+ * @param {number|undefined} [scalingFactor]  If defined, will scale like with PIXI.Polygon.prototype.toClipperPoints.
+ * @returns {number}  Positive if clockwise. (b/c y-axis is reversed in Foundry)
+ */
+function signedArea({ scalingFactor } = {}) {
+  const pts = [...this.iteratePoints({close: true})];
+
+  if ( scalingFactor ) pts.forEach(pt => {
+    pt.x = Math.roundFast(pt.x * scalingFactor);
+    pt.y = Math.roundFast(pt.y * scalingFactor);
+  });
+
+  const ln = pts.length;
+  if ( ln < 4 ) return 0; // Incl. closing point, should have 4
+
+  // (first + second) * (first - second)
+  // ...
+  // (last + first) * (last - first)
+
+  let area = 0;
+  const iter = ln - 1;
+  for ( let i = 0; i < iter; i += 1 ) {
+    const iPt = pts[i];
+    const jPt = pts[i + 1];
+    area += (iPt.x + jPt.x) * (iPt.y - jPt.y);
+  }
+
+  if ( scalingFactor ) area /= Math.pow(scalingFactor, 2);
+
+  return -area * 0.5;
+}
+
 
 /**
  * Test the point against existing hull points.
