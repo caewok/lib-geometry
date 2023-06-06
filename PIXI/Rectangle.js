@@ -36,12 +36,6 @@ export function registerPIXIRectangleMethods() {
   });
 
 
-  Object.defineProperty(PIXI.Rectangle.prototype, "segmentIntersections", {
-    value: segmentIntersections,
-    writable: true,
-    configurable: true
-  });
-
   Object.defineProperty(PIXI.Rectangle.prototype, "translate", {
     value: translate,
     writable: true,
@@ -112,56 +106,6 @@ function intersectPolygonPIXIRectangle(polygon, {clipType, scalingFactor}={}) {
   const res = wa.combine(this)[0];
   if ( !res ) return new PIXI.Polygon([]);
   return res instanceof PIXI.Polygon ? res : res.toPolygon();
-}
-
-
-/**
- * Get all intersection points for a segment A|B
- * Intersections are sorted from A to B.
- * @param {Point} a   Endpoint A of the segment
- * @param {Point} b   Endpoint B of the segment
- * @returns {Point[]} Array of intersections or empty.
- */
-function segmentIntersections(a, b) {
-  // Follows structure of lineSegmentIntersects
-  const zoneA = this._getZone(a);
-  const zoneB = this._getZone(b);
-
-  if ( !(zoneA | zoneB) ) return []; // Bitwise OR is 0: both points inside rectangle.
-  if ( zoneA & zoneB ) return []; // Bitwise AND is not 0: both points share outside zone
-
-  // Reguler AND: one point inside, one outside
-  // Otherwise, both points outside
-  const zones = !(zoneA && zoneB) ? [zoneA || zoneB] : [zoneA, zoneB];
-
-  // If 2 zones, line likely intersects two edges,
-  // but some possibility that the line starts at, say, center left
-  // and moves to center top which means it may or may not cross the rectangle.
-  // Check so we can use lineLineIntersection below
-  if ( zones.length === 2 && !this.lineSegmentIntersects(a, b) ) return [];
-
-  const CSZ = PIXI.Rectangle.CS_ZONES;
-  const lsi = foundry.utils.lineSegmentIntersects;
-  const lli = foundry.utils.lineLineIntersection;
-  const { leftEdge, rightEdge, bottomEdge, topEdge } = this;
-  const ixs = [];
-  for ( const z of zones ) {
-    let ix;
-    if ( (z & CSZ.LEFT)
-      && lsi(leftEdge.A, leftEdge.B, a, b)) ix = lli(leftEdge.A, leftEdge.B, a, b);
-    if ( !ix && (z & CSZ.RIGHT)
-      && lsi(rightEdge.A, rightEdge.B, a, b)) ix = lli(rightEdge.A, rightEdge.B, a, b);
-    if ( !ix && (z & CSZ.TOP)
-      && lsi(topEdge.A, topEdge.B, a, b)) ix = lli(topEdge.A, topEdge.B, a, b);
-    if ( !ix && (z & CSZ.BOTTOM)
-      && lsi(bottomEdge.A, bottomEdge.B, a, b)) ix = lli(bottomEdge.A, bottomEdge.B, a, b);
-
-    // The ix should always be a point by now
-    if ( !ix ) console.warn("PIXI.Rectangle.prototype.segmentIntersections returned a null point.");
-    ixs.push(ix);
-  }
-
-  return ixs;
 }
 
 /**
