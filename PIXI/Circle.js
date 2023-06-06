@@ -24,21 +24,6 @@ export function registerPIXICircleMethods() {
 
   // ----- Methods ----- //
 
-  /**
-   * Get all intersection points for a segment A|B
-   * Intersections are sorted from A to B.
-   * @param {Point} a
-   * @param {Point} b
-   * @returns {Point[]}
-   */
-  Object.defineProperty(PIXI.Circle.prototype, "segmentIntersections", {
-    value: function(a, b) {
-      const ixs = CONFIG.GeometryLib.utils.lineCircleIntersection(a, b, this, this.radius);
-      return ixs.intersections;
-    },
-    writable: true,
-    configurable: true
-  });
 
   /**
    * Calculate the angle of a point in relation to a circle.
