@@ -15,10 +15,6 @@ export function registerPIXIPolygonMethods() {
   addClassGetter(PIXI.Polygon.prototype, "center", centroid);
   addClassGetter(PIXI.Polygon.prototype, "isClockwise", isClockwise);
 
-  // ----- Iterators ----- //
-  addClassMethod(PIXI.Polygon.prototype, iterateEdges, "iterateEdges");
-  addClassMethod(PIXI.Polygon.prototype, iteratePoints, "iteratePoints");
-
   // ----- Methods ----- //
   addClassMethod(PIXI.Polygon.prototype, clipperClip, "clipperClip");
   addClassMethod(PIXI.Polygon.prototype, convexhull, "convexhull");
@@ -33,6 +29,10 @@ export function registerPIXIPolygonMethods() {
   addClassMethod(PIXI.Polygon.prototype, overlapsPolygon, "_overlapsPolygon");
   addClassMethod(PIXI.Polygon.prototype, overlapsCircle, "_overlapsCircle");
   addClassMethod(PIXI.Polygon.prototype, scaledArea, "scaledArea");
+
+  // ----- Iterators ----- //
+  addClassMethod(PIXI.Polygon.prototype, iterateEdges, "iterateEdges");
+  addClassMethod(PIXI.Polygon.prototype, iteratePoints, "iteratePoints");
 }
 
 /**
