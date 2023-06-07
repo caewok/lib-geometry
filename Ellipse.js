@@ -207,6 +207,36 @@ export class Ellipse extends PIXI.Ellipse {
   }
 
   /**
+   * Determine if the point is on or nearly on this polygon.
+   * @param {Point} point     Point to test
+   * @param {number} epsilon  Tolerated margin of error
+   * @returns {boolean}       Is the point on the circle within the allowed tolerance?
+   */
+  pointIsOn(point, epsilon = 1e-08) {
+    const { width, height } = this;
+    if ( width <= 0 || height <= 0 ) return false;
+
+    // Move point to Ellipse-space
+    const pt = PIXI.Point.fromObject(point);
+    this.fromCartesianCoords(pt, pt);
+
+    // Reject if x is outside the bounds
+    if ( pt.x < -width
+      || pt.x > width
+      || pt.y < -height
+      || pt.y > height ) return false;
+
+    // Just like PIXI.Ellipse.prototype.contains but we are already at 0, 0
+    // Normalize the coords to an ellipse
+    let normx = (pt.x / width);
+    let normy = (pt.y / height);
+    normx *= normx;
+    normy *= normy;
+    return (normx + normy).almostEqual(1, epsilon);
+  }
+
+
+  /**
    * Convert to a polygon
    * @return {PIXI.Polygon}
    */

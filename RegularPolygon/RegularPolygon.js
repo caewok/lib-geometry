@@ -220,13 +220,35 @@ export class RegularPolygon extends PIXI.Polygon {
     // Use orientation to test the point.
     // Moving clockwise, must be clockwise to each side.
     const { fixedPoints: fp, numSides } = this;
+    const orient2dFast = foundry.utils.orient2dFast;
     for ( let i = 0; i < numSides; i += 1 ) {
       const fp0 = fp[i];
       const fp1 = fp[(i + 1) % numSides];
-      if ( foundry.utils.orient2dFast(fp0, fp1, pt) >= 0 ) return false;
+      if ( orient2dFast(fp0, fp1, pt) >= 0 ) return false;
     }
 
     return true;
+  }
+
+  /**
+   * Determine if the point is on or nearly on this polygon.
+   * @param {Point} point     Point to test
+   * @param {number} epsilon  Tolerated margin of error
+   * @returns {boolean}       Is the point on the circle within the allowed tolerance?
+   */
+  pointIsOn(point, epsilon = 1e-08) {
+    const closestPointToSegment = foundry.utils.closestPointToSegment;
+    const pt = this.fromCartesianCoords(PIXI.Point.fromObject(point));
+
+    // Test each side in turn.
+    const { fixedPoints: fp, numSides } = this;
+    for ( let i = 0; i < numSides; i += 1 ) {
+      const fp0 = fp[i];
+      const fp1 = fp[(i + 1) % numSides];
+      const closestPoint = closestPointToSegment(point, fp0, fp1);
+      if ( pt.almostEqual(closestPoint, epsilon) ) return true;
+    }
+    return false;
   }
 
   /**
