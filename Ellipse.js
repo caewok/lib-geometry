@@ -294,6 +294,7 @@ export class Ellipse extends PIXI.Ellipse {
 
     // Default to the larger radius for density
     density ??= PIXI.Circle.approximateVertexDensity(this.major);
+    clipType ??= WeilerAthertonClipper.CLIP_TYPES.INTERSECT;
 
     // Use Weiler-Atherton for efficient intersection or union.
     if ( weilerAtherton ) {

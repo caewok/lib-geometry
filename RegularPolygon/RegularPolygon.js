@@ -366,7 +366,7 @@ export class RegularPolygon extends PIXI.Polygon {
    */
   _intersectPolygon(polygon, { density, clipType, weilerAtherton = true, ...options } = {}) {
     if ( !this.radius ) return new PIXI.Polygon([]);
-    clipType ??= ClipperLib.ClipType.ctIntersection;
+    clipType ??= WeilerAthertonClipper.CLIP_TYPES.INTERSECT;
 
     // Use Weiler-Atherton for efficient intersection or union.
     if ( weilerAtherton ) {
