@@ -186,6 +186,7 @@ export class RegularPolygon extends PIXI.Polygon {
    */
   fromCartesianCoords(a, outPoint) {
     outPoint ??= new PIXI.Point;
+    a = PIXI.Point.fromObject(a);
 
     a.translate(-this.x, -this.y, outPoint).rotate(-this.radians, outPoint);
     return outPoint;
@@ -199,6 +200,7 @@ export class RegularPolygon extends PIXI.Polygon {
    */
   toCartesianCoords(a, outPoint) {
     outPoint ??= new PIXI.Point;
+    a = PIXI.Point.fromObject(a);
 
     a.rotate(this.radians, outPoint).translate(this.x, this.y, outPoint);
     return outPoint;
