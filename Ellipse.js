@@ -1,6 +1,5 @@
 /* globals
 PIXI,
-ClipperLib,
 WeilerAthertonClipper
 */
 "use strict";
@@ -285,35 +284,26 @@ export class Ellipse extends PIXI.Ellipse {
    * Use WeilerAtherton to perform precise intersect.
    * @param {PIXI.Polygon} polygon      A PIXI.Polygon
    * @param {object} [options]          Options which configure how the intersection is computed
-   * @param {number} [options.density]        Number of points in the polygon approximation of the ellipse
-   * @param {number} [options.clipType]       The clipper clip type (union or intersect will use WA)
-   * @param {number} [options.scalingFactor]  A scaling factor passed to Polygon#toClipperPoints to preserve precision
+   * @param {number} [options.density]              The number of points which defines the density of approximation
+   * @param {number} [options.clipType]             The clipper clip type
+   * @param {string} [options.weilerAtherton=true]  Use the Weiler-Atherton algorithm. Otherwise, use Clipper.
    * @returns {PIXI.Polygon|null}       The intersected polygon or null if no solution was present
    */
-  intersectPolygon(polygon, options) {
+  intersectPolygon(polygon, { density, clipType, weilerAtherton=true, ...options } = {}) {
     if ( !this.major || !this.minor ) return new PIXI.Polygon([]);
 
     // Default to the larger radius for density
-    options.density ??= PIXI.Circle.approximateVertexDensity(this.major);
+    density ??= PIXI.Circle.approximateVertexDensity(this.major);
 
-    options.clipType ??= ClipperLib.ClipType.ctIntersection;
-    if ( options.clipType !== ClipperLib.ClipType.ctIntersection
-      && options.clipType !== ClipperLib.ClipType.ctUnion) {
-      const ellipsePolygon = this.toPolygon({ density: options.density });
-      return polygon.intersectPolygon(ellipsePolygon, options);
+    // Use Weiler-Atherton for efficient intersection or union.
+    if ( weilerAtherton ) {
+      const res = WeilerAthertonClipper.combine(polygon, this, { clipType, density, ...options });
+      if ( !res.length ) return new PIXI.Polygon([]);
+      return res[0];
     }
 
-    polygon._preWApoints = [...polygon.points];
-
-    const union = options.clipType === ClipperLib.ClipType.ctUnion;
-    const wa = WeilerAthertonClipper.fromPolygon(polygon, { union, density: options.density });
-    const res = wa.combine(this)[0];
-
-    if ( !res ) {
-      console.warn("Ellipse.prototype.intersectPolygon returned undefined.");
-      return new PIXI.Polygon([]);
-    }
-
-    return res instanceof PIXI.Polygon ? res : res.toPolygon();
+    // Otherwise, use Clipper polygon intersection.
+    const approx = this.toPolygon({ density });
+    return polygon.intersectPolygon(approx, options);
   }
 }

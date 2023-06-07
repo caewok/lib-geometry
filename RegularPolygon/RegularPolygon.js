@@ -364,27 +364,25 @@ export class RegularPolygon extends PIXI.Polygon {
    * @param {number} [options.scalingFactor]  A scaling factor passed to Polygon#toClipperPoints to preserve precision
    * @returns {PIXI.Polygon|null}       The intersected polygon or null if no solution was present
    */
-  _intersectPolygon(polygon, options = {}) {
+  _intersectPolygon(polygon, { density, clipType, weilerAtherton = true, ...options } = {}) {
     if ( !this.radius ) return new PIXI.Polygon([]);
-    options.clipType ??= ClipperLib.ClipType.ctIntersection;
+    clipType ??= ClipperLib.ClipType.ctIntersection;
+
+    // Use Weiler-Atherton for efficient intersection or union.
+    if ( weilerAtherton ) {
+      const res = WeilerAthertonClipper.combine(polygon, this, { clipType, density, ...options });
+      if ( !res.length ) return new PIXI.Polygon([]);
+      return res[0];
+    }
 
     if ( options.clipType !== ClipperLib.ClipType.ctIntersection
       && options.clipType !== ClipperLib.ClipType.ctUnion) {
       return super.intersectPolygon(polygon, options);
     }
 
-    polygon._preWApoints = [...polygon.points];
-
-    const union = options.clipType === ClipperLib.ClipType.ctUnion;
-    const wa = WeilerAthertonClipper.fromPolygon(polygon, { union });
-    const res = wa.combine(this)[0];
-
-    if ( !res ) {
-//       console.warn("RegularPolygon.prototype.intersectPolygon returned undefined.");
-      return new PIXI.Polygon([]);
-    }
-
-    return res instanceof PIXI.Polygon ? res : res.toPolygon();
+    // Otherwise, use Clipper polygon intersection
+    const approx = this.toPolygon({density});
+    return polygon.intersectPolygon(approx, options);
   }
 
   // Overlaps method added to PIXI.Polygon in PIXIPolygon.js
