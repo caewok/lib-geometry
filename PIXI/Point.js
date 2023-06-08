@@ -65,16 +65,6 @@ function fromObject(obj) {
   const x = obj.x ?? 0;
   const y = obj.y ?? 0;
   return new this(x, y);
-
-/**
- * Use Math.roundDecimals to round the point coordinates to a certain number of decimals
- * @returns {this}
- * @param {number} places   Number of decimals places to use when rounding.
- */
-function roundDecimals(places = 0) {
-  this.x = Math.roundDecimals(this.x, places);
-  this.y = Math.roundDecimals(this.y, places);
-  return this;
 }
 
 /**
@@ -236,21 +226,6 @@ function multiply2d(other, outPoint) {
   outPoint ??= new this.constructor();
   outPoint.x = this.x * other.x;
   outPoint.y = this.y * other.y;
-
-  return outPoint;
-}
-
-/**
- * Divide `this` point by another.
- * @param {PIXI.Point} other    The point to subtract from `this`.
- * @param {PIXI.Point} [outPoint]    A point-like object in which to store the value.
- *   (Will create new point if none provided.)
- * @returns {PIXI.Point}
- */
-function divide2d(other, outPoint) {
-  outPoint ??= new this.constructor();
-  outPoint.x = this.x / other.x;
-  outPoint.y = this.x / other.y;
 
   return outPoint;
 }
@@ -431,5 +406,5 @@ const MAX_TEXTURE_SIZE = Math.pow(2, 16);
  * @returns {number}
  */
 function sortKey(x, y) {
-  return (MAX_TEXTURE_SIZE * Math.roundFast(x)) + Math.roundFast(y);
+  return (MAX_TEXTURE_SIZE * Math.round(x)) + Math.round(y);
 }

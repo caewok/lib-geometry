@@ -63,26 +63,6 @@ function* iterateEdges({close = true} = {}) {
 }
 
 /**
- * Iterate over the rectangle's edges in order.
- * (Use close = true to return the last --> first edge.)
- * @param {object} [options]
- * @param {boolean} [close]   If true, return last point --> first point as edge.
- * @returns Return an object { A: {x, y}, B: {x, y}} for each edge
- * Edges link, such that edge0.B === edge.1.A.
- */
-function* iterateEdges({close = true} = {}) {
-  const A = { x: this.x, y: this.y };
-  const B = { x: this.x + this.width, y: this.y };
-  const C = { x: this.x + this.width, y: this.y + this.height };
-  const D = { x: this.x, y: this.y + this.height };
-
-  yield { A, B };
-  yield { A: B, B: C };
-  yield { A: C, B: D };
-  if ( close ) yield { A: D, B: A };
-}
-
-/**
  * Does this rectangle overlap something else?
  * @param {PIXI.Rectangle|PIXI.Circle|PIXI.Polygon} shape
  * @returns {boolean}

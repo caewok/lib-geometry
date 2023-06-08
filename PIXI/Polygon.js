@@ -580,7 +580,6 @@ function clean({epsilon = 1e-8, epsilonCollinear = 1e-12} = {}) {
 function key() {
   const points = [...this.points];
   const ln = this.isClosed ? points.length - 2 : points.length;
-  let i;
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
   let minIndex = -1;
