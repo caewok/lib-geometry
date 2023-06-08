@@ -42,10 +42,13 @@ import { WeilerAthertonClipper } from "./WeilerAtherton.js";
 import { Matrix } from "./Matrix.js";
 
 // Shadow
-import { Shadow } from "./Shadow.js";
+import { Shadow, ShadowProjection } from "./Shadow.js";
 
 // ClipperPaths
 import { ClipperPaths } from "./ClipperPaths.js";
+
+// Graph
+import { Graph, GraphVertex, GraphEdge } from "./Graph.js";
 
 export function registerGeometry() {
   registerPIXIPolygonMethods();
@@ -62,6 +65,19 @@ export function registerGeometry() {
   registerMatrix();
   registerWeilerAthertonClipper();
   registerClipperPaths();
+  register3d();
+  registerGraph();
+}
+
+export function registerGraph() {
+  CONFIG.GeometryLib ??= {};
+  if ( CONFIG.GeometryLib.Graph ) return;
+
+  CONFIG.GeometryLib.Graph = {
+    Graph,
+    GraphVertex,
+    GraphEdge
+  };
 }
 
 export function registerCenteredPolygons() {
@@ -125,6 +141,7 @@ export function registerShadow() {
   if ( CONFIG.GeometryLib.Shadow ) return;
 
   CONFIG.GeometryLib.Shadow = Shadow;
+  CONFIG.GeometryLib.ShadowProjection = ShadowProjection;
 }
 
 export function registerMatrix() {

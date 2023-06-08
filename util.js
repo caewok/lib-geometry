@@ -24,8 +24,178 @@ export function registerFoundryUtilsMethods() {
     gridUnitsToPixels,
     pixelsToGridUnits,
     perpendicularPoint,
-    centeredPolygonFromDrawing
+    centeredPolygonFromDrawing,
+    shortestRouteBetween3dLines,
+    isOnSegment,
+    categorizePointsInOutConvexPolygon,
+    lineLineIntersection
   };
+
+
+  // Simple extensions
+  Math.minMax = function(...args) {
+    return args.reduce((acc, curr) => {
+      acc.min = Math.min(acc.min, curr);
+      acc.max = Math.max(acc.max, curr);
+      return acc;
+    }, { min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY});
+  }
+}
+
+// Just like foundry.utils.lineLineIntersection but with the typo in t1 calculation fixed.
+function lineLineIntersection(a, b, c, d, {t1=false}={}) {
+
+  // If either line is length 0, they cannot intersect
+  if (((a.x === b.x) && (a.y === b.y)) || ((c.x === d.x) && (c.y === d.y))) return null;
+
+  // Check denominator - avoid parallel lines where d = 0
+  const dnm = ((d.y - c.y) * (b.x - a.x) - (d.x - c.x) * (b.y - a.y));
+  if (dnm === 0) return null;
+
+  // Vector distances
+  const t0 = ((d.x - c.x) * (a.y - c.y) - (d.y - c.y) * (a.x - c.x)) / dnm;
+  t1 = t1 ? ((b.x - a.x) * (a.y - c.y) - (b.y - a.y) * (a.x - c.x)) / dnm : undefined;
+
+  // Return the point of intersection
+  return {
+    x: a.x + t0 * (b.x - a.x),
+    y: a.y + t0 * (b.y - a.y),
+    t0: t0,
+    t1: t1
+  }
+}
+
+
+/**
+ * This method is only guaranteed to work for convex polygons
+ * Determine if one or more points are within the polygon.
+ * On the edge does not count.
+ * Note: will force the polygon to clockwise orientation.
+ * @param {PIXI.Polygon} poly   Convex polygon to test.
+ * @param {Point[]} points
+ * @param {epsilon}   Tolerance for near zero.
+ * @returns {object} Object containing the points, with arrays of inside, on edge, outside points.
+ */
+function categorizePointsInOutConvexPolygon(poly, points, epsilon = 1e-08) {
+   const isOnSegment = CONFIG.GeometryLib.utils.isOnSegment;
+
+  // Need to walk around the edges in clockwise order.
+  if ( !poly.isClockwise ) poly.reverseOrientation();
+  const edges = poly.iterateEdges({ close: true });
+  const out = {
+    inside: [],
+    on: [],
+    outside: []
+  }
+
+  // For each point, test if the point is on the edge ("on").
+  // If not on edge, test if clockwise. If not CW, then it is outside.
+  const nPts = points.length;
+  const isCW = new Array(nPts).fill(true);
+  let found = 0;
+  for ( const edge of edges ) {
+    for ( let i = 0; i < nPts; i += 1 ) {
+      const ptIsCW = isCW[i];
+      if ( !ptIsCW ) continue;
+
+      const pt = points[i];
+      if ( isOnSegment(edge.A, edge.B, pt, epsilon) ) {
+        ptIsCW = false;
+        out.on.push(pt);
+        found += 1;
+      } else {
+        const oPt = foundry.utils.orient2dFast(edge.A, edge.B, pt);
+        if  ( oPt.almostEqual(0, epsilon) ) oPt = 0;
+        ptIsCW &&= oPt < 0;
+        if ( !ptIsCW ) {
+          out.outside.push(pt);
+          found += 1;
+        }
+      }
+    }
+    if ( found === nPts ) return out;
+  }
+
+  // The remaining CW points are all inside.
+  for ( let i = 0; i < nPts; i += 1 ) {
+    if ( isCW[i] ) inside.push(pt[i]);
+  }
+
+  return out;
+}
+
+/**
+ * Determine if a point is on a segment, with a tolerance for nearly on the segment.
+ * @param {Point} a   Endpoint A of the segment A|B
+ * @param {Point} b   Endpoint B of the segment A|B
+ * @param {Point} c   Point to test
+ * @param {epsilon}   Tolerance for near zero.
+ * @returns {boolean}
+ */
+function isOnSegment(a, b, c, epsilon = 1e-08) {
+  // Confirm point is with bounding box formed by A|B
+  const minX = Math.min(a.x, b.x);
+  const minY = Math.min(a.y, b.y);
+  const maxX = Math.max(a.x, b.x);
+  const maxY = Math.max(a.y, b.y);
+
+  if ( (c.x < minX || c.x > maxX || c.y < minY || c.y > maxY)
+    && !(c.x.almostEqual(minX) && c.x.almostEqual(maxX) && c.y.almostEqual(minY) && c.y.almostEqual(maxY)) ) {
+    return false;
+  }
+
+  // If not collinear, then not on segment.
+  const orient = foundry.utils.orient2dFast(a, b, c);
+  if ( !orient.almostEqual(0, epsilon) ) return false;
+
+  // We already know we are within the bounding box, so if collinear, must be on the segment.
+  return true;
+}
+
+/**
+ * Shortest line segment between two 3d lines
+ * http://paulbourke.net/geometry/pointlineplane/
+ * http://paulbourke.net/geometry/pointlineplane/lineline.c
+ * @param {Point3d} a   Endpoint of line AB
+ * @param {Point3d} b   Endpoint of line AB
+ * @param {Point3d} c   Endpoint of line CD
+ * @param {Point3d} d   Endpoint of line CD
+ * @param {number} epsilon  Consider this value or less to be zero
+ * @returns {object|null} {A: Point3d, B: Point3d}
+ */
+function shortestRouteBetween3dLines(a, b, c, d, epsilon = 1e-08) {
+  const deltaDC = d.subtract(c);
+  if ( Math.abs(deltaDC.x) < epsilon
+    && Math.abs(deltaDC.y) < epsilon
+    && Math.abs(deltaDC.z) < epsilon ) return null;
+
+
+  const deltaBA = b.subtract(a);
+  if ( Math.abs(deltaBA.x) < epsilon
+    && Math.abs(deltaBA.y) < epsilon
+    && Math.abs(deltaBA.z) < epislon ) return null;
+
+  const deltaAC = a.subtract(c);
+
+  const dotACDC = deltaAC.dot(deltaDC);
+  const dotDCBA = deltaDC.dot(deltaBA);
+  const dotACBA = deltaAC.dot(deltaBA);
+  const dotDCDC = deltaDC.dot(deltaDC);
+  const dotBABA = deltaBA.dot(deltaBA);
+
+  const denom = (dotBABA * dotDCDC) - (dotDCBA * dotDCBA);
+  if ( Math.abs(denom) < epsilon ) return null;
+
+  const numer = (dotACBC * dotDCBA) - (dotACBA * dotDCDC);
+  const mua = numer / denom;
+  const mub = (dotACDC + (dotDCBA * mua)) / dotDCDC;
+
+  return {
+    A: deltaBA.multiplyScalar(mua).add(a),
+    B: deltaDC.multiplyScalar(mub).add(c),
+    mua,
+    mub
+  }
 }
 
 /**
@@ -96,21 +266,21 @@ function pixelsToGridUnits(pixels) {
  * @param {Point} b                   The second endpoint of segment AB
  * @param {Point} c                   The first endpoint of segment CD
  * @param {Point} d                   The second endpoint of segment CD
- *
+ * @param {epsilon}   Tolerance for near zero.
  * @returns {boolean}                 Do the line segments cross?
  */
-function lineSegmentCrosses(a, b, c, d) {
-  const xa = foundry.utils.orient2dFast(a, b, c);
-  if ( !xa ) return false;
+function lineSegmentCrosses(a, b, c, d, epsilon = 1e-08) {
+  let xa = foundry.utils.orient2dFast(a, b, c);
+  if ( xa.almostEqual(0, epsilon) ) return false;
 
-  const xb = foundry.utils.orient2dFast(a, b, d);
-  if ( !xb ) return false;
+  let xb = foundry.utils.orient2dFast(a, b, d);
+  if ( xb.almostEqual(0, epsilon) ) return false;
 
-  const xc = foundry.utils.orient2dFast(c, d, a);
-  if ( !xc ) return false;
+  let xc = foundry.utils.orient2dFast(c, d, a);
+  if ( xc.almostEqual(0, epsilon) ) return false;
 
-  const xd = foundry.utils.orient2dFast(c, d, b);
-  if ( !xd ) return false;
+  let xd = foundry.utils.orient2dFast(c, d, b);
+  if ( xd.almostEqual(0, epsilon) ) return false;
 
   const xab = (xa * xb) < 0; // Cannot be equal to 0.
   const xcd = (xc * xd) < 0; // Cannot be equal to 0.

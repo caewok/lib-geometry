@@ -15,6 +15,13 @@ export function registerPIXIRectangleMethods() {
   if ( CONFIG.GeometryLib.Registered.PIXIRectangle ) return;
   CONFIG.GeometryLib.Registered.PIXIRectangle = true;
 
+  // ----- Static methods ---- //
+  Object.defineProperty(PIXI.Rectangle, "gridRectangles", {
+    value: gridRectangles,
+    writable: true,
+    configurable: true
+  });
+
   // ----- Getters/Setters ----- //
   if ( !Object.hasOwn(PIXI.Rectangle.prototype, "area") ) {
     Object.defineProperty(PIXI.Rectangle.prototype, "area", {
@@ -30,10 +37,24 @@ export function registerPIXIRectangleMethods() {
     });
   }
 
+  // ----- Iterators ----- //
+
+  Object.defineProperty(PIXI.Rectangle.prototype, "iterateEdges", {
+    value: iterateEdges,
+    writable: true,
+    configurable: true
+  });
+
   // ----- Methods ----- //
 
   Object.defineProperty(PIXI.Rectangle.prototype, "_getEdgeZone", {
     value: _getEdgeZone,
+    writable: true,
+    configurable: true
+  });
+
+  Object.defineProperty(PIXI.Rectangle.prototype, "difference", {
+    value: difference,
     writable: true,
     configurable: true
   });
@@ -148,12 +169,13 @@ function _getEdgeZone(p) {
  * @param {number} [options.scalingFactor]  A scaling factor passed to Polygon#toClipperPoints to preserve precision
  * @returns {PIXI.Polygon|null}       The intersected polygon or null if no solution was present
  */
-function intersectPolygonPIXIRectangle(polygon, {clipType, scalingFactor}={}) {
+function intersectPolygonPIXIRectangle(polygon, {clipType, scalingFactor, disableWA = false }={}) {
   if ( !this.width || !this.height ) return new PIXI.Polygon([]);
   clipType ??= ClipperLib.ClipType.ctIntersection;
 
-  if ( clipType !== ClipperLib.ClipType.ctIntersection
-    && clipType !== ClipperLib.ClipType.ctUnion) {
+  // TODO: Fix so WA works when unioning two shapes that share only an edge.
+  if ( disableWA || (clipType !== ClipperLib.ClipType.ctIntersection
+    && clipType !== ClipperLib.ClipType.ctUnion)) {
     return polygon.intersectPolygon(this.toPolygon(), {clipType, scalingFactor});
   }
 
@@ -162,6 +184,26 @@ function intersectPolygonPIXIRectangle(polygon, {clipType, scalingFactor}={}) {
   const res = wa.combine(this)[0];
   if ( !res ) return new PIXI.Polygon([]);
   return res instanceof PIXI.Polygon ? res : res.toPolygon();
+}
+
+/**
+ * Iterate over the rectangle's edges in order.
+ * (Use close = true to return the last --> first edge.)
+ * @param {object} [options]
+ * @param {boolean} [close]   If true, return last point --> first point as edge.
+ * @returns Return an object { A: {x, y}, B: {x, y}} for each edge
+ * Edges link, such that edge0.B === edge.1.A.
+ */
+function* iterateEdges({close = true} = {}) {
+  const A = { x: this.x, y: this.y };
+  const B = { x: this.x + this.width, y: this.y };
+  const C = { x: this.x + this.width, y: this.y + this.height };
+  const D = { x: this.x, y: this.y + this.height };
+
+  yield { A, B };
+  yield { A: B, B: C };
+  yield { A: C, B: D };
+  if ( close ) yield { A: D, B: A };
 }
 
 /**
@@ -215,6 +257,7 @@ function pointsBetween(a, b) {
  * @param {Point} a   Endpoint A of the segment
  * @param {Point} b   Endpoint B of the segment
  * @returns {Point[]} Array of intersections or empty.
+ *   If intersections returned, the t of each intersection is the distance along the a|b segment.
  */
 function segmentIntersections(a, b) {
   // Follows structure of lineSegmentIntersects
@@ -242,13 +285,13 @@ function segmentIntersections(a, b) {
   for ( const z of zones ) {
     let ix;
     if ( (z & CSZ.LEFT)
-      && lsi(leftEdge.A, leftEdge.B, a, b)) ix = lli(leftEdge.A, leftEdge.B, a, b);
+      && lsi(leftEdge.A, leftEdge.B, a, b)) ix = lli(a, b, leftEdge.A, leftEdge.B);
     if ( !ix && (z & CSZ.RIGHT)
-      && lsi(rightEdge.A, rightEdge.B, a, b)) ix = lli(rightEdge.A, rightEdge.B, a, b);
+      && lsi(rightEdge.A, rightEdge.B, a, b)) ix = lli(a, b, rightEdge.A, rightEdge.B);
     if ( !ix && (z & CSZ.TOP)
-      && lsi(topEdge.A, topEdge.B, a, b)) ix = lli(topEdge.A, topEdge.B, a, b);
+      && lsi(topEdge.A, topEdge.B, a, b)) ix = lli(a, b, topEdge.A, topEdge.B);
     if ( !ix && (z & CSZ.BOTTOM)
-      && lsi(bottomEdge.A, bottomEdge.B, a, b)) ix = lli(bottomEdge.A, bottomEdge.B, a, b);
+      && lsi(bottomEdge.A, bottomEdge.B, a, b)) ix = lli(a, b, bottomEdge.A, bottomEdge.B);
 
     // The ix should always be a point by now
     if ( !ix ) console.warn("PIXI.Rectangle.prototype.segmentIntersections returned a null point.");
@@ -302,16 +345,15 @@ function overlapsPolygon(poly) {
     || poly.contains(this.left, this.bottom)
     || poly.contains(this.right, this.bottom)) return true;
 
-  poly.close();
-  const pts = poly.points;
-  const ln = pts.length;
-  let a = { x: pts[0], y: pts[1] };
+  const pts = poly.iteratePoints({ close: true });
+  let a = pts.next().value;
   if ( this.contains(a.x, a.y) ) return true;
-  for ( let i = 2; i < ln; i += 2 ) {
-    const b = { x: pts[i], y: pts[i+1] };
+
+  for ( const b of pts ) {
     if ( this.lineSegmentIntersects(a, b) || this.contains(b.x, b.y) ) return true;
     a = b;
   }
+
   return false;
 }
 
@@ -380,11 +422,26 @@ function getViewablePoints(bbox, origin) {
 
   switch ( bbox._getZone(origin) ) {
     case zones.INSIDE: return null;
-    case zones.TOPLEFT: return [{ x: bbox.left, y: bbox.bottom },  { x: bbox.left, y: bbox.top }, { x: bbox.right, y: bbox.top }];
-    case zones.TOPRIGHT: return [{ x: bbox.left, y: bbox.top }, { x: bbox.right, y: bbox.top }, { x: bbox.right, y: bbox.bottom }];
-    case zones.BOTTOMLEFT: return [{ x: bbox.right, y: bbox.bottom }, { x: bbox.left, y: bbox.bottom }, { x: bbox.left, y: bbox.top }];
-    case zones.BOTTOMRIGHT: return [{ x: bbox.right, y: bbox.top }, { x: bbox.right, y: bbox.bottom }, { x: bbox.left, y: bbox.bottom }];
-
+    case zones.TOPLEFT: return [
+      { x: bbox.left, y: bbox.bottom },
+      { x: bbox.left, y: bbox.top },
+      { x: bbox.right, y: bbox.top }
+    ];
+    case zones.TOPRIGHT: return [
+      { x: bbox.left, y: bbox.top },
+      { x: bbox.right, y: bbox.top },
+      { x: bbox.right, y: bbox.bottom }
+    ];
+    case zones.BOTTOMLEFT: return [
+      { x: bbox.right, y: bbox.bottom },
+      { x: bbox.left, y: bbox.bottom },
+      { x: bbox.left, y: bbox.top }
+    ];
+    case zones.BOTTOMRIGHT: return [
+      { x: bbox.right, y: bbox.top },
+      { x: bbox.right, y: bbox.bottom },
+      { x: bbox.left, y: bbox.bottom }
+    ];
     case zones.RIGHT: return [{ x: bbox.right, y: bbox.top }, { x: bbox.right, y: bbox.bottom }];
     case zones.LEFT: return [{ x: bbox.left, y: bbox.bottom }, { x: bbox.left, y: bbox.top }];
     case zones.TOP: return [{ x: bbox.left, y: bbox.top }, { x: bbox.right, y: bbox.top }];
@@ -394,3 +451,127 @@ function getViewablePoints(bbox, origin) {
   return undefined; // Should not happen
 }
 
+/**
+ * Get the difference between the two rectangles
+ * If no overlap, will return null
+ * @param {PIXI.Rectangle} other
+ * @returns {null| {A: PIXI.Rectangle, B: PIXI.Rectangle}}
+ *   A: portion of this rectangle
+ *   B: portion of other rectangle
+ */
+function difference(other, recurse = true) {
+  if ( this.right < other.x ) return null; // Left
+  if ( this.bottom < other.y ) return null; // Top
+  if ( this.x > other.right ) return null; // Right
+  if ( this.y > other.bottom ) return null; // Bottom
+
+  // Completely equal
+  if ( this.x === other.x
+    && this.y === other.y
+    && this.width === other.width
+    && this.height === other.height ) return null;
+
+  // Options:
+  // 1. One rectangle contains only 1 corner of the other.
+  // 2. One rectangle contains 2 corners of the other.
+  // 3. One rectangle contains 4 corners of the other (encompasses the other).
+
+  const Acontained = this.contains(other.x, other.y);
+  const Bcontained = this.contains(other.right, other.y);
+  const Ccontained = this.contains(other.right, other.bottom);
+  const Dcontained = this.contains(other.x, other.bottom);
+  const nContained = Acontained + Bcontained + Ccontained + Dcontained;
+
+  if ( nContained === 0 && recurse ) {
+    // Other contains this rectangle
+    const out = other.difference(this, false); // Set recurse = false to avoid endless loops if there is an error.
+    [out.thisDiff, out.otherDiff] = [out.otherDiff, out.thisDiff];
+    return out;
+  }
+
+  const g = PIXI.Rectangle.gridRectangles(this, other);
+  const out = { thisDiff: [], otherDiff: [], g };
+  switch ( nContained ) {
+    case 1:
+      if ( Acontained ) {
+        out.thisDiff = [g.topLeft, g.topMiddle, g.centerLeft];
+        out.otherDiff = [g.centerRight, g.bottomRight, g.bottomMiddle];
+      } else if ( Bcontained ) {
+        out.thisDiff = [g.topMiddle, g.topRight, g.centerRight];
+        out.otherDiff = [g.centerLeft, g.bottomMiddle, g.bottomLeft];
+      } else if ( Ccontained ) {
+        out.thisDiff = [g.centerRight, g.bottomRight, g.bottomMiddle];
+        out.otherDiff = [g.topLeft, g.topMiddle, g.centerLeft];
+      } else if ( Dcontained ) {
+        out.thisDiff = [g.centerLeft, g.bottomMiddle, g.bottomLeft];
+        out.otherDiff = [g.topMiddle, g.topRight, g.centerRight];
+      }
+      break;
+    case 2:
+      if ( Acontained && Bcontained ) {
+        out.thisDiff = [g.topLeft, g.topMiddle, g.topRight, g.centerRight, g.centerLeft];
+        out.otherDiff = [g.bottomMiddle];
+      } else if ( Bcontained && Ccontained ) {
+        out.thisDiff = [g.topMiddle, g.topRight, g.centerRight, g.bottomRight, g.bottomMiddle];
+        out.otherDiff = [g.centerLeft];
+      } else if ( Ccontained && Dcontained ) {
+        out.thisDiff = [g.centerRight, g.bottomRight, g.bottomMiddle, g.bottomLeft, g.centerLeft];
+        out.otherDiff = [g.topMiddle];
+      } else if ( Dcontained && Acontained ) {
+        out.thisDiff = [g.topLeft, g.topMiddle, g.bottomMiddle, g.bottomLeft, g.centerLeft];
+        out.otherDiff = [g.centerRight];
+      }
+      break;
+    case 3: break; // Shouldn't happen
+    case 4:
+      // Same as case 0 but for thisDiff.
+      out.thisDiff = [
+        g.topLeft, g.topMiddle, g.topRight,
+        g.centerLeft, g.centerRight,
+        g.bottomLeft, g.bottomMiddle, g.bottomRight
+      ];
+      break;
+  }
+
+  out.thisDiff = out.thisDiff.filter(r => r.width > 0 && r.height > 0);
+  out.otherDiff = out.otherDiff.filter(r => r.width > 0 && r.height > 0);
+  return out;
+}
+
+/**
+ * Determine the grid coordinates of all combinations of two rectangles.
+ * Order of the two rectangles does not matter.
+ * @param {PIXI.Rectangle} rect1    First rectangle
+ * @param {PIXI.Rectangle} rect2    Second rectangle
+ * @returns {object}  Object with 9 rectangles. Some may have zero width or height.
+ */
+function gridRectangles(rect1, rect2) {
+  // Order the xs and ys
+  const xArr = [rect1.x, rect1.right, rect2.x, rect2.right].sort((a, b) => a - b);
+  const yArr = [rect1.y, rect1.bottom, rect2.y, rect2.bottom].sort((a, b) => a - b);
+
+  const [x1, x2, x3, x4] = xArr;
+  const [y1, y2, y3, y4] = yArr;
+
+  const w1 = x2 - x1;
+  const w2 = x3 - x2;
+  const w3 = x4 - x3;
+
+  const h1 = y2 - y1;
+  const h2 = y3 - y2;
+  const h3 = y4 - y3;
+
+  return {
+    topLeft: new PIXI.Rectangle(x1, y1, w1, h1),
+    topMiddle: new PIXI.Rectangle(x2, y1, w2, h1),
+    topRight: new PIXI.Rectangle(x3, y1, w3, h1),
+
+    centerLeft: new PIXI.Rectangle(x1, y2, w1, h2),
+    centerMiddle: new PIXI.Rectangle(x2, y2, w2, h2),
+    centerRight: new PIXI.Rectangle(x3, y2, w3, h2),
+
+    bottomLeft: new PIXI.Rectangle(x1, y3, w1, h3),
+    bottomMiddle: new PIXI.Rectangle(x2, y3, w2, h3),
+    bottomRight: new PIXI.Rectangle(x3, y3, w3, h3)
+  };
+}

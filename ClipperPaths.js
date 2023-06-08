@@ -13,10 +13,10 @@ import { Draw } from "./Draw.js";
 export class ClipperPaths {
   scalingFactor = 1;
 
- /**
-  * @param paths {ClipperLib.Path[]|Set<ClipperLib.Path>|Map<ClipperLib.Path>}
-  * @returns {ClipperPaths}
-  */
+  /**
+   * @param paths {ClipperLib.Path[]|Set<ClipperLib.Path>|Map<ClipperLib.Path>}
+   * @returns {ClipperPaths}
+   */
   constructor(paths = [], { scalingFactor = 1 } = {}) {
     this.paths = [...paths]; // Ensure these are arrays
     this.scalingFactor = scalingFactor;
@@ -42,6 +42,22 @@ export class ClipperPaths {
   static fromPolygons(polygons, { scalingFactor = 1 } = {}) {
     const out = new ClipperPaths(polygons.map(p => p.toClipperPoints({scalingFactor})), { scalingFactor });
     return out;
+  }
+
+  /**
+   * Flatten a path of X, Y to an array
+   * @param {ClipperPoints[]} path
+   * @returns {number[]}
+   */
+  static flattenPath(path) {
+    const nPts = path.length;
+    const res = new Array(nPts * 2);
+    for ( let i = 0, j = 0; i < nPts; i += 1, j += 2 ) {
+      const pt = path[i];
+      res[j] = pt.X;
+      res[j + 1] = pt.Y;
+    }
+    return res;
   }
 
   /**
@@ -74,6 +90,84 @@ export class ClipperPaths {
     }
 
     return polygon;
+  }
+
+  /**
+   * Convert paths to earcut coordinates.
+   * See https://github.com/mapbox/earcut
+   * @returns {object} Object with vertices, holes, dimensions = 2.
+   */
+  toEarcutCoordinates() {
+    const out = {
+      vertices: [],
+      holes: [],
+      dimensions: 2
+    };
+
+    const paths = this.paths;
+    const nPaths = paths.length;
+    if ( nPaths === 0 ) return out;
+
+    out.vertices = ClipperPaths.flattenPath(paths[0]);
+    for ( let i = 1; i < nPaths; i += 1 ) {
+      const path = paths[i];
+      const isHole = !ClipperLib.Clipper.Orientation(path);
+      if ( !isHole ) console.warn("Earcut may fail with multiple outer polygons.");
+      const category = isHole ? out.holes : out.vertices;
+      category.push(ClipperPaths.flattenPath(path));
+    }
+
+    // Concatenate holes and add indices
+    const nHoles = out.holes.length;
+    if ( nHoles > 0 ) {
+      const indices = [];
+      let nVertices = out.vertices.length * 0.5;
+      for ( let i = 0; i < nHoles; i += 1 ) {
+        const hole = out.holes[i];
+        const nPts = hole.length * 0.5;
+        out.vertices.push(...hole);
+        indices.push(nVertices); // Vertices index starts at 0.
+        nVertices += nPts;
+      }
+      out.holes = indices;
+    }
+
+    return out;
+  }
+
+  /**
+   * Convert a flat array with indices of triangles, as in earcut, to ClipperPaths.
+   * Each 3 numbers in the indices array correspond to a triangle
+   * @param {number[]} vertices
+   * @param {number[]} indices
+   * @param {number} dimensions     Number of dimensions for the vertices. Z, etc. will be ignored.
+   * @returns {ClipperPaths}
+   */
+  static fromEarcutCoordinates(vertices, indices, dimensions = 2) {
+    const cPaths = new this();
+    const nIndices = indices.length;
+    for ( let i = 0; i < nIndices; ) { // Increment i in the loop
+      const path = new Array(3);
+      for ( let j = 0; j < 3; j += 1 ) {
+        const idx = indices[i] * dimensions;
+        const v = { X: vertices[idx], Y: vertices[idx + 1] };
+        path[j] = v;
+        i += 1;
+      }
+      cPaths.paths.push(path);
+    }
+    return cPaths;
+  }
+
+  /**
+   * Use earcut to triangulate these paths.
+   * See https://github.com/mapbox/earcut.
+   * @returns {ClipperPaths} Paths constructed from the resulting triangles
+   */
+  earcut() {
+    const coords = this.toEarcutCoordinates();
+    const res = PIXI.utils.earcut(coords.vertices, coords.holes, coords.dimensions);
+    return ClipperPaths.fromEarcutCoordinates(coords.vertices, res, coords.dimensions);
   }
 
   /**
@@ -112,7 +206,7 @@ export class ClipperPaths {
    */
   toPolygons() {
     return this.paths.map(pts => {
-      const poly = PIXI.Polygon.fromClipperPoints(pts, this.scalingFactor);
+      const poly = PIXI.Polygon.fromClipperPoints(pts, {scalingFactor: this.scalingFactor});
       poly.isHole = !ClipperLib.Clipper.Orientation(pts);
       return poly;
     });
@@ -212,7 +306,7 @@ export class ClipperPaths {
     c.Execute(type, solution.paths, subjFillType, clipFillType);
 
     return solution;
- }
+  }
 
   /**
    * Using a polygon as a subject, take the difference of this ClipperPaths.
