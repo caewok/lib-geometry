@@ -40,6 +40,18 @@ export class Point3d extends PIXI.Point {
   }
 
   /**
+   * Construct a Point3d from any object that has x and y and z properties.
+   * Recognizes elevationZ and elevation as potential z properties.
+   * @param {object} obj
+   * @returns {Point3d}
+   */
+  static fromObject(obj) {
+    const pt = super.fromObject(obj);
+    pt.z = obj.z ?? obj.elevationZ ?? obj.elevation ?? 0;
+    return pt;
+  }
+
+  /**
    * Check if 3d points are oriented clockwise.
    * ChatGPT
    * This function calculates the cross product of the two edge vectors of the triangle
