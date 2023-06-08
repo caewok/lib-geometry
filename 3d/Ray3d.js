@@ -70,7 +70,7 @@ export class Ray3d extends Ray {
   }
 
   /*
-    * Project the Ray onto the 2d XY canvas surface at the elevation of B.
+  * Project the Ray onto the 2d XY canvas surface at the elevation of B.
    * Preserves distance but not A or B location.
    * For gridless, will preserve B location.
    * Done in a manner to allow diagonal distance to be measured.
@@ -83,8 +83,9 @@ export class Ray3d extends Ray {
    * @returns {Ray} The new 2d ray
    */
   projectOntoCanvas() {
-    if ( !this.dz.almostEqual(0)
-      || (this.dx.almostEqual(0) && this.dy.almostEqual(0)) ) return new Ray(this.A.to2d(), this.B.to2d());
+    if ( this.dz.almostEqual(0) ) return new Ray(this.A.to2d({x: "x", y: "y"}), this.B.to2d({x: "x", y: "y"}));
+    if ( this.dx.almostEqual(0) ) return new Ray(this.A.to2d({x: "z", y: "y"}), this.B.to2d({x: "z", y: "y"}));
+    if ( this.dy.almostEqual(0) ) return new Ray(this.A.to2d({x: "x", y: "z"}), this.B.to2d({x: "x", y: "z"}));
 
     switch ( canvas.grid.type ) {
       case CONST.GRID_TYPES.GRIDLESS: return this._projectGridless();
@@ -145,11 +146,25 @@ export class Ray3d extends Ray {
     // If points are on vertical line
     // Set A to the east
     // B is either north or south from A
+    /*
+    A                    A
+    |                   /
+    |     ==>          /
+    |                 /
+    |                /
+    B---->Height    B--->Height
+    */
     if ( this.dx.almostEqual(0) ) A.x += height; // East
 
     // If points are on horizontal line
     // B is either west or east from A
     // Set A to the south
+    /*
+               • Height    A
+               |              \
+               |                \
+    A----------B    ==>           B
+    */
     else if ( this.dy.almostEqual(0) ) A.y += height; // South
 
     // Otherwise set B to point south, A pointing east
@@ -167,12 +182,21 @@ export class Ray3d extends Ray {
   _projectSouth() {
     const height = Math.abs(this.dz);
 
+    /*                   A
+    A                    |
+      \   • Height       |  <- Dist
+       \  |         ==>  |             ==>    A   <-- Height
+        \ |              |                      \
+          B              B----• height            \
+                                                   B
+    */
+
+    // Always measure Euclidean distances; only use gridSpaces later for the projected values.
     const A = this.A.to2d();
     const B = this.B.to2d();
-
-    const distance = canvas.grid.measureDistance(A, B, { gridSpaces: true });
-    A.y += height;
-    B.x -= distance;
+    const gridDistance = CONFIG.GeometryLib.utils.gridUnitsToPixels(canvas.grid.measureDistance(A, B, { gridSpaces: false }));
+    A.y = B.y - gridDistance;
+    A.x = B.x - height;
 
     // Debug: console.log(`Projecting South: A: (${this.A.x},${this.A.y},${this.A.z})->(${A.x},${A.y}); B: (${this.B.x},${this.B.y},${this.B.z})->(${B.x},${B.y})`);
 
@@ -186,12 +210,21 @@ export class Ray3d extends Ray {
   _projectEast() {
     const height = Math.abs(this.dz);
 
+    /*                           • Height
+    A                            |
+      \   • Height               |
+       \  |         ==>  A-------B   ==>    A   <-- Height
+        \ |                                  \
+          B                                   \
+                                               B
+    */
+
+    // Always measure Euclidean distances; only use gridSpaces later for the projected values.
     const A = this.A.to2d();
     const B = this.B.to2d();
-
-    const distance = canvas.grid.measureDistance(A, B, { gridSpaces: true });
-    A.x += height;
-    B.y += distance;
+    const gridDistance = CONFIG.GeometryLib.utils.gridUnitsToPixels(canvas.grid.measureDistance(A, B, { gridSpaces: false }));
+    A.x = B.x - gridDistance;
+    A.y = B.y - height;
 
     // Debug: log(`Projecting East: A: (${this.A.x},${this.A.y},${this.A.z})->(${A.x},${A.y}); B: (${this.B.x},${this.B.y},${this.B.z})->(${B.x},${B.y})`);
 
