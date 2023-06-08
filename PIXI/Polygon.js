@@ -398,8 +398,8 @@ function signedArea({ scalingFactor } = {}) {
   const pts = [...this.iteratePoints({close: true})];
 
   if ( scalingFactor ) pts.forEach(pt => {
-    pt.x = Math.roundFast(pt.x * scalingFactor);
-    pt.y = Math.roundFast(pt.y * scalingFactor);
+    pt.x = Math.round(pt.x * scalingFactor);
+    pt.y = Math.round(pt.y * scalingFactor);
   });
 
   const ln = pts.length;
