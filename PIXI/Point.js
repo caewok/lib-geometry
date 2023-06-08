@@ -11,21 +11,7 @@ import { addClassGetter, addClassMethod } from "../util.js";
 export function registerPIXIPointMethods() {
   // ----- Getters/Setters ----- //
   addClassGetter(PIXI.Point.prototype, "key", key);
-
-  // ----- Getters/Setters ----- //
-
-  // Add key as a getter to
-  if ( !Object.hasOwn(PIXI.Point.prototype, "key") ) {
-    Object.defineProperty(PIXI.Point.prototype, "key", {
-      get: function() { return key(this.x, this.y); }
-    });
-  }
-
-  if ( !Object.hasOwn(PIXI.Point.prototype, "sortKey") ) {
-    Object.defineProperty(PIXI.Point.prototype, "sortKey", {
-      get: function() { return sortKey(this.x, this.y); }
-    });
-  }
+  addClassGetter(PIXI.Point.prototype, "sortKey", sortKey);
 
   // ----- Static Methods ----- //
   addClassMethod(PIXI.Point, "midPoint", midPoint);
@@ -55,7 +41,6 @@ export function registerPIXIPointMethods() {
   addClassMethod(PIXI.Point.prototype, "rotate", rotate);
   addClassMethod(PIXI.Point.prototype, "roundDecimals", roundDecimals);
 
-
   // For parallel with Point3d
   addClassMethod(PIXI.Point.prototype, "to2d", function() { return this; });
 }
@@ -80,6 +65,7 @@ function fromObject(obj) {
   const x = obj.x ?? 0;
   const y = obj.y ?? 0;
   return new this(x, y);
+
 /**
  * Use Math.roundDecimals to round the point coordinates to a certain number of decimals
  * @returns {this}

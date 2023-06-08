@@ -10,27 +10,12 @@ export function registerPIXIRectangleMethods() {
   // ----- Static methods ----- //
   addClassMethod(PIXI.Rectangle, "gridRectangles", gridRectangles);
 
-  // ----- Static methods ---- //
-  Object.defineProperty(PIXI.Rectangle, "gridRectangles", {
-    value: gridRectangles,
-    writable: true,
-    configurable: true
-  });
-
   // ----- Getters/Setters ----- //
   addClassGetter(PIXI.Rectangle.prototype, "area", area);
   // center - in v11
 
   // ----- Iterators ----- //
   addClassMethod(PIXI.Rectangle.prototype, "iterateEdges", iterateEdges);
-
-  // ----- Iterators ----- //
-
-  Object.defineProperty(PIXI.Rectangle.prototype, "iterateEdges", {
-    value: iterateEdges,
-    writable: true,
-    configurable: true
-  });
 
   // ----- Methods ----- //
   // _getEdgeZone - in v11
@@ -78,32 +63,6 @@ function* iterateEdges({close = true} = {}) {
 }
 
 /**
- * Intersect this PIXI.Rectangle with a PIXI.Polygon.
- * Currently uses the clipper library or the WeilerAtherton, depending on shape
- * @param {PIXI.Polygon} polygon      A PIXI.Polygon
- * @param {object} [options]          Options which configure how the intersection is computed
- * @param {number} [options.clipType]       The clipper clip type
- * @param {number} [options.scalingFactor]  A scaling factor passed to Polygon#toClipperPoints to preserve precision
- * @returns {PIXI.Polygon|null}       The intersected polygon or null if no solution was present
- */
-function intersectPolygonPIXIRectangle(polygon, {clipType, scalingFactor, disableWA = false }={}) {
-  if ( !this.width || !this.height ) return new PIXI.Polygon([]);
-  clipType ??= ClipperLib.ClipType.ctIntersection;
-
-  // TODO: Fix so WA works when unioning two shapes that share only an edge.
-  if ( disableWA || (clipType !== ClipperLib.ClipType.ctIntersection
-    && clipType !== ClipperLib.ClipType.ctUnion)) {
-    return polygon.intersectPolygon(this.toPolygon(), {clipType, scalingFactor});
-  }
-
-  const union = clipType === ClipperLib.ClipType.ctUnion;
-  const wa = WeilerAthertonClipper.fromPolygon(polygon, { union });
-  const res = wa.combine(this)[0];
-  if ( !res ) return new PIXI.Polygon([]);
-  return res instanceof PIXI.Polygon ? res : res.toPolygon();
-}
-
-/**
  * Iterate over the rectangle's edges in order.
  * (Use close = true to return the last --> first edge.)
  * @param {object} [options]
@@ -121,101 +80,6 @@ function* iterateEdges({close = true} = {}) {
   yield { A: B, B: C };
   yield { A: C, B: D };
   if ( close ) yield { A: D, B: A };
-}
-
-/**
- * Get all the points (corners) for a polygon approximation of a rectangle between two points on the rectangle.
- * Points are clockwise from a to b.
- * @param { Point } a
- * @param { Point } b
- * @return { Point[]}
- */
-function pointsBetween(a, b) {
-  const CSZ = PIXI.Rectangle.CS_ZONES;
-
-  // Assume the point could be outside the rectangle but not inside (which would be undefined).
-  const zoneA = this._getEdgeZone(a);
-  if ( !zoneA ) return [];
-
-  const zoneB = this._getEdgeZone(b);
-  if ( !zoneB ) return [];
-
-  // If on the same wall, return none if b is counterclockwise to a.
-  if ( zoneA === zoneB && foundry.utils.orient2dFast(this.center, a, b) <= 0 ) return [];
-
-  let z = zoneA;
-  const pts = [];
-
-  for ( let i = 0; i < 4; i += 1) {
-    if ( (z & CSZ.LEFT) ) {
-      z !== CSZ.TOPLEFT && pts.push({ x: this.left, y: this.top }); // eslint-disable-line no-unused-expressions
-      z = CSZ.TOP;
-    } else if ( (z & CSZ.TOP) ) {
-      z !== CSZ.TOPRIGHT && pts.push({ x: this.right, y: this.top }); // eslint-disable-line no-unused-expressions
-      z = CSZ.RIGHT;
-    } else if ( (z & CSZ.RIGHT) ) {
-      z !== CSZ.BOTTOMRIGHT && pts.push({ x: this.right, y: this.bottom }); // eslint-disable-line no-unused-expressions
-      z = CSZ.BOTTOM;
-    } else if ( (z & CSZ.BOTTOM) ) {
-      z !== CSZ.BOTTOMLEFT && pts.push({ x: this.left, y: this.bottom }); // eslint-disable-line no-unused-expressions
-      z = CSZ.LEFT;
-    }
-
-    if ( z & zoneB ) break;
-
-  }
-
-  return pts;
-}
-
-/**
- * Get all intersection points for a segment A|B
- * Intersections are sorted from A to B.
- * @param {Point} a   Endpoint A of the segment
- * @param {Point} b   Endpoint B of the segment
- * @returns {Point[]} Array of intersections or empty.
- *   If intersections returned, the t of each intersection is the distance along the a|b segment.
- */
-function segmentIntersections(a, b) {
-  // Follows structure of lineSegmentIntersects
-  const zoneA = this._getZone(a);
-  const zoneB = this._getZone(b);
-
-  if ( !(zoneA | zoneB) ) return []; // Bitwise OR is 0: both points inside rectangle.
-  if ( zoneA & zoneB ) return []; // Bitwise AND is not 0: both points share outside zone
-
-  // Reguler AND: one point inside, one outside
-  // Otherwise, both points outside
-  const zones = !(zoneA && zoneB) ? [zoneA || zoneB] : [zoneA, zoneB];
-
-  // If 2 zones, line likely intersects two edges,
-  // but some possibility that the line starts at, say, center left
-  // and moves to center top which means it may or may not cross the rectangle.
-  // Check so we can use lineLineIntersection below
-  if ( zones.length === 2 && !this.lineSegmentIntersects(a, b) ) return [];
-
-  const CSZ = PIXI.Rectangle.CS_ZONES;
-  const lsi = foundry.utils.lineSegmentIntersects;
-  const lli = foundry.utils.lineLineIntersection;
-  const { leftEdge, rightEdge, bottomEdge, topEdge } = this;
-  const ixs = [];
-  for ( const z of zones ) {
-    let ix;
-    if ( (z & CSZ.LEFT)
-      && lsi(leftEdge.A, leftEdge.B, a, b)) ix = lli(a, b, leftEdge.A, leftEdge.B);
-    if ( !ix && (z & CSZ.RIGHT)
-      && lsi(rightEdge.A, rightEdge.B, a, b)) ix = lli(a, b, rightEdge.A, rightEdge.B);
-    if ( !ix && (z & CSZ.TOP)
-      && lsi(topEdge.A, topEdge.B, a, b)) ix = lli(a, b, topEdge.A, topEdge.B);
-    if ( !ix && (z & CSZ.BOTTOM)
-      && lsi(bottomEdge.A, bottomEdge.B, a, b)) ix = lli(a, b, bottomEdge.A, bottomEdge.B);
-
-    // The ix should always be a point by now
-    if ( !ix ) console.warn("PIXI.Rectangle.prototype.segmentIntersections returned a null point.");
-    ixs.push(ix);
-  }
-
-  return ixs;
 }
 
 /**
