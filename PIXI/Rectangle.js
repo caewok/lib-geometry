@@ -1,19 +1,14 @@
 /* globals
-PIXI,
-foundry,
-ClipperLib,
-CONFIG
+PIXI
 */
 "use strict";
 
-import { WeilerAthertonClipper } from "../WeilerAtherton.js";
+import { addClassGetter, addClassMethod } from "../util.js";
 
 // ----------------  ADD METHODS TO THE PIXI.RECTANGLE PROTOTYPE ------------------------
 export function registerPIXIRectangleMethods() {
-  CONFIG.GeometryLib ??= {};
-  CONFIG.GeometryLib.Registered ??= {};
-  if ( CONFIG.GeometryLib.Registered.PIXIRectangle ) return;
-  CONFIG.GeometryLib.Registered.PIXIRectangle = true;
+  // ----- Static methods ----- //
+  addClassMethod(PIXI.Rectangle, "gridRectangles", gridRectangles);
 
   // ----- Static methods ---- //
   Object.defineProperty(PIXI.Rectangle, "gridRectangles", {
@@ -23,19 +18,11 @@ export function registerPIXIRectangleMethods() {
   });
 
   // ----- Getters/Setters ----- //
-  if ( !Object.hasOwn(PIXI.Rectangle.prototype, "area") ) {
-    Object.defineProperty(PIXI.Rectangle.prototype, "area", {
-      get: area,
-      enumerable: false
-    });
-  }
+  addClassGetter(PIXI.Rectangle.prototype, "area", area);
+  // center - in v11
 
-  if ( !Object.hasOwn(PIXI.Rectangle.prototype, "center") ) {
-    Object.defineProperty(PIXI.Rectangle.prototype, "center", {
-      get: center,
-      enumerable: false
-    });
-  }
+  // ----- Iterators ----- //
+  addClassMethod(PIXI.Rectangle.prototype, "iterateEdges", iterateEdges);
 
   // ----- Iterators ----- //
 
@@ -46,80 +33,20 @@ export function registerPIXIRectangleMethods() {
   });
 
   // ----- Methods ----- //
-
-  Object.defineProperty(PIXI.Rectangle.prototype, "_getEdgeZone", {
-    value: _getEdgeZone,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Rectangle.prototype, "difference", {
-    value: difference,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Rectangle.prototype, "intersectPolygon", {
-    value: intersectPolygonPIXIRectangle,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Rectangle.prototype, "overlaps", {
-    value: overlaps,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Rectangle.prototype, "pointsBetween", {
-    value: pointsBetween,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Rectangle.prototype, "segmentIntersections", {
-    value: segmentIntersections,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Rectangle.prototype, "translate", {
-    value: translate,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Rectangle.prototype, "viewablePoints", {
-    value: viewablePoints,
-    writable: true,
-    configurable: true
-  });
+  // _getEdgeZone - in v11
+  // intersectPolygon - in v11
+  // pointsBetween - in v11
+  // segmentIntersections - in v11
+  addClassMethod(PIXI.Rectangle.prototype, "difference", difference);
+  addClassMethod(PIXI.Rectangle.prototype, "overlaps", overlaps);
+  addClassMethod(PIXI.Rectangle.prototype, "translate", translate);
+  addClassMethod(PIXI.Rectangle.prototype, "viewablePoints", viewablePoints);
 
   // ----- Helper methods ----- //
-
-  Object.defineProperty(PIXI.Rectangle.prototype, "_overlapsCircle", {
-    value: overlapsCircle,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Rectangle.prototype, "_overlapsPolygon", {
-    value: overlapsPolygon,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Rectangle.prototype, "_overlapsRectangle", {
-    value: overlapsRectangle,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Rectangle.prototype, "scaledArea", {
-    value: scaledArea,
-    writable: true,
-    configurable: true
-  });
+  addClassMethod(PIXI.Rectangle.prototype, "_overlapsCircle", overlapsCircle);
+  addClassMethod(PIXI.Rectangle.prototype, "_overlapsPolygon", overlapsPolygon);
+  addClassMethod(PIXI.Rectangle.prototype, "_overlapsRectangle", overlapsRectangle);
+  addClassMethod(PIXI.Rectangle.prototype, "scaledArea", scaledArea);
 }
 
 /**
@@ -131,33 +58,23 @@ function area() {
 }
 
 /**
- * Calculate center of the rectangle
- * @returns {number}
+ * Iterate over the rectangle's edges in order.
+ * (Use close = true to return the last --> first edge.)
+ * @param {object} [options]
+ * @param {boolean} [close]   If true, return last point --> first point as edge.
+ * @returns Return an object { A: {x, y}, B: {x, y}} for each edge
+ * Edges link, such that edge0.B === edge.1.A.
  */
-function center() {
-  return { x: this.x + (this.width * 0.5), y: this.y + (this.height * 0.5) };
-}
+function* iterateEdges({close = true} = {}) {
+  const A = { x: this.x, y: this.y };
+  const B = { x: this.x + this.width, y: this.y };
+  const C = { x: this.x + this.width, y: this.y + this.height };
+  const D = { x: this.x, y: this.y + this.height };
 
-/**
- * Calculate the rectangle Zone for a given point located around, on, or in the rectangle.
- * https://en.wikipedia.org/wiki/Cohen%E2%80%93Sutherland_algorithm
- *
- * This differs from _getZone in how points on the edge are treated: they are not considered inside.
- *
- * @param {Point} p     Point to test for location relative to the rectangle
- * @returns {integer}
- */
-function _getEdgeZone(p) {
-  const CSZ = PIXI.Rectangle.CS_ZONES;
-  let code = CSZ.INSIDE;
-
-  if ( p.x < this.x || p.x.almostEqual(this.x) ) code |= CSZ.LEFT;
-  else if ( p.x > this.right || p.x.almostEqual(this.right) ) code |= CSZ.RIGHT;
-
-  if ( p.y < this.y || p.y.almostEqual(this.y) ) code |= CSZ.TOP;
-  else if ( p.y > this.bottom || p.y.almostEqual(this.bottom) ) code |= CSZ.BOTTOM;
-
-  return code;
+  yield { A, B };
+  yield { A: B, B: C };
+  yield { A: C, B: D };
+  if ( close ) yield { A: D, B: A };
 }
 
 /**

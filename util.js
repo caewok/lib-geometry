@@ -12,9 +12,6 @@ import { Ellipse } from "./Ellipse.js";
 
 // Functions that would go in foundry.utils if that object were extensible
 export function registerFoundryUtilsMethods() {
-  CONFIG.GeometryLib ??= {};
-  if ( CONFIG.GeometryLib.utils ) return;
-
   CONFIG.GeometryLib.utils = {
     orient3dFast,
     quadraticIntersection,
@@ -197,6 +194,17 @@ function shortestRouteBetween3dLines(a, b, c, d, epsilon = 1e-08) {
     mub
   }
 }
+
+// Simple extensions
+Math.minMax = function(...args) {
+  return args.reduce((acc, curr) => {
+    acc.min = Math.min(acc.min, curr);
+    acc.max = Math.max(acc.max, curr);
+    return acc;
+  }, { min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY});
+}
+
+Math.PI_1_2 = Math.PI * 0.5;
 
 /**
  * Construct a centered polygon using the values in drawing shape.
@@ -431,4 +439,32 @@ function lineCircleIntersection(a, b, center, radius, epsilon=1e-8) {
     tangent: !aInside && !bInside && intersections.length === 1,
     intersections
   };
+}
+
+/**
+ * Helper to add a method to a class.
+ * @param {class} cl      Either Class.prototype or Class
+ * @param {string} name   Name of the method
+ * @param {function} fn   Function to use for the method
+ */
+export function addClassMethod(cl, name, fn) {
+  Object.defineProperty(cl, name, {
+    value: fn,
+    writable: true,
+    configurable: true
+  });
+}
+
+/**
+ * Helper to add a getter to a class.
+ * @param {class} cl      Either Class.prototype or Class
+ * @param {string} name   Name of the method
+ * @param {function} fn   Function to use for the method
+ */
+export function addClassGetter(cl, name, fn) {
+  if ( Object.hasOwn(cl, name) ) return;
+  Object.defineProperty(cl, name, {
+    get: fn,
+    configurable: true
+  });
 }

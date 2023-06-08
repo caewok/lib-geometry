@@ -35,9 +35,6 @@ import { Draw } from "./Draw.js";
 // Ellipse
 import { Ellipse } from "./Ellipse.js";
 
-// WeilerAtherton
-import { WeilerAthertonClipper } from "./WeilerAtherton.js";
-
 // Matrix
 import { Matrix } from "./Matrix.js";
 
@@ -47,15 +44,15 @@ import { Shadow, ShadowProjection } from "./Shadow.js";
 // ClipperPaths
 import { ClipperPaths } from "./ClipperPaths.js";
 
+CONFIG.GeometryLib = {};
+
 // Graph
 import { Graph, GraphVertex, GraphEdge } from "./Graph.js";
 
 export function registerGeometry() {
-  registerPIXIPolygonMethods();
-  registerPIXICircleMethods();
-  registerPIXIRectangleMethods();
-  registerPIXIPointMethods();
   registerFoundryUtilsMethods();
+  registerPIXIMethods();
+  register3d();
 
   registerCenteredPolygons();
   registerRegularPolygons();
@@ -63,7 +60,6 @@ export function registerGeometry() {
   registerEllipse();
   registerShadow();
   registerMatrix();
-  registerWeilerAthertonClipper();
   registerClipperPaths();
   register3d();
   registerGraph();
@@ -80,9 +76,16 @@ export function registerGraph() {
   };
 }
 
+export function registerPIXIMethods() {
+  registerPIXIPolygonMethods();
+  registerPIXICircleMethods();
+  registerPIXIRectangleMethods();
+  registerPIXIPointMethods();
+}
+
 export function registerCenteredPolygons() {
-  CONFIG.GeometryLib ??= {};
-  if ( CONFIG.GeometryLib.CenteredPolygons ) return;
+  // Dependencies
+  registerRegularPolygons();
 
   CONFIG.GeometryLib.CenteredPolygons = {
     CenteredPolygonBase,
@@ -92,8 +95,9 @@ export function registerCenteredPolygons() {
 }
 
 export function registerRegularPolygons() {
-  CONFIG.GeometryLib ??= {};
-  if ( CONFIG.GeometryLib.RegularPolygons ) return;
+  // Dependencies
+  registerFoundryUtilsMethods();
+  registerPIXIMethods();
 
   CONFIG.GeometryLib.RegularPolygons = {
     RegularPolygon,
@@ -105,16 +109,10 @@ export function registerRegularPolygons() {
 }
 
 export function registerDraw() {
-  CONFIG.GeometryLib ??= {};
-  if ( CONFIG.GeometryLib.Draw ) return;
-
   CONFIG.GeometryLib.Draw = Draw;
 }
 
 export function register3d() {
-  CONFIG.GeometryLib ??= {};
-  if ( CONFIG.GeometryLib.threeD ) return;
-
   CONFIG.GeometryLib.threeD = {
     Plane,
     Point3d,
@@ -123,37 +121,18 @@ export function register3d() {
 }
 
 export function registerEllipse() {
-  CONFIG.GeometryLib ??= {};
-  if ( CONFIG.GeometryLib.Ellipse ) return;
-
   CONFIG.GeometryLib.Ellipse = Ellipse;
 }
 
-export function registerWeilerAthertonClipper() {
-  CONFIG.GeometryLib ??= {};
-  if ( CONFIG.GeometryLib.WeilerAthertonClipper ) return;
-
-  CONFIG.GeometryLib.WeilerAthertonClipper = WeilerAthertonClipper;
-}
-
 export function registerShadow() {
-  CONFIG.GeometryLib ??= {};
-  if ( CONFIG.GeometryLib.Shadow ) return;
-
   CONFIG.GeometryLib.Shadow = Shadow;
   CONFIG.GeometryLib.ShadowProjection = ShadowProjection;
 }
 
 export function registerMatrix() {
-  CONFIG.GeometryLib ??= {};
-  if ( CONFIG.GeometryLib.Matrix ) return;
-
   CONFIG.GeometryLib.Matrix = Matrix;
 }
 
 export function registerClipperPaths() {
-  CONFIG.GeometryLib ??= {};
-  if ( CONFIG.GeometryLib.ClipperPaths ) return;
-
   CONFIG.GeometryLib.ClipperPaths = ClipperPaths;
 }

@@ -6,181 +6,42 @@ CONFIG
 */
 "use strict";
 
+import { addClassGetter, addClassMethod } from "../util.js";
+
 // --------- ADD METHODS TO THE PIXI.POLYGON PROTOTYPE ----- //
 export function registerPIXIPolygonMethods() {
-  CONFIG.GeometryLib ??= {};
-  CONFIG.GeometryLib.Registered ??= {};
-  if ( CONFIG.GeometryLib.Registered.PIXIPolygon ) return;
-  CONFIG.GeometryLib.Registered.PIXIPolygon = true;
-
   // ----- Getters/Setters ----- //
-
-  if ( !Object.hasOwn(PIXI.Polygon.prototype, "area") ) {
-    Object.defineProperty(PIXI.Polygon.prototype, "area", {
-      get: area,
-      enumerable: false
-    });
-  }
-
-  if ( !Object.hasOwn(PIXI.Polygon.prototype, "center") ) {
-    Object.defineProperty(PIXI.Polygon.prototype, "center", {
-      get: centroid,
-      enumerable: false
-    });
-  }
-
-  if ( !Object.hasOwn(PIXI.Polygon.prototype, "isClockwise") ) {
-    Object.defineProperty(PIXI.Polygon.prototype, "isClockwise", {
-      get: isClockwise,
-      enumerable: false
-    });
-  }
-
-  if ( !Object.hasOwn(PIXI.Polygon.prototype, "key") ) {
-    Object.defineProperty(PIXI.Polygon.prototype, "key", {
-      get: key,
-      enumerable: false
-    });
-  }
+  addClassGetter(PIXI.Polygon.prototype, "area", area);
+  addClassGetter(PIXI.Polygon.prototype, "center", centroid);
+  addClassGetter(PIXI.Polygon.prototype, "isClockwise", isClockwise);
+  addClassGetter(PIXI.Polygon.prototype, "key", key);
 
   // ----- Iterators ----- //
-
-  Object.defineProperty(PIXI.Polygon.prototype, "iterateEdges", {
-    value: iterateEdges,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Polygon.prototype, "iteratePoints", {
-    value: iteratePoints,
-    writable: true,
-    configurable: true
-  });
+  addClassMethod(PIXI.Polygon.prototype, "iterateEdges", iterateEdges);
+  addClassMethod(PIXI.Polygon.prototype, "iteratePoints", iteratePoints);
 
   // ----- Methods ----- //
-
-  // For compatibility with other shapes
-  Object.defineProperty(PIXI.Polygon.prototype, "toPolygon", {
-    value: function() { return this; },
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Polygon.prototype, "clean", {
-    value: clean,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Polygon.prototype, "clipperClip", {
-    value: clipperClip,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Polygon.prototype, "convexhull", {
-    value: convexhull,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Polygon.prototype, "equals", {
-    value: equals,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Polygon.prototype, "isSegmentEnclosed", {
-    value: isSegmentEnclosed,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Polygon.prototype, "linesCross", {
-    value: linesCross,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Polygon.prototype, "lineSegmentIntersects", {
-    value: lineSegmentIntersects,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Polygon.prototype, "reverseOrientation", {
-    value: reverseOrientation,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Polygon.prototype, "overlaps", {
-    value: overlaps,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Polygon.prototype, "pad", {
-    value: pad,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Polygon.prototype, "pointsBetween", {
-    value: pointsBetween,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Polygon.prototype, "segmentIntersections", {
-    value: segmentIntersections,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Polygon.prototype, "translate", {
-    value: translate,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Polygon.prototype, "viewablePoints", {
-    value: viewablePoints,
-    writable: true,
-    configurable: true
-  });
+  addClassMethod(PIXI.Polygon.prototype, "toPolygon", function() { return this; });
+  addClassMethod(PIXI.Polygon.prototype, "clean", clean);
+  addClassMethod(PIXI.Polygon.prototype, "clipperClip", clipperClip);
+  addClassMethod(PIXI.Polygon.prototype, "convexhull", convexhull);
+  addClassMethod(PIXI.Polygon.prototype, "equals", equals);
+  addClassMethod(PIXI.Polygon.prototype, "isSegmentEnclosed", isSegmentEnclosed);
+  addClassMethod(PIXI.Polygon.prototype, "linesCross", linesCross);
+  addClassMethod(PIXI.Polygon.prototype, "lineSegmentIntersects", lineSegmentIntersects);
+  // reverseOrientation - in v11
+  addClassMethod(PIXI.Polygon.prototype, "overlaps", overlaps);
+  addClassMethod(PIXI.Polygon.prototype, "pad", pad);
+  // pointsBetween - in v11
+  // segmentIntersections - in v11
+  addClassMethod(PIXI.Polygon.prototype, "translate", translate);
+  addClassMethod(PIXI.Polygon.prototype, "viewablePoints", viewablePoints);
 
   // ----- Helper/Internal Methods ----- //
-
-  Object.defineProperty(PIXI.Polygon.prototype, "_overlapsPolygon", {
-    value: overlapsPolygon,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Polygon.prototype, "_overlapsCircle", {
-    value: overlapsCircle,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Polygon.prototype, "_overlapsCircle", {
-    value: overlapsCircle,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Polygon.prototype, "scaledArea", {
-    value: scaledArea,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Polygon.prototype, "signedArea", {
-    value: signedArea,
-    writable: true,
-    configurable: true
-  });
+  addClassMethod(PIXI.Polygon.prototype, "_overlapsPolygon", overlapsPolygon);
+  addClassMethod(PIXI.Polygon.prototype, "_overlapsCircle", overlapsCircle);
+  addClassMethod(PIXI.Polygon.prototype, "scaledArea", scaledArea);
+  // signedArea - in v11
 
 }
 
@@ -304,15 +165,10 @@ function convexHullCmpFn(a, b) {
 /**
  * Test whether the polygon is oriented clockwise.
  * Cached property.
+ * In v11, this was renamed to isPositive; this provides backward-compatibility.
  * @returns {boolean}
  */
-function isClockwise() {
-  if ( this.points.length < 6 ) return (this._isClockwise = undefined);
-
-  if ( typeof this._isClockwise === "undefined") this._isClockwise = this.signedArea() > 0;
-  return this._isClockwise;
-}
-
+function isClockwise() { return this.isPositive; }
 
 /**
  * Test if a segment is enclosed by the polygon.
@@ -391,7 +247,6 @@ function* iteratePoints({close = true} = {}) {
 
   if ( close ) yield new PIXI.Point(this.points[0], this.points[1]);
 }
-
 
 /**
  * Test if a line or lines crosses a polygon edge
@@ -546,6 +401,7 @@ function overlapsPolygon(other) {
   return false;
 }
 
+
 /**
  * Does this polygon overlap a circle?
  * TO-DO: Use Separating Axis Theorem?
@@ -591,22 +447,6 @@ function pad(delta, { miterLimit = 2, scalingFactor = 1 } = {}) {
 }
 
 /**
- * Reverse the order of the polygon points.
- * @returns {PIXI.Polygon}
- */
-function reverseOrientation() {
-  const reversed_pts = [];
-  const pts = this.points;
-  const ln = pts.length - 2;
-  for (let i = ln; i >= 0; i -= 2) {
-    reversed_pts.push(pts[i], pts[i + 1]);
-  }
-  this.points = reversed_pts;
-  if ( typeof this._isClockwise !== "undefined" ) this._isClockwise = !this._isClockwise;
-  return this;
-}
-
-/**
  * Scaled area of a polygon.
  * Used to match what Clipper would measure as area, by scaling the points.
  * @param {object} [options]
@@ -628,8 +468,8 @@ function signedArea({ scalingFactor } = {}) {
   const pts = [...this.iteratePoints({close: true})];
 
   if ( scalingFactor ) pts.forEach(pt => {
-    pt.x = Math.roundFast(pt.x * scalingFactor);
-    pt.y = Math.roundFast(pt.y * scalingFactor);
+    pt.x = Math.round(pt.x * scalingFactor);
+    pt.y = Math.round(pt.y * scalingFactor);
   });
 
   const ln = pts.length;
@@ -651,6 +491,7 @@ function signedArea({ scalingFactor } = {}) {
 
   return -area * 0.5;
 }
+
 
 /**
  * Test the point against existing hull points.
