@@ -32,6 +32,8 @@ export function registerPIXIPolygonMethods() {
   // reverseOrientation - in v11
   addClassMethod(PIXI.Polygon.prototype, "overlaps", overlaps);
   addClassMethod(PIXI.Polygon.prototype, "pad", pad);
+  addClassMethod(PIXI.Polygon.prototype, "segmentIntersections", segmentIntersections);
+  addClassMethod(PIXI.Polygon.prototype, "pointsBetween", pointsBetween);
   // pointsBetween - in v11
   // segmentIntersections - in v11
   addClassMethod(PIXI.Polygon.prototype, "translate", translate);
@@ -282,6 +284,76 @@ function lineSegmentIntersects(a, b, { inside = false } = {}) {
   }
 
   return false;
+}
+
+/**
+ * Get all intersection points for a segment A|B
+ * Intersections are sorted from A to B.
+ * @param {Point} a   Endpoint A of the segment
+ * @param {Point} b   Endpoint B of the segment
+ * @param {object} [options]    Optional parameters
+ * @param {object[]} [options.edges]  Array of edges for this polygon, from this.iterateEdges.
+ * @param {boolean} [options.indices] If true, return the indices for the edges instead of intersections
+ * @returns {Point[]} Array of intersections or empty.
+ *   If intersections returned, the t of each intersection is the distance along the a|b segment.
+ */
+function segmentIntersections(a, b, { edges, indices = false } = {}) {
+  edges ??= [...this.iterateEdges({ close: true })];
+  const ixIndices = [];
+  edges.forEach((e, i) => {
+    if ( foundry.utils.lineSegmentIntersects(a, b, e.A, e.B) ) ixIndices.push(i);
+  });
+  if ( indices ) return ixIndices;
+
+  return ixIndices.map(i => {
+    const edge = edges[i];
+    return foundry.utils.lineLineIntersection(a, b, edge.A, edge.B);
+  });
+}
+
+/**
+ * Get all the points for this polygon between two points on the polygon
+ * Points are clockwise from a to b.
+ * @param { Point } a
+ * @param { Point } b
+ * @param {object} [options]    Optional parameters
+ * @param {object[]} [options.edges]  Array of edges for this polygon, from this.iterateEdges.
+ * @return { Point[]}
+ */
+function pointsBetween(a, b, { edges } = {}) {
+  edges ??= [...this.iterateEdges({ close: true })];
+  const ixIndices = this.segmentIntersections(a, b, { edges, indices: true });
+
+  // A is the closest ix
+  // B is the further ix
+  // Anything else can be ignored
+  let ixA = { t: Number.POSITIVE_INFINITY };
+  let ixB = { t: Number.NEGATIVE_INFINITY };
+  ixIndices.forEach(ix => {
+    if ( ix.t < ixA.t ) ixA = ix;
+    if ( ix.t > ixB.t ) ixB = ix;
+  });
+
+  // Start at ixA, and get intersection point at start and end
+  const out = [];
+  const startEdge = edges[ixA];
+  const startIx = foundry.utils.lineLineIntersection(startEdge.A, startEdge.B, a, b);
+  out.push(startIx);
+  if ( !startEdge.B.almostEqual(startIx) ) out.push(startEdge.B);
+
+  const ln = edges.length;
+  for ( let i = startIx + 1; i < ln; i += 1 ) out.push(edges[i].B);
+
+  if ( ixB < ixA ) {
+    // Must circle around to the starting edge
+    for ( let i = 0; i < ixB; i += 1 ) out.push(edges[i].B);
+  }
+
+  const endEdge = edges[ixB];
+  const endIx = foundry.utils.lineLineIntersection(endEdge.A, endEdge.B, a, b);
+  if ( !endEdge.A.almostEqual(endIx) ) out.push(endIx);
+
+  return out;
 }
 
 /**
