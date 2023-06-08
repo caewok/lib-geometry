@@ -1,7 +1,27 @@
 /* globals
+canvas,
 PIXI
 */
 "use strict";
+
+/**
+ * An object representing top and bottom points, like that for a Token.
+ * @typedef {object} Point3dToken
+ * @property {Point3d} top
+ * @property {Point3d} bottom
+ */
+
+/**
+ * An object representing points of a vertical Wall
+ * TODO: Flip these, so top and bottom represent segments A|B
+ * @typedef {object} Point3dWall
+ * @property {object} [A]
+ * @property {Point3d} [A.top]
+ * @property {Point3d} [A.bottom]
+ * @property {object} [B]
+ * @property {Point3d} [B.top]
+ * @property {Point3d} [B.bottom]
+ */
 
 /**
  * 3-D version of PIXI.Point
@@ -16,6 +36,35 @@ export class Point3d extends PIXI.Point {
   constructor(x = 0, y = 0, z = 0) {
     super(x, y);
     this.z = z;
+  }
+
+  /**
+   * Check if 3d points are oriented clockwise.
+   * ChatGPT
+   * This function calculates the cross product of the two edge vectors of the triangle
+   * formed by the three points using the subtract and cross functions. It then checks
+   * if the z component of the cross product is greater than zero, which indicates that
+   * the points are oriented clockwise. If the z component is less than or equal to zero,
+   * the points are oriented counter-clockwise.
+   *
+   * Note that this function assumes that the points are given in a right-handed coordinate system,
+   * where the positive z-axis points out of the screen. If the points are given in a
+   * left-handed coordinate system, the function should be modified to check if the z
+   * component of the cross product is less than zero.
+   * @param {Point3d} a
+   * @param {Point3d} b
+   * @param {Point3d} c
+   * @returns {number} The z-component of the cross. Comparable to foundry.utils.orient2d
+   *   0: colinear
+   *   positive: CCW (right-handed system, incl. Foundry)
+   *   negative: CW (right-handed system, incl. Foundry)
+   */
+  static orient(a, b, c) {
+    const dBA = b.subtract(a);
+    const dCB = c.subtract(b);
+    const crossProduct = dBA.cross(dCB);
+
+    return -crossProduct.z;
   }
 
   /**
@@ -92,6 +141,71 @@ export class Point3d extends PIXI.Point {
     const dy = b.y - a.y;
     const dz = b.z - a.z;
     return Math.pow(dx, 2) + Math.pow(dy, 2) + Math.pow(dz, 2);
+  }
+
+  /**
+   * Determine the center point for the source.
+   * @param {PointSource} source
+   * @returns {Point3d}
+   */
+  static fromPointSource(source) {
+    const { x, y, elevationZ } = source;
+    return new Point3d(x, y, elevationZ);
+  }
+
+  /**
+   * Determine the token top and bottom center points.
+   * @param {Token} token
+   * @returns {Point3dToken}
+   */
+  static fromToken(token) {
+    const { x, y } = token.center;
+    return {
+      top: new Point3d(x, y, token.topZ),
+      bottom: new Point3d(x, y, token.bottomZ)
+    };
+  }
+
+  /**
+   * Determine the token exact center point in 3d.
+   * For height, uses the average between token bottom and top.
+   * @param {Token} token
+   * @returns {Point3d}
+   */
+  static fromTokenCenter(token) {
+    const { center, bottomZ, topZ } = token;
+    const e = bottomZ + ((topZ - bottomZ) * 0.5);
+    return new Point3d(center.x, center.y, e);
+  }
+
+  /**
+   * Determine the wall top and bottom points
+   * @param {Wall} wall         Wall to convert to points object
+   * @param {object} [options]  Options that affect the conversion
+   * @param {boolean} [finite]  Force infinite z values to finite min/max safe integers
+   * @returns {Point3dWall}
+   */
+  static fromWall(wall, { finite = false } = {}) {
+    const { topZ, bottomZ, A, B } = wall;
+
+    // Use MAX instead of Number.MAX_SAFE_INTEGER to improve numerical accuracy
+    // particularly when converting to/from 2d.
+    const numDigits = numPositiveDigits(canvas.dimensions.maxR);
+    const MAX = Number(`1e0${numDigits}`);
+
+    const top = (finite && !isFinite(topZ)) ? MAX : topZ;
+    const bottom = (finite && !isFinite(bottomZ)) ? -MAX : bottomZ;
+
+    return {
+      A: {
+        top: new Point3d(A.x, A.y, top),
+        bottom: new Point3d(A.x, A.y, bottom)
+      },
+      B: {
+        top: new Point3d(B.x, B.y, top),
+        bottom: new Point3d(B.x, B.y, bottom)
+      }
+    };
   }
 
   /**
@@ -302,4 +416,16 @@ export class Point3d extends PIXI.Point {
   normalize(outPoint = new Point3d()) {
     return super.normalize(outPoint);
   }
+}
+
+/**
+ * Count the number of positive integer digits.
+ * Will return 0 for negative numbers.
+ * Will truncate any decimals.
+ * https://stackoverflow.com/questions/14879691/get-number-of-digits-with-javascript
+ * @param {number}      A positive number
+ * @returns {number}    The number of digits before the decimal
+ */
+export function numPositiveDigits(n) {
+  return (Math.log(n) * Math.LOG10E) + 1 | 0;
 }
