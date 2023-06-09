@@ -12,6 +12,10 @@ import { Ellipse } from "./Ellipse.js";
 
 // Functions that would go in foundry.utils if that object were extensible
 export function registerFoundryUtilsMethods() {
+  CONFIG.GeometryLib ??= {};
+  CONFIG.GeometryLib.registered ??= new Set();
+  if ( CONFIG.GeometryLib.registered.has("utils") ) return;
+
   CONFIG.GeometryLib.utils = {
     orient3dFast,
     quadraticIntersection,
@@ -37,6 +41,7 @@ export function registerFoundryUtilsMethods() {
       return acc;
     }, { min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY});
   };
+  CONFIG.GeometryLib.registered.add("utils");
 }
 
 // Just like foundry.utils.lineLineIntersection but with the typo in t1 calculation fixed.
@@ -455,10 +460,17 @@ export function addClassMethod(cl, name, fn) {
  * @param {string} name   Name of the method
  * @param {function} fn   Function to use for the method
  */
-export function addClassGetter(cl, name, fn) {
+export function addClassGetter(cl, name, getter, setter) {
   if ( Object.hasOwn(cl, name) ) return;
   Object.defineProperty(cl, name, {
-    get: fn,
+    get: getter,
     configurable: true
   });
+
+  if ( setter ) {
+    Object.defineProperty(cl, name, {
+      set: setter,
+      configurable: true
+    });
+  }
 }

@@ -7,6 +7,10 @@ import { addClassGetter, addClassMethod } from "../util.js";
 
 // ----------------  ADD METHODS TO THE PIXI.RECTANGLE PROTOTYPE ------------------------
 export function registerPIXIRectangleMethods() {
+  CONFIG.GeometryLib ??= {};
+  CONFIG.GeometryLib.registered ??= new Set();
+  if ( CONFIG.GeometryLib.registered.has("PIXI.Rectangle") ) return;
+
   // ----- Static methods ----- //
   addClassMethod(PIXI.Rectangle, "gridRectangles", gridRectangles);
 
@@ -32,6 +36,8 @@ export function registerPIXIRectangleMethods() {
   addClassMethod(PIXI.Rectangle.prototype, "_overlapsPolygon", overlapsPolygon);
   addClassMethod(PIXI.Rectangle.prototype, "_overlapsRectangle", overlapsRectangle);
   addClassMethod(PIXI.Rectangle.prototype, "scaledArea", scaledArea);
+
+  CONFIG.GeometryLib.registered.add("PIXI.Rectangle");
 }
 
 /**

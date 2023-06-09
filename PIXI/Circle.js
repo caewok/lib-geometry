@@ -7,6 +7,11 @@ import { addClassGetter, addClassMethod } from "../util.js";
 
 // ----------------  ADD METHODS TO THE PIXI.CIRCLE PROTOTYPE ------------------------
 export function registerPIXICircleMethods() {
+  CONFIG.GeometryLib ??= {};
+  CONFIG.GeometryLib.registered ??= new Set();
+  if ( CONFIG.GeometryLib.registered.has("PIXI.Circle") ) return;
+
+
   // ----- Getters/Setters ----- //
   addClassGetter(PIXI.Circle.prototype, "area", area);
   // center - in v11
@@ -20,6 +25,8 @@ export function registerPIXICircleMethods() {
   // pointsBetween - in v11
   addClassMethod(PIXI.Circle.prototype, "translate", translate);
   addClassMethod(PIXI.Circle.prototype, "scaledArea", scaledArea);
+
+  CONFIG.GeometryLib.registered.add("PIXI.Circle");
 }
 
 /**

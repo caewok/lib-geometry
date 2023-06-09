@@ -10,6 +10,11 @@ import { addClassGetter, addClassMethod } from "../util.js";
 
 // --------- ADD METHODS TO THE PIXI.POLYGON PROTOTYPE ----- //
 export function registerPIXIPolygonMethods() {
+  CONFIG.GeometryLib ??= {};
+  CONFIG.GeometryLib.registered ??= new Set();
+  if ( CONFIG.GeometryLib.registered.has("PIXI.Polygon") ) return;
+
+
   // ----- Getters/Setters ----- //
   addClassGetter(PIXI.Polygon.prototype, "area", area);
   addClassGetter(PIXI.Polygon.prototype, "center", centroid);
@@ -45,6 +50,7 @@ export function registerPIXIPolygonMethods() {
   addClassMethod(PIXI.Polygon.prototype, "scaledArea", scaledArea);
   // signedArea - in v11
 
+  CONFIG.GeometryLib.registered.add("PIXI.Polygon");
 }
 
 /**

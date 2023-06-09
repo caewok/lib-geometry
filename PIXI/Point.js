@@ -9,6 +9,10 @@ import { addClassGetter, addClassMethod } from "../util.js";
 
 // Add methods to PIXI.Point
 export function registerPIXIPointMethods() {
+  CONFIG.GeometryLib ??= {};
+  CONFIG.GeometryLib.registered ??= new Set();
+  if ( CONFIG.GeometryLib.registered.has("PIXI.Point") ) return;
+
   // ----- Getters/Setters ----- //
   addClassGetter(PIXI.Point.prototype, "key", key);
   addClassGetter(PIXI.Point.prototype, "sortKey", sortKey);
@@ -43,6 +47,8 @@ export function registerPIXIPointMethods() {
 
   // For parallel with Point3d
   addClassMethod(PIXI.Point.prototype, "to2d", function() { return this; });
+
+  CONFIG.GeometryLib.registered.add("PIXI.Point");
 }
 
 /**

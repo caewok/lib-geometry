@@ -44,16 +44,21 @@ import { Shadow, ShadowProjection } from "./Shadow.js";
 // ClipperPaths
 import { ClipperPaths } from "./ClipperPaths.js";
 
-CONFIG.GeometryLib = {};
+// Elevation
+import { registerElevationAdditions } from "./elevation.js";
 
 // Graph
 import { Graph, GraphVertex, GraphEdge } from "./Graph.js";
 
 export function registerGeometry() {
+  CONFIG.GeometryLib ??= {};
+  CONFIG.GeometryLib.registered ??= new Set();
+
   registerFoundryUtilsMethods();
   registerPIXIMethods();
   register3d();
 
+  registerElevationAdditions();
   registerCenteredPolygons();
   registerRegularPolygons();
   registerDraw();
@@ -67,9 +72,7 @@ export function registerGeometry() {
 
 export function registerGraph() {
   CONFIG.GeometryLib ??= {};
-  if ( CONFIG.GeometryLib.Graph ) return;
-
-  CONFIG.GeometryLib.Graph = {
+  CONFIG.GeometryLib.Graph ??= {
     Graph,
     GraphVertex,
     GraphEdge
@@ -87,7 +90,7 @@ export function registerCenteredPolygons() {
   // Dependencies
   registerRegularPolygons();
 
-  CONFIG.GeometryLib.CenteredPolygons = {
+  CONFIG.GeometryLib.CenteredPolygons ??= {
     CenteredPolygonBase,
     CenteredPolygon,
     CenteredRectangle
@@ -99,7 +102,7 @@ export function registerRegularPolygons() {
   registerFoundryUtilsMethods();
   registerPIXIMethods();
 
-  CONFIG.GeometryLib.RegularPolygons = {
+  CONFIG.GeometryLib.RegularPolygons ??= {
     RegularPolygon,
     EquilateralTriangle,
     Square,
@@ -109,11 +112,13 @@ export function registerRegularPolygons() {
 }
 
 export function registerDraw() {
-  CONFIG.GeometryLib.Draw = Draw;
+  CONFIG.GeometryLib ??= {};
+  CONFIG.GeometryLib.Draw ??= Draw;
 }
 
 export function register3d() {
-  CONFIG.GeometryLib.threeD = {
+  CONFIG.GeometryLib ??= {};
+  CONFIG.GeometryLib.threeD ??= {
     Plane,
     Point3d,
     Ray3d
@@ -121,18 +126,22 @@ export function register3d() {
 }
 
 export function registerEllipse() {
-  CONFIG.GeometryLib.Ellipse = Ellipse;
+  CONFIG.GeometryLib ??= {};
+  CONFIG.GeometryLib.Ellipse ??= Ellipse;
 }
 
 export function registerShadow() {
-  CONFIG.GeometryLib.Shadow = Shadow;
-  CONFIG.GeometryLib.ShadowProjection = ShadowProjection;
+  CONFIG.GeometryLib ??= {};
+  CONFIG.GeometryLib.Shadow ??= Shadow;
+  CONFIG.GeometryLib.ShadowProjection ??= ShadowProjection;
 }
 
 export function registerMatrix() {
-  CONFIG.GeometryLib.Matrix = Matrix;
+  CONFIG.GeometryLib ??= {};
+  CONFIG.GeometryLib.Matrix ??= Matrix;
 }
 
 export function registerClipperPaths() {
-  CONFIG.GeometryLib.ClipperPaths = ClipperPaths;
+  CONFIG.GeometryLib ??= {};
+  CONFIG.GeometryLib.ClipperPaths ??= ClipperPaths;
 }
