@@ -107,7 +107,10 @@ export function registerElevationAdditions() {
 // Changes to token elevation appear to update the source elevation automatically.
 function pointSourceElevationE() { return this.data.elevation ?? 0; }
 
-function setPointSourceElevationE(value) { this.data.elevation = value; }
+function setPointSourceElevationE(value) {
+  this.data.elevation = value;
+  if ( typeof this.object.elevationE !== "undefined" ) this.object.elevationE = value;
+}
 
 // NOTE: PlaceableObject Elevation
 // Drawing, AmbientLight, AmbientSound, MeasuredTemplate, Note, Tile, Wall, Token
@@ -128,15 +131,28 @@ function setPlaceableObjectElevationE(value) {
 
 // NOTE: AmbientLight and AmbientSound Elevation
 // Use the underlying source elevation
-function ambientElevationE() { return this.source.elevationE; }
+function ambientElevationE() { return this.source._elevationE; }
 
-function setAmbientElevationE(value) { this.source.elevationE = value; }
+function setAmbientElevationE(value) { this.source._elevationE = value; }
 
 // Note Tile Elevation
-// Has document.elevation already
-function tileElevationE() { return this.document.elevation; }
+// Has document.elevation already but does not save it.
+function tileElevationE() {
+  return this._elevationE
+    ?? (this._elevationE = getProperty(this.document.flags, MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION)
+    ?? this.document.elevation
+    ?? 0);
 
-function setTileElevationE(value) { this.document.elevation = value; }
+  return this._elevationE;
+}
+
+function setTileElevationE(value) {
+  this._elevationE = value;
+  this.document.elevation = value;
+
+  // Async method
+  this.document.update({ flags: { [MODULE_KEYS.EV.ID]: { [MODULE_KEYS.EV.ELEVATION]: value } } });
+}
 
 
 // NOTE: Wall Elevation
@@ -189,11 +205,14 @@ function setWallBottomE(value) {
 // Has document.elevation already
 function tokenElevationE() { return this.document.elevation; }
 
-function setTokenElevationE(value) { this.document.elevation = value; }
+function setTokenElevationE(value) {
+  this.document.elevation = value;
+  this.document.update({ elevation: value }); // Async
+}
 
 function tokenBottomE() { return this.document.elevation; }
 
-function setTokenBottomE(value) { this.document.elevation = value; }
+function setTokenBottomE(value) { this.elevationE = value; }
 
 // Don't allow setting of token.topE b/c it is ambiguous.
 
