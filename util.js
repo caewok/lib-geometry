@@ -252,20 +252,14 @@ function perpendicularPoint(a, b, c) {
  * @param {number} value
  * @returns {number}
  */
-function gridUnitsToPixels(value) {
-  const { distance, size } = canvas.scene.grid;
-  return (value * size) / distance;
-}
+function gridUnitsToPixels(value) { return value * canvas.dimensions.distancePixels; }
 
 /**
  * Convert pixel units (x,y,z) to grid units
  * @param {number} pixels
  * @returns {number}
  */
-function pixelsToGridUnits(pixels) {
-  const { distance, size } = canvas.scene.grid;
-  return (pixels * distance) / size;
-}
+function pixelsToGridUnits(pixels) { return pixels / canvas.dimensions.distancePixels; }
 
 /**
  * Like foundry.utils.lineSegmentIntersects but requires the two segments cross.
