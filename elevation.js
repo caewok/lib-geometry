@@ -17,7 +17,7 @@ Wall
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { addClassGetter, gridUnitsToPixels, pixelsToGridUnits } from "../util.js";
+import { addClassGetter, gridUnitsToPixels, pixelsToGridUnits } from "./util.js";
 import { MODULE_KEYS } from "./const.js";
 
 /* Elevation properties for Placeable Objects
