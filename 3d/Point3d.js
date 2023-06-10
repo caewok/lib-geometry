@@ -213,9 +213,9 @@ export class Point3d extends PIXI.Point {
    * @returns {number}
    */
   get sortKey() {
-    return (MAX_TEXTURE_SIZE2 * Math.roundFast(this.z))
-      + (MAX_TEXTURE_SIZE * Math.roundFast(this.x))
-      + Math.roundFast(this.y);
+    return (MAX_TEXTURE_SIZE2 * Math.round(this.z))
+      + (MAX_TEXTURE_SIZE * Math.round(this.x))
+      + Math.round(this.y);
   }
 
   /**
