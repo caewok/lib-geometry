@@ -1,6 +1,6 @@
 /* globals
-PIXI,
-canvas
+canvas,
+PIXI
 */
 "use strict";
 
@@ -37,6 +37,18 @@ export class Point3d extends PIXI.Point {
   constructor(x = 0, y = 0, z = 0) {
     super(x, y);
     this.z = z;
+  }
+
+  /**
+   * Construct a Point3d from any object that has x and y and z properties.
+   * Recognizes elevationZ and elevation as potential z properties.
+   * @param {object} obj
+   * @returns {Point3d}
+   */
+  static fromObject(obj) {
+    const pt = super.fromObject(obj);
+    pt.z = obj.z ?? obj.elevationZ ?? obj.elevation ?? 0;
+    return pt;
   }
 
   /**
@@ -201,9 +213,9 @@ export class Point3d extends PIXI.Point {
    * @returns {number}
    */
   get sortKey() {
-    return (MAX_TEXTURE_SIZE2 * Math.roundFast(this.z))
-      + (MAX_TEXTURE_SIZE * Math.roundFast(this.x))
-      + Math.roundFast(this.y);
+    return (MAX_TEXTURE_SIZE2 * Math.round(this.z))
+      + (MAX_TEXTURE_SIZE * Math.round(this.x))
+      + Math.round(this.y);
   }
 
   /**

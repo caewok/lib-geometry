@@ -1,7 +1,8 @@
 /* globals
-Ray,
 canvas,
-CONST
+CONFIG,
+CONST,
+Ray,
 */
 "use strict";
 

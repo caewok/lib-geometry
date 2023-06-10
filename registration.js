@@ -35,9 +35,6 @@ import { Draw } from "./Draw.js";
 // Ellipse
 import { Ellipse } from "./Ellipse.js";
 
-// WeilerAtherton
-import { WeilerAthertonClipper } from "./WeilerAtherton.js";
-
 // Matrix
 import { Matrix } from "./Matrix.js";
 
@@ -47,23 +44,27 @@ import { Shadow, ShadowProjection } from "./Shadow.js";
 // ClipperPaths
 import { ClipperPaths } from "./ClipperPaths.js";
 
+// Elevation
+import { registerElevationAdditions } from "./elevation.js";
+
 // Graph
 import { Graph, GraphVertex, GraphEdge } from "./Graph.js";
 
 export function registerGeometry() {
-  registerPIXIPolygonMethods();
-  registerPIXICircleMethods();
-  registerPIXIRectangleMethods();
-  registerPIXIPointMethods();
-  registerFoundryUtilsMethods();
+  CONFIG.GeometryLib ??= {};
+  CONFIG.GeometryLib.registered ??= new Set();
 
+  registerFoundryUtilsMethods();
+  registerPIXIMethods();
+  register3d();
+
+  registerElevationAdditions();
   registerCenteredPolygons();
   registerRegularPolygons();
   registerDraw();
   registerEllipse();
   registerShadow();
   registerMatrix();
-  registerWeilerAthertonClipper();
   registerClipperPaths();
   register3d();
   registerGraph();
@@ -71,20 +72,25 @@ export function registerGeometry() {
 
 export function registerGraph() {
   CONFIG.GeometryLib ??= {};
-  if ( CONFIG.GeometryLib.Graph ) return;
-
-  CONFIG.GeometryLib.Graph = {
+  CONFIG.GeometryLib.Graph ??= {
     Graph,
     GraphVertex,
     GraphEdge
   };
 }
 
-export function registerCenteredPolygons() {
-  CONFIG.GeometryLib ??= {};
-  if ( CONFIG.GeometryLib.CenteredPolygons ) return;
+export function registerPIXIMethods() {
+  registerPIXIPolygonMethods();
+  registerPIXICircleMethods();
+  registerPIXIRectangleMethods();
+  registerPIXIPointMethods();
+}
 
-  CONFIG.GeometryLib.CenteredPolygons = {
+export function registerCenteredPolygons() {
+  // Dependencies
+  registerRegularPolygons();
+
+  CONFIG.GeometryLib.CenteredPolygons ??= {
     CenteredPolygonBase,
     CenteredPolygon,
     CenteredRectangle
@@ -92,10 +98,11 @@ export function registerCenteredPolygons() {
 }
 
 export function registerRegularPolygons() {
-  CONFIG.GeometryLib ??= {};
-  if ( CONFIG.GeometryLib.RegularPolygons ) return;
+  // Dependencies
+  registerFoundryUtilsMethods();
+  registerPIXIMethods();
 
-  CONFIG.GeometryLib.RegularPolygons = {
+  CONFIG.GeometryLib.RegularPolygons ??= {
     RegularPolygon,
     EquilateralTriangle,
     Square,
@@ -106,16 +113,12 @@ export function registerRegularPolygons() {
 
 export function registerDraw() {
   CONFIG.GeometryLib ??= {};
-  if ( CONFIG.GeometryLib.Draw ) return;
-
-  CONFIG.GeometryLib.Draw = Draw;
+  CONFIG.GeometryLib.Draw ??= Draw;
 }
 
 export function register3d() {
   CONFIG.GeometryLib ??= {};
-  if ( CONFIG.GeometryLib.threeD ) return;
-
-  CONFIG.GeometryLib.threeD = {
+  CONFIG.GeometryLib.threeD ??= {
     Plane,
     Point3d,
     Ray3d
@@ -124,36 +127,21 @@ export function register3d() {
 
 export function registerEllipse() {
   CONFIG.GeometryLib ??= {};
-  if ( CONFIG.GeometryLib.Ellipse ) return;
-
-  CONFIG.GeometryLib.Ellipse = Ellipse;
-}
-
-export function registerWeilerAthertonClipper() {
-  CONFIG.GeometryLib ??= {};
-  if ( CONFIG.GeometryLib.WeilerAthertonClipper ) return;
-
-  CONFIG.GeometryLib.WeilerAthertonClipper = WeilerAthertonClipper;
+  CONFIG.GeometryLib.Ellipse ??= Ellipse;
 }
 
 export function registerShadow() {
   CONFIG.GeometryLib ??= {};
-  if ( CONFIG.GeometryLib.Shadow ) return;
-
-  CONFIG.GeometryLib.Shadow = Shadow;
-  CONFIG.GeometryLib.ShadowProjection = ShadowProjection;
+  CONFIG.GeometryLib.Shadow ??= Shadow;
+  CONFIG.GeometryLib.ShadowProjection ??= ShadowProjection;
 }
 
 export function registerMatrix() {
   CONFIG.GeometryLib ??= {};
-  if ( CONFIG.GeometryLib.Matrix ) return;
-
-  CONFIG.GeometryLib.Matrix = Matrix;
+  CONFIG.GeometryLib.Matrix ??= Matrix;
 }
 
 export function registerClipperPaths() {
   CONFIG.GeometryLib ??= {};
-  if ( CONFIG.GeometryLib.ClipperPaths ) return;
-
-  CONFIG.GeometryLib.ClipperPaths = ClipperPaths;
+  CONFIG.GeometryLib.ClipperPaths ??= ClipperPaths;
 }

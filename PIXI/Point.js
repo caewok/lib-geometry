@@ -1,187 +1,54 @@
 /* globals
-CONFIG,
 PIXI,
 foundry
 */
 "use strict";
 
 import { Point3d } from "../3d/Point3d.js";
+import { addClassGetter, addClassMethod } from "../util.js";
 
 // Add methods to PIXI.Point
 export function registerPIXIPointMethods() {
   CONFIG.GeometryLib ??= {};
-  CONFIG.GeometryLib.Registered ??= {};
-  if ( CONFIG.GeometryLib.Registered.PIXIPoint ) return;
-  CONFIG.GeometryLib.Registered.PIXIPoint = true;
+  CONFIG.GeometryLib.registered ??= new Set();
+  if ( CONFIG.GeometryLib.registered.has("PIXI.Point") ) return;
 
   // ----- Getters/Setters ----- //
-
-  // Add key as a getter to
-  if ( !Object.hasOwn(PIXI.Point.prototype, "key") ) {
-    Object.defineProperty(PIXI.Point.prototype, "key", {
-      get: function() { return key(this.x, this.y); }
-    });
-  }
-
-  if ( !Object.hasOwn(PIXI.Point.prototype, "sortKey") ) {
-    Object.defineProperty(PIXI.Point.prototype, "sortKey", {
-      get: function() { return sortKey(this.x, this.y); }
-    });
-  }
+  addClassGetter(PIXI.Point.prototype, "key", key);
+  addClassGetter(PIXI.Point.prototype, "sortKey", sortKey);
 
   // ----- Static Methods ----- //
-  Object.defineProperty(PIXI.Point, "midPoint", {
-    value: midPoint,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Point, "fromAngle", {
-    value: fromAngle,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Point, "distanceBetween", {
-    value: distanceBetween,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Point, "distanceSquaredBetween", {
-    value: distanceSquaredBetween,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Point, "angleBetween", {
-    value: angleBetween,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Point, "flatMapPoints", {
-    value: flatMapPoints,
-    writable: true,
-    configurable: true
-  });
+  addClassMethod(PIXI.Point, "midPoint", midPoint);
+  addClassMethod(PIXI.Point, "fromAngle", fromAngle);
+  addClassMethod(PIXI.Point, "distanceBetween", distanceBetween);
+  addClassMethod(PIXI.Point, "distanceSquaredBetween", distanceSquaredBetween);
+  addClassMethod(PIXI.Point, "angleBetween", angleBetween);
+  addClassMethod(PIXI.Point, "flatMapPoints", flatMapPoints);
+  addClassMethod(PIXI.Point, "fromObject", fromObject);
 
   // ----- Methods ----- //
-
-  Object.defineProperty(PIXI.Point.prototype, "add", {
-    value: add2d,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Point.prototype, "subtract", {
-    value: subtract2d,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Point.prototype, "multiply", {
-    value: multiply2d,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Point.prototype, "divide", {
-    value: divide2d,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Point.prototype, "multiplyScalar", {
-    value: multiplyScalar2d,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Point.prototype, "dot", {
-    value: dot2d,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Point.prototype, "magnitude", {
-    value: magnitude2d,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Point.prototype, "magnitudeSquared", {
-    value: magnitudeSquared2d,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Point.prototype, "almostEqual", {
-    value: almostEqual2d,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Point.prototype, "normalize", {
-    value: normalize,
-    writable: true,
-    configurable: true
-  });
+  addClassMethod(PIXI.Point.prototype, "add", add2d);
+  addClassMethod(PIXI.Point.prototype, "subtract", subtract2d);
+  addClassMethod(PIXI.Point.prototype, "multiply", multiply2d);
+  addClassMethod(PIXI.Point.prototype, "multiplyScalar", multiplyScalar2d);
+  addClassMethod(PIXI.Point.prototype, "dot", dot2d);
+  addClassMethod(PIXI.Point.prototype, "magnitude", magnitude2d);
+  addClassMethod(PIXI.Point.prototype, "magnitudeSquared", magnitudeSquared2d);
+  addClassMethod(PIXI.Point.prototype, "almostEqual", almostEqual2d);
+  addClassMethod(PIXI.Point.prototype, "normalize", normalize);
+  addClassMethod(PIXI.Point.prototype, "to3d", to3d);
+  addClassMethod(PIXI.Point.prototype, "projectToward", projectToward);
+  addClassMethod(PIXI.Point.prototype, "towardsPoint", towardsPoint);
+  addClassMethod(PIXI.Point.prototype, "towardsPointSquared", towardsPointSquared);
+  addClassMethod(PIXI.Point.prototype, "projectToAxisValue", projectToAxisValue);
+  addClassMethod(PIXI.Point.prototype, "translate", translate);
+  addClassMethod(PIXI.Point.prototype, "rotate", rotate);
+  addClassMethod(PIXI.Point.prototype, "roundDecimals", roundDecimals);
 
   // For parallel with Point3d
-  Object.defineProperty(PIXI.Point.prototype, "to2d", {
-    value: function() { return this; },
-    writable: true,
-    configurable: true
-  });
+  addClassMethod(PIXI.Point.prototype, "to2d", function() { return this; });
 
-  Object.defineProperty(PIXI.Point.prototype, "to3d", {
-    value: to3d,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Point.prototype, "projectToward", {
-    value: projectToward,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Point.prototype, "towardsPoint", {
-    value: towardsPoint,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Point.prototype, "towardsPointSquared", {
-    value: towardsPointSquared,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Point.prototype, "projectToAxisValue", {
-    value: projectToAxisValue,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Point.prototype, "translate", {
-    value: translate,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Point.prototype, "rotate", {
-    value: rotate,
-    writable: true,
-    configurable: true
-  });
-
-  Object.defineProperty(PIXI.Point.prototype, "roundDecimals", {
-    value: roundDecimals,
-    writable: true,
-    configurable: true
-  });
+  CONFIG.GeometryLib.registered.add("PIXI.Point");
 }
 
 /**
@@ -193,6 +60,17 @@ function roundDecimals(places = 0) {
   this.x = Math.roundDecimals(this.x, places);
   this.y = Math.roundDecimals(this.y, places);
   return this;
+}
+
+/**
+ * Construct a PIXI point from any object that has x and y properties.
+ * @param {object} obj
+ * @returns {PIXI.Point}
+ */
+function fromObject(obj) {
+  const x = obj.x ?? 0;
+  const y = obj.y ?? 0;
+  return new this(x, y);
 }
 
 /**
@@ -354,21 +232,6 @@ function multiply2d(other, outPoint) {
   outPoint ??= new this.constructor();
   outPoint.x = this.x * other.x;
   outPoint.y = this.y * other.y;
-
-  return outPoint;
-}
-
-/**
- * Divide `this` point by another.
- * @param {PIXI.Point} other    The point to subtract from `this`.
- * @param {PIXI.Point} [outPoint]    A point-like object in which to store the value.
- *   (Will create new point if none provided.)
- * @returns {PIXI.Point}
- */
-function divide2d(other, outPoint) {
-  outPoint ??= new this.constructor();
-  outPoint.x = this.x / other.x;
-  outPoint.y = this.x / other.y;
 
   return outPoint;
 }
@@ -549,5 +412,5 @@ const MAX_TEXTURE_SIZE = Math.pow(2, 16);
  * @returns {number}
  */
 function sortKey(x, y) {
-  return (MAX_TEXTURE_SIZE * Math.roundFast(x)) + Math.roundFast(y);
+  return (MAX_TEXTURE_SIZE * Math.round(x)) + Math.round(y);
 }

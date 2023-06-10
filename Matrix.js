@@ -153,7 +153,7 @@ export class Matrix {
    * @returns {Matrix}
    */
   static rotationX(angle, d3 = true) {
-    if ( !angle ) return d3 ? dimMatrix.identity(4, 4) : dimMatrix.identity(3, 3);
+    if ( !angle ) return d3 ? Matrix.identity(4, 4) : Matrix.identity(3, 3);
 
     let c = Math.cos(angle);
     let s = Math.sin(angle);
@@ -207,7 +207,7 @@ export class Matrix {
       [c, 0, s],
       [0, 1, 0],
       [-s, 0, c]
-    ]
+    ];
 
     return new Matrix(rotY);
   }
@@ -253,7 +253,7 @@ export class Matrix {
    * @param {boolean} [d3 = true]    If d3, use a 4-d matrix. Otherwise, 3-d matrix.
    * @returns {Matrix}
    */
-  static rotationXYZ(angleX, angleY, angleZ) {
+  static rotationXYZ(angleX, angleY, angleZ, d3 = true) {
     let rot = angleX ? Matrix.rotationX(angleX, d3) : angleY
       ? Matrix.rotationY(angleY, d3) : angleZ
         ? Matrix.rotationZ(angleZ, d3) : d3
@@ -263,12 +263,12 @@ export class Matrix {
 
     if ( angleX && angleY ) {
       const rotY = Matrix.rotationY(angleY, d3);
-      rot = rot["multFn"](rotY, d3);
+      rot = rot[multFn](rotY, d3);
     }
 
     if ( (angleX || angleY) && angleZ ) {
       const rotZ = Matrix.rotationZ(angleZ, d3);
-      rot = rot["multFn"](rotZ, d3);
+      rot = rot[multFn](rotZ, d3);
     }
 
     return rot;
@@ -347,7 +347,7 @@ export class Matrix {
   clone() {
     // See https://jsbench.me/gflbviyw69/1
     const { dim1, arr } = this;
-	  const newMat = Array(dim1);
+    const newMat = Array(dim1);
     for ( let i = 0; i < dim1; i += 1 ) {
       newMat[i] = arr[i].slice();
     }
@@ -609,7 +609,6 @@ export class Matrix {
     const a21 = a2[1];
     const a22 = a2[2];
 
-    const b0 = this.arr[0];
     const b00 = point.x;
     const b01 = point.y;
     const b02 = 1;
