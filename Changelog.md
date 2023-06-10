@@ -1,3 +1,6 @@
+## 0.2.0
+v11 fixes.
+
 ## 0.1.5
 Updates based on changes to Elevation Ruler v0.6.6.
 - Fix to 2d projection from 3d ray. Better handling of measurement on grids.

@@ -365,7 +365,7 @@ export class Plane {
    * @type {Function}
    */
   get numeratorFn2d() {
-    if ( typeof this._numeratorFn2d === "undefined" ) { const denom = this.denom2d; }
+    if ( typeof this._numeratorFn2d === "undefined" ) { const denom = this.denom2d; } // eslint-disable-line no-unused-vars
     return this._numeratorFn2d;
   }
 
@@ -592,8 +592,8 @@ export class Plane {
    *   The line is returned as point, direction
    */
   intersectPlane(other) {
-    const { normal: N1, point: P1 } = this;
-    const { normal: N2, point: P2 } = other;
+    const N1 = this.normal;
+    const N2 = other.normal;
 
     // Cross product of the two normals is the direction of the line.
     const direction = N1.cross(N2);

@@ -13,7 +13,8 @@ import { Ellipse } from "./Ellipse.js";
 // Functions that would go in foundry.utils if that object were extensible
 export function registerFoundryUtilsMethods() {
   CONFIG.GeometryLib ??= {};
-  if ( CONFIG.GeometryLib.utils ) return;
+  CONFIG.GeometryLib.registered ??= new Set();
+  if ( CONFIG.GeometryLib.registered.has("utils") ) return;
 
   CONFIG.GeometryLib.utils = {
     orient3dFast,
@@ -39,7 +40,8 @@ export function registerFoundryUtilsMethods() {
       acc.max = Math.max(acc.max, curr);
       return acc;
     }, { min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY});
-  }
+  };
+  CONFIG.GeometryLib.registered.add("utils");
 }
 
 // Just like foundry.utils.lineLineIntersection but with the typo in t1 calculation fixed.
@@ -62,7 +64,7 @@ function lineLineIntersection(a, b, c, d, {t1=false}={}) {
     y: a.y + t0 * (b.y - a.y),
     t0: t0,
     t1: t1
-  }
+  };
 }
 
 
@@ -86,7 +88,7 @@ function categorizePointsInOutConvexPolygon(poly, points, epsilon = 1e-08) {
     inside: [],
     on: [],
     outside: []
-  }
+  };
 
   // For each point, test if the point is on the edge ("on").
   // If not on edge, test if clockwise. If not CW, then it is outside.
@@ -95,7 +97,7 @@ function categorizePointsInOutConvexPolygon(poly, points, epsilon = 1e-08) {
   let found = 0;
   for ( const edge of edges ) {
     for ( let i = 0; i < nPts; i += 1 ) {
-      const ptIsCW = isCW[i];
+      let ptIsCW = isCW[i];
       if ( !ptIsCW ) continue;
 
       const pt = points[i];
@@ -104,7 +106,7 @@ function categorizePointsInOutConvexPolygon(poly, points, epsilon = 1e-08) {
         out.on.push(pt);
         found += 1;
       } else {
-        const oPt = foundry.utils.orient2dFast(edge.A, edge.B, pt);
+        let oPt = foundry.utils.orient2dFast(edge.A, edge.B, pt);
         if  ( oPt.almostEqual(0, epsilon) ) oPt = 0;
         ptIsCW &&= oPt < 0;
         if ( !ptIsCW ) {
@@ -118,7 +120,7 @@ function categorizePointsInOutConvexPolygon(poly, points, epsilon = 1e-08) {
 
   // The remaining CW points are all inside.
   for ( let i = 0; i < nPts; i += 1 ) {
-    if ( isCW[i] ) inside.push(pt[i]);
+    if ( isCW[i] ) out.inside.push(points[i]);
   }
 
   return out;
@@ -173,7 +175,7 @@ function shortestRouteBetween3dLines(a, b, c, d, epsilon = 1e-08) {
   const deltaBA = b.subtract(a);
   if ( Math.abs(deltaBA.x) < epsilon
     && Math.abs(deltaBA.y) < epsilon
-    && Math.abs(deltaBA.z) < epislon ) return null;
+    && Math.abs(deltaBA.z) < epsilon ) return null;
 
   const deltaAC = a.subtract(c);
 
@@ -186,7 +188,7 @@ function shortestRouteBetween3dLines(a, b, c, d, epsilon = 1e-08) {
   const denom = (dotBABA * dotDCDC) - (dotDCBA * dotDCBA);
   if ( Math.abs(denom) < epsilon ) return null;
 
-  const numer = (dotACBC * dotDCBA) - (dotACBA * dotDCDC);
+  const numer = (dotACDC * dotDCBA) - (dotACBA * dotDCDC);
   const mua = numer / denom;
   const mub = (dotACDC + (dotDCBA * mua)) / dotDCDC;
 
@@ -195,8 +197,19 @@ function shortestRouteBetween3dLines(a, b, c, d, epsilon = 1e-08) {
     B: deltaDC.multiplyScalar(mub).add(c),
     mua,
     mub
-  }
+  };
 }
+
+// Simple extensions
+Math.minMax = function(...args) {
+  return args.reduce((acc, curr) => {
+    acc.min = Math.min(acc.min, curr);
+    acc.max = Math.max(acc.max, curr);
+    return acc;
+  }, { min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY});
+};
+
+Math.PI_1_2 = Math.PI * 0.5;
 
 /**
  * Construct a centered polygon using the values in drawing shape.
@@ -244,20 +257,14 @@ function perpendicularPoint(a, b, c) {
  * @param {number} value
  * @returns {number}
  */
-function gridUnitsToPixels(value) {
-  const { distance, size } = canvas.scene.grid;
-  return (value * size) / distance;
-}
+export function gridUnitsToPixels(value) { return value * canvas.dimensions.distancePixels; }
 
 /**
  * Convert pixel units (x,y,z) to grid units
  * @param {number} pixels
  * @returns {number}
  */
-function pixelsToGridUnits(pixels) {
-  const { distance, size } = canvas.scene.grid;
-  return (pixels * distance) / size;
-}
+export function pixelsToGridUnits(pixels) { return pixels / canvas.dimensions.distancePixels; }
 
 /**
  * Like foundry.utils.lineSegmentIntersects but requires the two segments cross.
@@ -431,4 +438,39 @@ function lineCircleIntersection(a, b, center, radius, epsilon=1e-8) {
     tangent: !aInside && !bInside && intersections.length === 1,
     intersections
   };
+}
+
+/**
+ * Helper to add a method to a class.
+ * @param {class} cl      Either Class.prototype or Class
+ * @param {string} name   Name of the method
+ * @param {function} fn   Function to use for the method
+ */
+export function addClassMethod(cl, name, fn) {
+  Object.defineProperty(cl, name, {
+    value: fn,
+    writable: true,
+    configurable: true
+  });
+}
+
+/**
+ * Helper to add a getter to a class.
+ * @param {class} cl      Either Class.prototype or Class
+ * @param {string} name   Name of the method
+ * @param {function} fn   Function to use for the method
+ */
+export function addClassGetter(cl, name, getter, setter) {
+  if ( Object.hasOwn(cl, name) ) return;
+  Object.defineProperty(cl, name, {
+    get: getter,
+    configurable: true
+  });
+
+  if ( setter ) {
+    Object.defineProperty(cl, name, {
+      set: setter,
+      configurable: true
+    });
+  }
 }
