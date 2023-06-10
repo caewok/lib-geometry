@@ -1,5 +1,5 @@
 ## 0.2.0
-v11 fixes.
+v11 fixes. Add elevation getters for placeables and sources.
 
 ## 0.1.5
 Updates based on changes to Elevation Ruler v0.6.6.
