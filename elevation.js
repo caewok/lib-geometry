@@ -138,12 +138,11 @@ function setAmbientElevationE(value) { this.source._elevationE = value; }
 // Note Tile Elevation
 // Has document.elevation already but does not save it.
 function tileElevationE() {
-  return this._elevationE
-    ?? (this._elevationE = getProperty(this.document.flags, MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION)
-    ?? this.document.elevation
-    ?? 0);
+  if ( typeof this._elevationE !== "undefined" ) return this._elevationE;
 
-  return this._elevationE;
+  const e = getProperty(this.document.flags, MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION) ?? this.document.elevation ?? 0;
+  this._elevationE = e;
+  return e;
 }
 
 function setTileElevationE(value) {
