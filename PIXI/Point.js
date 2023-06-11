@@ -123,9 +123,9 @@ function distanceSquaredBetween(a, b) {
  * Ordered, so sortable.
  * @returns {number}
  */
-function key(x, y) {
-  x = Math.round(x);
-  y = Math.round(y);
+function key() {
+  const x = Math.round(this.x);
+  const y = Math.round(this.y);
   return (x << 16) ^ y;
 }
 
@@ -411,6 +411,8 @@ const MAX_TEXTURE_SIZE = Math.pow(2, 16);
  * Sort key, arranging points from north-west to south-east
  * @returns {number}
  */
-function sortKey(x, y) {
-  return (MAX_TEXTURE_SIZE * Math.round(x)) + Math.round(y);
+function sortKey() {
+  const x = Math.round(this.x);
+  const y = Math.round(this.y);
+  return (MAX_TEXTURE_SIZE * x) + y;
 }
