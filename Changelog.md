@@ -1,3 +1,7 @@
+## 0.2.1
+- Fix for PIXI.Point.key getter.
+- Use the new v11 status set to check for prone.
+
 ## 0.2.0
 v11 fixes. Add elevation getters for placeables and sources.
 
