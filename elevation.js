@@ -61,7 +61,7 @@ export function registerElevationAdditions() {
     Tile: CONFIG.Tile.objectClass
   };
 
-  for ( const [placeableName, placeableClass] of basicPlaceables ) {
+  for ( const [placeableName, placeableClass] of Object.entries(basicPlaceables) ) {
     addClassGetter(placeableClass.prototype, "elevationE", placeableObjectElevationE, setPlaceableObjectElevationE);
     addClassGetter(placeableClass.prototype, "elevationZ", zElevation, setZElevation);
     Hooks.on(`update${placeableName}`, updatePlaceableHookElevationE);
