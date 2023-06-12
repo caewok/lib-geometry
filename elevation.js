@@ -160,32 +160,30 @@ function setPointSourceElevationE(value) {
 // Wall, Tile, Token are broken out.
 function placeableObjectElevationE() {
   return this._elevationE
-    ?? (this._elevationE = this.document.getFlag(MODULE_KEYS.EV.ID, MODULE_KEYS.EV.ELEVATION) ?? 0);
+    ?? (this._elevationE = getProperty(this.document, MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION) ?? 0);
 }
 
 function setPlaceableObjectElevationE(value) {
   this._elevationE = value;
 
   // Async method
-  this.document.update({ flags: { [MODULE_KEYS.EV.ID]: { [MODULE_KEYS.EV.ELEVATION]: value } } });
+  this.document.update({ [MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION]: value });
+  // this.document.update({ flags: { [MODULE_KEYS.EV.ID]: { [MODULE_KEYS.EV.ELEVATION]: value } } });
 }
 
 // NOTE: Wall Elevation
 function wallTopE() {
   if ( typeof this._topE !== "undefined" ) return this._topE;
-
-  const flags = this.document.flags;
-  this._topE = getProperty(flags, MODULE_KEYS.EV.FLAG_WALL_TOP)
-    ?? getProperty(flags, MODULE_KEYS.WH.FLAG_WALL_TOP)
+  this._topE = getProperty(this.document, MODULE_KEYS.EV.FLAG_WALL_TOP)
+    ?? getProperty(this.document, MODULE_KEYS.WH.FLAG_WALL_TOP)
     ?? Number.POSITIVE_INFINITY;
   return this._topE;
 }
 
 function wallBottomE() {
   if ( typeof this._bottomE !== "undefined" ) return this._bottomE;
-  const flags = this.document.flags;
-  this._bottomE = getProperty(flags, MODULE_KEYS.EV.FLAG_WALL_BOTTOM)
-    ?? getProperty(flags, MODULE_KEYS.WH.FLAG_WALL_BOTTOM)
+  this._bottomE = getProperty(this.document, MODULE_KEYS.EV.FLAG_WALL_BOTTOM)
+    ?? getProperty(this.document, MODULE_KEYS.WH.FLAG_WALL_BOTTOM)
     ?? Number.NEGATIVE_INFINITY;
   return this._bottomE;
 }
@@ -200,7 +198,8 @@ function setWallTopE(value) {
 
   // Async method
   const MOD = MODULE_KEYS.EV;
-  this.document.update({ flags: { [MOD.ID]: { [MOD.ELEVATION]: { [MOD.WALL.TOP]: value } } } });
+  this.document.update({ [MODULE_KEYS.EV.FLAG_WALL_TOP]: value });
+  // this.document.update({ flags: { [MOD.ID]: { [MOD.ELEVATION]: { [MOD.WALL.TOP]: value } } } });
 }
 
 function setWallBottomE(value) {
@@ -213,7 +212,8 @@ function setWallBottomE(value) {
 
   // Async method
   const MOD = MODULE_KEYS.EV;
-  this.document.update({ flags: { [MOD.ID]: { [MOD.ELEVATION]: { [MOD.WALL.BOTTOM]: value } } } });
+  this.document.update({ [MODULE_KEYS.EV.FLAG_WALL_BOTTOM]: value });
+  // this.document.update({ flags: { [MOD.ID]: { [MOD.ELEVATION]: { [MOD.WALL.BOTTOM]: value } } } });
 }
 
 // NOTE: Token Elevation
@@ -259,9 +259,8 @@ function calculateTokenHeightFromTokenShape(token) {
 function getTokenLOSHeight() {
   if ( typeof this._losHeight !== "undefined" ) return this._losHeight;
 
-  const flags = this.document.flags;
-  this._losHeight = getProperty(flags, MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT)
-    ?? getProperty(flags, MODULE_KEYS.WH.FLAG_TOKEN_HEIGHT)
+  this._losHeight = getProperty(this.document, MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT)
+    ?? getProperty(this.document, MODULE_KEYS.WH.FLAG_TOKEN_HEIGHT)
     ?? calculateTokenHeightFromTokenShape(this);
   return this._losHeight;
 }
@@ -275,7 +274,8 @@ function setTokenLOSHeight(value) {
   this._losHeight = value;
 
   // Async method
-  this.document.update({ flags: { [MODULE_KEYS.EV.ID]: { [MODULE_KEYS.EV.TOKEN_HEIGHT]: value } } });
+  this.document.update({ [MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT]: value });
+  // this.document.update({ flags: { [MODULE_KEYS.EV.ID]: { [MODULE_KEYS.EV.TOKEN_HEIGHT]: value } } });
 }
 
 // NOTE: Hooks
@@ -286,9 +286,9 @@ function setTokenLOSHeight(value) {
 function updatePlaceableHookElevationE(placeableD, data, _options, _userId) {
   const flatData = flattenObject(data);
   const changed = new Set(Object.keys(flatData));
-  const evChangeFlag = `flags.${MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION}`;
-  if ( changed.has(evChangeFlag) && placeableD.object ) {
-    const e = flatData[evChangeFlag];
+  const evFlag = MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION;
+  if ( changed.has(evFlag) && placeableD.object ) {
+    const e = flatData[evFlag];
     placeableD.object._elevationE = e;
   }
 }
@@ -300,14 +300,14 @@ function updatePlaceableHookElevationE(placeableD, data, _options, _userId) {
 function preUpdateTileHook(placeableD, data, _options, _userId) {
   const flatData = flattenObject(data);
   const changes = new Set(Object.keys(flatData));
-  const evChangeFlag = `flags.${MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION}`;
+  const evFlag = MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION;
   const updates = {};
-  if ( changes.has(evChangeFlag) ) {
-    const e = flatData[evChangeFlag];
+  if ( changes.has(evFlag) ) {
+    const e = flatData[evFlag];
     updates.elevation = e;
   } else if ( changes.has("elevation") ) {
     const e = data.elevation;
-    updates[evChangeFlag] = e;
+    updates[evFlag] = e;
   }
   foundry.utils.mergeObject(data, updates);
 }
@@ -323,15 +323,15 @@ function preUpdateTileHook(placeableD, data, _options, _userId) {
 function preUpdateTokenHook(tokenD, data, _options, _userId) {
   const flatData = flattenObject(data);
   const changes = new Set(Object.keys(flatData));
-  const evChangeFlag = MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT;
-  const whChangeFlag = MODULE_KEYS.WH.FLAG_TOKEN_HEIGHT;
+  const evFlag = MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT;
+  const whFlag = MODULE_KEYS.WH.FLAG_TOKEN_HEIGHT;
   const updates = {};
-  if ( changes.has(evChangeFlag) ) {
-    const e = flatData[evChangeFlag];
-    updates[whChangeFlag] = e;
-  } else if ( changes.has(whChangeFlag) ) {
-    const e = flatData[whChangeFlag];
-    updates[evChangeFlag] = e;
+  if ( changes.has(evFlag) ) {
+    const e = flatData[evFlag];
+    updates[whFlag] = e;
+  } else if ( changes.has(whFlag) ) {
+    const e = flatData[whFlag];
+    updates[evFlag] = e;
   }
   foundry.utils.mergeObject(data, updates);
 }
@@ -339,9 +339,9 @@ function preUpdateTokenHook(tokenD, data, _options, _userId) {
 function updateTokenHook(tokenD, data, _options, _userId) {
   const flatData = flattenObject(data);
   const changed = new Set(Object.keys(flatData));
-  const evChangeFlag = MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT;
-  if ( changed.has(evChangeFlag) ) {
-    const tokenHeight = flatData[evChangeFlag];
+  const evFlag = MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT;
+  if ( changed.has(evFlag) ) {
+    const tokenHeight = flatData[evFlag];
     tokenD.object._tokenHeight = tokenHeight;
   }
 }
@@ -357,25 +357,25 @@ function updateTokenHook(tokenD, data, _options, _userId) {
 function preUpdateWallHook(wallD, data, _options, _userId) {
   const flatData = flattenObject(data);
   const changes = new Set(Object.keys(flatData));
-  const evChangeTopFlag = MODULE_KEYS.EV.FLAG_WALL_TOP;
-  const evChangeBottomFlag = MODULE_KEYS.EV.FLAG_WALL_BOTTOM;
-  const whChangeTopFlag = MODULE_KEYS.WH.FLAG_WALL_TOP;
-  const whChangeBottomFlag = MODULE_KEYS.WH.FLAG_WALL_BOTTOM;
+  const evTopFlag = MODULE_KEYS.EV.FLAG_WALL_TOP;
+  const evBottomFlag = MODULE_KEYS.EV.FLAG_WALL_BOTTOM;
+  const whTopFlag = MODULE_KEYS.WH.FLAG_WALL_TOP;
+  const whBottomFlag = MODULE_KEYS.WH.FLAG_WALL_BOTTOM;
   const updates = {};
-  if ( changes.has(evChangeTopFlag) ) {
-    const e = flatData[evChangeTopFlag];
-    updates[whChangeTopFlag] = e;
-  } else if ( changes.has(whChangeTopFlag) ) {
-    const e = flatData[whChangeTopFlag];
-    updates[evChangeTopFlag] = e;
+  if ( changes.has(evTopFlag) ) {
+    const e = flatData[evTopFlag];
+    updates[whTopFlag] = e;
+  } else if ( changes.has(whTopFlag) ) {
+    const e = flatData[whTopFlag];
+    updates[evTopFlag] = e;
   }
 
-  if ( changes.has(evChangeBottomFlag) ) {
-    const e = flatData[evChangeBottomFlag];
-    updates[whChangeBottomFlag] = e;
-  } else if ( changes.has(whChangeBottomFlag) ) {
-    const e = flatData[whChangeBottomFlag];
-    updates[evChangeBottomFlag] = e;
+  if ( changes.has(evBottomFlag) ) {
+    const e = flatData[evBottomFlag];
+    updates[whBottomFlag] = e;
+  } else if ( changes.has(whBottomFlag) ) {
+    const e = flatData[whBottomFlag];
+    updates[evBottomFlag] = e;
   }
 
   foundry.utils.mergeObject(data, updates);
@@ -385,17 +385,16 @@ function preUpdateWallHook(wallD, data, _options, _userId) {
 function updateWallHook(wallD, data, _options, _userId) {
   const flatData = flattenObject(data);
   const changed = new Set(Object.keys(flatData));
-  const evChangeTopFlag = MODULE_KEYS.EV.FLAG_WALL_TOP;
-  const evChangeBottomFlag = MODULE_KEYS.EV.FLAG_WALL_BOTTOM;
-
-  if ( changed.has(evChangeTopFlag) ) {
-    const wallTop = flatData[evChangeTopFlag];
+  const evTopFlag = MODULE_KEYS.EV.FLAG_WALL_TOP;
+  if ( changed.has(evTopFlag) ) {
+    const wallTop = flatData[evTopFlag];
     wallD.object._topE = wallTop;
 
   }
 
-  if ( changed.has(evChangeBottomFlag) ) {
-    const wallBottom = flatData[evChangeBottomFlag];
+  const evBottomFlag = MODULE_KEYS.EV.FLAG_WALL_BOTTOM;
+  if ( changed.has(evBottomFlag) ) {
+    const wallBottom = flatData[evBottomFlag];
     wallD.object._bottomE = wallBottom;
   }
 }
