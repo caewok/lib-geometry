@@ -1,16 +1,12 @@
 /* globals
-AmbientLight,
-AmbientSound,
 canvas,
 CONFIG,
 flattenObject,
+foundry,
 game,
 getProperty,
 Hooks,
-isEmpty,
 PointSource,
-PlaceableObject,
-Tile,
 Token,
 Wall
 */
@@ -54,27 +50,26 @@ export function registerElevationAdditions() {
   addClassGetter(PointSource.prototype, "elevationE", pointSourceElevationE, setPointSourceElevationE);
   addClassGetter(PointSource.prototype, "elevationZ", zElevation, setZElevation);
 
-  // PlaceableObject (Drawing, AmbientLight, AmbientSound, MeasuredTemplate, Note, Tile, Wall, Token)
-  addClassGetter(PlaceableObject.prototype, "elevationE", placeableObjectElevationE, setPlaceableObjectElevationE);
-  addClassGetter(PlaceableObject.prototype, "elevationZ", zElevation, setZElevation);
+  // PlaceableObjects (Drawing, AmbientLight, AmbientSound, MeasuredTemplate, Note, Tile, Wall, Token)
+  // Don't handle Wall or Token here
+  const basicPlaceables = {
+    Drawing: CONFIG.Drawing.objectClass,
+    Note: CONFIG.Note.objectClass,
+    MeasuredTemmplate: CONFIG.MeasuredTemplate.objectClass,
+    AmbientLight: CONFIG.AmbientLight.objectClass,
+    AmbientSound: CONFIG.AmbientSound.objectClass,
+    Tile: CONFIG.Tile.objectClass
+  };
 
-  // Drawing
-  Hooks.on("updateDrawing", updatePlaceableHook);
-
-  // MeasuredTemplate
-  Hooks.on("updateMeasuredTemplate", updatePlaceableHook);
-
-  // Note
-  Hooks.on("updateNote", updatePlaceableHook);
-
-  // AmbientLight
-  addClassGetter(AmbientLight.prototype, "elevationE", ambientElevationE, setAmbientElevationE);
-
-  // AmbientSound
-  addClassGetter(AmbientSound.prototype, "elevationE", ambientElevationE, setAmbientElevationE);
+  for ( const [placeableName, placeableClass] of Object.entries(basicPlaceables) ) {
+    addClassGetter(placeableClass.prototype, "elevationE", placeableObjectElevationE, setPlaceableObjectElevationE);
+    addClassGetter(placeableClass.prototype, "elevationZ", zElevation, setZElevation);
+    Hooks.on(`update${placeableName}`, updatePlaceableHookElevationE);
+  }
 
   // Tile
-  addClassGetter(Tile.prototype, "elevationE", tileElevationE, setTileElevationE);
+  // Sync tile.document.elevation with tile.document.flags.elevatedvision.elevation
+  Hooks.on("preUpdateTile", preUpdateTileHook);
 
   // Token
   addClassGetter(Token.prototype, "elevationE", tokenElevationE, setTokenElevationE);
@@ -90,6 +85,8 @@ export function registerElevationAdditions() {
   CONFIG.GeometryLib.proneMultiplier = 0.33;
   addClassGetter(Token.prototype, "losHeight", getTokenLOSHeight, setTokenLOSHeight);
 
+  // Sync token.tokenHeight between EV and Wall Height
+  Hooks.on("preUpdateToken", preUpdateTokenHook);
   Hooks.on("updateToken", updateTokenHook);
 
   // Wall
@@ -97,19 +94,64 @@ export function registerElevationAdditions() {
   addClassGetter(Wall.prototype, "topZ", zTop, setZTop);
   addClassGetter(Wall.prototype, "bottomE", wallBottomE, setWallBottomE);
   addClassGetter(Wall.prototype, "bottomZ", zBottom, setZBottom);
+
+  // Sync wall bottom and top elevations between EV and Wall Height
+  Hooks.on("preUpdateWall", preUpdateWallHook);
   Hooks.on("updateWall", updateWallHook);
 }
+
+/* Elevation handling
+Ignore data.elevation in PointSources (for now)
+Sync document.elevation in Tile
+Use document.elevation in Token
+
+PointSource (LightSource, VisionSource, SoundSource, MovementSource)
+  - elevationE -->
+    --> object.elevationE
+        --> object.document.flags.elevatedvision.elevation
+    --> data.elevation
+    --> 0
+
+Placeable (AmbientLight, AmbientSound, Drawing, Note, MeasuredTemplate, Wall, Token, Tile)
+  - elevationE
+    --> document.flags.elevatedvision.elevation
+    --> 0
+
+
+Tile
+  - elevationE
+    --> document.flags.elevatedvision.elevation
+    --> Sync to document.elevation
+
+Wall
+  - topE
+    --> document.flags.elevatedvision.elevation.top
+  - bottomE
+    --> document.flags.elevatedvision.elevation.bottom
+
+Token
+  - topE
+    --> Calculated via document.flags.elevatedvision.tokenHeight
+  - bottomE
+    --> document.elevation
+  - elevationE
+    --> document.elevation
+  - tokenHeight
+    --> document.flags.elevatedvision.tokenHeight
+*/
+
 
 // NOTE: PointSource Elevation
 // Abstract base class used by LightSource, VisionSource, SoundSource, MovementSource.
 // Can be attached to a Token.
-// Has data.elevation already
+// Has data.elevation already but ignoring this for now as it may have unintended consequences.
 // Changes to token elevation appear to update the source elevation automatically.
-function pointSourceElevationE() { return this.data.elevation ?? 0; }
+function pointSourceElevationE() {
+  return this.object?.elevationE ?? this.data.elevation ?? 0;
+}
 
 function setPointSourceElevationE(value) {
-  this.data.elevation = value;
-  if ( typeof this.object.elevationE !== "undefined" ) this.object.elevationE = value;
+  if ( typeof this.object?.elevationE !== "undefined" ) this.object.elevationE = value;
 }
 
 // NOTE: PlaceableObject Elevation
@@ -118,59 +160,30 @@ function setPointSourceElevationE(value) {
 // Wall, Tile, Token are broken out.
 function placeableObjectElevationE() {
   return this._elevationE
-    ?? (this._elevationE = getProperty(this.document.flags, MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION)
-    ?? 0);
+    ?? (this._elevationE = getProperty(this.document, MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION) ?? 0);
 }
 
 function setPlaceableObjectElevationE(value) {
   this._elevationE = value;
 
   // Async method
-  this.document.update({ flags: { [MODULE_KEYS.EV.ID]: { [MODULE_KEYS.EV.ELEVATION]: value } } });
+  this.document.update({ [MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION]: value });
+  // this.document.update({ flags: { [MODULE_KEYS.EV.ID]: { [MODULE_KEYS.EV.ELEVATION]: value } } });
 }
-
-// NOTE: AmbientLight and AmbientSound Elevation
-// Use the underlying source elevation
-function ambientElevationE() { return this.source._elevationE; }
-
-function setAmbientElevationE(value) { this.source._elevationE = value; }
-
-// Note Tile Elevation
-// Has document.elevation already but does not save it.
-function tileElevationE() {
-  return this._elevationE
-    ?? (this._elevationE = getProperty(this.document.flags, MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION)
-    ?? this.document.elevation
-    ?? 0);
-
-  return this._elevationE;
-}
-
-function setTileElevationE(value) {
-  this._elevationE = value;
-  this.document.elevation = value;
-
-  // Async method
-  this.document.update({ flags: { [MODULE_KEYS.EV.ID]: { [MODULE_KEYS.EV.ELEVATION]: value } } });
-}
-
 
 // NOTE: Wall Elevation
 function wallTopE() {
   if ( typeof this._topE !== "undefined" ) return this._topE;
-
-  const flags = this.document.flags;
-  this._topE = getProperty(flags, MODULE_KEYS.EV.FLAG_WALL_TOP)
-    ?? getProperty(flags, MODULE_KEYS.WH.FLAG_WALL_TOP)
+  this._topE = getProperty(this.document, MODULE_KEYS.EV.FLAG_WALL_TOP)
+    ?? getProperty(this.document, MODULE_KEYS.WH.FLAG_WALL_TOP)
     ?? Number.POSITIVE_INFINITY;
   return this._topE;
 }
 
 function wallBottomE() {
   if ( typeof this._bottomE !== "undefined" ) return this._bottomE;
-  const flags = this.document.flags;
-  this._bottomE = getProperty(flags, MODULE_KEYS.EV.FLAG_WALL_BOTTOM)
-    ?? getProperty(flags, MODULE_KEYS.WH.FLAG_WALL_BOTTOM)
+  this._bottomE = getProperty(this.document, MODULE_KEYS.EV.FLAG_WALL_BOTTOM)
+    ?? getProperty(this.document, MODULE_KEYS.WH.FLAG_WALL_BOTTOM)
     ?? Number.NEGATIVE_INFINITY;
   return this._bottomE;
 }
@@ -185,7 +198,8 @@ function setWallTopE(value) {
 
   // Async method
   const MOD = MODULE_KEYS.EV;
-  this.document.update({ flags: { [MOD.ID]: { [MOD.ELEVATION]: { [MOD.WALL.TOP]: value } } } });
+  this.document.update({ [MODULE_KEYS.EV.FLAG_WALL_TOP]: value });
+  // this.document.update({ flags: { [MOD.ID]: { [MOD.ELEVATION]: { [MOD.WALL.TOP]: value } } } });
 }
 
 function setWallBottomE(value) {
@@ -198,7 +212,8 @@ function setWallBottomE(value) {
 
   // Async method
   const MOD = MODULE_KEYS.EV;
-  this.document.update({ flags: { [MOD.ID]: { [MOD.ELEVATION]: { [MOD.WALL.BOTTOM]: value } } } });
+  this.document.update({ [MODULE_KEYS.EV.FLAG_WALL_BOTTOM]: value });
+  // this.document.update({ flags: { [MOD.ID]: { [MOD.ELEVATION]: { [MOD.WALL.BOTTOM]: value } } } });
 }
 
 // NOTE: Token Elevation
@@ -223,11 +238,9 @@ function setTokenBottomE(value) { this.elevationE = value; }
  */
 function tokenTopE() {
   const proneStatusId = CONFIG.GeometryLib.proneStatusId;
-  const isProne = (proneStatusId !== "" && this.actor)
-    ? this.actor.effects.some(e => e.getFlag("core", "statusId") === proneStatusId)
-    : game.modules.get(MODULE_KEYS.LEVELSAUTOCOVER.ID)?.active
-    && this.document.flags?.[MODULE_KEYS.LEVELSAUTOCOVER.ID]?.[MODULE_KEYS.LEVELSAUTOCOVER].DUCKING;
-
+  const isProne = (proneStatusId !== "" && this.actor && this.actor.statuses.has(proneStatusId))
+    || (game.modules.get(MODULE_KEYS.LEVELSAUTOCOVER.ID)?.active
+    && this.document.flags?.[MODULE_KEYS.LEVELSAUTOCOVER.ID]?.[MODULE_KEYS.LEVELSAUTOCOVER].DUCKING);
   const heightMult = isProne ? CONFIG.GeometryLib.proneMultiplier : 1;
   return this.bottomE + (this.losHeight * heightMult);
 }
@@ -246,9 +259,8 @@ function calculateTokenHeightFromTokenShape(token) {
 function getTokenLOSHeight() {
   if ( typeof this._losHeight !== "undefined" ) return this._losHeight;
 
-  const flags = this.document.flags;
-  this._losHeight = getProperty(flags, MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT)
-    ?? getProperty(flags, MODULE_KEYS.WH.FLAG_TOKEN_HEIGHT)
+  this._losHeight = getProperty(this.document, MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT)
+    ?? getProperty(this.document, MODULE_KEYS.WH.FLAG_TOKEN_HEIGHT)
     ?? calculateTokenHeightFromTokenShape(this);
   return this._losHeight;
 }
@@ -262,22 +274,42 @@ function setTokenLOSHeight(value) {
   this._losHeight = value;
 
   // Async method
-  this.document.update({ flags: { [MODULE_KEYS.EV.ID]: { [MODULE_KEYS.EV.TOKEN_HEIGHT]: value } } });
+  this.document.update({ [MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT]: value });
+  // this.document.update({ flags: { [MODULE_KEYS.EV.ID]: { [MODULE_KEYS.EV.TOKEN_HEIGHT]: value } } });
 }
 
 // NOTE: Hooks
 
 /**
- * Monitor placeable object updates for updated elevation and update the cached data property accordingly.
+ * Monitor placeable document updates for updated elevation and update the cached data property accordingly.
  */
-function updatePlaceableHook(placeableD, data, _options, _userId) {
+function updatePlaceableHookElevationE(placeableD, data, _options, _userId) {
   const flatData = flattenObject(data);
   const changed = new Set(Object.keys(flatData));
-  const evChangeFlag = MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION;
-  if ( changed.has(evChangeFlag) ) {
-    const e = flatData[evChangeFlag];
+  const evFlag = MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION;
+  if ( changed.has(evFlag) && placeableD.object ) {
+    const e = flatData[evFlag];
     placeableD.object._elevationE = e;
   }
+}
+
+/**
+ * Monitor tile document updates for updated elevation and sync the document with the flag.
+ * Note Tile Elevation has document.elevation already but does not save it (in v11).
+ */
+function preUpdateTileHook(placeableD, data, _options, _userId) {
+  const flatData = flattenObject(data);
+  const changes = new Set(Object.keys(flatData));
+  const evFlag = MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION;
+  const updates = {};
+  if ( changes.has(evFlag) ) {
+    const e = flatData[evFlag];
+    updates.elevation = e;
+  } else if ( changes.has("elevation") ) {
+    const e = data.elevation;
+    updates[evFlag] = e;
+  }
+  foundry.utils.mergeObject(data, updates);
 }
 
 /**
@@ -288,24 +320,30 @@ function updatePlaceableHook(placeableD, data, _options, _userId) {
  * @param {DocumentModificationContext} options     Additional options which modified the update request
  * @param {string} userId                           The ID of the User who triggered the update workflow
  */
-function updateTokenHook(tokenD, data, options, _userId) {
+function preUpdateTokenHook(tokenD, data, _options, _userId) {
+  const flatData = flattenObject(data);
+  const changes = new Set(Object.keys(flatData));
+  const evFlag = MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT;
+  const whFlag = MODULE_KEYS.WH.FLAG_TOKEN_HEIGHT;
+  const updates = {};
+  if ( changes.has(evFlag) ) {
+    const e = flatData[evFlag];
+    updates[whFlag] = e;
+  } else if ( changes.has(whFlag) ) {
+    const e = flatData[whFlag];
+    updates[evFlag] = e;
+  }
+  foundry.utils.mergeObject(data, updates);
+}
+
+function updateTokenHook(tokenD, data, _options, _userId) {
   const flatData = flattenObject(data);
   const changed = new Set(Object.keys(flatData));
-  const evChangeFlag = MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT;
-  const whChangeFlag = MODULE_KEYS.WH.FLAG_TOKEN_HEIGHT;
-  const updates = {};
-  let evUpdated = false;
-  if ( changed.has(evChangeFlag) ) {
-    const tokenHeight = flatData[evChangeFlag];
+  const evFlag = MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT;
+  if ( changed.has(evFlag) ) {
+    const tokenHeight = flatData[evFlag];
     tokenD.object._tokenHeight = tokenHeight;
-    updates[whChangeFlag] = tokenHeight;
-    evUpdated ||= true; // Avoid circular updating by passing the evUpdated option.
-
-  } else if ( changed.has(whChangeFlag) && !options.evUpdated ){
-    const tokenHeight = flatData[whChangeFlag];
-    updates[evChangeFlag] = tokenHeight;
   }
-  if ( !isEmpty(updates) ) tokenD.update(updates, { evUpdated });
 }
 
 /**
@@ -316,37 +354,49 @@ function updateTokenHook(tokenD, data, options, _userId) {
  * @param {DocumentModificationContext} options     Additional options which modified the update request
  * @param {string} userId                           The ID of the User who triggered the update workflow
  */
-function updateWallHook(wallD, data, options, _userId) {
+function preUpdateWallHook(wallD, data, _options, _userId) {
+  const flatData = flattenObject(data);
+  const changes = new Set(Object.keys(flatData));
+  const evTopFlag = MODULE_KEYS.EV.FLAG_WALL_TOP;
+  const evBottomFlag = MODULE_KEYS.EV.FLAG_WALL_BOTTOM;
+  const whTopFlag = MODULE_KEYS.WH.FLAG_WALL_TOP;
+  const whBottomFlag = MODULE_KEYS.WH.FLAG_WALL_BOTTOM;
+  const updates = {};
+  if ( changes.has(evTopFlag) ) {
+    const e = flatData[evTopFlag];
+    updates[whTopFlag] = e;
+  } else if ( changes.has(whTopFlag) ) {
+    const e = flatData[whTopFlag];
+    updates[evTopFlag] = e;
+  }
+
+  if ( changes.has(evBottomFlag) ) {
+    const e = flatData[evBottomFlag];
+    updates[whBottomFlag] = e;
+  } else if ( changes.has(whBottomFlag) ) {
+    const e = flatData[whBottomFlag];
+    updates[evBottomFlag] = e;
+  }
+
+  foundry.utils.mergeObject(data, updates);
+}
+
+
+function updateWallHook(wallD, data, _options, _userId) {
   const flatData = flattenObject(data);
   const changed = new Set(Object.keys(flatData));
-  const evChangeTopFlag = MODULE_KEYS.EV.FLAG_WALL_TOP;
-  const evChangeBottomFlag = MODULE_KEYS.EV.FLAG_WALL_BOTTOM;
-  const whChangeTopFlag = MODULE_KEYS.WH.FLAG_WALL_TOP;
-  const whChangeBottomFlag = MODULE_KEYS.WH.FLAG_WALL_BOTTOM;
-  const updates = {};
-  let evUpdated = false;
-
-  if ( changed.has(evChangeTopFlag) ) {
-    const wallTop = flatData[evChangeTopFlag];
+  const evTopFlag = MODULE_KEYS.EV.FLAG_WALL_TOP;
+  if ( changed.has(evTopFlag) ) {
+    const wallTop = flatData[evTopFlag];
     wallD.object._topE = wallTop;
-    updates[whChangeTopFlag] = wallTop;
-    evUpdated ||= true; // Avoid circular updating by passing the evUpdated option.
-  } else if ( changed.has(whChangeTopFlag) && !options.evUpdated ) {
-    const wallTop = flatData[whChangeTopFlag];
-    updates[evChangeTopFlag] = wallTop;
+
   }
 
-  if ( changed.has(evChangeBottomFlag) ) {
-    const wallBottom = flatData[evChangeBottomFlag];
+  const evBottomFlag = MODULE_KEYS.EV.FLAG_WALL_BOTTOM;
+  if ( changed.has(evBottomFlag) ) {
+    const wallBottom = flatData[evBottomFlag];
     wallD.object._bottomE = wallBottom;
-    updates[whChangeBottomFlag] = wallBottom;
-    evUpdated ||= true; // Avoid circular updating by passing the evUpdated option.
-  } else if ( changed.has(whChangeBottomFlag) && !options.evUpdated ) {
-    const wallBottom = flatData[whChangeBottomFlag];
-    updates[evChangeBottomFlag] = wallBottom;
   }
-
-  if ( !isEmpty(updates) ) wallD.update(updates, { evUpdated });
 }
 
 // NOTE: Helper functions to convert to Z pixels.
