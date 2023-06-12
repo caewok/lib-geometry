@@ -307,7 +307,7 @@ function preUpdateTileHook(placeableD, data, _options, _userId) {
     const e = flatData[evChangeFlag];
     updates.elevation = e;
   } else if ( changes.has("elevation") ) {
-    const e = changes.elevation;
+    const e = data.elevation;
     updates[evChangeFlag] = e;
   }
   foundry.utils.mergeObject(data, updates);
