@@ -1,6 +1,4 @@
 /* globals
-AmbientLight,
-AmbientSound,
 canvas,
 CONFIG,
 flattenObject,
@@ -58,20 +56,14 @@ export function registerElevationAdditions() {
   addClassGetter(PlaceableObject.prototype, "elevationE", placeableObjectElevationE, setPlaceableObjectElevationE);
   addClassGetter(PlaceableObject.prototype, "elevationZ", zElevation, setZElevation);
 
-  // Drawing
-  Hooks.on("updateDrawing", updatePlaceableHook);
-
-  // MeasuredTemplate
-  Hooks.on("updateMeasuredTemplate", updatePlaceableHook);
-
-  // Note
-  Hooks.on("updateNote", updatePlaceableHook);
-
-  // AmbientLight
-  addClassGetter(AmbientLight.prototype, "elevationE", ambientElevationE, setAmbientElevationE);
-
-  // AmbientSound
-  addClassGetter(AmbientSound.prototype, "elevationE", ambientElevationE, setAmbientElevationE);
+//   // Drawing
+//   Hooks.on("updateDrawing", updatePlaceableHook);
+//
+//   // MeasuredTemplate
+//   Hooks.on("updateMeasuredTemplate", updatePlaceableHook);
+//
+//   // Note
+//   Hooks.on("updateNote", updatePlaceableHook);
 
   // Tile
   addClassGetter(Tile.prototype, "elevationE", tileElevationE, setTileElevationE);
@@ -98,6 +90,19 @@ export function registerElevationAdditions() {
   addClassGetter(Wall.prototype, "bottomE", wallBottomE, setWallBottomE);
   addClassGetter(Wall.prototype, "bottomZ", zBottom, setZBottom);
   Hooks.on("updateWall", updateWallHook);
+
+  // Register new render flag for elevation changes to placeables.
+  CONFIG.AmbientLight.objectClass.RENDER_FLAGS.refreshElevation = {};
+  CONFIG.AmbientLight.objectClass.RENDER_FLAGS.refreshField.propagate.push("refreshElevation");
+
+  CONFIG.AmbientSound.objectClass.RENDER_FLAGS.refreshElevation = {};
+  CONFIG.AmbientSound.objectClass.RENDER_FLAGS.refreshField.propagate.push("refreshElevation");
+
+  Hooks.on("updatePlaceable", updatePlaceableHook);
+  Hooks.on("updateAmbientLightDocument", updateAmbientLightDocumentHook);
+  Hooks.on("updateAmbientSoundDocument", updateAmbientSoundDocumentHook);
+  Hooks.on("refreshAmbientLight", refreshAmbientLightHook);
+  Hooks.on("refreshAmbientSound", refreshAmbientSoundHook);
 }
 
 // NOTE: PointSource Elevation
@@ -109,7 +114,7 @@ function pointSourceElevationE() { return this.data.elevation ?? 0; }
 
 function setPointSourceElevationE(value) {
   this.data.elevation = value;
-  if ( typeof this.object.elevationE !== "undefined" ) this.object.elevationE = value;
+  if ( typeof this.object?.elevationE !== "undefined" ) this.object.elevationE = value;
 }
 
 // NOTE: PlaceableObject Elevation
@@ -118,8 +123,7 @@ function setPointSourceElevationE(value) {
 // Wall, Tile, Token are broken out.
 function placeableObjectElevationE() {
   return this._elevationE
-    ?? (this._elevationE = getProperty(this.document.flags, MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION)
-    ?? 0);
+    ?? (this._elevationE = this.document.getFlag(MODULE_KEYS.EV.ID, MODULE_KEYS.EV.ELEVATION) ?? 0);
 }
 
 function setPlaceableObjectElevationE(value) {
@@ -128,12 +132,6 @@ function setPlaceableObjectElevationE(value) {
   // Async method
   this.document.update({ flags: { [MODULE_KEYS.EV.ID]: { [MODULE_KEYS.EV.ELEVATION]: value } } });
 }
-
-// NOTE: AmbientLight and AmbientSound Elevation
-// Use the underlying source elevation
-function ambientElevationE() { return this.source._elevationE; }
-
-function setAmbientElevationE(value) { this.source._elevationE = value; }
 
 // Note Tile Elevation
 // Has document.elevation already but does not save it.
@@ -276,6 +274,71 @@ function updatePlaceableHook(placeableD, data, _options, _userId) {
     placeableD.object._elevationE = e;
   }
 }
+
+/**
+ * Hook when the elevation flag is changed in the AmbientLightDocument.
+ * Used below to update the underlying source elevation.
+ * @param {Document} document                       The existing Document which was updated
+ * @param {object} change                           Differential data that was used to update the document
+ * @param {DocumentModificationContext} options     Additional options which modified the update request
+ * @param {string} userId                           The ID of the User who triggered the update workflow
+ */
+function updateAmbientLightDocumentHook(doc, data, _options, _userId) {
+  const changeFlag = `flags.${MODULE_KEYS.EV.ID}.${MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION}`;
+  const flatData = flattenObject(data);
+  const changed = new Set(Object.keys(flatData));
+  if ( !changed.has(changeFlag) ) return;
+
+  doc.object.renderFlags.set({
+    refreshElevation: true
+  });
+}
+
+/**
+ * Hook when the elevation flag is changed in the AmbientSoundDocument.
+ * Used below to update the underlying source elevation.
+ * @param {Document} document                       The existing Document which was updated
+ * @param {object} change                           Differential data that was used to update the document
+ * @param {DocumentModificationContext} options     Additional options which modified the update request
+ * @param {string} userId                           The ID of the User who triggered the update workflow
+ */
+function updateAmbientSoundDocumentHook(doc, data, _options, _userId) {
+  const changeFlag = `flags.${MODULE_KEYS.EV.ID}.${MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION}`;
+  const flatData = flattenObject(data);
+  const changed = new Set(Object.keys(flatData));
+  if ( !changed.has(changeFlag) ) return;
+
+  doc.object.renderFlags.set({
+    refreshElevation: true
+  });
+}
+
+/**
+ * Hook ambient light refresh to address the refreshElevation renderFlag.
+ * Update the source elevation.
+ * See AmbientLight.prototype._applyRenderFlags.
+ * @param {PlaceableObject} object    The object instance being refreshed
+ * @param {RenderFlags} flags
+ */
+function refreshAmbientLightHook(light, flags) {
+  if ( flags.refreshElevation ) light.source.data.elevation = light.document.getFlag(
+    MODULE_KEYS.EV.ID,
+    MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION) ?? 0;
+}
+
+/**
+ * Hook ambient sound refresh to address the refreshElevation renderFlag.
+ * Update the source elevation.
+ * See AmbientSound.prototype._applyRenderFlags.
+ * @param {PlaceableObject} object    The object instance being refreshed
+ * @param {RenderFlags} flags
+ */
+function refreshAmbientSoundHook(sound, flags) {
+  if ( flags.refreshElevation ) sound.source.data.elevation = sound.document.getFlag(
+    MODULE_KEYS.EV.ID,
+    MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION) ?? 0;
+}
+
 
 /**
  * Monitor token updates for updated losHeight and update the cached data property accordingly.
