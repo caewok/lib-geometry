@@ -268,7 +268,7 @@ function setTokenLOSHeight(value) {
 function updatePlaceableHook(placeableD, data, _options, _userId) {
   const flatData = flattenObject(data);
   const changed = new Set(Object.keys(flatData));
-  const evChangeFlag = MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION;
+  const evChangeFlag = `flags.${MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION}`;
   if ( changed.has(evChangeFlag) ) {
     const e = flatData[evChangeFlag];
     placeableD.object._elevationE = e;
@@ -284,7 +284,7 @@ function updatePlaceableHook(placeableD, data, _options, _userId) {
  * @param {string} userId                           The ID of the User who triggered the update workflow
  */
 function updateAmbientLightDocumentHook(doc, data, _options, _userId) {
-  const changeFlag = `flags.${MODULE_KEYS.EV.ID}.${MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION}`;
+  const changeFlag = `flags.${MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION}`;
   const flatData = flattenObject(data);
   const changed = new Set(Object.keys(flatData));
   if ( !changed.has(changeFlag) ) return;
@@ -303,7 +303,7 @@ function updateAmbientLightDocumentHook(doc, data, _options, _userId) {
  * @param {string} userId                           The ID of the User who triggered the update workflow
  */
 function updateAmbientSoundDocumentHook(doc, data, _options, _userId) {
-  const changeFlag = `flags.${MODULE_KEYS.EV.ID}.${MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION}`;
+  const changeFlag = `flags.${MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION}`;
   const flatData = flattenObject(data);
   const changed = new Set(Object.keys(flatData));
   if ( !changed.has(changeFlag) ) return;
@@ -323,7 +323,7 @@ function updateAmbientSoundDocumentHook(doc, data, _options, _userId) {
 function refreshAmbientLightHook(light, flags) {
   if ( flags.refreshElevation ) light.source.data.elevation = light.document.getFlag(
     MODULE_KEYS.EV.ID,
-    MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION) ?? 0;
+    MODULE_KEYS.EV.ELEVATION) ?? 0;
 }
 
 /**
@@ -336,7 +336,7 @@ function refreshAmbientLightHook(light, flags) {
 function refreshAmbientSoundHook(sound, flags) {
   if ( flags.refreshElevation ) sound.source.data.elevation = sound.document.getFlag(
     MODULE_KEYS.EV.ID,
-    MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION) ?? 0;
+    MODULE_KEYS.EV.ELEVATION) ?? 0;
 }
 
 
