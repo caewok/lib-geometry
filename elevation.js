@@ -345,6 +345,12 @@ function updateTokenHook(tokenD, data, _options, _userId) {
     const tokenHeight = flatData[evChangeFlag];
     tokenD.object._tokenHeight = tokenHeight;
   }
+
+  if ( changed.has("elevation") ) {
+    const e = data.elevation;
+    if ( tokenD.object.light ) tokenD.object.light._elevationZ = e;
+    if ( tokenD.object.vision ) tokenD.object.vision._elevationZ = e;
+  }
 }
 
 /**
