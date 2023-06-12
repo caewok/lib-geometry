@@ -147,11 +147,10 @@ Token
 // Has data.elevation already but ignoring this for now as it may have unintended consequences.
 // Changes to token elevation appear to update the source elevation automatically.
 function pointSourceElevationE() {
-  return this._elevationE ?? (this._elevationE = this.object?.elevationE ?? this.data.elevation ?? 0);
+  return this.object?.elevationE ?? this.data.elevation ?? 0;
 }
 
 function setPointSourceElevationE(value) {
-  this._elevationE = value;
   if ( typeof this.object?.elevationE !== "undefined" ) this.object.elevationE = value;
 }
 
@@ -344,12 +343,6 @@ function updateTokenHook(tokenD, data, _options, _userId) {
   if ( changed.has(evChangeFlag) ) {
     const tokenHeight = flatData[evChangeFlag];
     tokenD.object._tokenHeight = tokenHeight;
-  }
-
-  if ( changed.has("elevation") ) {
-    const e = data.elevation;
-    if ( tokenD.object.light ) tokenD.object.light._elevationZ = e;
-    if ( tokenD.object.vision ) tokenD.object.vision._elevationZ = e;
   }
 }
 
