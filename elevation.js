@@ -2,13 +2,11 @@
 canvas,
 CONFIG,
 flattenObject,
+foundry,
 game,
 getProperty,
 Hooks,
-isEmpty,
 PointSource,
-PlaceableObject,
-Tile,
 Token,
 Wall
 */
@@ -52,21 +50,26 @@ export function registerElevationAdditions() {
   addClassGetter(PointSource.prototype, "elevationE", pointSourceElevationE, setPointSourceElevationE);
   addClassGetter(PointSource.prototype, "elevationZ", zElevation, setZElevation);
 
-  // PlaceableObject (Drawing, AmbientLight, AmbientSound, MeasuredTemplate, Note, Tile, Wall, Token)
-  addClassGetter(PlaceableObject.prototype, "elevationE", placeableObjectElevationE, setPlaceableObjectElevationE);
-  addClassGetter(PlaceableObject.prototype, "elevationZ", zElevation, setZElevation);
+  // PlaceableObjects (Drawing, AmbientLight, AmbientSound, MeasuredTemplate, Note, Tile, Wall, Token)
+  // Don't handle Wall or Token here
+  const basicPlaceables = {
+    Drawing: CONFIG.Drawing.objectClass,
+    Note: CONFIG.Note.objectClass,
+    MeasuredTemmplate: CONFIG.MeasuredTemplate.objectClass,
+    AmbientLight: CONFIG.AmbientLight.objectClass,
+    AmbientSound: CONFIG.AmbientSound.objectClass,
+    Tile: CONFIG.Tile.objectClass
+  };
 
-//   // Drawing
-//   Hooks.on("updateDrawing", updatePlaceableHook);
-//
-//   // MeasuredTemplate
-//   Hooks.on("updateMeasuredTemplate", updatePlaceableHook);
-//
-//   // Note
-//   Hooks.on("updateNote", updatePlaceableHook);
+  for ( const [placeableName, placeableClass] of basicPlaceables ) {
+    addClassGetter(placeableClass.prototype, "elevationE", placeableObjectElevationE, setPlaceableObjectElevationE);
+    addClassGetter(placeableClass.prototype, "elevationZ", zElevation, setZElevation);
+    Hooks.on(`update${placeableName}`, updatePlaceableHookElevationE);
+  }
 
   // Tile
-  addClassGetter(Tile.prototype, "elevationE", tileElevationE, setTileElevationE);
+  // Sync tile.document.elevation with tile.document.flags.elevatedvision.elevation
+  Hooks.on("preUpdateTile", preUpdateTileHook);
 
   // Token
   addClassGetter(Token.prototype, "elevationE", tokenElevationE, setTokenElevationE);
@@ -82,6 +85,8 @@ export function registerElevationAdditions() {
   CONFIG.GeometryLib.proneMultiplier = 0.33;
   addClassGetter(Token.prototype, "losHeight", getTokenLOSHeight, setTokenLOSHeight);
 
+  // Sync token.tokenHeight between EV and Wall Height
+  Hooks.on("preUpdateToken", preUpdateTokenHook);
   Hooks.on("updateToken", updateTokenHook);
 
   // Wall
@@ -89,31 +94,64 @@ export function registerElevationAdditions() {
   addClassGetter(Wall.prototype, "topZ", zTop, setZTop);
   addClassGetter(Wall.prototype, "bottomE", wallBottomE, setWallBottomE);
   addClassGetter(Wall.prototype, "bottomZ", zBottom, setZBottom);
+
+  // Sync wall bottom and top elevations between EV and Wall Height
+  Hooks.on("preUpdateWall", preUpdateWallHook);
   Hooks.on("updateWall", updateWallHook);
-
-  // Register new render flag for elevation changes to placeables.
-  CONFIG.AmbientLight.objectClass.RENDER_FLAGS.refreshElevation = {};
-  CONFIG.AmbientLight.objectClass.RENDER_FLAGS.refreshField.propagate.push("refreshElevation");
-
-  CONFIG.AmbientSound.objectClass.RENDER_FLAGS.refreshElevation = {};
-  CONFIG.AmbientSound.objectClass.RENDER_FLAGS.refreshField.propagate.push("refreshElevation");
-
-  Hooks.on("updatePlaceable", updatePlaceableHook);
-  Hooks.on("updateAmbientLightDocument", updateAmbientLightDocumentHook);
-  Hooks.on("updateAmbientSoundDocument", updateAmbientSoundDocumentHook);
-  Hooks.on("refreshAmbientLight", refreshAmbientLightHook);
-  Hooks.on("refreshAmbientSound", refreshAmbientSoundHook);
 }
+
+/* Elevation handling
+Ignore data.elevation in PointSources (for now)
+Sync document.elevation in Tile
+Use document.elevation in Token
+
+PointSource (LightSource, VisionSource, SoundSource, MovementSource)
+  - elevationE -->
+    --> object.elevationE
+        --> object.document.flags.elevatedvision.elevation
+    --> data.elevation
+    --> 0
+
+Placeable (AmbientLight, AmbientSound, Drawing, Note, MeasuredTemplate, Wall, Token, Tile)
+  - elevationE
+    --> document.flags.elevatedvision.elevation
+    --> 0
+
+
+Tile
+  - elevationE
+    --> document.flags.elevatedvision.elevation
+    --> Sync to document.elevation
+
+Wall
+  - topE
+    --> document.flags.elevatedvision.elevation.top
+  - bottomE
+    --> document.flags.elevatedvision.elevation.bottom
+
+Token
+  - topE
+    --> Calculated via document.flags.elevatedvision.tokenHeight
+  - bottomE
+    --> document.elevation
+  - elevationE
+    --> document.elevation
+  - tokenHeight
+    --> document.flags.elevatedvision.tokenHeight
+*/
+
 
 // NOTE: PointSource Elevation
 // Abstract base class used by LightSource, VisionSource, SoundSource, MovementSource.
 // Can be attached to a Token.
-// Has data.elevation already
+// Has data.elevation already but ignoring this for now as it may have unintended consequences.
 // Changes to token elevation appear to update the source elevation automatically.
-function pointSourceElevationE() { return this.data.elevation ?? 0; }
+function pointSourceElevationE() {
+  return this._elevationE ?? (this._elevationE = this.object?.elevationE ?? this.data.elevation ?? 0);
+}
 
 function setPointSourceElevationE(value) {
-  this.data.elevation = value;
+  this._elevationE = value;
   if ( typeof this.object?.elevationE !== "undefined" ) this.object.elevationE = value;
 }
 
@@ -132,25 +170,6 @@ function setPlaceableObjectElevationE(value) {
   // Async method
   this.document.update({ flags: { [MODULE_KEYS.EV.ID]: { [MODULE_KEYS.EV.ELEVATION]: value } } });
 }
-
-// Note Tile Elevation
-// Has document.elevation already but does not save it.
-function tileElevationE() {
-  if ( typeof this._elevationE !== "undefined" ) return this._elevationE;
-
-  const e = getProperty(this.document.flags, MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION) ?? this.document.elevation ?? 0;
-  this._elevationE = e;
-  return e;
-}
-
-function setTileElevationE(value) {
-  this._elevationE = value;
-  this.document.elevation = value;
-
-  // Async method
-  this.document.update({ flags: { [MODULE_KEYS.EV.ID]: { [MODULE_KEYS.EV.ELEVATION]: value } } });
-}
-
 
 // NOTE: Wall Elevation
 function wallTopE() {
@@ -263,82 +282,36 @@ function setTokenLOSHeight(value) {
 // NOTE: Hooks
 
 /**
- * Monitor placeable object updates for updated elevation and update the cached data property accordingly.
+ * Monitor placeable document updates for updated elevation and update the cached data property accordingly.
  */
-function updatePlaceableHook(placeableD, data, _options, _userId) {
+function updatePlaceableHookElevationE(placeableD, data, _options, _userId) {
   const flatData = flattenObject(data);
   const changed = new Set(Object.keys(flatData));
   const evChangeFlag = `flags.${MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION}`;
-  if ( changed.has(evChangeFlag) ) {
+  if ( changed.has(evChangeFlag) && placeableD.object ) {
     const e = flatData[evChangeFlag];
     placeableD.object._elevationE = e;
   }
 }
 
 /**
- * Hook when the elevation flag is changed in the AmbientLightDocument.
- * Used below to update the underlying source elevation.
- * @param {Document} document                       The existing Document which was updated
- * @param {object} change                           Differential data that was used to update the document
- * @param {DocumentModificationContext} options     Additional options which modified the update request
- * @param {string} userId                           The ID of the User who triggered the update workflow
+ * Monitor tile document updates for updated elevation and sync the document with the flag.
+ * Note Tile Elevation has document.elevation already but does not save it (in v11).
  */
-function updateAmbientLightDocumentHook(doc, data, _options, _userId) {
-  const changeFlag = `flags.${MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION}`;
+function preUpdateTileHook(placeableD, data, _options, _userId) {
   const flatData = flattenObject(data);
-  const changed = new Set(Object.keys(flatData));
-  if ( !changed.has(changeFlag) ) return;
-
-  doc.object.renderFlags.set({
-    refreshElevation: true
-  });
+  const changes = new Set(Object.keys(flatData));
+  const evChangeFlag = `flags.${MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION}`;
+  const updates = {};
+  if ( changes.has(evChangeFlag) ) {
+    const e = flatData[evChangeFlag];
+    updates.elevation = e;
+  } else if ( changes.has("elevation") ) {
+    const e = changes.elevation;
+    updates[evChangeFlag] = e;
+  }
+  foundry.utils.mergeObject(data, updates);
 }
-
-/**
- * Hook when the elevation flag is changed in the AmbientSoundDocument.
- * Used below to update the underlying source elevation.
- * @param {Document} document                       The existing Document which was updated
- * @param {object} change                           Differential data that was used to update the document
- * @param {DocumentModificationContext} options     Additional options which modified the update request
- * @param {string} userId                           The ID of the User who triggered the update workflow
- */
-function updateAmbientSoundDocumentHook(doc, data, _options, _userId) {
-  const changeFlag = `flags.${MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION}`;
-  const flatData = flattenObject(data);
-  const changed = new Set(Object.keys(flatData));
-  if ( !changed.has(changeFlag) ) return;
-
-  doc.object.renderFlags.set({
-    refreshElevation: true
-  });
-}
-
-/**
- * Hook ambient light refresh to address the refreshElevation renderFlag.
- * Update the source elevation.
- * See AmbientLight.prototype._applyRenderFlags.
- * @param {PlaceableObject} object    The object instance being refreshed
- * @param {RenderFlags} flags
- */
-function refreshAmbientLightHook(light, flags) {
-  if ( flags.refreshElevation ) light.source.data.elevation = light.document.getFlag(
-    MODULE_KEYS.EV.ID,
-    MODULE_KEYS.EV.ELEVATION) ?? 0;
-}
-
-/**
- * Hook ambient sound refresh to address the refreshElevation renderFlag.
- * Update the source elevation.
- * See AmbientSound.prototype._applyRenderFlags.
- * @param {PlaceableObject} object    The object instance being refreshed
- * @param {RenderFlags} flags
- */
-function refreshAmbientSoundHook(sound, flags) {
-  if ( flags.refreshElevation ) sound.source.data.elevation = sound.document.getFlag(
-    MODULE_KEYS.EV.ID,
-    MODULE_KEYS.EV.ELEVATION) ?? 0;
-}
-
 
 /**
  * Monitor token updates for updated losHeight and update the cached data property accordingly.
@@ -348,24 +321,30 @@ function refreshAmbientSoundHook(sound, flags) {
  * @param {DocumentModificationContext} options     Additional options which modified the update request
  * @param {string} userId                           The ID of the User who triggered the update workflow
  */
-function updateTokenHook(tokenD, data, options, _userId) {
+function preUpdateTokenHook(tokenD, data, _options, _userId) {
   const flatData = flattenObject(data);
-  const changed = new Set(Object.keys(flatData));
+  const changes = new Set(Object.keys(flatData));
   const evChangeFlag = MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT;
   const whChangeFlag = MODULE_KEYS.WH.FLAG_TOKEN_HEIGHT;
   const updates = {};
-  let evUpdated = false;
+  if ( changes.has(evChangeFlag) ) {
+    const e = flatData[evChangeFlag];
+    updates[whChangeFlag] = e;
+  } else if ( changes.has(whChangeFlag) ) {
+    const e = flatData[whChangeFlag];
+    updates[evChangeFlag] = e;
+  }
+  foundry.utils.mergeObject(data, updates);
+}
+
+function updateTokenHook(tokenD, data, _options, _userId) {
+  const flatData = flattenObject(data);
+  const changed = new Set(Object.keys(flatData));
+  const evChangeFlag = MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT;
   if ( changed.has(evChangeFlag) ) {
     const tokenHeight = flatData[evChangeFlag];
     tokenD.object._tokenHeight = tokenHeight;
-    updates[whChangeFlag] = tokenHeight;
-    evUpdated ||= true; // Avoid circular updating by passing the evUpdated option.
-
-  } else if ( changed.has(whChangeFlag) && !options.evUpdated ){
-    const tokenHeight = flatData[whChangeFlag];
-    updates[evChangeFlag] = tokenHeight;
   }
-  if ( !isEmpty(updates) ) tokenD.update(updates, { evUpdated });
 }
 
 /**
@@ -376,37 +355,50 @@ function updateTokenHook(tokenD, data, options, _userId) {
  * @param {DocumentModificationContext} options     Additional options which modified the update request
  * @param {string} userId                           The ID of the User who triggered the update workflow
  */
-function updateWallHook(wallD, data, options, _userId) {
+function preUpdateWallHook(wallD, data, _options, _userId) {
   const flatData = flattenObject(data);
-  const changed = new Set(Object.keys(flatData));
+  const changes = new Set(Object.keys(flatData));
   const evChangeTopFlag = MODULE_KEYS.EV.FLAG_WALL_TOP;
   const evChangeBottomFlag = MODULE_KEYS.EV.FLAG_WALL_BOTTOM;
   const whChangeTopFlag = MODULE_KEYS.WH.FLAG_WALL_TOP;
   const whChangeBottomFlag = MODULE_KEYS.WH.FLAG_WALL_BOTTOM;
   const updates = {};
-  let evUpdated = false;
+  if ( changes.has(evChangeTopFlag) ) {
+    const e = flatData[evChangeTopFlag];
+    updates[whChangeTopFlag] = e;
+  } else if ( changes.has(whChangeTopFlag) ) {
+    const e = flatData[whChangeTopFlag];
+    updates[evChangeTopFlag] = e;
+  }
+
+  if ( changes.has(evChangeBottomFlag) ) {
+    const e = flatData[evChangeBottomFlag];
+    updates[whChangeBottomFlag] = e;
+  } else if ( changes.has(whChangeBottomFlag) ) {
+    const e = flatData[whChangeBottomFlag];
+    updates[evChangeBottomFlag] = e;
+  }
+
+  foundry.utils.mergeObject(data, updates);
+}
+
+
+function updateWallHook(wallD, data, _options, _userId) {
+  const flatData = flattenObject(data);
+  const changed = new Set(Object.keys(flatData));
+  const evChangeTopFlag = MODULE_KEYS.EV.FLAG_WALL_TOP;
+  const evChangeBottomFlag = MODULE_KEYS.EV.FLAG_WALL_BOTTOM;
 
   if ( changed.has(evChangeTopFlag) ) {
     const wallTop = flatData[evChangeTopFlag];
     wallD.object._topE = wallTop;
-    updates[whChangeTopFlag] = wallTop;
-    evUpdated ||= true; // Avoid circular updating by passing the evUpdated option.
-  } else if ( changed.has(whChangeTopFlag) && !options.evUpdated ) {
-    const wallTop = flatData[whChangeTopFlag];
-    updates[evChangeTopFlag] = wallTop;
+
   }
 
   if ( changed.has(evChangeBottomFlag) ) {
     const wallBottom = flatData[evChangeBottomFlag];
     wallD.object._bottomE = wallBottom;
-    updates[whChangeBottomFlag] = wallBottom;
-    evUpdated ||= true; // Avoid circular updating by passing the evUpdated option.
-  } else if ( changed.has(whChangeBottomFlag) && !options.evUpdated ) {
-    const wallBottom = flatData[whChangeBottomFlag];
-    updates[evChangeBottomFlag] = wallBottom;
   }
-
-  if ( !isEmpty(updates) ) wallD.update(updates, { evUpdated });
 }
 
 // NOTE: Helper functions to convert to Z pixels.
