@@ -64,7 +64,7 @@ export function registerElevationAdditions() {
   for ( const [placeableName, placeableClass] of Object.entries(basicPlaceables) ) {
     addClassGetter(placeableClass.prototype, "elevationE", placeableObjectElevationE, setPlaceableObjectElevationE);
     addClassGetter(placeableClass.prototype, "elevationZ", zElevation, setZElevation);
-    Hooks.on(`update${placeableName}`, updatePlaceableHookElevationE);
+    Hooks.on(`preUpdate${placeableName}`, preUpdatePlaceableHookElevationE);
   }
 
   // Tile
@@ -86,8 +86,8 @@ export function registerElevationAdditions() {
   addClassGetter(Token.prototype, "losHeight", getTokenLOSHeight, setTokenLOSHeight);
 
   // Sync token.tokenHeight between EV and Wall Height
+  // Also clear the _tokenHeight cached property.
   Hooks.on("preUpdateToken", preUpdateTokenHook);
-  Hooks.on("updateToken", updateTokenHook);
 
   // Wall
   addClassGetter(Wall.prototype, "topE", wallTopE, setWallTopE);
@@ -97,7 +97,6 @@ export function registerElevationAdditions() {
 
   // Sync wall bottom and top elevations between EV and Wall Height
   Hooks.on("preUpdateWall", preUpdateWallHook);
-  Hooks.on("updateWall", updateWallHook);
 }
 
 /* Elevation handling
@@ -281,16 +280,14 @@ function setTokenLOSHeight(value) {
 // NOTE: Hooks
 
 /**
- * Monitor placeable document updates for updated elevation and update the cached data property accordingly.
+ * Wipe the cache whenever documents might be updated with the key.
+ * This prevents issues where use of the property in the update hook is still relying on the old value.
  */
-function updatePlaceableHookElevationE(placeableD, data, _options, _userId) {
+function preUpdatePlaceableHookElevationE(placeableD, data, _options, _userId) {
   const flatData = flattenObject(data);
   const changed = new Set(Object.keys(flatData));
   const evFlag = MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION;
-  if ( changed.has(evFlag) && placeableD.object ) {
-    const e = flatData[evFlag];
-    placeableD.object._elevationE = e;
-  }
+  if ( changed.has(evFlag) && placeableD.object ) placeableD.object._elevationE = undefined;
 }
 
 /**
@@ -329,21 +326,14 @@ function preUpdateTokenHook(tokenD, data, _options, _userId) {
   if ( changes.has(evFlag) ) {
     const e = flatData[evFlag];
     updates[whFlag] = e;
+    tokenD.object._tokenHeight = undefined;
   } else if ( changes.has(whFlag) ) {
     const e = flatData[whFlag];
     updates[evFlag] = e;
+    tokenD.object._tokenHeight = undefined;
   }
   foundry.utils.mergeObject(data, updates);
-}
 
-function updateTokenHook(tokenD, data, _options, _userId) {
-  const flatData = flattenObject(data);
-  const changed = new Set(Object.keys(flatData));
-  const evFlag = MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT;
-  if ( changed.has(evFlag) ) {
-    const tokenHeight = flatData[evFlag];
-    tokenD.object._tokenHeight = tokenHeight;
-  }
 }
 
 /**
@@ -365,39 +355,26 @@ function preUpdateWallHook(wallD, data, _options, _userId) {
   if ( changes.has(evTopFlag) ) {
     const e = flatData[evTopFlag];
     updates[whTopFlag] = e;
+    wallD.object._topE = undefined;
   } else if ( changes.has(whTopFlag) ) {
     const e = flatData[whTopFlag];
     updates[evTopFlag] = e;
+    wallD.object._topE = undefined;
   }
 
   if ( changes.has(evBottomFlag) ) {
     const e = flatData[evBottomFlag];
     updates[whBottomFlag] = e;
+    wallD.object._bottomE = undefined;
   } else if ( changes.has(whBottomFlag) ) {
     const e = flatData[whBottomFlag];
     updates[evBottomFlag] = e;
+    wallD.object._bottomE = undefined;
   }
 
   foundry.utils.mergeObject(data, updates);
 }
 
-
-function updateWallHook(wallD, data, _options, _userId) {
-  const flatData = flattenObject(data);
-  const changed = new Set(Object.keys(flatData));
-  const evTopFlag = MODULE_KEYS.EV.FLAG_WALL_TOP;
-  if ( changed.has(evTopFlag) ) {
-    const wallTop = flatData[evTopFlag];
-    wallD.object._topE = wallTop;
-
-  }
-
-  const evBottomFlag = MODULE_KEYS.EV.FLAG_WALL_BOTTOM;
-  if ( changed.has(evBottomFlag) ) {
-    const wallBottom = flatData[evBottomFlag];
-    wallD.object._bottomE = wallBottom;
-  }
-}
 
 // NOTE: Helper functions to convert to Z pixels.
 
