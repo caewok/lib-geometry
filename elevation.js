@@ -13,7 +13,7 @@ Wall
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { addClassGetter, gridUnitsToPixels, pixelsToGridUnits } from "./util.js";
+import { addClassGetter, addClassMethod, gridUnitsToPixels, pixelsToGridUnits } from "./util.js";
 import { MODULE_KEYS } from "./const.js";
 
 /* Elevation properties for Placeable Objects
@@ -46,9 +46,14 @@ lights can display with varying canvas elevation.
 export function registerElevationAdditions() {
   if ( CONFIG.GeometryLib.proneStatusId ) return; // Already registered.
 
+  // Define elevation getters.
+  // Because elevation is saved to flags, use an async method instead of a setter.
   // Point Source (LightSource, VisionSource, SoundSource, MovementSource)
-  addClassGetter(PointSource.prototype, "elevationE", pointSourceElevationE, setPointSourceElevationE);
-  addClassGetter(PointSource.prototype, "elevationZ", zElevation, setZElevation);
+  addClassGetter(PointSource.prototype, "elevationE", pointSourceElevationE);
+  addClassGetter(PointSource.prototype, "elevationZ", zElevation);
+  addClassMethod(PointSource.prototype, "setElevationE", setPointSourceElevationE);
+  addClassMethod(PointSource.prototype, "setElevationZ", setZElevation);
+
 
   // PlaceableObjects (Drawing, AmbientLight, AmbientSound, MeasuredTemplate, Note, Tile, Wall, Token)
   // Don't handle Wall or Token here
@@ -61,10 +66,11 @@ export function registerElevationAdditions() {
     Tile: CONFIG.Tile.objectClass
   };
 
-  for ( const [placeableName, placeableClass] of Object.entries(basicPlaceables) ) {
-    addClassGetter(placeableClass.prototype, "elevationE", placeableObjectElevationE, setPlaceableObjectElevationE);
-    addClassGetter(placeableClass.prototype, "elevationZ", zElevation, setZElevation);
-    Hooks.on(`preUpdate${placeableName}`, preUpdatePlaceableHookElevationE);
+  for ( const placeableClass of Object.values(basicPlaceables) ) {
+    addClassGetter(placeableClass.prototype, "elevationE", placeableObjectElevationE);
+    addClassGetter(placeableClass.prototype, "elevationZ", zElevation);
+    addClassMethod(placeableClass.prototype, "setElevationE", setPlaceableObjectElevationE);
+    addClassMethod(placeableClass.prototype, "setElevationZ", setZElevation);
   }
 
   // Tile
@@ -72,28 +78,39 @@ export function registerElevationAdditions() {
   Hooks.on("preUpdateTile", preUpdateTileHook);
 
   // Token
-  addClassGetter(Token.prototype, "elevationE", tokenElevationE, setTokenElevationE);
-  addClassGetter(Token.prototype, "bottomE", tokenBottomE, setTokenBottomE);
+  addClassGetter(Token.prototype, "elevationE", tokenElevationE);
+  addClassGetter(Token.prototype, "elevationZ", zElevation);
+  addClassGetter(Token.prototype, "bottomE", tokenElevationE); // alias
+  addClassGetter(Token.prototype, "bottomZ", zBottom); // alias
   addClassGetter(Token.prototype, "topE", tokenTopE);
-
-  addClassGetter(Token.prototype, "elevationZ", zElevation, setZElevation);
-  addClassGetter(Token.prototype, "bottomZ", zBottom, setZBottom);
   addClassGetter(Token.prototype, "topZ", zTop);
+
+  // Don't set the topE, which is calculated.
+  addClassMethod(Token.prototype, "setElevationE", setTokenElevationE);
+  addClassMethod(Token.prototype, "setElevationZ", setZBottom);
+  addClassMethod(Token.prototype, "setBottomE", setTokenElevationE); // alias
+  addClassMethod(Token.prototype, "setBottomZ", setZBottom); // alias
 
   // Handle Token "ducking"
   CONFIG.GeometryLib.proneStatusId = "prone";
   CONFIG.GeometryLib.proneMultiplier = 0.33;
-  addClassGetter(Token.prototype, "losHeight", getTokenLOSHeight, setTokenLOSHeight);
+  addClassGetter(Token.prototype, "losHeight", getTokenLOSHeight);
+  addClassMethod(Token.prototype, "setLOSHeight", setTokenLOSHeight);
 
   // Sync token.tokenHeight between EV and Wall Height
   // Also clear the _tokenHeight cached property.
   Hooks.on("preUpdateToken", preUpdateTokenHook);
 
   // Wall
-  addClassGetter(Wall.prototype, "topE", wallTopE, setWallTopE);
-  addClassGetter(Wall.prototype, "topZ", zTop, setZTop);
-  addClassGetter(Wall.prototype, "bottomE", wallBottomE, setWallBottomE);
-  addClassGetter(Wall.prototype, "bottomZ", zBottom, setZBottom);
+  addClassGetter(Wall.prototype, "topE", wallTopE);
+  addClassGetter(Wall.prototype, "topZ", zTop);
+  addClassGetter(Wall.prototype, "bottomE", wallBottomE);
+  addClassGetter(Wall.prototype, "bottomZ", zBottom);
+
+  addClassMethod(Wall.prototype, "setTopE", setWallTopE);
+  addClassMethod(Wall.prototype, "setTopZ", setZTop);
+  addClassMethod(Wall.prototype, "setBottomE", setWallBottomE);
+  addClassMethod(Wall.prototype, "setBottomZ", setZBottom);
 
   // Sync wall bottom and top elevations between EV and Wall Height
   Hooks.on("preUpdateWall", preUpdateWallHook);
@@ -149,84 +166,59 @@ function pointSourceElevationE() {
   return this.object?.elevationE ?? this.data.elevation ?? 0;
 }
 
-function setPointSourceElevationE(value) {
-  if ( typeof this.object?.elevationE !== "undefined" ) this.object.elevationE = value;
+async function setPointSourceElevationE(value) {
+  if ( !this.object ) return;
+  return this.object.setElevationE(value);
 }
 
 // NOTE: PlaceableObject Elevation
 // Drawing, AmbientLight, AmbientSound, MeasuredTemplate, Note, Tile, Wall, Token
 // Default is to use the object's cached elevation property.
 // Wall, Tile, Token are broken out.
+// TODO: Would be 2x faster by accessing the flag directly and not using getProperty.
+
 function placeableObjectElevationE() {
-  return this._elevationE
-    ?? (this._elevationE = getProperty(this.document, MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION) ?? 0);
+  return getProperty(this.document, MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION) ?? 0;
 }
 
-function setPlaceableObjectElevationE(value) {
-  this._elevationE = value;
-
-  // Async method
-  this.document.update({ [MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION]: value });
-  // this.document.update({ flags: { [MODULE_KEYS.EV.ID]: { [MODULE_KEYS.EV.ELEVATION]: value } } });
+async function setPlaceableObjectElevationE(value) {
+  return this.document.update({ [MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION]: value });
 }
 
 // NOTE: Wall Elevation
 function wallTopE() {
-  if ( typeof this._topE !== "undefined" ) return this._topE;
-  this._topE = getProperty(this.document, MODULE_KEYS.EV.FLAG_WALL_TOP)
+  return getProperty(this.document, MODULE_KEYS.EV.FLAG_WALL_TOP)
     ?? getProperty(this.document, MODULE_KEYS.WH.FLAG_WALL_TOP)
     ?? Number.POSITIVE_INFINITY;
-  return this._topE;
 }
 
 function wallBottomE() {
-  if ( typeof this._bottomE !== "undefined" ) return this._bottomE;
-  this._bottomE = getProperty(this.document, MODULE_KEYS.EV.FLAG_WALL_BOTTOM)
+  return getProperty(this.document, MODULE_KEYS.EV.FLAG_WALL_BOTTOM)
     ?? getProperty(this.document, MODULE_KEYS.WH.FLAG_WALL_BOTTOM)
     ?? Number.NEGATIVE_INFINITY;
-  return this._bottomE;
 }
 
-function setWallTopE(value) {
+async function setWallTopE(value) {
   if ( !Number.isNumeric(value) ) {
     console.err("setWallTopE value must be a number.");
     return;
   }
-
-  this._topE = value;
-
-  // Async method
-  const MOD = MODULE_KEYS.EV;
-  this.document.update({ [MODULE_KEYS.EV.FLAG_WALL_TOP]: value });
-  // this.document.update({ flags: { [MOD.ID]: { [MOD.ELEVATION]: { [MOD.WALL.TOP]: value } } } });
+  return this.document.update({ [MODULE_KEYS.EV.FLAG_WALL_TOP]: value });
 }
 
-function setWallBottomE(value) {
+async function setWallBottomE(value) {
   if ( !Number.isNumeric(value) ) {
     console.err("setWallTopE value must be a number.");
     return;
   }
-
-  this._bottomE = value;
-
-  // Async method
-  const MOD = MODULE_KEYS.EV;
-  this.document.update({ [MODULE_KEYS.EV.FLAG_WALL_BOTTOM]: value });
-  // this.document.update({ flags: { [MOD.ID]: { [MOD.ELEVATION]: { [MOD.WALL.BOTTOM]: value } } } });
+  return this.document.update({ [MODULE_KEYS.EV.FLAG_WALL_BOTTOM]: value });
 }
 
 // NOTE: Token Elevation
 // Has document.elevation already
 function tokenElevationE() { return this.document.elevation; }
 
-function setTokenElevationE(value) {
-  this.document.elevation = value;
-  this.document.update({ elevation: value }); // Async
-}
-
-function tokenBottomE() { return this.document.elevation; }
-
-function setTokenBottomE(value) { this.elevationE = value; }
+async function setTokenElevationE(value) { return this.document.update({ elevation: value }); }
 
 // Don't allow setting of token.topE b/c it is ambiguous.
 
@@ -256,39 +248,20 @@ function calculateTokenHeightFromTokenShape(token) {
 }
 
 function getTokenLOSHeight() {
-  if ( typeof this._losHeight !== "undefined" ) return this._losHeight;
-
-  this._losHeight = getProperty(this.document, MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT)
+  return getProperty(this.document, MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT)
     ?? getProperty(this.document, MODULE_KEYS.WH.FLAG_TOKEN_HEIGHT)
     ?? calculateTokenHeightFromTokenShape(this);
-  return this._losHeight;
 }
 
-function setTokenLOSHeight(value) {
+async function setTokenLOSHeight(value) {
   if ( !Number.isNumeric(value) || value < 0 ) {
     console.err("setTokenLOSHeight value must be 0 or greater.");
     return;
   }
-
-  this._losHeight = value;
-
-  // Async method
-  this.document.update({ [MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT]: value });
-  // this.document.update({ flags: { [MODULE_KEYS.EV.ID]: { [MODULE_KEYS.EV.TOKEN_HEIGHT]: value } } });
+  return this.document.update({ [MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT]: value });
 }
 
 // NOTE: Hooks
-
-/**
- * Wipe the cache whenever documents might be updated with the key.
- * This prevents issues where use of the property in the update hook is still relying on the old value.
- */
-function preUpdatePlaceableHookElevationE(placeableD, data, _options, _userId) {
-  const flatData = flattenObject(data);
-  const changed = new Set(Object.keys(flatData));
-  const evFlag = MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION;
-  if ( changed.has(evFlag) && placeableD.object ) placeableD.object._elevationE = undefined;
-}
 
 /**
  * Monitor tile document updates for updated elevation and sync the document with the flag.
@@ -326,11 +299,9 @@ function preUpdateTokenHook(tokenD, data, _options, _userId) {
   if ( changes.has(evFlag) ) {
     const e = flatData[evFlag];
     updates[whFlag] = e;
-    tokenD.object._tokenHeight = undefined;
   } else if ( changes.has(whFlag) ) {
     const e = flatData[whFlag];
     updates[evFlag] = e;
-    tokenD.object._tokenHeight = undefined;
   }
   foundry.utils.mergeObject(data, updates);
 
@@ -355,21 +326,17 @@ function preUpdateWallHook(wallD, data, _options, _userId) {
   if ( changes.has(evTopFlag) ) {
     const e = flatData[evTopFlag];
     updates[whTopFlag] = e;
-    wallD.object._topE = undefined;
   } else if ( changes.has(whTopFlag) ) {
     const e = flatData[whTopFlag];
     updates[evTopFlag] = e;
-    wallD.object._topE = undefined;
   }
 
   if ( changes.has(evBottomFlag) ) {
     const e = flatData[evBottomFlag];
     updates[whBottomFlag] = e;
-    wallD.object._bottomE = undefined;
   } else if ( changes.has(whBottomFlag) ) {
     const e = flatData[whBottomFlag];
     updates[evBottomFlag] = e;
-    wallD.object._bottomE = undefined;
   }
 
   foundry.utils.mergeObject(data, updates);
@@ -383,18 +350,19 @@ function preUpdateWallHook(wallD, data, _options, _userId) {
  */
 function zTop() { return gridUnitsToPixels(this.topE); }
 
-function setZTop(value) { this.topE = pixelsToGridUnits(value); }
+async function setZTop(value) { return this.setTopE(pixelsToGridUnits(value)); }
 
 /**
  * Helper to convert to Z value for a bottom elevation.
  */
 function zBottom() { return gridUnitsToPixels(this.bottomE); }
 
-function setZBottom(value) { this.bottomE = pixelsToGridUnits(value); }
+async function setZBottom(value) { return this.setBottomE(pixelsToGridUnits(value)); }
 
 /**
  * Helper to convert to Z value for an elevationE.
  */
 function zElevation() { return gridUnitsToPixels(this.elevationE); }
 
-function setZElevation(value) { this.elevationE = pixelsToGridUnits(value); }
+async function setZElevation(value) { return this.setElevationE(pixelsToGridUnits(value)); }
+
