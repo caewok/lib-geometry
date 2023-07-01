@@ -54,6 +54,9 @@ export function registerElevationAdditions() {
   addClassMethod(PointSource.prototype, "setElevationE", setPointSourceElevationE);
   addClassMethod(PointSource.prototype, "setElevationZ", setZElevation);
 
+  // VisionSource
+  addClassGetter(VisionSource.prototype, "elevationE", visionSourceElevationE);
+  addClassMethod(VisionSource.prototype, "setElevationE", setVisionSourceElevationE);
 
   // PlaceableObjects (Drawing, AmbientLight, AmbientSound, MeasuredTemplate, Note, Tile, Wall, Token)
   // Don't handle Wall or Token here
@@ -169,6 +172,16 @@ function pointSourceElevationE() {
 async function setPointSourceElevationE(value) {
   if ( !this.object ) return;
   return this.object.setElevationE(value);
+}
+
+// Set VisionSource (but not MovementSource) to the top elevation of the token
+function visionSourceElevationE() {
+  return this.object?.topE ?? this.object?.elevationE ?? this.data.elevation ?? 0;
+}
+
+async function setVisionSourceElevationE(value) {
+  console.warn("Cannot set elevationE for a vision source because it is calculated from token height.");
+  return;
 }
 
 // NOTE: PlaceableObject Elevation
