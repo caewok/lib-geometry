@@ -248,9 +248,10 @@ function calculateTokenHeightFromTokenShape(token) {
 }
 
 function getTokenLOSHeight() {
+  // Use || to ignore 0 height values.
   return getProperty(this.document, MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT)
-    ?? getProperty(this.document, MODULE_KEYS.WH.FLAG_TOKEN_HEIGHT)
-    ?? calculateTokenHeightFromTokenShape(this);
+    || getProperty(this.document, MODULE_KEYS.WH.FLAG_TOKEN_HEIGHT)
+    || calculateTokenHeightFromTokenShape(this);
 }
 
 async function setTokenLOSHeight(value) {
