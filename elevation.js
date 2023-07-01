@@ -98,7 +98,7 @@ export function registerElevationAdditions() {
   CONFIG.GeometryLib.proneStatusId = "prone";
   CONFIG.GeometryLib.proneMultiplier = 0.33;
   addClassGetter(Token.prototype, "tokenVisionHeight", getTokenLOSHeight);
-  addClassMethod(Token.prototype, "tokenVisionHeight", setTokenLOSHeight);
+  addClassMethod(Token.prototype, "setTokenVisionHeight", setTokenLOSHeight);
 
   // Sync token.tokenHeight between EV and Wall Height
   // Also clear the _tokenHeight cached property.
