@@ -54,6 +54,9 @@ export function registerElevationAdditions() {
   addClassMethod(PointSource.prototype, "setElevationE", setPointSourceElevationE);
   addClassMethod(PointSource.prototype, "setElevationZ", setZElevation);
 
+  // VisionSource
+  addClassGetter(VisionSource.prototype, "elevationE", visionSourceElevationE);
+  addClassMethod(VisionSource.prototype, "setElevationE", setVisionSourceElevationE);
 
   // PlaceableObjects (Drawing, AmbientLight, AmbientSound, MeasuredTemplate, Note, Tile, Wall, Token)
   // Don't handle Wall or Token here
@@ -94,8 +97,8 @@ export function registerElevationAdditions() {
   // Handle Token "ducking"
   CONFIG.GeometryLib.proneStatusId = "prone";
   CONFIG.GeometryLib.proneMultiplier = 0.33;
-  addClassGetter(Token.prototype, "losHeight", getTokenLOSHeight);
-  addClassMethod(Token.prototype, "setLOSHeight", setTokenLOSHeight);
+  addClassGetter(Token.prototype, "tokenVisionHeight", getTokenLOSHeight);
+  addClassMethod(Token.prototype, "setTokenVisionHeight", setTokenLOSHeight);
 
   // Sync token.tokenHeight between EV and Wall Height
   // Also clear the _tokenHeight cached property.
@@ -171,6 +174,16 @@ async function setPointSourceElevationE(value) {
   return this.object.setElevationE(value);
 }
 
+// Set VisionSource (but not MovementSource) to the top elevation of the token
+function visionSourceElevationE() {
+  return this.object?.topE ?? this.object?.elevationE ?? this.data.elevation ?? 0;
+}
+
+async function setVisionSourceElevationE(value) {
+  console.warn("Cannot set elevationE for a vision source because it is calculated from token height.");
+  return;
+}
+
 // NOTE: PlaceableObject Elevation
 // Drawing, AmbientLight, AmbientSound, MeasuredTemplate, Note, Tile, Wall, Token
 // Default is to use the object's cached elevation property.
@@ -233,7 +246,7 @@ function tokenTopE() {
     || (game.modules.get(MODULE_KEYS.LEVELSAUTOCOVER.ID)?.active
     && this.document.flags?.[MODULE_KEYS.LEVELSAUTOCOVER.ID]?.[MODULE_KEYS.LEVELSAUTOCOVER].DUCKING);
   const heightMult = isProne ? CONFIG.GeometryLib.proneMultiplier : 1;
-  return this.bottomE + (this.losHeight * heightMult);
+  return this.bottomE + (this.tokenVisionHeight * heightMult);
 }
 
 /**
@@ -248,14 +261,15 @@ function calculateTokenHeightFromTokenShape(token) {
 }
 
 function getTokenLOSHeight() {
+  // Use || to ignore 0 height values.
   return getProperty(this.document, MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT)
-    ?? getProperty(this.document, MODULE_KEYS.WH.FLAG_TOKEN_HEIGHT)
-    ?? calculateTokenHeightFromTokenShape(this);
+    || getProperty(this.document, MODULE_KEYS.WH.FLAG_TOKEN_HEIGHT)
+    || calculateTokenHeightFromTokenShape(this);
 }
 
 async function setTokenLOSHeight(value) {
   if ( !Number.isNumeric(value) || value < 0 ) {
-    console.err("setTokenLOSHeight value must be 0 or greater.");
+    console.err("tokenVisionHeight value must be 0 or greater.");
     return;
   }
   return this.document.update({ [MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT]: value });
