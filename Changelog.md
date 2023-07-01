@@ -1,3 +1,6 @@
+## 0.2.2
+- Don't use cached elevation properties, to avoid caching problems and simplify approach.
+
 ## 0.2.1
 - Fix for PIXI.Point.key getter.
 - Use the new v11 status set to check for prone.
