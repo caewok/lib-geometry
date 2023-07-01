@@ -94,8 +94,8 @@ export function registerElevationAdditions() {
   // Handle Token "ducking"
   CONFIG.GeometryLib.proneStatusId = "prone";
   CONFIG.GeometryLib.proneMultiplier = 0.33;
-  addClassGetter(Token.prototype, "losHeight", getTokenLOSHeight);
-  addClassMethod(Token.prototype, "setLOSHeight", setTokenLOSHeight);
+  addClassGetter(Token.prototype, "tokenVisionHeight", getTokenLOSHeight);
+  addClassMethod(Token.prototype, "tokenVisionHeight", setTokenLOSHeight);
 
   // Sync token.tokenHeight between EV and Wall Height
   // Also clear the _tokenHeight cached property.
@@ -233,7 +233,7 @@ function tokenTopE() {
     || (game.modules.get(MODULE_KEYS.LEVELSAUTOCOVER.ID)?.active
     && this.document.flags?.[MODULE_KEYS.LEVELSAUTOCOVER.ID]?.[MODULE_KEYS.LEVELSAUTOCOVER].DUCKING);
   const heightMult = isProne ? CONFIG.GeometryLib.proneMultiplier : 1;
-  return this.bottomE + (this.losHeight * heightMult);
+  return this.bottomE + (this.tokenVisionHeight * heightMult);
 }
 
 /**
@@ -256,7 +256,7 @@ function getTokenLOSHeight() {
 
 async function setTokenLOSHeight(value) {
   if ( !Number.isNumeric(value) || value < 0 ) {
-    console.err("setTokenLOSHeight value must be 0 or greater.");
+    console.err("tokenVisionHeight value must be 0 or greater.");
     return;
   }
   return this.document.update({ [MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT]: value });
