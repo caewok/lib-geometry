@@ -271,7 +271,7 @@ export class ShadowProjection {
     if ( pts.A.bottom.z >= sourceZ ) return [];
 
     const srcOrigin = this.sourceOrigin;
-    const maxR2 = Math.pow(canvas.dimensions.maxR, 2);
+
     const topShadow = { A: new Point3d(0, 0, planeZ), B: new Point3d(0, 0, planeZ) };
     const bottomShadow = {
       A: new Point3d(pts.A.bottom.x, pts.A.bottom.y, planeZ),
@@ -286,7 +286,8 @@ export class ShadowProjection {
       const [closerPt, furtherPt] = dist2(srcOrigin, pts.A.top) < dist2(srcOrigin, pts.B.top)
         ? ["A", "B"] : ["B", "A"];
 
-      srcOrigin.towardsPointSquared(pts[closerPt].top, maxR2, topShadow[closerPt]);
+      const maxR2 = Math.pow(canvas.dimensions.maxR, 2);
+      srcOrigin.to2d().towardsPointSquared(pts[closerPt].top, maxR2, topShadow[closerPt]);
       topShadow[closerPt].z = planeZ;
 
       // Intersect the line parallel with the wall to get the second shadow point
