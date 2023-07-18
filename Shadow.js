@@ -274,8 +274,8 @@ export class ShadowProjection {
     const maxR2 = Math.pow(canvas.dimensions.maxR, 2);
     const topShadow = { A: new Point3d(0, 0, planeZ), B: new Point3d(0, 0, planeZ) };
     const bottomShadow = {
-      A: new Point3d(pts.A.x, pts.A.y, planeZ),
-      B: new Point3d(pts.B.x, pts.B.y, planeZ)
+      A: new Point3d(pts.A.bottom.x, pts.A.bottom.y, planeZ),
+      B: new Point3d(pts.B.bottom.x, pts.B.bottom.y, planeZ)
     };
 
     if ( pts.A.top.z >= sourceZ ) {
