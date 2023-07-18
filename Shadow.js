@@ -287,8 +287,9 @@ export class ShadowProjection {
         ? ["A", "B"] : ["B", "A"];
 
       const maxR2 = Math.pow(canvas.dimensions.maxR, 2);
-      srcOrigin.to2d().towardsPointSquared(pts[closerPt].top, maxR2, topShadow[closerPt]);
-      topShadow[closerPt].z = planeZ;
+      const ix = srcOrigin.to2d().towardsPointSquared(pts[closerPt].top, maxR2);
+      topShadow[closerPt].x = ix.x;
+      topShadow[closerPt].y = ix.y;
 
       // Intersect the line parallel with the wall to get the second shadow point
       const wallDir = pts.B.top.subtract(pts.A.top);
