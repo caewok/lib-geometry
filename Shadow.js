@@ -287,6 +287,7 @@ export class ShadowProjection {
         ? ["A", "B"] : ["B", "A"];
 
       srcOrigin.towardsPointSquared(pts[closerPt].top, maxR2, topShadow[closerPt]);
+      topShadow[closerPt].z = planeZ;
 
       // Intersect the line parallel with the wall to get the second shadow point
       const wallDir = pts.B.top.subtract(pts.A.top);
@@ -294,11 +295,13 @@ export class ShadowProjection {
       topShadow[furtherPt].x = ix.x;
       topShadow[furtherPt].y = ix.y;
 
+
     } else {
       // Determine the plane intersection
       this._intersectionWith(pts.A.top, topShadow.A);
       this._intersectionWith(pts.B.top, topShadow.B);
     }
+
 
     if ( pts.A.bottom.z > planeZ ) {
       // Wall is above the plane
