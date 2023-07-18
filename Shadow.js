@@ -287,15 +287,15 @@ export class ShadowProjection {
         ? ["A", "B"] : ["B", "A"];
 
       const maxR2 = Math.pow(canvas.dimensions.maxR, 2);
-      const ix = srcOrigin.to2d().towardsPointSquared(pts[closerPt].top, maxR2);
-      topShadow[closerPt].x = ix.x;
-      topShadow[closerPt].y = ix.y;
+      const ixCloser = srcOrigin.to2d().towardsPointSquared(pts[closerPt].top, maxR2);
+      topShadow[closerPt].x = ixCloser.x;
+      topShadow[closerPt].y = ixCloser.y;
 
       // Intersect the line parallel with the wall to get the second shadow point
       const wallDir = pts.B.top.subtract(pts.A.top);
-      const ix = foundry.utils.lineLineIntersection(srcOrigin, pts[furtherPt].top, topShadow[closerPt], topShadow[closerPt].add(wallDir));
-      topShadow[furtherPt].x = ix.x;
-      topShadow[furtherPt].y = ix.y;
+      const ixFurther = foundry.utils.lineLineIntersection(srcOrigin, pts[furtherPt].top, topShadow[closerPt], topShadow[closerPt].add(wallDir));
+      topShadow[furtherPt].x = ixFurther.x;
+      topShadow[furtherPt].y = ixFurther.y;
 
 
     } else {
