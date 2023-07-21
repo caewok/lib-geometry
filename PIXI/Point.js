@@ -1,4 +1,5 @@
 /* globals
+CONFIG,
 PIXI,
 foundry
 */
@@ -19,12 +20,13 @@ export function registerPIXIPointMethods() {
 
   // ----- Static Methods ----- //
   addClassMethod(PIXI.Point, "midPoint", midPoint);
-  addClassMethod(PIXI.Point, "fromAngle", fromAngle);
+  addClassMethod(PIXI.Point, "fromAngle", fromAngleStatic);
   addClassMethod(PIXI.Point, "distanceBetween", distanceBetween);
   addClassMethod(PIXI.Point, "distanceSquaredBetween", distanceSquaredBetween);
   addClassMethod(PIXI.Point, "angleBetween", angleBetween);
   addClassMethod(PIXI.Point, "flatMapPoints", flatMapPoints);
   addClassMethod(PIXI.Point, "fromObject", fromObject);
+  addClassMethod(PIXI.Point, "invertKey", invertKey);
 
   // ----- Methods ----- //
   addClassMethod(PIXI.Point.prototype, "add", add2d);
@@ -44,11 +46,24 @@ export function registerPIXIPointMethods() {
   addClassMethod(PIXI.Point.prototype, "translate", translate);
   addClassMethod(PIXI.Point.prototype, "rotate", rotate);
   addClassMethod(PIXI.Point.prototype, "roundDecimals", roundDecimals);
+  addClassMethod(PIXI.Point.prototype, "fromAngle", fromAngle);
 
   // For parallel with Point3d
   addClassMethod(PIXI.Point.prototype, "to2d", function() { return this; });
 
   CONFIG.GeometryLib.registered.add("PIXI.Point");
+}
+
+/**
+ * Invert a wall key to get the coordinates.
+ * Key = (MAX_TEXTURE_SIZE * x) + y, where x and y are integers.
+ * @param {number} key      Integer key
+ * @returns {PIXI.Point} coordinates
+ */
+function invertKey(key) {
+  const x = Math.floor(key * MAX_TEXTURE_SIZE_INV);
+  const y = key - (MAX_TEXTURE_SIZE * x);
+  return new PIXI.Point(x, y);
 }
 
 /**
@@ -157,10 +172,26 @@ function flatMapPoints(ptsArr, transformFn) {
  * @param {Number}  distance  Distance to travel from the starting point.
  * @returns {Point}  Coordinates of point that lies distance away from origin along angle.
  */
-function fromAngle(origin, radians, distance) {
+function fromAngleStatic(origin, radians, distance) {
   const dx = Math.cos(radians);
   const dy = Math.sin(radians);
   return new this(origin.x + (dx * distance), origin.y + (dy * distance));
+}
+
+/**
+ * Same as Ray.fromAngle but returns a point instead of constructing the full Ray.
+ * @param {Number}  radians   Angle to move from the starting point.
+ * @param {Number}  distance  Distance to travel from the starting point.
+ * @param {PIXI.Point} [outPoint]    A point-like object in which to store the value.
+ *   (Will create new point if none provided.)
+ * @returns {Point}  Coordinates of point that lies distance away from origin along angle.
+ */
+function fromAngle(radians, distance, outPoint) {
+  outPoint ??= new this.constructor();
+  const dx = Math.cos(radians);
+  const dy = Math.sin(radians);
+  outPoint.copyFrom({ x: dx, y: dy});
+  return this.add(outPoint.multiplyScalar(distance, outPoint), outPoint);
 }
 
 /**
@@ -200,7 +231,6 @@ function add2d(other, outPoint) {
   outPoint ??= new this.constructor();
   outPoint.x = this.x + other.x;
   outPoint.y = this.y + other.y;
-
   return outPoint;
 }
 
@@ -232,7 +262,6 @@ function multiply2d(other, outPoint) {
   outPoint ??= new this.constructor();
   outPoint.x = this.x * other.x;
   outPoint.y = this.y * other.y;
-
   return outPoint;
 }
 
@@ -248,7 +277,6 @@ function multiplyScalar2d(scalar, outPoint) {
   outPoint ??= new this.constructor();
   outPoint.x = this.x * scalar;
   outPoint.y = this.y * scalar;
-
   return outPoint;
 }
 
@@ -323,7 +351,6 @@ function projectToward(other, t, outPoint) {
  */
 function towardsPoint(other, distance, outPoint) {
   outPoint ??= new this.constructor();
-
   const delta = other.subtract(this, outPoint);
   const t = distance / delta.magnitude();
   this.add(delta.multiplyScalar(t, outPoint), outPoint);
@@ -338,7 +365,6 @@ function towardsPoint(other, distance, outPoint) {
  */
 function towardsPointSquared(other, distance2, outPoint) {
   outPoint ??= new this.constructor();
-
   const delta = other.subtract(this, outPoint);
   const t = Math.sqrt(distance2 / delta.magnitudeSquared());
   this.add(delta.multiplyScalar(t, outPoint), outPoint);
@@ -375,11 +401,9 @@ function projectToAxisValue(other, value, coordinate, outPoint) {
  */
 function rotate(angle, outPoint) {
   outPoint ??= new this.constructor();
-
   const cAngle = Math.cos(angle);
   const sAngle = Math.sin(angle);
   const { x, y } = this; // Avoid accidentally using the outPoint values when calculating new y.
-
   outPoint.x = (x * cAngle) - (y * sAngle);
   outPoint.y = (y * cAngle) + (x * sAngle);
   return outPoint;
@@ -394,10 +418,8 @@ function rotate(angle, outPoint) {
  */
 function translate(dx, dy, outPoint) {
   outPoint ??= new this.constructor();
-
   outPoint.x = this.x + dx;
   outPoint.y = this.y + dy;
-
   return outPoint;
 }
 
@@ -406,6 +428,7 @@ function translate(dx, dy, outPoint) {
  * @type {number}
  */
 const MAX_TEXTURE_SIZE = Math.pow(2, 16);
+const MAX_TEXTURE_SIZE_INV = 1 / MAX_TEXTURE_SIZE;
 
 /**
  * Sort key, arranging points from north-west to south-east

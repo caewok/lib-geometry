@@ -270,35 +270,51 @@ export class ShadowProjection {
     // No shadow if the bottom of the wall is above the source.
     if ( pts.A.bottom.z >= sourceZ ) return [];
 
-    const maxR2 = Math.pow(canvas.dimensions.maxR, 2);
-    let shadowA = new Point3d();
-    let shadowB = new Point3d();
-    let shadowC = pts.A.bottom.clone();
-    let shadowD = pts.B.bottom.clone();
+    const srcOrigin = this.sourceOrigin;
+
+    const topShadow = { A: new Point3d(0, 0, planeZ), B: new Point3d(0, 0, planeZ) };
+    const bottomShadow = {
+      A: new Point3d(pts.A.bottom.x, pts.A.bottom.y, planeZ),
+      B: new Point3d(pts.B.bottom.x, pts.B.bottom.y, planeZ)
+    };
+
     if ( pts.A.top.z >= sourceZ ) {
       // Source is below the top of the wall; shadow is infinite
       // Project the point sufficiently far to cover the canvas
-      this.sourceOrigin.towardsPointSquared(pts.A.top, maxR2, shadowA);
-      this.sourceOrigin.towardsPointSquared(pts.B.top, maxR2, shadowB);
+      // Use the closer point
+      const dist2 = PIXI.Point.distanceSquaredBetween;
+      const [closerPt, furtherPt] = dist2(srcOrigin, pts.A.top) < dist2(srcOrigin, pts.B.top)
+        ? ["A", "B"] : ["B", "A"];
+
+      const maxR2 = Math.pow(canvas.dimensions.maxR, 2);
+      const ixCloser = srcOrigin.to2d().towardsPointSquared(pts[closerPt].top, maxR2);
+      topShadow[closerPt].x = ixCloser.x;
+      topShadow[closerPt].y = ixCloser.y;
+
+      // Intersect the line parallel with the wall to get the second shadow point
+      const wallDir = pts.B.top.subtract(pts.A.top);
+      const ixFurther = foundry.utils.lineLineIntersection(srcOrigin, pts[furtherPt].top, topShadow[closerPt], topShadow[closerPt].add(wallDir));
+      topShadow[furtherPt].x = ixFurther.x;
+      topShadow[furtherPt].y = ixFurther.y;
+
+
     } else {
       // Determine the plane intersection
-      this._intersectionWith(pts.A.top, shadowA);
-      this._intersectionWith(pts.B.top, shadowB);
+      this._intersectionWith(pts.A.top, topShadow.A);
+      this._intersectionWith(pts.B.top, topShadow.B);
     }
 
-    if ( pts.A.bottom.z <= planeZ ) {
-      // Source is below the plane; use the wall intersection point with the plane
-      shadowC.z = planeZ;
-      shadowD.z = planeZ;
-    } else {
-      this._intersectionWith(pts.A.bottom, shadowC);
-      this._intersectionWith(pts.B.bottom, shadowD);
+
+    if ( pts.A.bottom.z > planeZ ) {
+      // Wall is above the plane
+      this._intersectionWith(pts.A.bottom, bottomShadow.A);
+      this._intersectionWith(pts.B.bottom, bottomShadow.B);
     }
 
     // Force clockwise
-    return foundry.utils.orient2dFast(shadowB, shadowD, shadowC) < 0
-      ? [shadowB, shadowD, shadowC, shadowA]
-      : [shadowA, shadowC, shadowD, shadowB];
+    return foundry.utils.orient2dFast(topShadow.B, bottomShadow.B, bottomShadow.A) < 0
+      ? [topShadow.B, bottomShadow.B, bottomShadow.A, topShadow.A]
+      : [topShadow.A, bottomShadow.A, bottomShadow.B, topShadow.B];
   }
 
   /**
@@ -323,9 +339,8 @@ export class ShadowProjection {
 
       const planeZ = this.plane.point.z;
       const sourceZ = this.sourceOrigin.z;
-      if ( planeZ.almostEqual(sourceZ) ) return [];
 
-      return planeZ < sourceZ
+      return planeZ <= sourceZ
         ? this._shadowPointsFromWallPointsSourceAbovePlane(wallPoints, planeZ, sourceZ)
         : this._shadowPointsFromWallPointsSourceBelowPlane(wallPoints, planeZ, sourceZ);
     }
