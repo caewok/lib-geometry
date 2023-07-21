@@ -1,3 +1,7 @@
+## 0.2.3
+- Fixes to infinite shadow polygons
+- Add `invertKey` and `fromAngle` methods.
+
 ## 0.2.2
 - Don't use cached elevation properties, to avoid caching problems and simplify approach.
 - Use token topE for VisionSources.
