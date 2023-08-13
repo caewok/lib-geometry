@@ -1,3 +1,6 @@
+## 0.2.4
+- Fix calculation of polygon centroid.
+
 ## 0.2.3
 - Fixes to infinite shadow polygons
 - Add `invertKey` and `fromAngle` methods.
