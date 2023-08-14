@@ -72,13 +72,13 @@ export class CenteredPolygon extends CenteredPolygonBase {
     this._fixedPoints = Array(nFP);
     for (let i = 0; i < nFP; i += 1) {
       const j = i * 2;
-      this._fixedPoints[i] = { x: pts[j], y: pts[j + 1] };
+      this._fixedPoints[i] = new PIXI.Point(pts[j], pts[j + 1]);
     }
 
     // Close the polygon
     const lastY = pts[ln - 1];
     const lastX = pts[ln - 2];
-    if ( pts[0] !== lastX || pts[1] !== lastY ) this._fixedPoints.push({ x: lastX, y: lastY });
+    if ( pts[0] !== lastX || pts[1] !== lastY ) this._fixedPoints.push(new PIXI.Point(lastX, lastY));
   }
 
   /**
