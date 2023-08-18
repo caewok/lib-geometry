@@ -138,7 +138,9 @@ export class Point3d extends PIXI.Point {
    * @returns {Point3d}
    */
   static fromPointSource(source) {
-    const { x, y, elevationZ } = source;
+    let { x, y, elevationZ } = source;
+    x ??= source.object.center.x; // Vision sources have no x, y.
+    y ??= source.object.center.y;
     return new Point3d(x, y, elevationZ);
   }
 
