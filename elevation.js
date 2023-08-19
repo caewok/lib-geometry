@@ -79,6 +79,8 @@ export function registerElevationAdditions() {
   // Tile
   // Sync tile.document.elevation with tile.document.flags.elevatedvision.elevation
   Hooks.on("preUpdateTile", preUpdateTileHook);
+  Hooks.on("updateTile", updateTileHook);
+  Hooks.on("drawTile", drawTileHook);
 
   // Token
   addClassGetter(Token.prototype, "elevationE", tokenElevationE);
@@ -244,7 +246,7 @@ function tokenTopE() {
   const proneStatusId = CONFIG.GeometryLib.proneStatusId;
   const isProne = (proneStatusId !== "" && this.actor && this.actor.statuses.has(proneStatusId))
     || (game.modules.get(MODULE_KEYS.LEVELSAUTOCOVER.ID)?.active
-    && this.document.flags?.[MODULE_KEYS.LEVELSAUTOCOVER.ID]?.[MODULE_KEYS.LEVELSAUTOCOVER].DUCKING);
+    && this.document.flags?.[MODULE_KEYS.LEVELSAUTOCOVER.ID]?.[MODULE_KEYS.LEVELSAUTOCOVER]?.DUCKING);
   const heightMult = isProne ? CONFIG.GeometryLib.proneMultiplier : 1;
   return this.bottomE + (this.tokenVisionHeight * heightMult);
 }
@@ -281,19 +283,21 @@ async function setTokenLOSHeight(value) {
  * Monitor tile document updates for updated elevation and sync the document with the flag.
  * Note Tile Elevation has document.elevation already but does not save it (in v11).
  */
-function preUpdateTileHook(placeableD, data, _options, _userId) {
-  const flatData = flattenObject(data);
-  const changes = new Set(Object.keys(flatData));
+function preUpdateTileHook(_tileD, changes, _options, _userId) {
+  const flatData = flattenObject(changes);
+  const changeKeys = new Set(Object.keys(flatData));
   const evFlag = MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION;
   const updates = {};
-  if ( changes.has(evFlag) ) {
-    const e = flatData[evFlag];
-    updates.elevation = e;
-  } else if ( changes.has("elevation") ) {
-    const e = data.elevation;
-    updates[evFlag] = e;
-  }
+  if ( changeKeys.has(evFlag) ) updates.elevation = flatData[evFlag];
+  else if ( changeKeys.has("elevation") ) updates[evFlag] = data.elevation;
   foundry.utils.mergeObject(data, updates);
+}
+
+function updateTileHook(tileD, changed, _options, _userId) {
+  const flatData = flattenObject(changed);
+  const changeKeys = new Set(Object.keys(flatData));
+  const evFlag = MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION;
+  if ( changeKeys.has(evFlag) ) tileD.elevation = flatData[evFlag];
 }
 
 /**
@@ -354,6 +358,13 @@ function preUpdateWallHook(wallD, data, _options, _userId) {
   }
 
   foundry.utils.mergeObject(data, updates);
+}
+
+/**
+ * Monitor tiles drawn to canvas and sync elevation.
+ */
+function drawTileHook(tile) {
+  if ( tile.document.elevation !== tile.elevationE ) tile.document.elevation = tile.elevationE;
 }
 
 

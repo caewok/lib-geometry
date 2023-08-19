@@ -34,21 +34,24 @@ export function registerPIXIPolygonMethods() {
   addClassMethod(PIXI.Polygon.prototype, "isSegmentEnclosed", isSegmentEnclosed);
   addClassMethod(PIXI.Polygon.prototype, "linesCross", linesCross);
   addClassMethod(PIXI.Polygon.prototype, "lineSegmentIntersects", lineSegmentIntersects);
-  // reverseOrientation - in v11
   addClassMethod(PIXI.Polygon.prototype, "overlaps", overlaps);
   addClassMethod(PIXI.Polygon.prototype, "pad", pad);
   addClassMethod(PIXI.Polygon.prototype, "segmentIntersections", segmentIntersections);
   addClassMethod(PIXI.Polygon.prototype, "pointsBetween", pointsBetween);
-  // pointsBetween - in v11
-  // segmentIntersections - in v11
   addClassMethod(PIXI.Polygon.prototype, "translate", translate);
   addClassMethod(PIXI.Polygon.prototype, "viewablePoints", viewablePoints);
+
+  // In v11:
+  // - reverseOrientation
+  // - pointsBetween
+  // - segementIntersections
+
 
   // ----- Helper/Internal Methods ----- //
   addClassMethod(PIXI.Polygon.prototype, "_overlapsPolygon", overlapsPolygon);
   addClassMethod(PIXI.Polygon.prototype, "_overlapsCircle", overlapsCircle);
   addClassMethod(PIXI.Polygon.prototype, "scaledArea", scaledArea);
-  // signedArea - in v11
+  // In v11: signedArea
 
   CONFIG.GeometryLib.registered.add("PIXI.Polygon");
 }
@@ -78,27 +81,22 @@ function centroid() {
     case 2: return pts[0];
     case 3: return PIXI.Point.midPoint(pts[0], pts[1]);
   }
-
   const outPoint = new PIXI.Point();
   let area = 0;
-  const iter = ln - 2;
+  const iter = ln - 1;
   for ( let i = 0; i < iter; i += 1 ) {
     const iPt = pts[i];
     const jPt = pts[i + 1];
+    const ijX = (iPt.x + jPt.x);
+    area += ijX * (iPt.y - jPt.y); // See signedArea function
     const mult = (iPt.x * jPt.y) - (jPt.x * iPt.y);
-
-    outPoint.x += (iPt.x + jPt.x) * mult;
+    outPoint.x += ijX * mult;
     outPoint.y += (iPt.y + jPt.y) * mult;
-
-    area += (iPt.x + jPt.x) * (iPt.y - jPt.y); // See signedArea function
   }
-
   area = -area * 0.5;
-
   const areaMult = 1 / (6 * area);
   outPoint.x *= areaMult;
   outPoint.y *= areaMult;
-
   return outPoint;
 }
 
@@ -664,7 +662,7 @@ function key() {
   for ( let i = 0; i < ln; i += 2 ) {
     const x = points[i];
     const y = points[i + 1];
-    if ( x < minX || x === minX && y < minY ) {
+    if ( (x < minX || x === minX) && y < minY ) {
       minIndex = i;
       minX = x;
       minY = y;
