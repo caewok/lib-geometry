@@ -1,5 +1,9 @@
 ## 0.2.4
 - Fix calculation of polygon centroid.
+- Correct error when rotating fixed points.
+- Sync TileDocument.prototype.elevation
+- Catch when VisionSource has no x,y; use object (token) center instead
+- Add check for whether the DUCKING Levels property is present
 
 ## 0.2.3
 - Fixes to infinite shadow polygons
