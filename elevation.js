@@ -246,7 +246,7 @@ function tokenTopE() {
   const proneStatusId = CONFIG.GeometryLib.proneStatusId;
   const isProne = (proneStatusId !== "" && this.actor && this.actor.statuses.has(proneStatusId))
     || (game.modules.get(MODULE_KEYS.LEVELSAUTOCOVER.ID)?.active
-    && this.document.flags?.[MODULE_KEYS.LEVELSAUTOCOVER.ID]?.[MODULE_KEYS.LEVELSAUTOCOVER].DUCKING);
+    && this.document.flags?.[MODULE_KEYS.LEVELSAUTOCOVER.ID]?.[MODULE_KEYS.LEVELSAUTOCOVER]?.DUCKING);
   const heightMult = isProne ? CONFIG.GeometryLib.proneMultiplier : 1;
   return this.bottomE + (this.tokenVisionHeight * heightMult);
 }
