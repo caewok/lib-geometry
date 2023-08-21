@@ -93,7 +93,7 @@ function overlaps(shape) {
 function overlapsCircle(circle) {
   // https://www.geeksforgeeks.org/check-if-any-point-overlaps-the-given-circle-and-rectangle
   // {xn,yn} is the nearest point on the rectangle to the circle center
-  const xn = Math.max(this.right, Math.min(circle.x, this.left));
+  const xn = Math.max(this.left, Math.min(circle.x, this.right));
   const yn = Math.max(this.top, Math.min(circle.y, this.bottom));
 
   // Find the distance between the nearest point and the center of the circle

@@ -1,3 +1,6 @@
+## 0.2.5
+Fixes for testing overlaps. Improved test for circle-polygon overlap; fix for rectangle-polygon overlap. Copy centered polygon when translating.
+
 ## 0.2.4
 - Fix calculation of polygon centroid.
 - Correct error when rotating fixed points.
