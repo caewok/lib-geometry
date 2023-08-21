@@ -133,10 +133,10 @@ export class RegularPolygon extends PIXI.Polygon {
    * @returns {RegularPolygon}    New polygon
    */
   translate(dx, dy) {
-    this.x = this.x + dx;
-    this.y = this.y + dy;
-    this._points = undefined;
-    return this;
+    const copy = new this.constructor({ x: this.x + dx, y: this.y + dy }, this.radius,
+      { numSides: this.numSides, rotation: this.rotation });
+    if ( this._fixedPoints ) copy._fixedPoints = [...this._fixedPoints]; // Copy the points.
+    return copy;
   }
 
   /**
