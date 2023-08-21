@@ -369,17 +369,13 @@ function overlaps(other) {
   if ( other instanceof PIXI.Polygon ) { return this._overlapsPolygon(other); }
   if ( other instanceof PIXI.Circle ) { return this._overlapsCircle(other); }
   if ( other instanceof PIXI.Rectangle ) { return other.overlaps(this); }
-
   if ( other.toPolygon) return this._overlapsPolygon(other.toPolygon());
-
   console.warn("overlaps|shape not recognized.", other);
   return false;
 }
 
 /**
  * Detect overlaps using brute force
- * TO-DO: Use Separating Axis Theorem to detect collisions, or overlap, between two polygons.
- * See http://programmerart.weebly.com/separating-axis-theorem.html#:~:text=%E2%80%8BThe%20Separating%20Axis%20Theorem,the%20Polyhedra%20are%20not%20colliding.
  * @param {PIXI.Polygon} other
  * @returns {boolean}
  */
@@ -410,21 +406,23 @@ function overlapsPolygon(other) {
 
 /**
  * Does this polygon overlap a circle?
- * TO-DO: Use Separating Axis Theorem?
  * @param {PIXI.Circle} circle
  * @returns {boolean}
  */
 function overlapsCircle(circle) {
+  // If the circle center is contained, we are done.
+  if ( this.contains(circle) ) return true;
+
+  // If the bounding boxes of the circle and this polygon do not overlap, we are done.
   const polyBounds = this.getBounds();
-  if ( !polyBounds.overlaps(circle) ) return false;
+  if ( !polyBounds.overlaps(circle.getBounds()) ) return false;
 
-  const pts = this.iteratePoints({ close: true });
-  let a = pts.next().value;
-  if ( circle.contains(a.x, a.y) ) return true;
-
-  for ( const b of pts ) {
-    // Get point on the line closest to a|b (might be a or b)
-    const c = foundry.utils.closestPointToSegment(c, a, b);
+  // If the center of the circle is not contained, then the polygon cannot envelope the circle.
+  // Therefore, some part of a polygon edge must be within the circle.
+  const segments = this.iterateEdges({ close: true });
+  for ( const s of segments ) {
+    // Get point on the line closest to segment from circle center
+    const c = foundry.utils.closestPointToSegment(circle, s.A, s.B);
     if ( circle.contains(c.x, c.y) ) return true;
   }
 
