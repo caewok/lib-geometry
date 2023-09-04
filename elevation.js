@@ -99,6 +99,7 @@ export function registerElevationAdditions() {
   // Handle Token "ducking"
   CONFIG.GeometryLib.proneStatusId = "prone";
   CONFIG.GeometryLib.proneMultiplier = 0.33;
+  addClassGetter(Token.prototype, "isProne", getIsProne);
   addClassGetter(Token.prototype, "tokenVisionHeight", getTokenLOSHeight);
   addClassMethod(Token.prototype, "setTokenVisionHeight", setTokenLOSHeight);
 
@@ -243,12 +244,17 @@ async function setTokenElevationE(value) { return this.document.update({ elevati
  * Returns 1/3 the height if the token is prone.
  */
 function tokenTopE() {
-  const proneStatusId = CONFIG.GeometryLib.proneStatusId;
-  const isProne = (proneStatusId !== "" && this.actor && this.actor.statuses.has(proneStatusId))
-    || (game.modules.get(MODULE_KEYS.LEVELSAUTOCOVER.ID)?.active
-    && this.document.flags?.[MODULE_KEYS.LEVELSAUTOCOVER.ID]?.[MODULE_KEYS.LEVELSAUTOCOVER]?.DUCKING);
+  const isProne = this.isProne;
   const heightMult = isProne ? CONFIG.GeometryLib.proneMultiplier : 1;
   return this.bottomE + (this.tokenVisionHeight * heightMult);
+}
+
+/** @type {boolean} */
+function getIsProne() {
+  const proneStatusId = CONFIG.GeometryLib.proneStatusId;
+  return (proneStatusId !== "" && this.actor && this.actor.statuses.has(proneStatusId))
+    || (game.modules.get(MODULE_KEYS.LEVELSAUTOCOVER.ID)?.active
+    && this.document.flags?.[MODULE_KEYS.LEVELSAUTOCOVER.ID]?.[MODULE_KEYS.LEVELSAUTOCOVER]?.DUCKING);
 }
 
 /**
