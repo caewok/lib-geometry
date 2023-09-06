@@ -1,3 +1,9 @@
+## 0.2.6
+Allow registration of newer version of geometry lib, skipping if newer version already registered. Deregister hooks as needed.
+(Note: Hook deregistration will only work from this version on.)
+
+Add isProne getter to Token.
+
 ## 0.2.5
 Fixes for testing overlaps. Improved test for circle-polygon overlap; fix for rectangle-polygon overlap. Copy centered polygon when translating.
 
