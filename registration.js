@@ -83,7 +83,7 @@ export function registerGeometry() {
 function deRegister() {
   CONFIG.GeometryLib.registered?.clear();
   if ( !CONFIG.GeometryLib.hooks ) return;
-  CONFIG.GeometryLib.hooks.forEach((id, name) => Hooks.off(name, id));
+  CONFIG.GeometryLib.hooks.forEach((name, id) => Hooks.off(name, id));
   CONFIG.GeometryLib.hooks.clear();
 }
 

@@ -47,7 +47,7 @@ lights can display with varying canvas elevation.
 function addHook(name, fn) {
   const hooks = CONFIG.GeometryLib.hooks ??= new Map();
   const id = Hooks.on(name, fn);
-  hooks.set(name, id);
+  hooks.set(id, name);
   return id;
 }
 
