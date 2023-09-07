@@ -8,6 +8,7 @@ getProperty,
 Hooks,
 PointSource,
 Token,
+VisionSource,
 Wall
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
@@ -43,8 +44,16 @@ lights can display with varying canvas elevation.
 
 */
 
+function addHook(name, fn) {
+  const hooks = CONFIG.GeometryLib.hooks ??= new Map();
+  const id = Hooks.on(name, fn);
+  hooks.set(id, name);
+  return id;
+}
+
 export function registerElevationAdditions() {
-  if ( CONFIG.GeometryLib.proneStatusId ) return; // Already registered.
+  CONFIG.GeometryLib.registered ??= new Set();
+  if ( CONFIG.GeometryLib.registered.has("Elevation") ) return;
 
   // Define elevation getters.
   // Because elevation is saved to flags, use an async method instead of a setter.
@@ -78,9 +87,9 @@ export function registerElevationAdditions() {
 
   // Tile
   // Sync tile.document.elevation with tile.document.flags.elevatedvision.elevation
-  Hooks.on("preUpdateTile", preUpdateTileHook);
-  Hooks.on("updateTile", updateTileHook);
-  Hooks.on("drawTile", drawTileHook);
+  addHook("preUpdateTile", preUpdateTileHook);
+  addHook("updateTile", updateTileHook);
+  addHook("drawTile", drawTileHook);
 
   // Token
   addClassGetter(Token.prototype, "elevationE", tokenElevationE);
@@ -99,12 +108,13 @@ export function registerElevationAdditions() {
   // Handle Token "ducking"
   CONFIG.GeometryLib.proneStatusId = "prone";
   CONFIG.GeometryLib.proneMultiplier = 0.33;
+  addClassGetter(Token.prototype, "isProne", getIsProne);
   addClassGetter(Token.prototype, "tokenVisionHeight", getTokenLOSHeight);
   addClassMethod(Token.prototype, "setTokenVisionHeight", setTokenLOSHeight);
 
   // Sync token.tokenHeight between EV and Wall Height
   // Also clear the _tokenHeight cached property.
-  Hooks.on("preUpdateToken", preUpdateTokenHook);
+  addHook("preUpdateToken", preUpdateTokenHook);
 
   // Wall
   addClassGetter(Wall.prototype, "topE", wallTopE);
@@ -118,7 +128,9 @@ export function registerElevationAdditions() {
   addClassMethod(Wall.prototype, "setBottomZ", setZBottom);
 
   // Sync wall bottom and top elevations between EV and Wall Height
-  Hooks.on("preUpdateWall", preUpdateWallHook);
+  addHook("preUpdateWall", preUpdateWallHook);
+
+  CONFIG.GeometryLib.registered.add("Elevation");
 }
 
 /* Elevation handling
@@ -181,7 +193,7 @@ function visionSourceElevationE() {
   return this.object?.topE ?? this.object?.elevationE ?? this.data.elevation ?? 0;
 }
 
-async function setVisionSourceElevationE(value) {
+async function setVisionSourceElevationE(_value) {
   console.warn("Cannot set elevationE for a vision source because it is calculated from token height.");
   return;
 }
@@ -243,12 +255,17 @@ async function setTokenElevationE(value) { return this.document.update({ elevati
  * Returns 1/3 the height if the token is prone.
  */
 function tokenTopE() {
-  const proneStatusId = CONFIG.GeometryLib.proneStatusId;
-  const isProne = (proneStatusId !== "" && this.actor && this.actor.statuses.has(proneStatusId))
-    || (game.modules.get(MODULE_KEYS.LEVELSAUTOCOVER.ID)?.active
-    && this.document.flags?.[MODULE_KEYS.LEVELSAUTOCOVER.ID]?.[MODULE_KEYS.LEVELSAUTOCOVER]?.DUCKING);
+  const isProne = this.isProne;
   const heightMult = isProne ? CONFIG.GeometryLib.proneMultiplier : 1;
   return this.bottomE + (this.tokenVisionHeight * heightMult);
+}
+
+/** @type {boolean} */
+function getIsProne() {
+  const proneStatusId = CONFIG.GeometryLib.proneStatusId;
+  return (proneStatusId !== "" && this.actor && this.actor.statuses.has(proneStatusId))
+    || (game.modules.get(MODULE_KEYS.LEVELSAUTOCOVER.ID)?.active
+    && this.document.flags?.[MODULE_KEYS.LEVELSAUTOCOVER.ID]?.[MODULE_KEYS.LEVELSAUTOCOVER]?.DUCKING);
 }
 
 /**
@@ -289,8 +306,8 @@ function preUpdateTileHook(_tileD, changes, _options, _userId) {
   const evFlag = MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION;
   const updates = {};
   if ( changeKeys.has(evFlag) ) updates.elevation = flatData[evFlag];
-  else if ( changeKeys.has("elevation") ) updates[evFlag] = data.elevation;
-  foundry.utils.mergeObject(data, updates);
+  else if ( changeKeys.has("elevation") ) updates[evFlag] = changes.elevation;
+  foundry.utils.mergeObject(changes, updates);
 }
 
 function updateTileHook(tileD, changed, _options, _userId) {
