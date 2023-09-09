@@ -77,6 +77,24 @@ export class Square extends RegularPolygon {
   }
 
   /**
+   * Convert to a rectangle
+   * Throws error if the shape is rotated.
+   * @returns {PIXI.Rectangle|PIXI.Polygon}
+   */
+  toRectangle() {
+    // Not oriented []
+    const rotation = this.rotation;
+    if ( !squareRotations.has(rotation) ) {
+      console.warn(`toRectangle requested but the square's rotation is ${this.rotation}`);
+      return this.toPolygon();
+    }
+
+    // Oriented []
+    const { x, y, sideLength, apothem } = this;
+    return new PIXI.Rectangle(-apothem + x, -apothem + y, sideLength, sideLength);
+  }
+
+  /**
    * Generate the points of the square using the provided configuration.
    * Simpler and more mathematically precise than the default version.
    * @returns {Point[]}
@@ -134,7 +152,7 @@ export class Square extends RegularPolygon {
 
   overlaps(other) {
     // Oriented []
-    if ( squareRotations.has(rotation) ) {
+    if ( squareRotations.has(this.rotation) ) {
       const rect = this.getBounds();
       return rect.overlaps(other);
     }
