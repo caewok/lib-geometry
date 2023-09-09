@@ -5,6 +5,9 @@ PIXI
 
 import { RegularPolygon } from "./RegularPolygon.js";
 
+const squareRotations = new Set([45, 135, 225, 315]); // Oriented []
+const diagonalRotations = new Set([0, 90, 180, 270]); // Oriented [] turned 45º
+
 /**
  * Square is oriented at 0º rotation like a diamond.
  * Special case when square is rotate 45º or some multiple thereof
@@ -15,6 +18,7 @@ import { RegularPolygon } from "./RegularPolygon.js";
  * @param {number} [options.width]      Alternative specification when skipping radius
  */
 export class Square extends RegularPolygon {
+
   constructor(origin, radius, {rotation = 0, width} = {}) {
     if ( !radius && !width ) {
       console.warn("Square should have either radius or width defined.");
@@ -32,7 +36,7 @@ export class Square extends RegularPolygon {
    * Calculate the distance of the line segment from the center to the midpoint of a side.
    * @type {number}
    */
-  get apothem() { return this.width / 2; }
+  get apothem() { return this.width * 0.5; }
 
   /**
    * Calculate length of a side of this square.
@@ -50,7 +54,7 @@ export class Square extends RegularPolygon {
    * Construct a square like a PIXI.Rectangle, where the point is the top left corner.
    */
   static fromTopLeft(point, width) {
-    const w1_2 = width / 2;
+    const w1_2 = width * 0.5;
     return new this({x: point.x + w1_2, y: point.y + w1_2}, undefined, { rotation: 45, width });
   }
 
@@ -70,6 +74,24 @@ export class Square extends RegularPolygon {
     }
 
     return new this(token.center, undefined, { rotation: 45, width});
+  }
+
+  /**
+   * Convert to a rectangle
+   * Throws error if the shape is rotated.
+   * @returns {PIXI.Rectangle|PIXI.Polygon}
+   */
+  toRectangle() {
+    // Not oriented []
+    const rotation = this.rotation;
+    if ( !squareRotations.has(rotation) ) {
+      console.warn(`toRectangle requested but the square's rotation is ${this.rotation}`);
+      return this.toPolygon();
+    }
+
+    // Oriented []
+    const { x, y, sideLength, apothem } = this;
+    return new PIXI.Rectangle(-apothem + x, -apothem + y, sideLength, sideLength);
   }
 
   /**
@@ -96,31 +118,21 @@ export class Square extends RegularPolygon {
   _generatePoints() {
     const { x, y, radius, rotation, apothem } = this;
 
-    switch ( rotation ) {
-      // Oriented []
-      case 45:
-      case 135:
-      case 225:
-      case 315:
-        return [
-          apothem + x, apothem + y,
-          -apothem + x, apothem + y,
-          -apothem + x, -apothem + y,
-          apothem + x, -apothem + y
-        ];
+    // Oriented []
+    if ( squareRotations.has(rotation) ) return [
+      apothem + x, apothem + y,
+      -apothem + x, apothem + y,
+      -apothem + x, -apothem + y,
+      apothem + x, -apothem + y
+    ];
 
-      // Oriented [] turned 45º
-      case 0:
-      case 90:
-      case 180:
-      case 270:
-        return [
-          radius + x, y,
-          x, radius + y,
-          -radius + x, y,
-          x, -radius + y
-        ];
-    }
+    // Oriented [] turned 45º
+    if ( diagonalRotations.has(rotation) ) return [
+      radius + x, y,
+      x, radius + y,
+      -radius + x, y,
+      x, -radius + y
+    ];
 
     return super._generatePoints();
   }
@@ -129,38 +141,21 @@ export class Square extends RegularPolygon {
     // If an edge is on the bounding box, use it as the border
     const { x, y, sideLength, apothem, rotation, fixedPoints: fp } = this;
 
-    switch ( rotation ) {
-      // PIXI.Rectangle(x, y, width, height)
-      // Oriented []
-      case 45:
-      case 135:
-      case 225:
-      case 315:
-        return new PIXI.Rectangle(-apothem + x, -apothem + y, sideLength, sideLength);
+    // Oriented []
+    if ( squareRotations.has(rotation) ) return new PIXI.Rectangle(-apothem + x, -apothem + y, sideLength, sideLength);
 
-      // Oriented [] turned 45º
-      case 0:
-      case 90:
-      case 180:
-      case 270:
-        return new PIXI.Rectangle(fp[2], fp[3], sideLength, sideLength);
-    }
+    // Oriented [] turned 45º
+    if ( diagonalRotations.has(rotation) ) return new PIXI.Rectangle(fp[2].x, fp[3].y, sideLength, sideLength);
 
     return super.getBounds();
   }
 
   overlaps(other) {
-    switch ( this.rotation ) {
-      // Oriented []
-      case 45:
-      case 135:
-      case 225:
-      case 315: {
-        const rect = this.getBounds();
-        return rect.overlaps(other);
-      }
+    // Oriented []
+    if ( squareRotations.has(this.rotation) ) {
+      const rect = this.getBounds();
+      return rect.overlaps(other);
     }
-
     return super.overlaps(other);
   }
 }
