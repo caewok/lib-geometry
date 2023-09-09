@@ -32,7 +32,7 @@ export class Square extends RegularPolygon {
    * Calculate the distance of the line segment from the center to the midpoint of a side.
    * @type {number}
    */
-  get apothem() { return this.width / 2; }
+  get apothem() { return this.width * 0.5; }
 
   /**
    * Calculate length of a side of this square.
@@ -50,7 +50,7 @@ export class Square extends RegularPolygon {
    * Construct a square like a PIXI.Rectangle, where the point is the top left corner.
    */
   static fromTopLeft(point, width) {
-    const w1_2 = width / 2;
+    const w1_2 = width * 0.5;
     return new this({x: point.x + w1_2, y: point.y + w1_2}, undefined, { rotation: 45, width });
   }
 
