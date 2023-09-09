@@ -5,6 +5,9 @@ PIXI
 
 import { RegularPolygon } from "./RegularPolygon.js";
 
+const squareRotations = new Set([45, 135, 225, 315]); // Oriented []
+const diagonalRotations = new Set([0, 90, 180, 270]); // Oriented [] turned 45º
+
 /**
  * Square is oriented at 0º rotation like a diamond.
  * Special case when square is rotate 45º or some multiple thereof
@@ -15,6 +18,7 @@ import { RegularPolygon } from "./RegularPolygon.js";
  * @param {number} [options.width]      Alternative specification when skipping radius
  */
 export class Square extends RegularPolygon {
+
   constructor(origin, radius, {rotation = 0, width} = {}) {
     if ( !radius && !width ) {
       console.warn("Square should have either radius or width defined.");
@@ -96,31 +100,21 @@ export class Square extends RegularPolygon {
   _generatePoints() {
     const { x, y, radius, rotation, apothem } = this;
 
-    switch ( rotation ) {
-      // Oriented []
-      case 45:
-      case 135:
-      case 225:
-      case 315:
-        return [
-          apothem + x, apothem + y,
-          -apothem + x, apothem + y,
-          -apothem + x, -apothem + y,
-          apothem + x, -apothem + y
-        ];
+    // Oriented []
+    if ( squareRotations.has(rotation) ) return [
+      apothem + x, apothem + y,
+      -apothem + x, apothem + y,
+      -apothem + x, -apothem + y,
+      apothem + x, -apothem + y
+    ];
 
-      // Oriented [] turned 45º
-      case 0:
-      case 90:
-      case 180:
-      case 270:
-        return [
-          radius + x, y,
-          x, radius + y,
-          -radius + x, y,
-          x, -radius + y
-        ];
-    }
+    // Oriented [] turned 45º
+    if ( diagonalRotations.has(rotation) ) return [
+      radius + x, y,
+      x, radius + y,
+      -radius + x, y,
+      x, -radius + y
+    ];
 
     return super._generatePoints();
   }
@@ -129,38 +123,21 @@ export class Square extends RegularPolygon {
     // If an edge is on the bounding box, use it as the border
     const { x, y, sideLength, apothem, rotation, fixedPoints: fp } = this;
 
-    switch ( rotation ) {
-      // PIXI.Rectangle(x, y, width, height)
-      // Oriented []
-      case 45:
-      case 135:
-      case 225:
-      case 315:
-        return new PIXI.Rectangle(-apothem + x, -apothem + y, sideLength, sideLength);
+    // Oriented []
+    if ( squareRotations.has(rotation) ) return new PIXI.Rectangle(-apothem + x, -apothem + y, sideLength, sideLength);
 
-      // Oriented [] turned 45º
-      case 0:
-      case 90:
-      case 180:
-      case 270:
-        return new PIXI.Rectangle(fp[2], fp[3], sideLength, sideLength);
-    }
+    // Oriented [] turned 45º
+    if ( diagonalRotations.has(rotation) ) return new PIXI.Rectangle(fp[2].x, fp[3].y, sideLength, sideLength);
 
     return super.getBounds();
   }
 
   overlaps(other) {
-    switch ( this.rotation ) {
-      // Oriented []
-      case 45:
-      case 135:
-      case 225:
-      case 315: {
-        const rect = this.getBounds();
-        return rect.overlaps(other);
-      }
+    // Oriented []
+    if ( squareRotations.has(rotation) ) {
+      const rect = this.getBounds();
+      return rect.overlaps(other);
     }
-
     return super.overlaps(other);
   }
 }
