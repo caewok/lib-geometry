@@ -381,7 +381,8 @@ function preUpdateWallHook(wallD, data, _options, _userId) {
  * Monitor tiles drawn to canvas and sync elevation.
  */
 function drawTileHook(tile) {
-  if ( tile.document.elevation !== tile.elevationE ) tile.document.elevation = tile.elevationE;
+  if ( typeof tile.document.elevation !== "undefined"
+     && tile.document.elevation !== tile.elevationE ) tile.document.elevation = tile.elevationE;
 }
 
 
