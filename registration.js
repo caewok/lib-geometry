@@ -5,7 +5,7 @@ Hooks
 */
 "use strict";
 
-const VERSION = "0.2.7";
+const VERSION = "0.2.8";
 
 // PIXI
 import { registerPIXIPolygonMethods } from "./PIXI/Polygon.js";

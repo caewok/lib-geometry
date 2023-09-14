@@ -314,7 +314,7 @@ function updateTileHook(tileD, changed, _options, _userId) {
   const flatData = flattenObject(changed);
   const changeKeys = new Set(Object.keys(flatData));
   const evFlag = MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION;
-  if ( changeKeys.has(evFlag) ) tileD.elevation = flatData[evFlag];
+  if ( changeKeys.has(evFlag) ) tileD.elevation = flatData[evFlag] ?? undefined; // Avoid setting null.
 }
 
 /**
@@ -381,6 +381,7 @@ function preUpdateWallHook(wallD, data, _options, _userId) {
  * Monitor tiles drawn to canvas and sync elevation.
  */
 function drawTileHook(tile) {
+  if ( !game.modules.get("elevatedvision")?.active ) return;
   if ( tile.document.elevation !== tile.elevationE ) tile.document.elevation = tile.elevationE;
 }
 
