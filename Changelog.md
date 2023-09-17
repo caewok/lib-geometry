@@ -1,8 +1,10 @@
+## 0.2.8
+Catch when `actor.statuses` is undefined.
+
 ## 0.2.7
 Fix `Square.prototype.getBounds` when returning a square rotated 45º.
 Use Set test instead of switch for checking if the square is rotated 0º or 45º.
 Add `Square.prototype.toRectangle`.
-
 
 ## 0.2.6
 Allow registration of newer version of geometry lib, skipping if newer version already registered. Deregister hooks as needed.
