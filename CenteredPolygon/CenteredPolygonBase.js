@@ -80,8 +80,8 @@ export class CenteredPolygonBase extends PIXI.Polygon {
    * @returns {CenteredPolygonBase}    New polygon
    */
   translate(dx, dy) {
-    return new this.constructor(this.origin.add({x: dx, y: dy}, { rotation: this.rotation });
-    return copy;
+    const txOrigin = this.origin.add({x: dx, y: dy});
+    return new this.constructor(txOrigin, { rotation: this.rotation });
   }
 
   /**
