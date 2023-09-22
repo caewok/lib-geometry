@@ -90,7 +90,8 @@ export class Square extends RegularPolygon {
     }
 
     // Oriented []
-    const { x, y, sideLength, apothem } = this;
+    const { origin, sideLength, apothem } = this;
+    const { x, y } = origin;
     return new PIXI.Rectangle(-apothem + x, -apothem + y, sideLength, sideLength);
   }
 
@@ -116,7 +117,8 @@ export class Square extends RegularPolygon {
    * @return {Points[]}
    */
   _generatePoints() {
-    const { x, y, radius, rotation, apothem } = this;
+    const { origin, radius, rotation, apothem } = this;
+    const { x, y } = origin;
 
     // Oriented []
     if ( squareRotations.has(rotation) ) return [
@@ -139,7 +141,8 @@ export class Square extends RegularPolygon {
 
   getBounds() {
     // If an edge is on the bounding box, use it as the border
-    const { x, y, sideLength, apothem, rotation, fixedPoints: fp } = this;
+    const { origin, sideLength, apothem, rotation, fixedPoints: fp } = this;
+    const { x, y } = origin;
 
     // Oriented []
     if ( squareRotations.has(rotation) ) return new PIXI.Rectangle(-apothem + x, -apothem + y, sideLength, sideLength);
