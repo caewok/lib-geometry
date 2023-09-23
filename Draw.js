@@ -135,9 +135,7 @@ export class Draw {
    * @returns {PIXI.Text}
    */
   labelPoint(p, text, opts = {}) {
-    if (!this.g.polygonText) {
-      this.g.polygonText = canvas.controls.addChild(new PIXI.Container());
-    }
+    this.g.polygonText ??= new PIXI.Container();
     const polygonText = this.g.polygonText;
 
     // Update existing label if it exists at or very near Poly endpoint
