@@ -132,8 +132,9 @@ export class Draw {
    * Tracks location so that only one piece of text is at any given x,y position.
    * @param {Point}   p     Location of the start of the text.
    * @param {String}  text  Text to draw.
+   * @returns {PIXI.Text}
    */
-  labelPoint(p, text) {
+  labelPoint(p, text, opts = {}) {
     if (!this.g.polygonText) {
       this.g.polygonText = canvas.controls.addChild(new PIXI.Container());
     }
@@ -143,8 +144,10 @@ export class Draw {
     const idx = polygonText.children.findIndex(c => p.x.almostEqual(c.position.x) && p.y.almostEqual(c.position.y));
     if (idx !== -1) { this.g.polygonText.removeChildAt(idx); }
 
-    const t = polygonText.addChild(new PIXI.Text(String(text), CONFIG.canvasTextStyle));
+    const style = foundry.utils.mergeObject(CONFIG.canvasTextStyle, opts);
+    const t = polygonText.addChild(new PIXI.Text(String(text), style));
     t.position.set(p.x, p.y);
+    return t;
   }
 
   /**
