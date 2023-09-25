@@ -28,6 +28,9 @@ import { CenteredPolygonBase } from "./CenteredPolygon/CenteredPolygonBase.js";
 import { CenteredPolygon } from "./CenteredPolygon/CenteredPolygon.js";
 import { CenteredRectangle } from "./CenteredPolygon/CenteredRectangle.js";
 
+// Holed Shapes
+import { ShapeHoled } from "./ShapeHoled.js";
+
 // 3d
 import { Plane } from "./3d/Plane.js";
 import { Point3d } from "./3d/Point3d.js";
@@ -77,6 +80,7 @@ export function registerGeometry() {
   registerClipperPaths();
   register3d();
   registerGraph();
+  registerShapeHoled();
 }
 
 
@@ -161,4 +165,9 @@ export function registerMatrix() {
 export function registerClipperPaths() {
   CONFIG.GeometryLib ??= {};
   CONFIG.GeometryLib.ClipperPaths = ClipperPaths;
+}
+
+export function registerShapeHoled() {
+  CONFIG.GeometryLib ??= {};
+  CONFIG.GeometryLib.ShapeHoled = ShapeHoled;
 }
