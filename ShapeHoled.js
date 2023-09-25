@@ -24,6 +24,9 @@ export class ShapeHoled {
   /** @type {Shape[]} */
   holes = [];
 
+  /** @type {PIXI.Rectangle} */
+  #bounds;
+
   /**
    * @param {Shape[]} shapes     Array of PIXI shapes that make up this shape.
    *   Any shape with property `isHole` will be considered a hole.
@@ -39,6 +42,9 @@ export class ShapeHoled {
     });
   }
 
+  /** @type {PIXI.Rectangle} */
+  get bounds() { return this.#bounds || (this.#bounds = this.getBounds()); }
+
   /**
    * Add a shape. If it has the `isHole` property, add as hole.
    * @param {Shape}
@@ -46,6 +52,7 @@ export class ShapeHoled {
   add(shape) {
     if ( shape.isHole ) return this.addHole(shape);
     this.shapes.push(shape);
+    this.#bounds = undefined;
   }
 
   /**
@@ -55,6 +62,7 @@ export class ShapeHoled {
   addHole(shape) {
     shape.isHole = true;
     this.holes.push(shape);
+    this.#bounds = undefined;
   }
 
   /**
@@ -78,6 +86,22 @@ export class ShapeHoled {
   contains(x, y) {
     if ( !this.shapes.some(s => s.contains(x, y)) ) return false;
     return this.holes.every(h => !h.contains(x, y));
+  }
+
+  /**
+   * Get the bounds of this shape.
+   * Combines the bounds of all shapes within.
+   * @returns {PIXI.Rectangle}
+   */
+  getBounds() {
+    const shapes = [...this.shapes, ...this.holes];
+    let bounds = shapes[0].getBounds();
+    const ln = shapes.length;
+    for ( let i = 1; i < ln; i += 1 ) {
+      const b2 = shapes[i].getBounds();
+      bounds = bounds.union(b2);
+    }
+    return bounds;
   }
 
   /**
@@ -117,15 +141,40 @@ export class ShapeHoled {
    * @param {boolean} [modifySelf=false]  If true, modify this object.
    * @returns {(PolygonHoled|Shape)[]} Array of shapes or PolygonHoled
    */
-  simplify(modifySelf) {
+  simplify(modifySelf = false) {
     // If any shapes are completely contained in another, remove.
+    // If a hole is completely outside all shapes, remove.
     const { holes, shapes } = this;
+    let filteredShapes = shapes.filter(s1 => !shapes.some(s2 => s2.envelops(s1)));
+    let filteredHoles = holes.filter(h1 => !holes.some(h2 => h2.envelops(h1)));
 
+    // If a hole "eats" a shape by encompassing it, remove the shape.
+    filteredShapes = filteredShapes.filter(s => !filteredHoles.some(h => h.envelops(s)));
 
-    if ( !this.holes.length ) return this.shapes;
+    // If a hole is outside any shape, remove the hole.
+    // (Technically, should probably have only holes that are encompassed by shapes. Would require clean.)
+    filteredHoles = filteredHoles.filter(h => filteredShapes.some(s => s.contains(h)));
 
+    // Update this object if required.
+    if ( modifySelf ) {
+      this.shapes.length = 0;
+      this.holes.length = 0;
+      this.shapes.push(...filteredShapes);
+      this.holes.push(...filteredHoles);
+      this.#bounds = undefined;
+    }
 
+    // If no holes, just return the array of shapes.
+    if ( !this.holes.length ) return filteredShapes;
+
+    // Determine if any shapes are not interacting with a hole, and pull those out separately.
+    const standaloneShapes = [];
+    const remainingShapes = [];
+    for ( const s of filteredShapes ) {
+      const arr = filteredHoles.some(h => s.contains(h)) ? remainingShapes : standaloneShapes;
+      arr.push(s);
+    }
+
+    return [new this.constructor([...remainingShapes, ...filteredHoles]), ...standaloneShapes];
   }
-
-
 }
