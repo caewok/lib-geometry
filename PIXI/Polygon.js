@@ -34,12 +34,23 @@ export function registerPIXIPolygonMethods() {
   addClassMethod(PIXI.Polygon.prototype, "isSegmentEnclosed", isSegmentEnclosed);
   addClassMethod(PIXI.Polygon.prototype, "linesCross", linesCross);
   addClassMethod(PIXI.Polygon.prototype, "lineSegmentIntersects", lineSegmentIntersects);
-  addClassMethod(PIXI.Polygon.prototype, "overlaps", overlaps);
+
   addClassMethod(PIXI.Polygon.prototype, "pad", pad);
   addClassMethod(PIXI.Polygon.prototype, "segmentIntersections", segmentIntersections);
   addClassMethod(PIXI.Polygon.prototype, "pointsBetween", pointsBetween);
   addClassMethod(PIXI.Polygon.prototype, "translate", translate);
   addClassMethod(PIXI.Polygon.prototype, "viewablePoints", viewablePoints);
+
+  // Overlap methods
+  addClassMethod(PIXI.Polygon.prototype, "overlaps", overlaps);
+  addClassMethod(PIXI.Polygon.prototype, "_overlapsPolygon", overlapsPolygon);
+  addClassMethod(PIXI.Polygon.prototype, "_overlapsCircle", overlapsCircle);
+
+  // Envelop methods
+  addClassMethod(PIXI.Polygon.prototype, "envelops", envelops);
+  addClassMethod(PIXI.Polygon.prototype, "_envelopsCircle", envelopsCircle);
+  addClassMethod(PIXI.Polygon.prototype, "_envelopsRectangle", envelopsRectangle);
+  addClassMethod(PIXI.Polygon.prototype, "_envelopsPolygon", envelopsPolygon);
 
   // In v11:
   // - reverseOrientation
@@ -48,8 +59,6 @@ export function registerPIXIPolygonMethods() {
 
 
   // ----- Helper/Internal Methods ----- //
-  addClassMethod(PIXI.Polygon.prototype, "_overlapsPolygon", overlapsPolygon);
-  addClassMethod(PIXI.Polygon.prototype, "_overlapsCircle", overlapsCircle);
   addClassMethod(PIXI.Polygon.prototype, "scaledArea", scaledArea);
   // In v11: signedArea
 
@@ -375,6 +384,21 @@ function overlaps(other) {
 }
 
 /**
+ * Does this polygon envelop something else?
+ * This is a one-way test; call other.envelops(this) to test the other direction.
+ * @param {PIXI.Rectangle|PIXI.Circle|PIXI.Polygon} shape
+ * @returns {boolean}
+ */
+function envelops(shape) {
+  if ( shape instanceof PIXI.Polygon ) { return this._envelopsPolygon(shape); }
+  if ( shape instanceof PIXI.Circle ) { return this._envelopsCircle(shape); }
+  if ( shape instanceof PIXI.Rectangle ) { return this._envelopsRectangle(shape); }
+  if ( shape.toPolygon) return this._envelopsPolygon(shape.toPolygon());
+  console.warn("overlaps|shape not recognized.", shape);
+  return false;
+}
+
+/**
  * Detect overlaps using brute force
  * @param {PIXI.Polygon} other
  * @returns {boolean}
@@ -427,6 +451,73 @@ function overlapsCircle(circle) {
   }
 
   return false;
+}
+
+/**
+ * Does this polygon envelop another?
+ * @param {PIXI.Polygon} poly
+ * @returns {boolean}
+ */
+function envelopsPolygon(poly) {
+  // Not terribly efficient (sweepline would be better) but simple in concept.
+  // Step 1: Check the bounding box.
+  // (Could test both bounds, but it would iterate over the second polygon to create bounds.)
+  if ( !this.getBounds().envelops(poly) ) return false;
+
+  // Step 2: All polygon points must be contained.
+  const iter = poly.iteratePoints({ close: false });
+  for ( const pt of iter ) {
+    if ( !this.contains(pt.x, pt.y) ) return false;
+  }
+
+  // Step 3: Cannot have intersecting lines.
+  const edges = poly.iterateEdges();
+  for ( const edge of edges ) {
+    if ( this.lineSegmentIntersects(edge.A, edge.B) ) return false;
+  }
+  return true;
+}
+
+/**
+ * Does this polygon envelop a rectangle?
+ * @param {PIXI.Rectangle} rect
+ * @returns {boolean}
+ */
+function envelopsRectangle(rect) {
+  // Step 1: All 4 points must be contained within.
+  const { top, left, right, bottom } = rect;
+  if ( !(this.contains(left, top)
+       && this.contains(right, top)
+       && this.contains(right, bottom)
+       && this.contains(left, bottom)) ) return false;
+
+  // Step 2: No intersecting edges.
+  const edges = rect.iterateEdges();
+  for ( const edge of edges ) {
+    if ( this.lineSegmentIntersects(edge.A, edge.B) ) return false;
+  }
+  return true;
+}
+
+/**
+ * Does this polygon envelop a circle?
+ * @param {PIXI.Rectangle} rect
+ * @returns {boolean}
+ */
+function envelopsCircle(circle) {
+  // Step 1: Center point must be contained.
+  if ( !this.contains(circle.x, circle.y) ) return false;
+
+  // Step 2: Circle cannot envelop this polygon.
+  if ( circle._envelopsPolygon(this) ) return false;
+
+  // Step 3: No intersecting edges.
+  const edges = this.iterateEdges();
+  for ( const edge of edges ) {
+    const ixs = circle.segmentIntersections(edge.A, edge.B);
+    if ( ixs.length ) return false;
+  }
+  return true;
 }
 
 /**
