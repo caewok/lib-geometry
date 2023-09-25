@@ -95,6 +95,10 @@ export class ShapeHoled {
    */
   getBounds() {
     const shapes = [...this.shapes, ...this.holes];
+    if ( !shapes.length ) {
+      console.warn("ShapeHoled|getBounds cannot find any shapes.");
+      return new PIXI.Rectangle();
+    }
     let bounds = shapes[0].getBounds();
     const ln = shapes.length;
     for ( let i = 1; i < ln; i += 1 ) {
