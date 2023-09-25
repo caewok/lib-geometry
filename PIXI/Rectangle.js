@@ -27,6 +27,7 @@ export function registerPIXIRectangleMethods() {
   // intersectPolygon - in v11
   // pointsBetween - in v11
   // segmentIntersections - in v11
+  addClassMethod(PIXI.Rectangle.prototype, "union", union);
   addClassMethod(PIXI.Rectangle.prototype, "difference", difference);
   addClassMethod(PIXI.Rectangle.prototype, "translate", translate);
   addClassMethod(PIXI.Rectangle.prototype, "viewablePoints", viewablePoints);
@@ -287,7 +288,18 @@ function getViewablePoints(bbox, origin) {
 }
 
 /**
- * Get the difference between the two rectangles
+ * Get the union between this rectangle and another.
+ * @param {PIXI.Rectangle} other
+ * @returns {PIXI.Rectangle} New, combined rectangle.
+ */
+function union(other) {
+  const xMinMax = Math.minMax(this.left, other.left, this.right, other.right);
+  const yMinMax = Math.minMax(this.top, other.top, this.bottom, other.bottom);
+  return new PIXI.Rectangle(xMinMax.min, yMinMax.min, xMinMax.max - xMinMax.min, yMinMax.max - yMinMax.min);
+}
+
+/**
+ * Get the difference between this rectangle and another.
  * If no overlap, will return null
  * @param {PIXI.Rectangle} other
  * @returns {null| {A: PIXI.Rectangle, B: PIXI.Rectangle}}
