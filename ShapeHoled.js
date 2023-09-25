@@ -147,7 +147,6 @@ export class ShapeHoled {
    */
   simplify(modifySelf = false) {
     // If any shapes are completely contained in another, remove.
-    // If a hole is completely outside all shapes, remove.
     const { holes, shapes } = this;
     let filteredShapes = shapes.filter(s1 => !shapes.some(s2 => s2.envelops(s1)));
     let filteredHoles = holes.filter(h1 => !holes.some(h2 => h2.envelops(h1)));
@@ -155,9 +154,9 @@ export class ShapeHoled {
     // If a hole "eats" a shape by encompassing it, remove the shape.
     filteredShapes = filteredShapes.filter(s => !filteredHoles.some(h => h.envelops(s)));
 
-    // If a hole is outside any shape, remove the hole.
+    // If a hole is outside all shapes, remove the hole.
     // (Technically, should probably have only holes that are encompassed by shapes. Would require clean.)
-    filteredHoles = filteredHoles.filter(h => filteredShapes.some(s => s.contains(h)));
+    filteredHoles = filteredHoles.filter(h => filteredShapes.some(s => s.overlaps(h)));
 
     // Update this object if required.
     if ( modifySelf ) {
@@ -175,7 +174,7 @@ export class ShapeHoled {
     const standaloneShapes = [];
     const remainingShapes = [];
     for ( const s of filteredShapes ) {
-      const arr = filteredHoles.some(h => s.contains(h)) ? remainingShapes : standaloneShapes;
+      const arr = filteredHoles.some(h => s.overlaps(h)) ? remainingShapes : standaloneShapes;
       arr.push(s);
     }
 
