@@ -180,4 +180,29 @@ export class ShapeHoled {
 
     return [new this.constructor([...remainingShapes, ...filteredHoles]), ...standaloneShapes];
   }
+
+  /**
+   * Test if this shape overlaps another.
+   * If any of the subshapes overlap, and no hole encompasses, then true.
+   * (This may return false where 2+ polygons together overlap the other shape.)
+   * @param {PIXI.Polygon|PIXI.Circle|PIXI.Rectangle} other
+   * @returns {boolean}
+   */
+  overlaps(other) {
+    if ( !this.shapes.some(s => s.overlaps(other)) ) return false;
+    return !this.holes.some(h => h.encompasses(other));
+  }
+
+
+  /**
+   * Test if this shape encompasses another.
+   * If any of the subshapes encompass, and no hole overlaps, then it encompasses.
+   * (This may return false where 2+ polygons together encompass the other shape.)
+   * @param {PIXI.Polygon|PIXI.Circle|PIXI.Rectangle}
+   * @returns {boolean}
+   */
+  envelops() {
+    if ( !this.shapes.some(s => s.envelops(other)) ) return false;
+    return !this.holes.some(h => h.overlaps(other));
+  }
 }
