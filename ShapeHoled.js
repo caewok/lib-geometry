@@ -201,7 +201,7 @@ export class ShapeHoled {
    * @param {PIXI.Polygon|PIXI.Circle|PIXI.Rectangle}
    * @returns {boolean}
    */
-  envelops() {
+  envelops(other) {
     if ( !this.shapes.some(s => s.envelops(other)) ) return false;
     return !this.holes.some(h => h.overlaps(other));
   }
