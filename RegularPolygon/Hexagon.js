@@ -116,7 +116,8 @@ export class Hexagon extends RegularPolygon {
    * @return {Points[]}
    */
   _generatePoints() {
-    const { x, y, rotation, radius, apothem } = this;
+    const { origin, rotation, radius, apothem } = this;
+    const { x, y } = origin;
     const r1_2 = radius * 0.5;
 
     switch ( rotation ) {
@@ -150,7 +151,8 @@ export class Hexagon extends RegularPolygon {
 
   getBounds() {
     // If an edge is on the bounding box, use it as the border
-    const { x, y, radius, apothem, fixedPoints: fp } = this;
+    const { origin, radius, apothem, fixedPoints: fp } = this;
+    const { x, y } = origin;
 
     switch ( this.rotation ) {
       // PIXI.Rectangle(x, y, width, height)

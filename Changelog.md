@@ -1,5 +1,13 @@
-## 0.2.8
+## 0.2.10
+
+
+## 0.2.9
 Catch when `actor.statuses` is undefined.
+
+## 0.2.8
+Avoid setting tile elevation to null.
+Don't overwrite tile elevation if it is undefined.
+Avoid changing tile elevation if EV is not active.
 
 ## 0.2.7
 Fix `Square.prototype.getBounds` when returning a square rotated 45º.

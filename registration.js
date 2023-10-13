@@ -5,7 +5,7 @@ Hooks
 */
 "use strict";
 
-const VERSION = "0.2.9";
+const VERSION = "0.2.10";
 
 // PIXI
 import { registerPIXIPolygonMethods } from "./PIXI/Polygon.js";
@@ -27,6 +27,9 @@ import { RegularStar } from "./RegularPolygon/RegularStar.js";
 import { CenteredPolygonBase } from "./CenteredPolygon/CenteredPolygonBase.js";
 import { CenteredPolygon } from "./CenteredPolygon/CenteredPolygon.js";
 import { CenteredRectangle } from "./CenteredPolygon/CenteredRectangle.js";
+
+// Holed Shapes
+import { ShapeHoled } from "./ShapeHoled.js";
 
 // 3d
 import { Plane } from "./3d/Plane.js";
@@ -77,6 +80,7 @@ export function registerGeometry() {
   registerClipperPaths();
   register3d();
   registerGraph();
+  registerShapeHoled();
 }
 
 
@@ -161,4 +165,9 @@ export function registerMatrix() {
 export function registerClipperPaths() {
   CONFIG.GeometryLib ??= {};
   CONFIG.GeometryLib.ClipperPaths = ClipperPaths;
+}
+
+export function registerShapeHoled() {
+  CONFIG.GeometryLib ??= {};
+  CONFIG.GeometryLib.ShapeHoled = ShapeHoled;
 }

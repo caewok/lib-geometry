@@ -55,7 +55,8 @@ export class EquilateralTriangle extends RegularPolygon {
 
   getBounds() {
     // If an edge is on the bounding box, use it as the border
-    const { x, y, sideLength, altitude, apothem, fixedPoints: fp } = this;
+    const { origin, sideLength, altitude, apothem, fixedPoints: fp } = this;
+    const { x, y } = origin;
 
     switch ( this.rotation ) {
       // PIXI.Rectangle(x, y, width, height)

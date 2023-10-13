@@ -62,6 +62,11 @@ export class Draw {
     d.labelPoint(...args);
   }
 
+  static removeLabel(...args) {
+    const d = new this();
+    d.removeLabel(...args);
+  }
+
   static clearLabels() {
     const d = new this();
     d.clearLabels();
@@ -132,19 +137,34 @@ export class Draw {
    * Tracks location so that only one piece of text is at any given x,y position.
    * @param {Point}   p     Location of the start of the text.
    * @param {String}  text  Text to draw.
+   * @returns {PIXI.Text}
    */
-  labelPoint(p, text) {
-    if (!this.g.polygonText) {
-      this.g.polygonText = canvas.controls.addChild(new PIXI.Container());
-    }
+  labelPoint(p, text, opts = {}) {
+    this.g.polygonText ??= new PIXI.Container();
     const polygonText = this.g.polygonText;
 
     // Update existing label if it exists at or very near Poly endpoint
     const idx = polygonText.children.findIndex(c => p.x.almostEqual(c.position.x) && p.y.almostEqual(c.position.y));
     if (idx !== -1) { this.g.polygonText.removeChildAt(idx); }
 
-    const t = polygonText.addChild(new PIXI.Text(String(text), CONFIG.canvasTextStyle));
+    const style = foundry.utils.mergeObject(CONFIG.canvasTextStyle, opts);
+    const t = polygonText.addChild(new PIXI.Text(String(text), style));
     t.position.set(p.x, p.y);
+    return t;
+  }
+
+  /**
+   * Remove the text label at a specified position on the canvas.
+   * @param {Point}   p     Location of the start of the text.
+   * @returns {PIXI.Text|undefined} The removed text or undefined if none found.
+   */
+  removeLabel(p) {
+    this.g.polygonText ??= new PIXI.Container();
+    const polygonText = this.g.polygonText;
+    // Remove existing label if it exists at or very near Poly endpoint
+    const idx = polygonText.children.findIndex(c => p.x.almostEqual(c.position.x) && p.y.almostEqual(c.position.y));
+    if ( ~idx ) return this.g.polygonText.removeChildAt(idx);
+    return undefined;
   }
 
   /**

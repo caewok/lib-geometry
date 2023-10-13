@@ -33,11 +33,8 @@ export class RegularPolygon extends PIXI.Polygon {
   /** @type {boolean} */
   _isClockwise = true;
 
-  /** @type {number} */
-  x = 0;
-
-  /** @type {number} */
-  y = 0;
+  /** @type {PIXI.Point} */
+  origin = new PIXI.Point();
 
   /** @type {number} */
   numSides = 3;
@@ -57,13 +54,27 @@ export class RegularPolygon extends PIXI.Polygon {
    */
   constructor(origin, radius, { numSides = 3, rotation = 0 } = {}) {
     super([]);
-    this.x = origin.x;
-    this.y = origin.y;
+
+    this.origin.copyFrom(origin);
     this.numSides = numSides;
     this.radius = radius;
     this.rotation = Math.normalizeDegrees(rotation);
     this.radians = Math.toRadians(this.rotation);
   }
+
+
+  // Getters/setters for x and y for backwards compatibility.
+
+  /** @type {number} */
+  get x() { return this.origin.x; }
+
+  set x(value) { this.origin.x = value; }
+
+  /** @type {number} */
+
+  get y() { return this.origin.y; }
+
+  set y(value) { return this.origin.y = value; }
 
   get center() { return { x: this.x, y: this.y }; }
 
@@ -133,7 +144,7 @@ export class RegularPolygon extends PIXI.Polygon {
    * @returns {RegularPolygon}    New polygon
    */
   translate(dx, dy) {
-    const copy = new this.constructor({ x: this.x + dx, y: this.y + dy }, this.radius,
+    const copy = new this.constructor(this.origin.add({x: dx, y: dy}), this.radius,
       { numSides: this.numSides, rotation: this.rotation });
     if ( this._fixedPoints ) copy._fixedPoints = [...this._fixedPoints]; // Copy the points.
     return copy;
@@ -145,7 +156,6 @@ export class RegularPolygon extends PIXI.Polygon {
    */
   _generateFixedPoints() {
     const { numSides, radius } = this;
-
     const angles = Array.fromRange(numSides).map(i => (360 / numSides) * i);
     const radAngles = angles.map(a => Math.toRadians(a));
     return radAngles.map(angle => PIXI.Point.fromAngle({x: 0, y: 0}, angle, radius));
@@ -173,7 +183,8 @@ export class RegularPolygon extends PIXI.Polygon {
    */
   getBounds() {
     // Default to the bounding box of the radius circle
-    const { x, y, radius: r } = this;
+    const { x, y } = this.origin;
+    const r = this.radius;
     const r2 = r * 2;
     return new PIXI.Rectangle(x - r, y - r, r2, r2);
   }
@@ -185,10 +196,11 @@ export class RegularPolygon extends PIXI.Polygon {
    * @returns {PIXI.Point}
    */
   fromCartesianCoords(a, outPoint) {
+    const { x, y } = this.origin;
     outPoint ??= new PIXI.Point;
     a = PIXI.Point.fromObject(a);
 
-    a.translate(-this.x, -this.y, outPoint).rotate(-this.radians, outPoint);
+    a.translate(-x, -y, outPoint).rotate(-this.radians, outPoint);
     return outPoint;
   }
 
@@ -199,10 +211,11 @@ export class RegularPolygon extends PIXI.Polygon {
    * @returns {Point}
    */
   toCartesianCoords(a, outPoint) {
+    const { x, y } = this.origin;
     outPoint ??= new PIXI.Point;
     a = PIXI.Point.fromObject(a);
 
-    a.rotate(this.radians, outPoint).translate(this.x, this.y, outPoint);
+    a.rotate(this.radians, outPoint).translate(x, y, outPoint);
     return outPoint;
   }
 
