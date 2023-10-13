@@ -10,11 +10,8 @@ PIXI
  * Polygon is treated as closed.
  */
 export class CenteredPolygonBase extends PIXI.Polygon {
-  /** @type {number} */
-  x = 0;
-
-  /** @type {number} */
-  y = 0;
+  /** @type {PIXI.Point} */
+  origin = new PIXI.Point();
 
   // TODO: Make rotation and radians getters, so they can be modified.
   /** @type {number} */
@@ -43,11 +40,24 @@ export class CenteredPolygonBase extends PIXI.Polygon {
   constructor(origin, { rotation = 0 }) {
     super([]);
 
-    this.x = origin.x;
-    this.y = origin.y;
+    this.origin.copyFrom(origin);
     this.rotation = Math.normalizeDegrees(rotation);
     this.radians = Math.toRadians(this.rotation);
   }
+
+  // Getters/setters for x and y for backwards compatibility.
+
+  /** @type {number} */
+  get x() { return this.origin.x; }
+
+  set x(value) { this.origin.x = value; }
+
+  /** @type {number} */
+
+  get y() { return this.origin.y; }
+
+  set y(value) { return this.origin.y = value; }
+
 
   get center() { return { x: this.x, y: this.y }; }
 
@@ -61,21 +71,17 @@ export class CenteredPolygonBase extends PIXI.Polygon {
    * For compatibility with Ellipse.
    * Convert this shape to a Polygon
    */
-  toPolygon() {
-    return this;
-  }
+  toPolygon() { return this; }
 
   /**
    * Shift this polygon to a new position.
    * @param {number} dx   Change in x position
    * @param {number} dy   Change in y position
-   * @returns {CenteredPolygonBase}    This polygon
+   * @returns {CenteredPolygonBase}    New polygon
    */
   translate(dx, dy) {
-    this.x = this.x + dx;
-    this.y = this.y + dy;
-    this._points = undefined;
-    return this;
+    const txOrigin = this.origin.add({x: dx, y: dy});
+    return new this.constructor(txOrigin, { rotation: this.rotation });
   }
 
   /**

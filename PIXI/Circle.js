@@ -27,6 +27,16 @@ export function registerPIXICircleMethods() {
   addClassMethod(PIXI.Circle.prototype, "translate", translate);
   addClassMethod(PIXI.Circle.prototype, "scaledArea", scaledArea);
 
+  // Overlap methods
+  addClassMethod(PIXI.Circle.prototype, "overlaps", overlaps);
+  addClassMethod(PIXI.Circle.prototype, "_overlapsCircle", overlapsCircle);
+
+  // Envelop methods
+  addClassMethod(PIXI.Circle.prototype, "envelops", envelops);
+  addClassMethod(PIXI.Circle.prototype, "_envelopsCircle", envelopsCircle);
+  addClassMethod(PIXI.Circle.prototype, "_envelopsRectangle", envelopsRectangle);
+  addClassMethod(PIXI.Circle.prototype, "_envelopsPolygon", envelopsPolygon);
+
   CONFIG.GeometryLib.registered.add("PIXI.Circle");
 }
 
@@ -68,4 +78,99 @@ function translate(dx, dy) {
  */
 function scaledArea({scalingFactor = 1} = {}) {
   return this.toPolygon().scaledArea({scalingFactor});
+}
+
+/**
+ * Does this circle overlap something else?
+ * @param {PIXI.Rectangle|PIXI.Circle|PIXI.Polygon|PIXI.Ellipse} other
+ * @returns {boolean}
+ */
+function overlaps(other) {
+  if ( other instanceof PIXI.Circle ) return this._overlapsCircle(other);
+  if ( other instanceof PIXI.Polygon ) return other._overlapsCircle(this);
+  if ( other instanceof PIXI.Rectangle ) return other._overlapsCircle(this);
+  if ( other.toPolygon) return other.toPolygon()._overlapsCircle(this);
+  console.warn("overlaps|shape not recognized.", other);
+  return false;
+}
+
+/**
+ * Does this circle envelop (completely enclose) something else?
+ * This is a one-way test; call other.envelops(this) to test the other direction.
+ * @param {PIXI.Rectangle|PIXI.Circle|PIXI.Polygon|PIXI.Ellipse} other
+ * @returns {boolean}
+ */
+function envelops(other) {
+  if ( other instanceof PIXI.Polygon ) return this._envelopsPolygon(other);
+  if ( other instanceof PIXI.Circle ) return this._envelopsCircle(other);
+  if ( other instanceof PIXI.Rectangle ) return this._envelopsRectangle(other);
+  if ( other.toPolygon ) return this._envelopsPolygon(other.toPolygon());
+  console.warn("envelops|shape not recognized.", other);
+  return false;
+}
+
+/**
+ * Detect overlap between this circle and another.
+ * @param {PIXI.Circle} other
+ * @returns {boolean}
+ */
+function overlapsCircle(circle) {
+  // Test distance between the two centers.
+  // See https://www.geeksforgeeks.org/check-two-given-circles-touch-intersect/#
+  const dist2 = PIXI.Point.distanceSquaredBetween(this, circle);
+  const r1 = this.radius;
+  const r2 = circle.radius;
+
+  // Test for overlap using the radii.
+  // if ( dist <= Math.pow(r1 - r2, 2) return true; // This (1) inside circle (2).
+  // if ( dist <= Math.pow(r2 - r1, 2) ) return true; // Circle (2) inside this (1).
+  // if ( dist < Math.pow(r1 + r2, 2) ) return true; // Circles intersect one another.
+  // if ( dist === Math.pow(r1 + r2, 2) ) return true; // Circles touch.
+
+  // Combine the above tests.
+  if ( dist2 <= Math.pow(Math.abs(r1 - r2), 2) ) return true;
+  if ( dist2 <= Math.pow(r1 + r2, 2) ) return true;
+  return false;
+}
+
+/**
+ * Detect whether this circle envelops another.
+ * @param {PIXI.Circle} other
+ * @returns {boolean}
+ */
+function envelopsCircle(circle) {
+  // Test distance between the two centers.
+  // See https://www.geeksforgeeks.org/check-two-given-circles-touch-intersect/#
+  const dist2 = PIXI.Point.distanceSquaredBetween(this, circle);
+  const r1 = this.radius;
+  const r2 = circle.radius;
+  return (dist2 <= Math.pow(r1 - r2, 2));
+}
+
+/**
+ * Detect whether this circle envelops a rectangle.
+ * @param {PIXI.Rectangle} rect
+ * @returns {boolean}
+ */
+function envelopsRectangle(rect) {
+  // All 4 points of the rectangle must be contained by the circle.
+  const { top, left, right, bottom } = rect;
+  return (this.contains(left, top)
+      && this.contains(right, top)
+      && this.contains(right, bottom)
+      && this.contains(left, bottom));
+}
+
+/**
+ * Detect whether this circle envelops a polygon.
+ * @param {PIXI.Polygon} poly
+ * @returns {boolean}
+ */
+function envelopsPolygon(poly) {
+  // All points of the polygon must be contained in the circle.
+  const iter = poly.iteratePoints({ close: false });
+  for ( const pt of iter ) {
+    if ( !this.contains(pt.x, pt.y) ) return false;
+  }
+  return true;
 }

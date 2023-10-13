@@ -125,7 +125,8 @@ export class CenteredRectangle extends CenteredPolygonBase {
    * @return {Points[]}
    */
   _generatePoints() {
-    const { x, y, width, height, rotation, fixedPoints: fp } = this;
+    const { origin, width, height, rotation, fixedPoints: fp } = this;
+    const { x, y } = origin;
     const w1_2 = width * 0.5;
     const h1_2 = height * 0.5;
 
@@ -181,7 +182,8 @@ export class CenteredRectangle extends CenteredPolygonBase {
    */
   getBounds() {
     // If an edge is on the bounding box, use it as the border
-    const { x, y, width, height, rotation } = this;
+    const { origin, width, height, rotation } = this;
+    const { x, y } = origin;
     const w1_2 = width * 0.5;
     const h1_2 = height * 0.5;
 

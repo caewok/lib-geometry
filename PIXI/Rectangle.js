@@ -27,15 +27,24 @@ export function registerPIXIRectangleMethods() {
   // intersectPolygon - in v11
   // pointsBetween - in v11
   // segmentIntersections - in v11
+  addClassMethod(PIXI.Rectangle.prototype, "union", union);
   addClassMethod(PIXI.Rectangle.prototype, "difference", difference);
-  addClassMethod(PIXI.Rectangle.prototype, "overlaps", overlaps);
   addClassMethod(PIXI.Rectangle.prototype, "translate", translate);
   addClassMethod(PIXI.Rectangle.prototype, "viewablePoints", viewablePoints);
 
-  // ----- Helper methods ----- //
+  // Overlap methods
+  addClassMethod(PIXI.Rectangle.prototype, "overlaps", overlaps);
   addClassMethod(PIXI.Rectangle.prototype, "_overlapsCircle", overlapsCircle);
   addClassMethod(PIXI.Rectangle.prototype, "_overlapsPolygon", overlapsPolygon);
   addClassMethod(PIXI.Rectangle.prototype, "_overlapsRectangle", overlapsRectangle);
+
+  // Envelop methods
+  addClassMethod(PIXI.Rectangle.prototype, "envelops", envelops);
+  addClassMethod(PIXI.Rectangle.prototype, "_envelopsCircle", envelopsCircle);
+  addClassMethod(PIXI.Rectangle.prototype, "_envelopsRectangle", envelopsRectangle);
+  addClassMethod(PIXI.Rectangle.prototype, "_envelopsPolygon", envelopsPolygon);
+
+  // ----- Helper methods ----- //
   addClassMethod(PIXI.Rectangle.prototype, "scaledArea", scaledArea);
 
   CONFIG.GeometryLib.registered.add("PIXI.Rectangle");
@@ -78,9 +87,22 @@ function overlaps(shape) {
   if ( shape instanceof PIXI.Polygon ) { return this._overlapsPolygon(shape); }
   if ( shape instanceof PIXI.Circle ) { return this._overlapsCircle(shape); }
   if ( shape instanceof PIXI.Rectangle ) { return this._overlapsRectangle(shape); }
-
   if ( shape.toPolygon) return this._overlapsPolygon(shape.toPolygon());
+  console.warn("overlaps|shape not recognized.", shape);
+  return false;
+}
 
+/**
+ * Does this rectangle envelop something else?
+ * This is a one-way test; call other.envelops(this) to test the other direction.
+ * @param {PIXI.Rectangle|PIXI.Circle|PIXI.Polygon} shape
+ * @returns {boolean}
+ */
+function envelops(shape) {
+  if ( shape instanceof PIXI.Polygon ) { return this._envelopsPolygon(shape); }
+  if ( shape instanceof PIXI.Circle ) { return this._envelopsCircle(shape); }
+  if ( shape instanceof PIXI.Rectangle ) { return this._envelopsRectangle(shape); }
+  if ( shape.toPolygon) return this._envelopsPolygon(shape.toPolygon());
   console.warn("overlaps|shape not recognized.", shape);
   return false;
 }
@@ -88,10 +110,11 @@ function overlaps(shape) {
 /**
  * Does this rectangle overlap a circle?
  * @param {PIXI.Circle} circle
- * @return {Boolean}
+ * @return {boolean}
  */
 function overlapsCircle(circle) {
   // https://www.geeksforgeeks.org/check-if-any-point-overlaps-the-given-circle-and-rectangle
+
   // {xn,yn} is the nearest point on the rectangle to the circle center
   const xn = Math.max(this.left, Math.min(circle.x, this.right));
   const yn = Math.max(this.top, Math.min(circle.y, this.bottom));
@@ -105,7 +128,7 @@ function overlapsCircle(circle) {
 /**
  * Does this rectangle overlap a polygon?
  * @param {PIXI.Polygon} poly
- * @return {Boolean}
+ * @return {boolean}
  */
 function overlapsPolygon(poly) {
   if ( poly.contains(this.left, this.top)
@@ -128,16 +151,61 @@ function overlapsPolygon(poly) {
 /**
  * Does this rectangle overlap another?
  * @param {PIXI.Rectangle} other
- * @return {Boolean}
+ * @return {boolean}
  */
-function overlapsRectangle(other) {
+function overlapsRectangle(rect) {
   // https://www.geeksforgeeks.org/find-two-rectangles-overlap
   // One rectangle is completely above the other
-  if ( this.top > other.bottom || other.top > this.bottom ) return false;
+  if ( this.top > rect.bottom || rect.top > this.bottom ) return false;
 
   // One rectangle is completely to the left of the other
-  if ( this.left > other.right || other.left > this.right ) return false;
+  if ( this.left > rect.right || rect.left > this.right ) return false;
 
+  return true;
+}
+
+/**
+ * Does this rectangle envelop another?
+ * @param {PIXI.Rectangle} rect
+ * @returns {boolean}
+ */
+function envelopsRectangle(rect) {
+  // All 4 points must be contained within.
+  const { top, left, right, bottom } = rect;
+  return (this.contains(left, top)
+       && this.contains(right, top)
+       && this.contains(right, bottom)
+       && this.contains(left, bottom));
+}
+
+/**
+ * Does this rectangle envelop a circle?
+ * @param {PIXI.Circle} circle
+ * @returns {boolean}
+ */
+function envelopsCircle(circle) {
+  // Center point must be contained.
+  if ( !this.contains(circle.x, circle.y) ) return false;
+
+  // Four compass points extending from the circle must be contained.
+  const r = circle.radius;
+  return (this.contains(circle.x - r, circle.y)   // W
+       && this.contains(circle.x + r, circle.y)   // E
+       && this.contains(circle.x, circle.y - r)   // N
+       && this.contains(circle.x, circle.y + r)); // S
+}
+
+/**
+ * Does this rectangle envelop a polygon?
+ * @param {PIXI.Polygon} poly
+ * @returns {boolean}
+ */
+function envelopsPolygon(poly) {
+  // All points of the polygon must be contained in the circle.
+  const iter = poly.iteratePoints({ close: false });
+  for ( const pt of iter ) {
+    if ( !this.contains(pt.x, pt.y) ) return false;
+  }
   return true;
 }
 
@@ -220,7 +288,18 @@ function getViewablePoints(bbox, origin) {
 }
 
 /**
- * Get the difference between the two rectangles
+ * Get the union between this rectangle and another.
+ * @param {PIXI.Rectangle} other
+ * @returns {PIXI.Rectangle} New, combined rectangle.
+ */
+function union(other) {
+  const xMinMax = Math.minMax(this.left, other.left, this.right, other.right);
+  const yMinMax = Math.minMax(this.top, other.top, this.bottom, other.bottom);
+  return new PIXI.Rectangle(xMinMax.min, yMinMax.min, xMinMax.max - xMinMax.min, yMinMax.max - yMinMax.min);
+}
+
+/**
+ * Get the difference between this rectangle and another.
  * If no overlap, will return null
  * @param {PIXI.Rectangle} other
  * @returns {null| {A: PIXI.Rectangle, B: PIXI.Rectangle}}
