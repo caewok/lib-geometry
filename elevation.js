@@ -180,7 +180,7 @@ Token
 // Has data.elevation already but ignoring this for now as it may have unintended consequences.
 // Changes to token elevation appear to update the source elevation automatically.
 function pointSourceElevationE() {
-  return this.object?.elevationE ?? this.data.elevation ?? 0;
+  return this.object?.elevationE ?? this.document.elevation ?? Number.MAX_SAFE_INTEGER;
 }
 
 async function setPointSourceElevationE(value) {
@@ -190,7 +190,7 @@ async function setPointSourceElevationE(value) {
 
 // Set VisionSource (but not MovementSource) to the top elevation of the token
 function visionSourceElevationE() {
-  return this.object?.topE ?? this.object?.elevationE ?? this.data.elevation ?? 0;
+  return this.object?.topE ?? this.object?.elevationE ?? this.document.elevation ?? 0;
 }
 
 async function setVisionSourceElevationE(_value) {
