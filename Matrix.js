@@ -69,6 +69,13 @@ export class Matrix {
     return new Matrix(out);
   }
 
+  toFlatArray() {
+    const arr = [];
+    const nRows = this.arr.length;
+    for ( let r = 0; r < this.dim1; r += 1 ) arr.push(...this.arr[r]);
+    return arr;
+  }
+
   static empty(rows, cols) {
     return Matrix.fromFlatArray(new Array(rows * cols), rows, cols);
   }
@@ -97,11 +104,65 @@ export class Matrix {
   }
 
   /**
-   * See https://webglfundamentals.org/webgl/lessons/webgl-3d-camera.html
-   * https://www.scratchapixel.com/lessons/mathematics-physics-for-computer-graphics/lookat-function
-   * https://www.geertarien.com/blog/2017/07/30/breakdown-of-the-lookAt-function-in-OpenGL/
+   * Specifies a viewing frustum in the world coordinate system.
+   * See
+   * https://registry.khronos.org/OpenGL-Refpages/gl2.1/xhtml/gluPerspective.xml
+   * https://gamedev.stackexchange.com/questions/12726/understanding-the-perspective-projection-matrix-in-opengl
+   * http://www.opengl-tutorial.org/beginners-tutorials/tutorial-3-matrices/
+   * http://www.songho.ca/opengl/gl_projectionmatrix.html
+   *
+   * @param {number} fovy     Field of view angle, in degrees, in the y direction
+   * @param {number} aspect   Aspect ratio that determines fov in the x direction. Ratio of x (width) to y (height).
+   * @param {number} zNear    Distance from the viewer to the near clipping plane (always positive)
+   * @param {number} zFar     Distance from the viewer to the far clipping plane (always positive)
+   * @returns {Matrix} 4x4 Matrix, in row-major format
+   */
+  static perspective(fovy, aspect, zNear, zFar) {
+    const cotangent = function(x) { return 1 / Math.tan(x); }
+    const f = cotangent(fovy * 0.5);
+    return new Matrix([
+      [f, 0, 0,                                   0],
+      [0, f, 0,                                   0],
+      [0, 0, (zFar + zNear) / (zNear - zFar),     -1],
+      [0, 0, (2 * zFar * zNear) / (zNear - zFar), 0]
+    ]);
+  }
+
+  /**
+   * Specifies a perspective matrix.
+   * See
+   * https://registry.khronos.org/OpenGL-Refpages/gl2.1/xhtml/glFrustum.xml
+   *
+   * @param {number} left   Coordinate for left vertical clipping plane
+   * @param {number} right  Coordinate for right vertical clipping plane
+   * @param {number} bottom Coordinate for the bottom horizontal clipping plane
+   * @param {number} top    Coordinate for the top horizontal clipping plane
+   * @param {number} zNear    Distance from the viewer to the near clipping plane (always positive)
+   * @param {number} zFar     Distance from the viewer to the far clipping plane (always positive)
+   * @returns {Matrix} 4x4 Matrix, in row-major format
+   */
+  static frustrum(left, right, bottom, top, zNear, zFar) {
+    const A = (right + left) / (right - left);
+    const B = (top + bottom) / (top - bottom);
+    const C = -((zFar + zNear) / (zFar - zNear));
+    const D = -((2 * zFar * zNear) / (zFar - zNear));
+    return new Matrix([
+      [(2 * zNear) / (right - left),  0,                            A,  0],
+      [0,                             (2 * zNear) / (top - bottom), B,  0],
+      [0,                             0,                            C,  D],
+      [0,                             0,                            -1, 0]
+    ]);
+  }
+
+  /**
    * Construct a camera matrix given the position of the camera, position of the
    * target the camera is observing, the a vector pointing directly up.
+   *
+   * See
+   * https://webglfundamentals.org/webgl/lessons/webgl-3d-camera.html
+   * https://www.scratchapixel.com/lessons/mathematics-physics-for-computer-graphics/lookat-function
+   * https://www.geertarien.com/blog/2017/07/30/breakdown-of-the-lookAt-function-in-OpenGL/
+   *
    * @param {Point3d} cameraPosition
    * @param {Point3d} target
    * @param {Point3d} up
@@ -486,8 +547,9 @@ export class Matrix {
    * @returns {Matrix}
    */
   transpose(outMatrix = Matrix.empty(this.dim1, this.dim2)) {
-    outMatrix.arr = Object.keys(this.arr[0]).map(function(c) {
-      return this.arr.map(function(r) { return r[c]; });
+    const arr = this.arr;
+    outMatrix.arr = Object.keys(arr[0]).map(function(c) {
+      return arr.map(function(r) { return r[c]; });
     });
     return outMatrix;
   }
