@@ -69,11 +69,25 @@ export class Matrix {
     return new Matrix(out);
   }
 
-  toFlatArray() {
-    const arr = [];
-    const nRows = this.arr.length;
-    for ( let r = 0; r < this.dim1; r += 1 ) arr.push(...this.arr[r]);
-    return arr;
+  toRowMajorArray() { return this.arr.flat(); }
+
+  toColMajorArray() {
+    const nRow = this.dim1;
+    const nCol = this.dim2;
+    const flatArr = Array(nRow * nCol);
+    for ( let c = 0; c < nCol; c += 1 ) {
+      const cIdx = c * nRow;
+      for ( let r = 0; r < nRow; r += 1 ) {
+        flatArr[cIdx + r] = this.arr[r][c];
+      }
+    }
+    return flatArr;
+  }
+
+  toGLSLArray() {
+    // Technically: this.transpose().toColMajorArray().
+    // But that is the same as this.toRowMajorArray().
+    return this.toRowMajorArray();
   }
 
   static empty(rows, cols) {
