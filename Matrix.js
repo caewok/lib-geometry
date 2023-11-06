@@ -110,22 +110,30 @@ export class Matrix {
    * https://gamedev.stackexchange.com/questions/12726/understanding-the-perspective-projection-matrix-in-opengl
    * http://www.opengl-tutorial.org/beginners-tutorials/tutorial-3-matrices/
    * http://www.songho.ca/opengl/gl_projectionmatrix.html
+   * https://webglfundamentals.org/webgl/lessons/webgl-3d-perspective.html
    *
-   * @param {number} fovy     Field of view angle, in degrees, in the y direction
+   * @param {number} fovRadians     Field of view angle, in radians, in the y direction
    * @param {number} aspect   Aspect ratio that determines fov in the x direction. Ratio of x (width) to y (height).
    * @param {number} zNear    Distance from the viewer to the near clipping plane (always positive)
    * @param {number} zFar     Distance from the viewer to the far clipping plane (always positive)
    * @returns {Matrix} 4x4 Matrix, in row-major format
    */
-  static perspective(fovy, aspect, zNear, zFar) {
-    const cotangent = function(x) { return 1 / Math.tan(x); }
-    const f = cotangent(fovy * 0.5);
+  static perspective(fovRadians, aspect, zNear, zFar) {
+    const f = Math.tan((Math.PI * 0.5) - (0.5 * fovRadians));
+    const rangeInv = 1.0 / (zNear - zFar);
+    const DIAG0 = f / aspect;
+    const DIAG2 = (zNear + zFar) * rangeInv;
+    const A = zNear * zFar * rangeInv * 2;
     return new Matrix([
-      [f, 0, 0,                                   0],
-      [0, f, 0,                                   0],
-      [0, 0, (zFar + zNear) / (zNear - zFar),     -1],
-      [0, 0, (2 * zFar * zNear) / (zNear - zFar), 0]
+      [DIAG0,   0,    0,      0],
+      [0,       f,    0,      0],
+      [0,       0,    DIAG2,  A],
+      [0,       0,    -1,     0]
     ]);
+  }
+
+  static perspectiveDegrees(fovDegrees, aspect, zNear, zFar) {
+    return this.perspective(Math.toRadians(fovDegrees), aspect, zNear, zFar);
   }
 
   /**
