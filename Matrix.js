@@ -85,6 +85,7 @@ export class Matrix {
   }
 
   toGLSLArray() {
+    // See https://austinmorlan.com/posts/opengl_matrices/
     // Technically: this.transpose().toColMajorArray().
     // But that is the same as this.toRowMajorArray().
     return this.toRowMajorArray();
@@ -141,8 +142,8 @@ export class Matrix {
     return new Matrix([
       [DIAG0,   0,    0,      0],
       [0,       f,    0,      0],
-      [0,       0,    DIAG2,  A],
-      [0,       0,    -1,     0]
+      [0,       0,    DIAG2,  -1],
+      [0,       0,    A,      0]
     ]);
   }
 
@@ -346,12 +347,12 @@ export class Matrix {
 
     if ( angleX && angleY ) {
       const rotY = Matrix.rotationY(angleY, d3);
-      rot = rot[multFn](rotY, d3);
+      rot = rot[multFn](rotY);
     }
 
     if ( (angleX || angleY) && angleZ ) {
       const rotZ = Matrix.rotationZ(angleZ, d3);
-      rot = rot[multFn](rotZ, d3);
+      rot = rot[multFn](rotZ);
     }
 
     return rot;
