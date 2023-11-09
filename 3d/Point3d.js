@@ -23,6 +23,16 @@ PIXI
  * @property {Point3d} [B.bottom]
  */
 
+/**
+ * An object representing points of a horizontal Tile
+ * @typedef {object} Point3dTile
+ * @property {Point3d} tl
+ * @property {Point3d} tr
+ * @property {Point3d} bl
+ * @property {Point3d} br
+ */
+
+import { Matrix } from "../Matrix.js";
 
 /**
  * 3-D version of PIXI.Point
@@ -196,6 +206,46 @@ export class Point3d extends PIXI.Point {
         top: new Point3d(B.x, B.y, top),
         bottom: new Point3d(B.x, B.y, bottom)
       }
+    };
+  }
+
+  /**
+   * Determine the tile corners and elevation.
+   * @param {Tile} tile     Tile to convert to points object
+   * @returns {Point3dTile} Points labeled in line with the tile texture, not necessarily its
+   *   current orientation. So tl is top left of the tile texture before transforms.
+   */
+  static fromTile(tile) {
+    const { elevationZ, bounds, document } = tile;
+    const { width, height, texture, rotation } = document;
+    const { scaleX, scaleY, offsetX, offsetY } = texture;
+
+    // Build the points around 0,0 center.
+    const w1_2 = width * scaleX * 0.5;
+    const h1_2 = height * scaleY * 0.5;
+    const pts = [
+      new Point3d(-w1_2, -h1_2, 0), // TL
+      new Point3d(w1_2, -h1_2, 0),  // TR
+      new Point3d(w1_2, h1_2, 0),   // BL
+      new Point3d(-w1_2, h1_2, 0)   // BR
+    ];
+
+    // Rotate points to match tile rotation.
+    if ( rotation ) {
+      const rotZ = Matrix.rotationZ(Math.toRadians(rotation));
+      pts.forEach(pt => rotZ.multiplyPoint3d(pt, pt));
+    }
+
+    // Translate to canvas position.
+    const center = bounds.center;
+    const trM = Matrix.translation(center.x + offsetX, center.y + offsetY, elevationZ);
+    pts.forEach(pt => trM.multiplyPoint3d(pt, pt));
+
+    return {
+      tl: pts[0],
+      tr: pts[1],
+      br: pts[2],
+      bl: pts[3]
     };
   }
 
