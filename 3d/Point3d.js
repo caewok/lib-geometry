@@ -247,13 +247,24 @@ export class Point3d extends PIXI.Point {
   }
 
   /**
-   * Copies `x` and `y` and `z` from the given point into this point
+   * Copies `x` and `y` and `z` from the given point into this point.
    * @param {Point} p - The point to copy from
    * @returns {Point3d} The point instance itself
    */
   copyFrom(p) {
     this.set(p.x, p.y, p.z);
     return this;
+  }
+
+  /**
+   * Copies `x` and `y` and `z` from the given point into this point.
+   * Only copies properties that exist on p.
+   * @param {Point} p - The point to copy from
+   * @returns {Point3d} The point instance itself
+   */
+  copyPartial(p) {
+    if ( Object.hasOwn(p, "z") ) this.z = p.z;
+    return super.copyPartial(p);
   }
 
   /**

@@ -33,6 +33,7 @@ export function registerPIXIPointMethods() {
   addClassMethod(PIXI.Point.prototype, "subtract", subtract2d);
   addClassMethod(PIXI.Point.prototype, "multiply", multiply2d);
   addClassMethod(PIXI.Point.prototype, "multiplyScalar", multiplyScalar2d);
+  addClassMethod(PIXI.Point.prototype, "copyPartial", copyPartial);
   addClassMethod(PIXI.Point.prototype, "dot", dot2d);
   addClassMethod(PIXI.Point.prototype, "magnitude", magnitude2d);
   addClassMethod(PIXI.Point.prototype, "magnitudeSquared", magnitudeSquared2d);
@@ -192,6 +193,19 @@ function fromAngle(radians, distance, outPoint) {
   const dy = Math.sin(radians);
   outPoint.copyFrom({ x: dx, y: dy});
   return this.add(outPoint.multiplyScalar(distance, outPoint), outPoint);
+}
+
+/**
+ * Copies `x` and `y` and `z` from the given point into this point.
+ * Only copies properties that exist on p.
+ * So it is permissible to pass, e.g., pt.copyFrom({y: 2}).
+ * @param {Point} p - The point to copy from
+ * @returns {Point3d} The point instance itself
+ */
+function copyPartial(p) {
+  if ( Object.hasOwn(p, "x") ) this.x = p.x;
+  if ( Object.hasOwn(p, "y") ) this.y = p.y;
+  return this;
 }
 
 /**
