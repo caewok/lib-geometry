@@ -151,7 +151,7 @@ export class Point3d extends PIXI.Point {
     let { x, y, elevationZ } = source;
     x ??= source.object.center.x; // Vision sources have no x, y.
     y ??= source.object.center.y;
-    return new Point3d(x, y, elevationZ);
+    return new this(x, y, elevationZ);
   }
 
   /**
@@ -162,8 +162,8 @@ export class Point3d extends PIXI.Point {
   static fromToken(token) {
     const { x, y } = token.center;
     return {
-      top: new Point3d(x, y, token.topZ),
-      bottom: new Point3d(x, y, token.bottomZ)
+      top: new this(x, y, token.topZ),
+      bottom: new this(x, y, token.bottomZ)
     };
   }
 
@@ -171,6 +171,8 @@ export class Point3d extends PIXI.Point {
    * Determine the token exact center point in 3d.
    * For height, uses the average between token bottom and top.
    * @param {Token} token
+   * @param {Point3d} [outPoint]    A point-like object in which to store the value.
+   *   (Will create new point if none provided.)
    * @returns {Point3d}
    */
   static fromTokenCenter(token) {
@@ -199,12 +201,12 @@ export class Point3d extends PIXI.Point {
 
     return {
       A: {
-        top: new Point3d(A.x, A.y, top),
-        bottom: new Point3d(A.x, A.y, bottom)
+        top: new this(A.x, A.y, top),
+        bottom: new this(A.x, A.y, bottom)
       },
       B: {
-        top: new Point3d(B.x, B.y, top),
-        bottom: new Point3d(B.x, B.y, bottom)
+        top: new this(B.x, B.y, top),
+        bottom: new this(B.x, B.y, bottom)
       }
     };
   }
