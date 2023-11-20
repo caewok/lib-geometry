@@ -252,6 +252,23 @@ export class Point3d extends PIXI.Point {
   }
 
   /**
+   * Get the angle between three 2d points, A --> B --> C.
+   * Assumes A|B and B|C have lengths > 0.
+   * See https://mathsathome.com/angle-between-two-vectors/
+   * @param {Point3d} a   First point
+   * @param {Point3d} b   Second point
+   * @param {Point3d} c   Third point
+   * @returns {number}  Angle, in radians
+   */
+  static angleBetween(a, b, c) {
+    const ba = a.subtract(b);
+    const bc = c.subtract(b);
+    const dot = ba.dot(bc);
+    const denom = ba.magnitude() * bc.magnitude();
+    return Math.acos(dot / denom);
+  }
+
+  /**
    * Hash key for this point, with coordinates rounded to nearest integer.
    * Ordered, so sortable.
    * @returns {BigInt}

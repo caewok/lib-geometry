@@ -100,10 +100,12 @@ function fromObject(obj) {
  * @returns {number}  Angle, in radians
  */
 function angleBetween(a, b, c, { clockwiseAngle = false } = {}) {
+  // See https://mathsathome.com/angle-between-two-vectors/
+  // Create new pixi points so that 2d distance works when passing 3d points.
   const ba = new PIXI.Point(a.x - b.x, a.y - b.y);
   const bc = new PIXI.Point(c.x - b.x, c.y - b.y);
   const dot = ba.dot(bc);
-  const denom = PIXI.Point.distanceBetween(a, b) * PIXI.Point.distanceBetween(b, c);
+  const denom = ba.magnitude() * bc.magnitude();
 
   let angle = Math.acos(dot / denom);
   if ( clockwiseAngle && foundry.utils.orient2dFast(a, b, c) > 0 ) angle = (Math.PI * 2) - angle;
