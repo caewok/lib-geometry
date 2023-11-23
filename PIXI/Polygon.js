@@ -672,7 +672,10 @@ function viewablePoints(origin, { returnKeys = false, outermostOnly = false } = 
       if ( foundry.utils.lineSegmentIntersects(origin, pt, A, B) ) keySet.delete(key);
     }
   }
-  if ( !keySet.size ) return [];
+  if ( !keySet.size ) {
+    console.warn(`No viewablePoints from ${origin.x},${origin.y}.`, this);
+    return [];
+  }
 
   // Measure how far each point is clockwise or counterclockwise from the origin --> center line.
   // The farthest points are the outermost key points.
@@ -725,8 +728,8 @@ function viewablePoints(origin, { returnKeys = false, outermostOnly = false } = 
     return indices;
   }
 
-  // Viewable will always be from cwIdx to ccwIdx, b/c that is forward half for origin --> center.
-  return wrapslice(pts, cwIdx, ccwIdx);
+  // Viewable will always be from cwIdx to ccwIdx, not inclusive, b/c that is forward half for origin --> center.
+  return wrapslice(pts, cwIdx, ccwIdx + 1);
 }
 
 /**
