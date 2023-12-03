@@ -263,9 +263,9 @@ function tokenTopE() {
 /** @type {boolean} */
 function getIsProne() {
   const proneStatusId = CONFIG.GeometryLib.proneStatusId;
-  return (proneStatusId !== "" && this.actor && this.actor.statuses?.has(proneStatusId))
+  return Boolean((proneStatusId !== "" && this.actor && this.actor.statuses?.has(proneStatusId))
     || (game.modules.get(MODULE_KEYS.LEVELSAUTOCOVER.ID)?.active
-    && this.document.flags?.[MODULE_KEYS.LEVELSAUTOCOVER.ID]?.[MODULE_KEYS.LEVELSAUTOCOVER]?.DUCKING);
+    && this.document.flags?.[MODULE_KEYS.LEVELSAUTOCOVER.ID]?.[MODULE_KEYS.LEVELSAUTOCOVER]?.DUCKING));
 }
 
 /**
