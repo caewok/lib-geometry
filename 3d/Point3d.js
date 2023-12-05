@@ -145,13 +145,18 @@ export class Point3d extends PIXI.Point {
   /**
    * Determine the center point for the source.
    * @param {PointSource} source
+   * @param {Point3d} [outPoint]    A point-like object in which to store the value.
+   *   (Will create new point if none provided.)
    * @returns {Point3d}
    */
-  static fromPointSource(source) {
-    let { x, y, elevationZ } = source;
-    x ??= source.object.center.x; // Vision sources have no x, y.
-    y ??= source.object.center.y;
-    return new this(x, y, elevationZ);
+  static fromPointSource(source, outPoint) {
+    outPoint ??= new this();
+    const { x, y, elevationZ } = source;
+    outPoint.set(
+      x ?? source.object.center.x, // Vision sources have no x, y.
+      y ?? source.object.center.y,
+      elevationZ);
+    return outPoint;
   }
 
   /**
@@ -175,10 +180,26 @@ export class Point3d extends PIXI.Point {
    *   (Will create new point if none provided.)
    * @returns {Point3d}
    */
-  static fromTokenCenter(token) {
+  static fromTokenCenter(token, outPoint) {
+    outPoint ??= new this();
     const { center, bottomZ, topZ } = token;
-    const e = bottomZ + ((topZ - bottomZ) * 0.5);
-    return new Point3d(center.x, center.y, e);
+    const z = bottomZ + ((topZ - bottomZ) * 0.5);
+    outPoint.set(center.x, center.y, z);
+    return outPoint;
+  }
+
+  /**
+   * Determine the token vision point using the token vision multiplier in GeometryLib.
+   * @param {Token} token
+   * @param {Point3d} [outPoint]    A point-like object in which to store the value.
+   *   (Will create new point if none provided.)
+   * @returns {Point3d}
+   */
+  static fromTokenVisionHeight(token, outPoint) {
+    outPoint ??= new this();
+    const { center, visionZ } = token;
+    outPoint.set(center.x, center.y, visionZ);
+    return outPoint;
   }
 
   /**

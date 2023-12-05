@@ -94,23 +94,30 @@ export function registerElevationAdditions() {
   // Token
   addClassGetter(Token.prototype, "elevationE", tokenElevationE);
   addClassGetter(Token.prototype, "elevationZ", zElevation);
-  addClassGetter(Token.prototype, "bottomE", tokenElevationE); // alias
-  addClassGetter(Token.prototype, "bottomZ", zBottom); // alias
+  addClassGetter(Token.prototype, "bottomE", tokenElevationE); // Alias
+  addClassGetter(Token.prototype, "bottomZ", zBottom); // Alias
   addClassGetter(Token.prototype, "topE", tokenTopE);
   addClassGetter(Token.prototype, "topZ", zTop);
+  addClassGetter(Token.prototype, "verticalHeight", getTokenVerticalHeight); // Accounts for prone.
+  addClassMethod(Token.prototype, "setVerticalHeight", setTokenVerticalHeight); // Async
 
   // Don't set the topE, which is calculated.
   addClassMethod(Token.prototype, "setElevationE", setTokenElevationE);
   addClassMethod(Token.prototype, "setElevationZ", setZBottom);
-  addClassMethod(Token.prototype, "setBottomE", setTokenElevationE); // alias
-  addClassMethod(Token.prototype, "setBottomZ", setZBottom); // alias
+  addClassMethod(Token.prototype, "setBottomE", setTokenElevationE); // Alias
+  addClassMethod(Token.prototype, "setBottomZ", setZBottom); // Alias
 
-  // Handle Token "ducking"
+  // Handle Token "ducking" or prone. Note that topZ is modified by prone.
   CONFIG.GeometryLib.proneStatusId = "prone";
   CONFIG.GeometryLib.proneMultiplier = 0.33;
   addClassGetter(Token.prototype, "isProne", getIsProne);
-  addClassGetter(Token.prototype, "tokenVisionHeight", getTokenLOSHeight);
-  addClassMethod(Token.prototype, "setTokenVisionHeight", setTokenLOSHeight);
+
+  // Handle Token vision height
+  CONFIG.GeometryLib.visionHeightMultiplier = 1;
+  addClassGetter(Token.prototype, "visionE", getTokenVisionE);
+  addClassGetter(Token.prototype, "visionZ", getTokenVisionZ);
+  addClassGetter(Token.prototype, "visionHeight", getTokenVisionHeight);
+
 
   // Sync token.tokenHeight between EV and Wall Height
   // Also clear the _tokenHeight cached property.
@@ -195,7 +202,6 @@ function visionSourceElevationE() {
 
 async function setVisionSourceElevationE(_value) {
   console.warn("Cannot set elevationE for a vision source because it is calculated from token height.");
-  return;
 }
 
 // NOTE: PlaceableObject Elevation
@@ -250,14 +256,33 @@ async function setTokenElevationE(value) { return this.document.update({ elevati
 // Don't allow setting of token.topE b/c it is ambiguous.
 
 /**
- * Top elevation of a token.
+ * Calculated vertical height of a token.
+ * Accounts for prone multiplier.
+ * @type {number}  Returns the height, at least 1 pixel high.
+ */
+function getTokenVerticalHeight() {
+  const isProne = this.isProne;
+  const heightMult = isProne ? Math.clamped(CONFIG.GeometryLib.proneMultiplier, 0, 1) : 1;
+  return (getTokenHeight(this) * heightMult) || 1; // Force at least 1 pixel high.
+}
+
+/**
+ * Calculated vision height.
+ */
+function getTokenVisionHeight() {
+  return Math.max(1, this.verticalHeight * Math.clamped(CONFIG.GeometryLib.visionHeightMultiplier, 0, 1));
+}
+
+function getTokenVisionE() { return this.bottomE + this.visionHeight; }
+
+function getTokenVisionZ() { return gridUnitsToPixels(this.visionE); }
+
+/**
+ * Top elevation of a token. Accounts for prone status.
  * @returns {number} In grid units.
- * Returns 1/3 the height if the token is prone.
  */
 function tokenTopE() {
-  const isProne = this.isProne;
-  const heightMult = isProne ? CONFIG.GeometryLib.proneMultiplier : 1;
-  return this.bottomE + (this.tokenVisionHeight * heightMult);
+  return this.bottomE + this.verticalHeight;
 }
 
 /** @type {boolean} */
@@ -268,27 +293,29 @@ function getIsProne() {
     && this.document.flags?.[MODULE_KEYS.LEVELSAUTOCOVER.ID]?.[MODULE_KEYS.LEVELSAUTOCOVER]?.DUCKING));
 }
 
+function getTokenHeight(token) {
+  // Use || to ignore 0 height values.
+  return getProperty(token.document, MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT)
+    || getProperty(token.document, MODULE_KEYS.WH.FLAG_TOKEN_HEIGHT)
+    || calculateTokenHeightFromTokenShape(token);
+}
+
 /**
  * Calculate token LOS height.
  * Comparable to Wall Height method.
- * Does not consider "ducking" here—that is done in tokenTopElevation.
+ * Does not consider "ducking" here—that is done in tokenVerticalHeight, tokenTopElevation.
  */
 function calculateTokenHeightFromTokenShape(token) {
   const { width, height, texture } = token.document;
-  return canvas.scene.dimensions.distance * Math.max(width, height) *
-    ((Math.abs(texture.scaleX) + Math.abs(texture.scaleY)) * 0.5);
+  return canvas.scene.dimensions.distance
+    * Math.max(width, height)
+    * (Math.abs(texture.scaleX) + Math.abs(texture.scaleY))
+    * 0.5;
 }
 
-function getTokenLOSHeight() {
-  // Use || to ignore 0 height values.
-  return getProperty(this.document, MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT)
-    || getProperty(this.document, MODULE_KEYS.WH.FLAG_TOKEN_HEIGHT)
-    || calculateTokenHeightFromTokenShape(this);
-}
-
-async function setTokenLOSHeight(value) {
+async function setTokenVerticalHeight(value) {
   if ( !Number.isNumeric(value) || value < 0 ) {
-    console.err("tokenVisionHeight value must be 0 or greater.");
+    console.err("token vertical height must be 0 or greater.");
     return;
   }
   return this.document.update({ [MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT]: value });
