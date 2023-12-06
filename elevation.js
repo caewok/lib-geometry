@@ -92,7 +92,6 @@ Token
     --> document.flags.elevatedvision.tokenHeight
 */
 
-
 // NOTE: PointSource Elevation
 // Abstract base class used by LightSource, VisionSource, SoundSource, MovementSource.
 // Can be attached to a Token.
@@ -197,11 +196,14 @@ function tokenTopE() {
   return this.bottomE + this.verticalHeight;
 }
 
+
+
+
 /** @type {boolean} */
 function getIsProne() {
   const proneStatusId = CONFIG.GeometryLib.proneStatusId;
   return Boolean((proneStatusId !== "" && this.actor && this.actor.statuses?.has(proneStatusId))
-    || (game.modules.get(MODULE_KEYS.LEVELSAUTOCOVER.ID)?.active
+    || (MODULE_KEYS.LEVELSAUTOCOVER.ACTIVE
     && this.document.flags?.[MODULE_KEYS.LEVELSAUTOCOVER.ID]?.[MODULE_KEYS.LEVELSAUTOCOVER]?.DUCKING));
 }
 
@@ -320,7 +322,7 @@ function preUpdateWallHook(wallD, data, _options, _userId) {
  * Monitor tiles drawn to canvas and sync elevation.
  */
 function drawTileHook(tile) {
-  if ( !game.modules.get("elevatedvision")?.active ) return;
+  if ( !MODULE_KEYS.EV.ACTIVE ) return;
   if ( tile.document.elevation !== tile.elevationE ) tile.document.elevation = tile.elevationE;
 }
 
