@@ -4,17 +4,12 @@ CONFIG,
 flattenObject,
 foundry,
 game,
-getProperty,
-Hooks,
-PointSource,
-Token,
-VisionSource,
-Wall
+getProperty
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { addClassGetter, addClassMethod, gridUnitsToPixels, pixelsToGridUnits } from "./util.js";
+import { gridUnitsToPixels, pixelsToGridUnits } from "./util.js";
 import { MODULE_KEYS } from "./const.js";
 
 /* Elevation properties for Placeable Objects
@@ -44,101 +39,18 @@ lights can display with varying canvas elevation.
 
 */
 
-function addHook(name, fn) {
-  const hooks = CONFIG.GeometryLib.hooks ??= new Map();
-  const id = Hooks.on(name, fn);
-  hooks.set(id, name);
-  return id;
-}
+export const PATCHES = {};
+PATCHES.PointSource = { ELEVATION: {} };
+PATCHES.VisionSource = { ELEVATION: {} };
+PATCHES.PlaceableObject = { ELEVATION: {} };
+PATCHES.Tile = { ELEVATION: {} };
+PATCHES.Token = { ELEVATION: {} };
+PATCHES.Wall = { ELEVATION: {} };
 
-export function registerElevationAdditions() {
-  CONFIG.GeometryLib.registered ??= new Set();
-  if ( CONFIG.GeometryLib.registered.has("Elevation") ) return;
-
-  // Define elevation getters.
-  // Because elevation is saved to flags, use an async method instead of a setter.
-  // Point Source (LightSource, VisionSource, SoundSource, MovementSource)
-  addClassGetter(PointSource.prototype, "elevationE", pointSourceElevationE);
-  addClassGetter(PointSource.prototype, "elevationZ", zElevation);
-  addClassMethod(PointSource.prototype, "setElevationE", setPointSourceElevationE);
-  addClassMethod(PointSource.prototype, "setElevationZ", setZElevation);
-
-  // VisionSource
-  addClassGetter(VisionSource.prototype, "elevationE", visionSourceElevationE);
-  addClassMethod(VisionSource.prototype, "setElevationE", setVisionSourceElevationE);
-
-  // PlaceableObjects (Drawing, AmbientLight, AmbientSound, MeasuredTemplate, Note, Tile, Wall, Token)
-  // Don't handle Wall or Token here
-  const basicPlaceables = {
-    Drawing: CONFIG.Drawing.objectClass,
-    Note: CONFIG.Note.objectClass,
-    MeasuredTemmplate: CONFIG.MeasuredTemplate.objectClass,
-    AmbientLight: CONFIG.AmbientLight.objectClass,
-    AmbientSound: CONFIG.AmbientSound.objectClass,
-    Tile: CONFIG.Tile.objectClass
-  };
-
-  for ( const placeableClass of Object.values(basicPlaceables) ) {
-    addClassGetter(placeableClass.prototype, "elevationE", placeableObjectElevationE);
-    addClassGetter(placeableClass.prototype, "elevationZ", zElevation);
-    addClassMethod(placeableClass.prototype, "setElevationE", setPlaceableObjectElevationE);
-    addClassMethod(placeableClass.prototype, "setElevationZ", setZElevation);
-  }
-
-  // Tile
-  // Sync tile.document.elevation with tile.document.flags.elevatedvision.elevation
-  addHook("preUpdateTile", preUpdateTileHook);
-  addHook("updateTile", updateTileHook);
-  addHook("drawTile", drawTileHook);
-
-  // Token
-  addClassGetter(Token.prototype, "elevationE", tokenElevationE);
-  addClassGetter(Token.prototype, "elevationZ", zElevation);
-  addClassGetter(Token.prototype, "bottomE", tokenElevationE); // Alias
-  addClassGetter(Token.prototype, "bottomZ", zBottom); // Alias
-  addClassGetter(Token.prototype, "topE", tokenTopE);
-  addClassGetter(Token.prototype, "topZ", zTop);
-  addClassGetter(Token.prototype, "verticalHeight", getTokenVerticalHeight); // Accounts for prone.
-  addClassMethod(Token.prototype, "setVerticalHeight", setTokenVerticalHeight); // Async
-
-  // Don't set the topE, which is calculated.
-  addClassMethod(Token.prototype, "setElevationE", setTokenElevationE);
-  addClassMethod(Token.prototype, "setElevationZ", setZBottom);
-  addClassMethod(Token.prototype, "setBottomE", setTokenElevationE); // Alias
-  addClassMethod(Token.prototype, "setBottomZ", setZBottom); // Alias
-
-  // Handle Token "ducking" or prone. Note that topZ is modified by prone.
-  CONFIG.GeometryLib.proneStatusId = "prone";
-  CONFIG.GeometryLib.proneMultiplier = 0.33;
-  addClassGetter(Token.prototype, "isProne", getIsProne);
-
-  // Handle Token vision height
-  CONFIG.GeometryLib.visionHeightMultiplier = 1;
-  addClassGetter(Token.prototype, "visionE", getTokenVisionE);
-  addClassGetter(Token.prototype, "visionZ", getTokenVisionZ);
-  addClassGetter(Token.prototype, "visionHeight", getTokenVisionHeight);
-
-
-  // Sync token.tokenHeight between EV and Wall Height
-  // Also clear the _tokenHeight cached property.
-  addHook("preUpdateToken", preUpdateTokenHook);
-
-  // Wall
-  addClassGetter(Wall.prototype, "topE", wallTopE);
-  addClassGetter(Wall.prototype, "topZ", zTop);
-  addClassGetter(Wall.prototype, "bottomE", wallBottomE);
-  addClassGetter(Wall.prototype, "bottomZ", zBottom);
-
-  addClassMethod(Wall.prototype, "setTopE", setWallTopE);
-  addClassMethod(Wall.prototype, "setTopZ", setZTop);
-  addClassMethod(Wall.prototype, "setBottomE", setWallBottomE);
-  addClassMethod(Wall.prototype, "setBottomZ", setZBottom);
-
-  // Sync wall bottom and top elevations between EV and Wall Height
-  addHook("preUpdateWall", preUpdateWallHook);
-
-  CONFIG.GeometryLib.registered.add("Elevation");
-}
+CONFIG.GeometryLib ??= {};
+CONFIG.GeometryLib.proneStatusId = "prone";
+CONFIG.GeometryLib.proneMultiplier = 0.33;
+CONFIG.GeometryLib.visionHeightMultiplier = 1;
 
 /* Elevation handling
 Ignore data.elevation in PointSources (for now)
@@ -436,3 +348,82 @@ function zElevation() { return gridUnitsToPixels(this.elevationE); }
 
 async function setZElevation(value) { return this.setElevationE(pixelsToGridUnits(value)); }
 
+
+// ---- NOTE: PointSource ----- //
+PATCHES.PointSource.ELEVATION.METHODS = {
+  elevationE: pointSourceElevationE,
+  elevationZ: zElevation
+};
+
+PATCHES.PointSource.ELEVATION.METHODS = {
+  setElevationE: setPointSourceElevationE,
+  setElevationZ: setZElevation
+};
+
+// ---- NOTE: VisionSource ----- //
+PATCHES.VisionSource.ELEVATION.GETTERS = { elevationE: visionSourceElevationE };
+PATCHES.VisionSource.ELEVATION.METHODS = { setElevationE: setVisionSourceElevationE };
+
+// ---- NOTE: PlaceableObject ----- //
+PATCHES.PlaceableObject.ELEVATION.GETTERS = {
+  elevationE: placeableObjectElevationE,
+  elevationZ: zElevation
+};
+
+PATCHES.PlaceableObject.ELEVATION.METHODS = {
+  setElevationE: setPlaceableObjectElevationE,
+  setElevationZ: setZElevation
+};
+
+// ---- NOTE: Tile ----- //
+PATCHES.Tile.ELEVATION.HOOKS = {
+  preUpdateTile: preUpdateTileHook,
+  updateTile: updateTileHook,
+  drawTile: drawTileHook
+};
+
+// ---- NOTE: Token ----- //
+PATCHES.Token.ELEVATION.GETTERS = {
+  elevationE: tokenElevationE,
+  elevationZ: zElevation,
+  bottomE: tokenElevationE, // Alias
+  bottomZ: zBottom, // Alias
+  topE: tokenTopE,
+  topZ: zTop,
+  verticalHeight: getTokenVerticalHeight,
+
+  // Prone or "ducking"
+  isProne: getIsProne,
+
+  // Token vision Height
+  visionE: getTokenVisionE,
+  visionZ: getTokenVisionZ,
+  visionHeight: getTokenVisionHeight
+};
+
+PATCHES.Token.ELEVATION.METHODS = {
+  setElevationE: setTokenElevationE,
+  setElevationZ: setZBottom,
+  setBottomE: setTokenElevationE, // Alias
+  setBottomZ: setZBottom, // Alias
+  setVerticalHeight: setTokenVerticalHeight // Async
+};
+
+PATCHES.Token.ELEVATION.HOOKS = { preUpdateToken: preUpdateTokenHook };
+
+// ---- NOTE: Wall ----- //
+PATCHES.Wall.ELEVATION.GETTERS = {
+  topE: wallTopE,
+  topZ: zTop,
+  bottomE: wallBottomE,
+  bottomZ: zBottom
+};
+
+PATCHES.Wall.ELEVATION.METHODS = {
+  setTopE: setWallTopE,
+  setTopZ: setZTop,
+  setBottomE: setWallBottomE,
+  setBottomZ: setZBottom
+};
+
+PATCHES.Wall.ELEVATION.HOOKS = { preUpdateWall: preUpdateWallHook };

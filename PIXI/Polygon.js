@@ -6,64 +6,8 @@ CONFIG
 */
 "use strict";
 
-import { addClassGetter, addClassMethod } from "../util.js";
-
-// --------- ADD METHODS TO THE PIXI.POLYGON PROTOTYPE ----- //
-export function registerPIXIPolygonMethods() {
-  CONFIG.GeometryLib ??= {};
-  CONFIG.GeometryLib.registered ??= new Set();
-  if ( CONFIG.GeometryLib.registered.has("PIXI.Polygon") ) return;
-
-
-  // ----- Getters/Setters ----- //
-  addClassGetter(PIXI.Polygon.prototype, "area", area);
-  addClassGetter(PIXI.Polygon.prototype, "center", centroid);
-  addClassGetter(PIXI.Polygon.prototype, "isClockwise", isClockwise);
-  addClassGetter(PIXI.Polygon.prototype, "key", key);
-
-  // ----- Iterators ----- //
-  addClassMethod(PIXI.Polygon.prototype, "iterateEdges", iterateEdges);
-  addClassMethod(PIXI.Polygon.prototype, "iteratePoints", iteratePoints);
-
-  // ----- Methods ----- //
-  addClassMethod(PIXI.Polygon.prototype, "toPolygon", function() { return this; });
-  addClassMethod(PIXI.Polygon.prototype, "clean", clean);
-  addClassMethod(PIXI.Polygon.prototype, "clipperClip", clipperClip);
-  addClassMethod(PIXI.Polygon.prototype, "convexhull", convexhull);
-  addClassMethod(PIXI.Polygon.prototype, "equals", equals);
-  addClassMethod(PIXI.Polygon.prototype, "isSegmentEnclosed", isSegmentEnclosed);
-  addClassMethod(PIXI.Polygon.prototype, "linesCross", linesCross);
-  addClassMethod(PIXI.Polygon.prototype, "lineSegmentIntersects", lineSegmentIntersects);
-
-  addClassMethod(PIXI.Polygon.prototype, "pad", pad);
-  addClassMethod(PIXI.Polygon.prototype, "segmentIntersections", segmentIntersections);
-  addClassMethod(PIXI.Polygon.prototype, "pointsBetween", pointsBetween);
-  addClassMethod(PIXI.Polygon.prototype, "translate", translate);
-  addClassMethod(PIXI.Polygon.prototype, "viewablePoints", viewablePoints);
-
-  // Overlap methods
-  addClassMethod(PIXI.Polygon.prototype, "overlaps", overlaps);
-  addClassMethod(PIXI.Polygon.prototype, "_overlapsPolygon", overlapsPolygon);
-  addClassMethod(PIXI.Polygon.prototype, "_overlapsCircle", overlapsCircle);
-
-  // Envelop methods
-  addClassMethod(PIXI.Polygon.prototype, "envelops", envelops);
-  addClassMethod(PIXI.Polygon.prototype, "_envelopsCircle", envelopsCircle);
-  addClassMethod(PIXI.Polygon.prototype, "_envelopsRectangle", envelopsRectangle);
-  addClassMethod(PIXI.Polygon.prototype, "_envelopsPolygon", envelopsPolygon);
-
-  // In v11:
-  // - reverseOrientation
-  // - pointsBetween
-  // - segementIntersections
-
-
-  // ----- Helper/Internal Methods ----- //
-  addClassMethod(PIXI.Polygon.prototype, "scaledArea", scaledArea);
-  // In v11: signedArea
-
-  CONFIG.GeometryLib.registered.add("PIXI.Polygon");
-}
+export const PATCHES = {};
+PATCHES.PIXI = {};
 
 /**
  * Calculate the area of this polygon.
@@ -403,7 +347,7 @@ function envelops(shape) {
  * @param {PIXI.Polygon} other
  * @returns {boolean}
  */
-function overlapsPolygon(other) {
+function _overlapsPolygon(other) {
   const polyBounds = this.getBounds();
   const otherBounds = other.getBounds();
 
@@ -433,7 +377,7 @@ function overlapsPolygon(other) {
  * @param {PIXI.Circle} circle
  * @returns {boolean}
  */
-function overlapsCircle(circle) {
+function _overlapsCircle(circle) {
   // If the circle center is contained, we are done.
   if ( this.contains(circle) ) return true;
 
@@ -458,7 +402,7 @@ function overlapsCircle(circle) {
  * @param {PIXI.Polygon} poly
  * @returns {boolean}
  */
-function envelopsPolygon(poly) {
+function _envelopsPolygon(poly) {
   // Not terribly efficient (sweepline would be better) but simple in concept.
   // Step 1: Check the bounding box.
   // (Could test both bounds, but it would iterate over the second polygon to create bounds.)
@@ -483,7 +427,7 @@ function envelopsPolygon(poly) {
  * @param {PIXI.Rectangle} rect
  * @returns {boolean}
  */
-function envelopsRectangle(rect) {
+function _envelopsRectangle(rect) {
   // Step 1: All 4 points must be contained within.
   const { top, left, right, bottom } = rect;
   if ( !(this.contains(left, top)
@@ -504,7 +448,7 @@ function envelopsRectangle(rect) {
  * @param {PIXI.Rectangle} rect
  * @returns {boolean}
  */
-function envelopsCircle(circle) {
+function _envelopsCircle(circle) {
   // Step 1: Center point must be contained.
   if ( !this.contains(circle.x, circle.y) ) return false;
 
@@ -634,7 +578,7 @@ function translate(dx, dy) {
 function wrapslice(arr, start, end) {
   return end < start
     ? arr.slice(start).concat(arr.slice(0, end))
-    : arr.slice(start, end)
+    : arr.slice(start, end);
 }
 
 /**
@@ -843,3 +787,46 @@ function equals(other) {
 
   return true;
 }
+
+
+PATCHES.PIXI.GETTERS = {
+  area,
+  center: centroid,
+  isClockwise,
+  key
+};
+
+PATCHES.PIXI.METHODS = {
+  // Iterators
+  iterateEdges,
+  iteratePoints,
+
+  // Other methods
+  toPolygon: function() { return this; },
+  clean,
+  clipperClip,
+  convexhull,
+  equals,
+  isSegmentEnclosed,
+  linesCross,
+  lineSegmentIntersects,
+  pad,
+  segmentIntersections,
+  pointsBetween,
+  translate,
+  viewablePoints,
+
+  // Overlap methods
+  overlaps,
+  _overlapsPolygon,
+  _overlapsCircle,
+
+  // Envelop methods
+  envelops,
+  _envelopsCircle,
+  _envelopsRectangle,
+  _envelopsPolygon,
+
+  // Helper/internal methods
+  scaledArea
+};

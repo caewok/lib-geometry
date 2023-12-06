@@ -3,14 +3,23 @@ canvas,
 FormDataExtended,
 foundry,
 game,
-Hooks,
-libWrapper,
 renderTemplate
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
 import { MODULE_ID } from "../const.js";
+import { PATCHER } from "./registration.js";
+
+const PATCHES = {};
+PATCHES.Tile = {};
+PATCHES.Tile.TILE_CONFIG = {};
+PATCHES.AmbientLight = {};
+PATCHES.AmbientLight.AMBIENT_LIGHT_CONFIG = {};
+PATCHES.AmbientSound = {};
+PATCHES.AmbientSound.AMBIENT_SOUND_CONFIG = {};
+PATCHES.MeasuredTemplate = {};
+PATCHES.MeasuredTemplate.MEASURED_TEMPLATE_CONFIG = {};
 
 // Optional placeable configurations for elevation.
 // Walls handled by Wall Height.
@@ -36,14 +45,6 @@ const LEGEND_LABELS = {
   MeasuredTemplate: []
 };
 
-/** @type {enum: function} */
-const HOOK_FUNCTIONS = {
-  Tile: renderTileConfigHook,
-  AmbientLight: renderAmbientLightConfigHook,
-  AmbientSound: renderAmbientSoundConfigHook,
-  MeasuredTemplate: renderMeasuredTemplateConfigHook
-};
-
 /**
  * Cause the requested placeable type to add an elevation configuration to its config app.
  * If already requested, additional modules will be added to the legend to track who did what.
@@ -56,18 +57,13 @@ export function registerElevationConfig(type, moduleLabel) {
   LEGEND_LABELS[type].push(`${moduleLabel}`);
   if ( CONFIG_REGISTERED[type] ) return;
 
-  // Add hook for rendering the config and if necessary, wrap additional methods.
-  Hooks.on(`render${type}Config`, HOOK_FUNCTIONS[type]);
-  switch ( type ) {
-    case "Tile": libWrapper.register(MODULE_ID, "TileConfig.prototype._onChangeInput", _onChangeInputTileConfig, libWrapper.WRAPPER); break;
-    case "AmbientSound": libWrapper.register(MODULE_ID, "AmbientSoundConfig.defaultOptions", defaultOptionsAmbientSoundConfig, libWrapper.WRAPPER); break;
-  }
+  PATCHER.registerGroup({ [type]: PATCHES[type] });
 }
 
 /**
  * Inject html to add controls to the ambient light configuration to allow user to set elevation.
  */
-async function renderAmbientLightConfigHook(app, html, data) {
+async function renderAmbientLightConfig(app, html, data) {
   const findString = "div[data-tab='basic']:last";
   addConfigData(data, "AmbientLight");
   await injectConfiguration(app, html, data, TEMPLATE, findString);
@@ -76,7 +72,7 @@ async function renderAmbientLightConfigHook(app, html, data) {
 /**
  * Inject html to add controls to the ambient sound configuration to allow user to set elevation.
  */
-async function renderAmbientSoundConfigHook(app, html, data) {
+async function renderAmbientSoundConfig(app, html, data) {
   const findString = ".form-group:last";
   addConfigData(data, "AmbientSound");
   await injectConfiguration(app, html, data, TEMPLATE, findString);
@@ -84,14 +80,14 @@ async function renderAmbientSoundConfigHook(app, html, data) {
 /**
  * Inject html to add controls to the tile configuration to allow user to set elevation.
  */
-async function renderTileConfigHook(app, html, data) {
+async function renderTileConfig(app, html, data) {
   const findString = "div[data-tab='basic']:last";
   addConfigData(data, "Tile");
   data.gridUnits = canvas.scene.grid.units || game.i18n.localize("GridUnits");
   await injectConfiguration(app, html, data, TEMPLATE, findString);
 }
 
-async function renderMeasuredTemplateConfigHook(app, html, data) {
+async function renderMeasuredTemplateConfig(app, html, data) {
   const findString = "div[data-tab='basic']:last";
   addConfigData(data, "MeasuredTemplate");
   await injectConfiguration(app, html, data, TEMPLATE, findString);
@@ -156,3 +152,14 @@ async function _onChangeInputTileConfig(wrapper, event) {
   foundry.utils.mergeObject(this.document, foundry.utils.expandObject(fdo));
   this.document.object.refresh();
 }
+
+
+PATCHES.Tile.TILE_CONFIG.WRAPS = { _onChangeInputTileConfig };
+PATCHES.Tile.TILE_CONFIG.HOOKS = { renderTileConfig };
+
+PATCHES.AmbientLight.AMBIENT_LIGHT_CONFIG.HOOKS = { renderAmbientLightConfig };
+
+PATCHES.AmbientSound.AMBIENT_SOUND_CONFIG.HOOKS = { renderAmbientSoundConfig };
+PATCHES.AmbientSound.AMBIENT_SOUND_CONFIG.STATIC_WRAPS = { defaultOptions: defaultOptionsAmbientSoundConfig };
+
+PATCHES.MeasuredTemplate.MEASURED_TEMPLATE_CONFIG.HOOKS = { renderMeasuredTemplateConfig };
