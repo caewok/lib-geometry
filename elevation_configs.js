@@ -12,14 +12,14 @@ import { MODULE_ID } from "../const.js";
 import { PATCHER } from "./registration.js";
 
 const PATCHES = {};
-PATCHES.Tile = {};
-PATCHES.Tile.TILE_CONFIG = {};
-PATCHES.AmbientLight = {};
-PATCHES.AmbientLight.AMBIENT_LIGHT_CONFIG = {};
-PATCHES.AmbientSound = {};
-PATCHES.AmbientSound.AMBIENT_SOUND_CONFIG = {};
-PATCHES.MeasuredTemplate = {};
-PATCHES.MeasuredTemplate.MEASURED_TEMPLATE_CONFIG = {};
+PATCHES.TileConfig = {};
+PATCHES.TileConfig.TileConfig = {};
+PATCHES.AmbientLightConfig = {};
+PATCHES.AmbientLightConfig.AmbientLightConfig = {};
+PATCHES.AmbientSoundConfig = {};
+PATCHES.AmbientSoundConfig.AmbientSoundConfig = {};
+PATCHES.MeasuredTemplateConfig = {};
+PATCHES.MeasuredTemplateConfig.MeasuredTemplateConfig = {};
 
 // Optional placeable configurations for elevation.
 // Walls handled by Wall Height.
@@ -29,35 +29,27 @@ PATCHES.MeasuredTemplate.MEASURED_TEMPLATE_CONFIG = {};
 
 const TEMPLATE = `modules/${MODULE_ID}/scripts/geometry/templates/placeable-elevation-config.html`;
 
-/** @type {enum: boolean} */
-const CONFIG_REGISTERED = {
-  Tile: false,
-  AmbientLight: false,
-  AmbientSound: false,
-  MeasuredTemplate: false
-};
-
 /** @type {enum: string} */
 const LEGEND_LABELS = {
-  Tile: [],
-  AmbientLight: [],
-  AmbientSound: [],
-  MeasuredTemplate: []
+  TileConfig: [],
+  AmbientLightConfig: [],
+  AmbientSoundConfig: [],
+  MeasuredTemplateConfig: []
 };
 
 /**
  * Cause the requested placeable type to add an elevation configuration to its config app.
  * If already requested, additional modules will be added to the legend to track who did what.
- * @param {string} type           One of Tile|AmbientLight|AmbientSound|MeasuredTemplate
+ * @param {string} type           One of TileConfig|AmbientLightConfig|AmbientSoundConfig|MeasuredTemplateConfig
  * @param {string} [moduleLabel]  Localized module label. Defaults to the localized module key.
  */
 export function registerElevationConfig(type, moduleLabel) {
   // Add this module label to the legend.
   moduleLabel ??= game.i18n.localize(MODULE_ID);
   LEGEND_LABELS[type].push(`${moduleLabel}`);
-  if ( CONFIG_REGISTERED[type] ) return;
-
-  PATCHER.registerGroup({ [type]: PATCHES[type] });
+  if ( PATCHER.groupIsRegistered(type) ) return;
+  PATCHER.addPatches({ [type]: PATCHES[type] });
+  PATCHER.registerGroup(type);
 }
 
 /**
@@ -65,7 +57,7 @@ export function registerElevationConfig(type, moduleLabel) {
  */
 async function renderAmbientLightConfig(app, html, data) {
   const findString = "div[data-tab='basic']:last";
-  addConfigData(data, "AmbientLight");
+  addConfigData(data, "AmbientLightConfig");
   await injectConfiguration(app, html, data, TEMPLATE, findString);
 }
 
@@ -74,7 +66,7 @@ async function renderAmbientLightConfig(app, html, data) {
  */
 async function renderAmbientSoundConfig(app, html, data) {
   const findString = ".form-group:last";
-  addConfigData(data, "AmbientSound");
+  addConfigData(data, "AmbientSoundConfig");
   await injectConfiguration(app, html, data, TEMPLATE, findString);
 }
 /**
@@ -82,14 +74,14 @@ async function renderAmbientSoundConfig(app, html, data) {
  */
 async function renderTileConfig(app, html, data) {
   const findString = "div[data-tab='basic']:last";
-  addConfigData(data, "Tile");
+  addConfigData(data, "TileConfig");
   data.gridUnits = canvas.scene.grid.units || game.i18n.localize("GridUnits");
   await injectConfiguration(app, html, data, TEMPLATE, findString);
 }
 
 async function renderMeasuredTemplateConfig(app, html, data) {
   const findString = "div[data-tab='basic']:last";
-  addConfigData(data, "MeasuredTemplate");
+  addConfigData(data, "MeasuredTemplateConfig");
   await injectConfiguration(app, html, data, TEMPLATE, findString);
 }
 
@@ -154,12 +146,12 @@ async function _onChangeInputTileConfig(wrapper, event) {
 }
 
 
-PATCHES.Tile.TILE_CONFIG.WRAPS = { _onChangeInputTileConfig };
-PATCHES.Tile.TILE_CONFIG.HOOKS = { renderTileConfig };
+PATCHES.TileConfig.TileConfig.WRAPS = { _onChangeInput: _onChangeInputTileConfig };
+PATCHES.TileConfig.TileConfig.HOOKS = { renderTileConfig };
 
-PATCHES.AmbientLight.AMBIENT_LIGHT_CONFIG.HOOKS = { renderAmbientLightConfig };
+PATCHES.AmbientLightConfig.AmbientLightConfig.HOOKS = { renderAmbientLightConfig };
 
-PATCHES.AmbientSound.AMBIENT_SOUND_CONFIG.HOOKS = { renderAmbientSoundConfig };
-PATCHES.AmbientSound.AMBIENT_SOUND_CONFIG.STATIC_WRAPS = { defaultOptions: defaultOptionsAmbientSoundConfig };
+PATCHES.AmbientSoundConfig.AmbientSoundConfig.HOOKS = { renderAmbientSoundConfig };
+PATCHES.AmbientSoundConfig.AmbientSoundConfig.STATIC_WRAPS = { defaultOptions: defaultOptionsAmbientSoundConfig };
 
-PATCHES.MeasuredTemplate.MEASURED_TEMPLATE_CONFIG.HOOKS = { renderMeasuredTemplateConfig };
+PATCHES.MeasuredTemplateConfig.MeasuredTemplateConfig.HOOKS = { renderMeasuredTemplateConfig };
