@@ -9,7 +9,7 @@ renderTemplate
 "use strict";
 
 import { MODULE_ID } from "../const.js";
-import { PATCHER } from "./registration.js";
+import { registerGeometry } from "./registration.js";
 
 const PATCHES = {};
 PATCHES.TileConfig = {};
@@ -44,6 +44,9 @@ const LEGEND_LABELS = {
  * @param {string} [moduleLabel]  Localized module label. Defaults to the localized module key.
  */
 export function registerElevationConfig(type, moduleLabel) {
+  if ( !CONFIG.GeometryLib?.PATCHER ) registerGeometry();
+  const PATCHER = CONFIG.GeometryLib.PATCHER;
+
   // Add this module label to the legend.
   moduleLabel ??= game.i18n.localize(MODULE_ID);
   LEGEND_LABELS[type].push(`${moduleLabel}`);

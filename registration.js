@@ -75,12 +75,10 @@ const PATCHES = {
   "Wall": PATCHES_ELEVATION.Wall
 }
 
-export const PATCHER = new Patcher(PATCHES);
-
 export function registerGeometry() {
   CONFIG.GeometryLib ??= {};
   CONFIG.GeometryLib.registered ??= new Set();
-  CONFIG.GeometryLib.PATCHER ??= PATCHER;
+  CONFIG.GeometryLib.PATCHER ??= new Patcher(PATCHES);;
 
   const currentVersion = CONFIG.GeometryLib.version;
   if ( currentVersion && !foundry.utils.isNewerVersion(VERSION, currentVersion) ) return;
@@ -107,8 +105,8 @@ export function registerGeometry() {
 
 function deRegister() {
   CONFIG.GeometryLib.registered?.clear();
-  PATCHER.deregisterGroup("ELEVATION");
-  PATCHER.deregisterGroup("PIXI");
+  CONFIG.GeometryLib.PATCHER.deregisterGroup("ELEVATION");
+  CONFIG.GeometryLib.PATCHER.deregisterGroup("PIXI");
 }
 
 export function registerGraph() {
@@ -125,11 +123,11 @@ export function registerElevationAdditions() {
   CONFIG.GeometryLib.proneStatusId = "prone";
   CONFIG.GeometryLib.proneMultiplier = 0.33;
   CONFIG.GeometryLib.visionHeightMultiplier = 1;
-  PATCHER.registerGroup("ELEVATION");
+  CONFIG.GeometryLib.PATCHER.registerGroup("ELEVATION");
 }
 
 export function registerPIXIMethods() {
-  PATCHER.registerGroup("PIXI");
+  CONFIG.GeometryLib.PATCHER.registerGroup("PIXI");
 }
 
 export function registerCenteredPolygons() {
