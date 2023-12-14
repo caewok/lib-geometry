@@ -46,10 +46,11 @@ const LEGEND_LABELS = {
 export function registerElevationConfig(type, moduleLabel) {
   if ( !CONFIG.GeometryLib?.PATCHER ) registerGeometry();
   const PATCHER = CONFIG.GeometryLib.PATCHER;
+  PATCHER.LEGEND_LABELS ??= LEGEND_LABELS;
 
   // Add this module label to the legend.
   moduleLabel ??= game.i18n.localize(MODULE_ID);
-  LEGEND_LABELS[type].push(`${moduleLabel}`);
+  PATCHER.LEGEND_LABELS[type].push(`${moduleLabel}`);
   if ( PATCHER.groupIsRegistered(type) ) return;
   PATCHER.addPatches({ [type]: PATCHES[type] });
   PATCHER.registerGroup(type);
