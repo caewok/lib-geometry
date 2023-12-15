@@ -416,7 +416,7 @@ PATCHES.PIXI.GETTERS = {
 
 PATCHES.PIXI.STATIC_METHODS = {
   midPoint,
-  fromAngleStatic,
+  fromAngle: fromAngleStatic,
   distanceBetween,
   distanceSquaredBetween,
   angleBetween,
