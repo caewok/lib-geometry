@@ -1,8 +1,10 @@
 /* globals
 canvas,
+CONFIG,
 FormDataExtended,
 foundry,
 game,
+libWrapper,
 renderTemplate
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
@@ -10,22 +12,17 @@ renderTemplate
 
 import { MODULE_ID } from "../const.js";
 import { registerGeometry } from "./registration.js";
-
-const PATCHES = {};
-PATCHES.TileConfig = {};
-PATCHES.TileConfig.TileConfig = {};
-PATCHES.AmbientLightConfig = {};
-PATCHES.AmbientLightConfig.AmbientLightConfig = {};
-PATCHES.AmbientSoundConfig = {};
-PATCHES.AmbientSoundConfig.AmbientSoundConfig = {};
-PATCHES.MeasuredTemplateConfig = {};
-PATCHES.MeasuredTemplateConfig.MeasuredTemplateConfig = {};
+import { HookPatch, LibWrapperPatch } from "../Patcher.js";
 
 // Optional placeable configurations for elevation.
 // Walls handled by Wall Height.
 // AmbientLight
 // Tile
 // MeasuredTemplate
+
+const group = "ELEVATION_CONFIG";
+const perf_mode = "FAST";
+const PATCHES = {};
 
 const TEMPLATE = `modules/${MODULE_ID}/scripts/geometry/templates/placeable-elevation-config.html`;
 
@@ -45,15 +42,15 @@ const LEGEND_LABELS = {
  */
 export function registerElevationConfig(type, moduleLabel) {
   if ( !CONFIG.GeometryLib?.PATCHER ) registerGeometry();
+
   const PATCHER = CONFIG.GeometryLib.PATCHER;
   PATCHER.LEGEND_LABELS ??= LEGEND_LABELS;
 
   // Add this module label to the legend.
   moduleLabel ??= game.i18n.localize(MODULE_ID);
   PATCHER.LEGEND_LABELS[type].push(`${moduleLabel}`);
-  if ( PATCHER.groupIsRegistered(type) ) return;
-  PATCHER.addPatchesFromRegistrationObject({ [type]: PATCHES[type] });
-  PATCHER.registerGroup(type);
+  for ( const patch of PATCHES[type] ) PATCHER.addPatch(patch);
+  PATCHER.registerGroup(group);
 }
 
 /**
@@ -149,13 +146,22 @@ async function _onChangeInputTileConfig(wrapper, event) {
   this.document.object.refresh();
 }
 
+const cfg = { group, perf_mode };
 
-PATCHES.TileConfig.TileConfig.WRAPS = { _onChangeInput: _onChangeInputTileConfig };
-PATCHES.TileConfig.TileConfig.HOOKS = { renderTileConfig };
+PATCHES.TileConfig = [
+  HookPatch.create("renderTileConfig", renderTileConfig, cfg),
+  LibWrapperPatch.create("TileConfig.prototype._onChangeInput", _onChangeInputTileConfig, cfg)
+];
 
-PATCHES.AmbientLightConfig.AmbientLightConfig.HOOKS = { renderAmbientLightConfig };
+PATCHES.AmbientLightConfig = [
+  HookPatch.create("renderAmbientLightConfig", renderAmbientLightConfig, cfg)
+];
 
-PATCHES.AmbientSoundConfig.AmbientSoundConfig.HOOKS = { renderAmbientSoundConfig };
-PATCHES.AmbientSoundConfig.AmbientSoundConfig.STATIC_WRAPS = { defaultOptions: defaultOptionsAmbientSoundConfig };
+PATCHES.AmbientSoundConfig = [
+  HookPatch.create("renderAmbientSoundConfig", renderAmbientSoundConfig, cfg),
+  LibWrapperPatch.create("AmbientSoundConfig.defaultOptions", defaultOptionsAmbientSoundConfig, cfg)
+];
 
-PATCHES.MeasuredTemplateConfig.MeasuredTemplateConfig.HOOKS = { renderMeasuredTemplateConfig };
+PATCHES.MeasuredTemplateConfig = [
+  HookPatch.create("renderMeasuredTemplateConfig", renderMeasuredTemplateConfig, cfg)
+];
