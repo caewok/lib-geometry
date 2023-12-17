@@ -52,7 +52,7 @@ export function registerElevationConfig(type, moduleLabel) {
   moduleLabel ??= game.i18n.localize(MODULE_ID);
   PATCHER.LEGEND_LABELS[type].push(`${moduleLabel}`);
   if ( PATCHER.groupIsRegistered(type) ) return;
-  PATCHER.addPatches({ [type]: PATCHES[type] });
+  PATCHER.addPatchesFromRegistrationObject({ [type]: PATCHES[type] });
   PATCHER.registerGroup(type);
 }
 

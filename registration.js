@@ -78,7 +78,10 @@ const PATCHES = {
 export function registerGeometry() {
   CONFIG.GeometryLib ??= {};
   CONFIG.GeometryLib.registered ??= new Set();
-  CONFIG.GeometryLib.PATCHER ??= new Patcher(PATCHES);;
+  if ( !CONFIG.GeometryLib.PATCHER ) {
+    const PATCHER = CONFIG.GeometryLib.PATCHER = new Patcher();
+    PATCHER.addPatchesFromRegistrationObject(PATCHES);
+  }
 
   const currentVersion = CONFIG.GeometryLib.version;
   if ( currentVersion && !foundry.utils.isNewerVersion(VERSION, currentVersion) ) return;
