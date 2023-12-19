@@ -82,7 +82,7 @@ function clipperClip(poly, { cliptype = ClipperLib.ClipType.ctUnion } = {}) {
  * @param {PIXI.Point[]} points
  * @returns {PIXI.Polygon}
  */
-function convexhull(points) {
+function convexHull(points) {
   const ln = points.length;
   if ( ln <= 1 ) return points;
 
@@ -831,6 +831,6 @@ PATCHES.PIXI.METHODS = {
 };
 
 PATCHES.PIXI.STATIC_METHODS = {
-  convexhull
+  convexHull
 };
 
