@@ -646,7 +646,7 @@ function viewablePoints(origin, { returnKeys = false, outermostOnly = false } = 
   if ( cwPt === ccwPt ) {
     // Should never happen?
     console.warn(`Only one viewablePoint from ${origin.x},${origin.y}.`, this);
-    return cwPt;
+    return [cwPt];
   }
   const ccwIdx = pts.indexOf(ccwPt);
   const cwIdx = pts.indexOf(cwPt);
