@@ -805,7 +805,6 @@ PATCHES.PIXI.METHODS = {
   toPolygon: function() { return this; },
   clean,
   clipperClip,
-  convexhull,
   equals,
   isSegmentEnclosed,
   linesCross,
@@ -830,3 +829,8 @@ PATCHES.PIXI.METHODS = {
   // Helper/internal methods
   scaledArea
 };
+
+PATCHES.PIXI.STATIC_METHODS = {
+  convexhull
+};
+
