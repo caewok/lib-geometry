@@ -5,7 +5,7 @@ Hooks
 */
 "use strict";
 
-const VERSION = "0.2.11";
+const VERSION = "0.2.12";
 
 // Foundry utils
 import { registerFoundryUtilsMethods } from "./util.js";
