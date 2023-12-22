@@ -52,6 +52,11 @@ export class Draw {
     d.segment(...args);
   }
 
+  static connectPoints(...args) {
+    const d = new this();
+    d.connectPoints(...args);
+  }
+
   static shape(...args) {
     const d = new this();
     d.shape(...args);
@@ -96,10 +101,10 @@ export class Draw {
   /**
    * Draw the points of a polygon
    * @param {PIXI.Polygon} poly
-   * @param {object} options    Options to pass to the drawing method.
+   * @param {object} drawingOptions    Options to pass to the drawing method.
    */
-  polygonPoints(poly, options) {
-    for ( const pt of poly.iteratePoints() ) { this.point(pt, options); }
+  polygonPoints(poly, drawingOptions) {
+    for ( const pt of poly.iteratePoints() ) { this.point(pt, drawingOptions); }
   }
 
   /**
@@ -114,6 +119,21 @@ export class Draw {
     this.g.lineStyle(width, color, alpha)
       .moveTo(s.A.x, s.A.y)
       .lineTo(s.B.x, s.B.y);
+  }
+
+  /**
+   * Draw a set of segments defined by points in order, connecting one point to the next.
+   * @param {Point[]} points    Array of {x, y} objects.
+   * @param {object} [drawingOptions]     Options to pass to the drawing method.
+   */
+  connectPoints(points, drawingOptions) {
+    let prevPt = points.at(-1);
+    const nPts = points.length;
+    for ( let i = 0; i < nPts; i += 1 ) {
+      const currPt = points[i];
+      this.segment({A: prevPt, B: currPt}, drawingOptions);
+      prevPt = currPt;
+    }
   }
 
   /**

@@ -1,5 +1,12 @@
-## 0.2.10
+## 0.2.11
+Use source.document instead of source.data.
+Set point sources to max integer elevation if undefined, to mimic infinite height.
 
+## 0.2.10
+Add ShapeHoled classes.
+Add envelop methods.
+Add Draw.removeLabel method.
+Add rectangle union method.
 
 ## 0.2.9
 Catch when `actor.statuses` is undefined.

@@ -197,6 +197,7 @@ export class ClipperPaths {
    */
   simplify() {
     if ( this.paths.length > 1 ) return this;
+    if ( this.paths.length === 0 ) return new PIXI.Polygon();
     return ClipperPaths.polygonToRectangle(this.toPolygons()[0]);
   }
 

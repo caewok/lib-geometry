@@ -1,54 +1,10 @@
 /* globals
-CONFIG,
 PIXI
 */
 "use strict";
 
-import { addClassGetter, addClassMethod } from "../util.js";
-
-// ----------------  ADD METHODS TO THE PIXI.RECTANGLE PROTOTYPE ------------------------
-export function registerPIXIRectangleMethods() {
-  CONFIG.GeometryLib ??= {};
-  CONFIG.GeometryLib.registered ??= new Set();
-  if ( CONFIG.GeometryLib.registered.has("PIXI.Rectangle") ) return;
-
-  // ----- Static methods ----- //
-  addClassMethod(PIXI.Rectangle, "gridRectangles", gridRectangles);
-
-  // ----- Getters/Setters ----- //
-  addClassGetter(PIXI.Rectangle.prototype, "area", area);
-  // center - in v11
-
-  // ----- Iterators ----- //
-  addClassMethod(PIXI.Rectangle.prototype, "iterateEdges", iterateEdges);
-
-  // ----- Methods ----- //
-  // _getEdgeZone - in v11
-  // intersectPolygon - in v11
-  // pointsBetween - in v11
-  // segmentIntersections - in v11
-  addClassMethod(PIXI.Rectangle.prototype, "union", union);
-  addClassMethod(PIXI.Rectangle.prototype, "difference", difference);
-  addClassMethod(PIXI.Rectangle.prototype, "translate", translate);
-  addClassMethod(PIXI.Rectangle.prototype, "viewablePoints", viewablePoints);
-
-  // Overlap methods
-  addClassMethod(PIXI.Rectangle.prototype, "overlaps", overlaps);
-  addClassMethod(PIXI.Rectangle.prototype, "_overlapsCircle", overlapsCircle);
-  addClassMethod(PIXI.Rectangle.prototype, "_overlapsPolygon", overlapsPolygon);
-  addClassMethod(PIXI.Rectangle.prototype, "_overlapsRectangle", overlapsRectangle);
-
-  // Envelop methods
-  addClassMethod(PIXI.Rectangle.prototype, "envelops", envelops);
-  addClassMethod(PIXI.Rectangle.prototype, "_envelopsCircle", envelopsCircle);
-  addClassMethod(PIXI.Rectangle.prototype, "_envelopsRectangle", envelopsRectangle);
-  addClassMethod(PIXI.Rectangle.prototype, "_envelopsPolygon", envelopsPolygon);
-
-  // ----- Helper methods ----- //
-  addClassMethod(PIXI.Rectangle.prototype, "scaledArea", scaledArea);
-
-  CONFIG.GeometryLib.registered.add("PIXI.Rectangle");
-}
+export const PATCHES = {};
+PATCHES.PIXI = {};
 
 /**
  * Calculate area of rectangle
@@ -112,7 +68,7 @@ function envelops(shape) {
  * @param {PIXI.Circle} circle
  * @return {boolean}
  */
-function overlapsCircle(circle) {
+function _overlapsCircle(circle) {
   // https://www.geeksforgeeks.org/check-if-any-point-overlaps-the-given-circle-and-rectangle
 
   // {xn,yn} is the nearest point on the rectangle to the circle center
@@ -130,7 +86,7 @@ function overlapsCircle(circle) {
  * @param {PIXI.Polygon} poly
  * @return {boolean}
  */
-function overlapsPolygon(poly) {
+function _overlapsPolygon(poly) {
   if ( poly.contains(this.left, this.top)
     || poly.contains(this.right, this.top)
     || poly.contains(this.left, this.bottom)
@@ -153,7 +109,7 @@ function overlapsPolygon(poly) {
  * @param {PIXI.Rectangle} other
  * @return {boolean}
  */
-function overlapsRectangle(rect) {
+function _overlapsRectangle(rect) {
   // https://www.geeksforgeeks.org/find-two-rectangles-overlap
   // One rectangle is completely above the other
   if ( this.top > rect.bottom || rect.top > this.bottom ) return false;
@@ -169,7 +125,7 @@ function overlapsRectangle(rect) {
  * @param {PIXI.Rectangle} rect
  * @returns {boolean}
  */
-function envelopsRectangle(rect) {
+function _envelopsRectangle(rect) {
   // All 4 points must be contained within.
   const { top, left, right, bottom } = rect;
   return (this.contains(left, top)
@@ -183,7 +139,7 @@ function envelopsRectangle(rect) {
  * @param {PIXI.Circle} circle
  * @returns {boolean}
  */
-function envelopsCircle(circle) {
+function _envelopsCircle(circle) {
   // Center point must be contained.
   if ( !this.contains(circle.x, circle.y) ) return false;
 
@@ -200,7 +156,7 @@ function envelopsCircle(circle) {
  * @param {PIXI.Polygon} poly
  * @returns {boolean}
  */
-function envelopsPolygon(poly) {
+function _envelopsPolygon(poly) {
   // All points of the polygon must be contained in the circle.
   const iter = poly.iteratePoints({ close: false });
   for ( const pt of iter ) {
@@ -422,3 +378,33 @@ function gridRectangles(rect1, rect2) {
     bottomRight: new PIXI.Rectangle(x3, y3, w3, h3)
   };
 }
+
+PATCHES.PIXI.STATIC_METHODS = { gridRectangles };
+
+PATCHES.PIXI.GETTERS = { area };
+
+PATCHES.PIXI.METHODS = {
+  // Iterators
+  iterateEdges,
+
+  // Other methods
+  union,
+  difference,
+  translate,
+  viewablePoints,
+
+  // Overlap methods
+  overlaps,
+  _overlapsCircle,
+  _overlapsPolygon,
+  _overlapsRectangle,
+
+  // Envelop methods
+  envelops,
+  _envelopsCircle,
+  _envelopsRectangle,
+  _envelopsPolygon,
+
+  // Helper methods
+  scaledArea
+};

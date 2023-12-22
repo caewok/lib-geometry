@@ -5,13 +5,7 @@ Hooks
 */
 "use strict";
 
-const VERSION = "0.2.10";
-
-// PIXI
-import { registerPIXIPolygonMethods } from "./PIXI/Polygon.js";
-import { registerPIXICircleMethods } from "./PIXI/Circle.js";
-import { registerPIXIRectangleMethods } from "./PIXI/Rectangle.js";
-import { registerPIXIPointMethods } from "./PIXI/Point.js";
+const VERSION = "0.2.11";
 
 // Foundry utils
 import { registerFoundryUtilsMethods } from "./util.js";
@@ -51,26 +45,56 @@ import { Shadow, ShadowProjection } from "./Shadow.js";
 // ClipperPaths
 import { ClipperPaths } from "./ClipperPaths.js";
 
-// Elevation
-import { registerElevationAdditions } from "./elevation.js";
-
 // Graph
 import { Graph, GraphVertex, GraphEdge } from "./Graph.js";
+
+// Patcher
+import { Patcher } from "../Patcher.js";
+
+// PIXI
+import { PATCHES as PATCHES_Circle } from "./PIXI/Circle.js";
+import { PATCHES as PATCHES_Point } from "./PIXI/Point.js";
+import { PATCHES as PATCHES_Polygon } from "./PIXI/Polygon.js";
+import { PATCHES as PATCHES_Rectangle } from "./PIXI/Rectangle.js";
+
+// Elevation
+import { PATCHES as PATCHES_ELEVATION } from "./elevation.js";
+
+const PATCHES = {
+  "PIXI.Circle": PATCHES_Circle,
+  "PIXI.Point": PATCHES_Point,
+  "PIXI.Polygon": PATCHES_Polygon,
+  "PIXI.Rectangle": PATCHES_Rectangle,
+
+  // Elevation patches.
+  "PointSource": PATCHES_ELEVATION.PointSource,
+  "VisionSource": PATCHES_ELEVATION.VisionSource,
+  "PlaceableObject": PATCHES_ELEVATION.PlaceableObject,
+  "Tile": PATCHES_ELEVATION.Tile,
+  "Token": PATCHES_ELEVATION.Token,
+  "Wall": PATCHES_ELEVATION.Wall
+}
 
 export function registerGeometry() {
   CONFIG.GeometryLib ??= {};
   CONFIG.GeometryLib.registered ??= new Set();
+  if ( !CONFIG.GeometryLib.PATCHER ) {
+    const PATCHER = CONFIG.GeometryLib.PATCHER = new Patcher();
+    PATCHER.addPatchesFromRegistrationObject(PATCHES);
+  }
 
   const currentVersion = CONFIG.GeometryLib.version;
   if ( currentVersion && !foundry.utils.isNewerVersion(VERSION, currentVersion) ) return;
   if ( currentVersion ) deRegister();
   CONFIG.GeometryLib.version = VERSION;
 
-  registerFoundryUtilsMethods();
+  // Patches
   registerPIXIMethods();
-  register3d();
-
   registerElevationAdditions();
+
+  // New classes
+  registerFoundryUtilsMethods();
+  register3d();
   registerCenteredPolygons();
   registerRegularPolygons();
   registerDraw();
@@ -78,17 +102,14 @@ export function registerGeometry() {
   registerShadow();
   registerMatrix();
   registerClipperPaths();
-  register3d();
   registerGraph();
   registerShapeHoled();
 }
 
-
 function deRegister() {
   CONFIG.GeometryLib.registered?.clear();
-  if ( !CONFIG.GeometryLib.hooks ) return;
-  CONFIG.GeometryLib.hooks.forEach((name, id) => Hooks.off(name, id));
-  CONFIG.GeometryLib.hooks.clear();
+  CONFIG.GeometryLib.PATCHER.deregisterGroup("ELEVATION");
+  CONFIG.GeometryLib.PATCHER.deregisterGroup("PIXI");
 }
 
 export function registerGraph() {
@@ -100,11 +121,16 @@ export function registerGraph() {
   };
 }
 
+export function registerElevationAdditions() {
+  CONFIG.GeometryLib ??= {};
+  CONFIG.GeometryLib.proneStatusId = "prone";
+  CONFIG.GeometryLib.proneMultiplier = 0.33;
+  CONFIG.GeometryLib.visionHeightMultiplier = 1;
+  CONFIG.GeometryLib.PATCHER.registerGroup("ELEVATION");
+}
+
 export function registerPIXIMethods() {
-  registerPIXIPolygonMethods();
-  registerPIXICircleMethods();
-  registerPIXIRectangleMethods();
-  registerPIXIPointMethods();
+  CONFIG.GeometryLib.PATCHER.registerGroup("PIXI");
 }
 
 export function registerCenteredPolygons() {

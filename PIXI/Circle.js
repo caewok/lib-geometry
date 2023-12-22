@@ -1,44 +1,10 @@
 /* globals
-CONFIG,
 PIXI
 */
 "use strict";
 
-import { addClassGetter, addClassMethod } from "../util.js";
-
-// ----------------  ADD METHODS TO THE PIXI.CIRCLE PROTOTYPE ------------------------
-export function registerPIXICircleMethods() {
-  CONFIG.GeometryLib ??= {};
-  CONFIG.GeometryLib.registered ??= new Set();
-  if ( CONFIG.GeometryLib.registered.has("PIXI.Circle") ) return;
-
-
-  // ----- Getters/Setters ----- //
-  addClassGetter(PIXI.Circle.prototype, "area", area);
-  // center - in v11
-
-  // ----- Methods ----- //
-  // segmentIntersections - in v11
-  // pointAtAngle - in v11
-  addClassMethod(PIXI.Circle.prototype, "angleAtPoint", angleAtPoint);
-  // pointsForArc - in v11
-  // intersectPolygon - in v11
-  // pointsBetween - in v11
-  addClassMethod(PIXI.Circle.prototype, "translate", translate);
-  addClassMethod(PIXI.Circle.prototype, "scaledArea", scaledArea);
-
-  // Overlap methods
-  addClassMethod(PIXI.Circle.prototype, "overlaps", overlaps);
-  addClassMethod(PIXI.Circle.prototype, "_overlapsCircle", overlapsCircle);
-
-  // Envelop methods
-  addClassMethod(PIXI.Circle.prototype, "envelops", envelops);
-  addClassMethod(PIXI.Circle.prototype, "_envelopsCircle", envelopsCircle);
-  addClassMethod(PIXI.Circle.prototype, "_envelopsRectangle", envelopsRectangle);
-  addClassMethod(PIXI.Circle.prototype, "_envelopsPolygon", envelopsPolygon);
-
-  CONFIG.GeometryLib.registered.add("PIXI.Circle");
-}
+export const PATCHES = {};
+PATCHES.PIXI = {};
 
 /**
  * Calculate the angle of a point in relation to a circle.
@@ -114,7 +80,7 @@ function envelops(other) {
  * @param {PIXI.Circle} other
  * @returns {boolean}
  */
-function overlapsCircle(circle) {
+function _overlapsCircle(circle) {
   // Test distance between the two centers.
   // See https://www.geeksforgeeks.org/check-two-given-circles-touch-intersect/#
   const dist2 = PIXI.Point.distanceSquaredBetween(this, circle);
@@ -138,7 +104,7 @@ function overlapsCircle(circle) {
  * @param {PIXI.Circle} other
  * @returns {boolean}
  */
-function envelopsCircle(circle) {
+function _envelopsCircle(circle) {
   // Test distance between the two centers.
   // See https://www.geeksforgeeks.org/check-two-given-circles-touch-intersect/#
   const dist2 = PIXI.Point.distanceSquaredBetween(this, circle);
@@ -152,7 +118,7 @@ function envelopsCircle(circle) {
  * @param {PIXI.Rectangle} rect
  * @returns {boolean}
  */
-function envelopsRectangle(rect) {
+function _envelopsRectangle(rect) {
   // All 4 points of the rectangle must be contained by the circle.
   const { top, left, right, bottom } = rect;
   return (this.contains(left, top)
@@ -166,7 +132,7 @@ function envelopsRectangle(rect) {
  * @param {PIXI.Polygon} poly
  * @returns {boolean}
  */
-function envelopsPolygon(poly) {
+function _envelopsPolygon(poly) {
   // All points of the polygon must be contained in the circle.
   const iter = poly.iteratePoints({ close: false });
   for ( const pt of iter ) {
@@ -174,3 +140,21 @@ function envelopsPolygon(poly) {
   }
   return true;
 }
+
+PATCHES.PIXI.GETTERS = { area };
+
+PATCHES.PIXI.METHODS = {
+  angleAtPoint,
+  translate,
+  scaledArea,
+
+  // Overlap methods
+  overlaps,
+  _overlapsCircle,
+
+  // Envelop methods
+  envelops,
+  _envelopsCircle,
+  _envelopsRectangle,
+  _envelopsPolygon
+};
