@@ -23,6 +23,16 @@ PIXI
  * @property {Point3d} [B.bottom]
  */
 
+/**
+ * An object representing points of a horizontal Tile
+ * @typedef {object} Point3dTile
+ * @property {Point3d} tl
+ * @property {Point3d} tr
+ * @property {Point3d} bl
+ * @property {Point3d} br
+ */
+
+import { Matrix } from "../Matrix.js";
 
 /**
  * 3-D version of PIXI.Point
@@ -135,13 +145,18 @@ export class Point3d extends PIXI.Point {
   /**
    * Determine the center point for the source.
    * @param {PointSource} source
+   * @param {Point3d} [outPoint]    A point-like object in which to store the value.
+   *   (Will create new point if none provided.)
    * @returns {Point3d}
    */
-  static fromPointSource(source) {
-    let { x, y, elevationZ } = source;
-    x ??= source.object.center.x; // Vision sources have no x, y.
-    y ??= source.object.center.y;
-    return new Point3d(x, y, elevationZ);
+  static fromPointSource(source, outPoint) {
+    outPoint ??= new this();
+    const { x, y, elevationZ } = source;
+    outPoint.set(
+      x ?? source.object.center.x, // Vision sources have no x, y.
+      y ?? source.object.center.y,
+      elevationZ);
+    return outPoint;
   }
 
   /**
@@ -152,8 +167,8 @@ export class Point3d extends PIXI.Point {
   static fromToken(token) {
     const { x, y } = token.center;
     return {
-      top: new Point3d(x, y, token.topZ),
-      bottom: new Point3d(x, y, token.bottomZ)
+      top: new this(x, y, token.topZ),
+      bottom: new this(x, y, token.bottomZ)
     };
   }
 
@@ -161,12 +176,30 @@ export class Point3d extends PIXI.Point {
    * Determine the token exact center point in 3d.
    * For height, uses the average between token bottom and top.
    * @param {Token} token
+   * @param {Point3d} [outPoint]    A point-like object in which to store the value.
+   *   (Will create new point if none provided.)
    * @returns {Point3d}
    */
-  static fromTokenCenter(token) {
+  static fromTokenCenter(token, outPoint) {
+    outPoint ??= new this();
     const { center, bottomZ, topZ } = token;
-    const e = bottomZ + ((topZ - bottomZ) * 0.5);
-    return new Point3d(center.x, center.y, e);
+    const z = bottomZ + ((topZ - bottomZ) * 0.5);
+    outPoint.set(center.x, center.y, z);
+    return outPoint;
+  }
+
+  /**
+   * Determine the token vision point using the token vision multiplier in GeometryLib.
+   * @param {Token} token
+   * @param {Point3d} [outPoint]    A point-like object in which to store the value.
+   *   (Will create new point if none provided.)
+   * @returns {Point3d}
+   */
+  static fromTokenVisionHeight(token, outPoint) {
+    outPoint ??= new this();
+    const { center, visionZ } = token;
+    outPoint.set(center.x, center.y, visionZ);
+    return outPoint;
   }
 
   /**
@@ -189,14 +222,71 @@ export class Point3d extends PIXI.Point {
 
     return {
       A: {
-        top: new Point3d(A.x, A.y, top),
-        bottom: new Point3d(A.x, A.y, bottom)
+        top: new this(A.x, A.y, top),
+        bottom: new this(A.x, A.y, bottom)
       },
       B: {
-        top: new Point3d(B.x, B.y, top),
-        bottom: new Point3d(B.x, B.y, bottom)
+        top: new this(B.x, B.y, top),
+        bottom: new this(B.x, B.y, bottom)
       }
     };
+  }
+
+  /**
+   * Determine the tile corners and elevation.
+   * @param {Tile} tile     Tile to convert to points object
+   * @returns {Point3dTile} Points labeled in line with the tile texture, not necessarily its
+   *   current orientation. So tl is top left of the tile texture before transforms.
+   */
+  static fromTile(tile) {
+    const { elevationZ, bounds, document } = tile;
+    const { width, height, texture, rotation } = document;
+    const { scaleX, scaleY, offsetX, offsetY } = texture;
+
+    // Build the points around 0,0 center.
+    const w1_2 = width * scaleX * 0.5;
+    const h1_2 = height * scaleY * 0.5;
+    const pts = [
+      new Point3d(-w1_2, -h1_2, 0), // TL
+      new Point3d(w1_2, -h1_2, 0),  // TR
+      new Point3d(w1_2, h1_2, 0),   // BL
+      new Point3d(-w1_2, h1_2, 0)   // BR
+    ];
+
+    // Rotate points to match tile rotation.
+    if ( rotation ) {
+      const rotZ = Matrix.rotationZ(Math.toRadians(rotation));
+      pts.forEach(pt => rotZ.multiplyPoint3d(pt, pt));
+    }
+
+    // Translate to canvas position.
+    const center = bounds.center;
+    const trM = Matrix.translation(center.x + offsetX, center.y + offsetY, elevationZ);
+    pts.forEach(pt => trM.multiplyPoint3d(pt, pt));
+
+    return {
+      tl: pts[0],
+      tr: pts[1],
+      br: pts[2],
+      bl: pts[3]
+    };
+  }
+
+  /**
+   * Get the angle between three 2d points, A --> B --> C.
+   * Assumes A|B and B|C have lengths > 0.
+   * See https://mathsathome.com/angle-between-two-vectors/
+   * @param {Point3d} a   First point
+   * @param {Point3d} b   Second point
+   * @param {Point3d} c   Third point
+   * @returns {number}  Angle, in radians
+   */
+  static angleBetween(a, b, c) {
+    const ba = a.subtract(b);
+    const bc = c.subtract(b);
+    const dot = ba.dot(bc);
+    const denom = ba.magnitude() * bc.magnitude();
+    return Math.acos(dot / denom);
   }
 
   /**
@@ -247,13 +337,24 @@ export class Point3d extends PIXI.Point {
   }
 
   /**
-   * Copies `x` and `y` and `z` from the given point into this point
+   * Copies `x` and `y` and `z` from the given point into this point.
    * @param {Point} p - The point to copy from
    * @returns {Point3d} The point instance itself
    */
   copyFrom(p) {
     this.set(p.x, p.y, p.z);
     return this;
+  }
+
+  /**
+   * Copies `x` and `y` and `z` from the given point into this point.
+   * Only copies properties that exist on p.
+   * @param {Point} p - The point to copy from
+   * @returns {Point3d} The point instance itself
+   */
+  copyPartial(p) {
+    if ( Object.hasOwn(p, "z") ) this.z = p.z;
+    return super.copyPartial(p);
   }
 
   /**

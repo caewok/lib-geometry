@@ -6,64 +6,8 @@ CONFIG
 */
 "use strict";
 
-import { addClassGetter, addClassMethod } from "../util.js";
-
-// --------- ADD METHODS TO THE PIXI.POLYGON PROTOTYPE ----- //
-export function registerPIXIPolygonMethods() {
-  CONFIG.GeometryLib ??= {};
-  CONFIG.GeometryLib.registered ??= new Set();
-  if ( CONFIG.GeometryLib.registered.has("PIXI.Polygon") ) return;
-
-
-  // ----- Getters/Setters ----- //
-  addClassGetter(PIXI.Polygon.prototype, "area", area);
-  addClassGetter(PIXI.Polygon.prototype, "center", centroid);
-  addClassGetter(PIXI.Polygon.prototype, "isClockwise", isClockwise);
-  addClassGetter(PIXI.Polygon.prototype, "key", key);
-
-  // ----- Iterators ----- //
-  addClassMethod(PIXI.Polygon.prototype, "iterateEdges", iterateEdges);
-  addClassMethod(PIXI.Polygon.prototype, "iteratePoints", iteratePoints);
-
-  // ----- Methods ----- //
-  addClassMethod(PIXI.Polygon.prototype, "toPolygon", function() { return this; });
-  addClassMethod(PIXI.Polygon.prototype, "clean", clean);
-  addClassMethod(PIXI.Polygon.prototype, "clipperClip", clipperClip);
-  addClassMethod(PIXI.Polygon.prototype, "convexhull", convexhull);
-  addClassMethod(PIXI.Polygon.prototype, "equals", equals);
-  addClassMethod(PIXI.Polygon.prototype, "isSegmentEnclosed", isSegmentEnclosed);
-  addClassMethod(PIXI.Polygon.prototype, "linesCross", linesCross);
-  addClassMethod(PIXI.Polygon.prototype, "lineSegmentIntersects", lineSegmentIntersects);
-
-  addClassMethod(PIXI.Polygon.prototype, "pad", pad);
-  addClassMethod(PIXI.Polygon.prototype, "segmentIntersections", segmentIntersections);
-  addClassMethod(PIXI.Polygon.prototype, "pointsBetween", pointsBetween);
-  addClassMethod(PIXI.Polygon.prototype, "translate", translate);
-  addClassMethod(PIXI.Polygon.prototype, "viewablePoints", viewablePoints);
-
-  // Overlap methods
-  addClassMethod(PIXI.Polygon.prototype, "overlaps", overlaps);
-  addClassMethod(PIXI.Polygon.prototype, "_overlapsPolygon", overlapsPolygon);
-  addClassMethod(PIXI.Polygon.prototype, "_overlapsCircle", overlapsCircle);
-
-  // Envelop methods
-  addClassMethod(PIXI.Polygon.prototype, "envelops", envelops);
-  addClassMethod(PIXI.Polygon.prototype, "_envelopsCircle", envelopsCircle);
-  addClassMethod(PIXI.Polygon.prototype, "_envelopsRectangle", envelopsRectangle);
-  addClassMethod(PIXI.Polygon.prototype, "_envelopsPolygon", envelopsPolygon);
-
-  // In v11:
-  // - reverseOrientation
-  // - pointsBetween
-  // - segementIntersections
-
-
-  // ----- Helper/Internal Methods ----- //
-  addClassMethod(PIXI.Polygon.prototype, "scaledArea", scaledArea);
-  // In v11: signedArea
-
-  CONFIG.GeometryLib.registered.add("PIXI.Polygon");
-}
+export const PATCHES = {};
+PATCHES.PIXI = {};
 
 /**
  * Calculate the area of this polygon.
@@ -138,7 +82,7 @@ function clipperClip(poly, { cliptype = ClipperLib.ClipType.ctUnion } = {}) {
  * @param {PIXI.Point[]} points
  * @returns {PIXI.Polygon}
  */
-function convexhull(points) {
+function convexHull(points) {
   const ln = points.length;
   if ( ln <= 1 ) return points;
 
@@ -403,7 +347,7 @@ function envelops(shape) {
  * @param {PIXI.Polygon} other
  * @returns {boolean}
  */
-function overlapsPolygon(other) {
+function _overlapsPolygon(other) {
   const polyBounds = this.getBounds();
   const otherBounds = other.getBounds();
 
@@ -433,7 +377,7 @@ function overlapsPolygon(other) {
  * @param {PIXI.Circle} circle
  * @returns {boolean}
  */
-function overlapsCircle(circle) {
+function _overlapsCircle(circle) {
   // If the circle center is contained, we are done.
   if ( this.contains(circle) ) return true;
 
@@ -458,7 +402,7 @@ function overlapsCircle(circle) {
  * @param {PIXI.Polygon} poly
  * @returns {boolean}
  */
-function envelopsPolygon(poly) {
+function _envelopsPolygon(poly) {
   // Not terribly efficient (sweepline would be better) but simple in concept.
   // Step 1: Check the bounding box.
   // (Could test both bounds, but it would iterate over the second polygon to create bounds.)
@@ -483,7 +427,7 @@ function envelopsPolygon(poly) {
  * @param {PIXI.Rectangle} rect
  * @returns {boolean}
  */
-function envelopsRectangle(rect) {
+function _envelopsRectangle(rect) {
   // Step 1: All 4 points must be contained within.
   const { top, left, right, bottom } = rect;
   if ( !(this.contains(left, top)
@@ -504,7 +448,7 @@ function envelopsRectangle(rect) {
  * @param {PIXI.Rectangle} rect
  * @returns {boolean}
  */
-function envelopsCircle(circle) {
+function _envelopsCircle(circle) {
   // Step 1: Center point must be contained.
   if ( !this.contains(circle.x, circle.y) ) return false;
 
@@ -624,6 +568,20 @@ function translate(dx, dy) {
 }
 
 /**
+ * Helper for viewablePoints to slice an array in a circle if the end is before the start.
+ * https://stackoverflow.com/questions/57138153/slice-from-beginning-if-array-ended-javascript
+ * @param {Array} arr       Array to slice
+ * @param {number} start    Starting index
+ * @param {number} end      Ending index. Can be less than start.
+ * @returns {Array}
+ */
+function wrapslice(arr, start, end) {
+  return end < start
+    ? arr.slice(start).concat(arr.slice(0, end))
+    : arr.slice(start, end);
+}
+
+/**
  * Returns the points of the polygon that make up the viewable perimeter
  * as seen from an origin.
  * @param {Point} origin                  Location of the viewer, in 2d.
@@ -633,52 +591,89 @@ function translate(dx, dy) {
  * @returns {Point[]|number[]}
  */
 function viewablePoints(origin, { returnKeys = false, outermostOnly = false } = {}) {
-  // Key point is a line from origin to the point that does not intersect the polygon
+  // Viewable point is a line from origin to the point that does not intersect the polygon
   // the outermost key points are the most ccw and cw of the key points.
-
-  // Possible paths:
-  // 1. n   n   n   key key key
-  // 2. key key key n   n   n
-  // 3. key key n   n   key  <-- last key(s) should be shifted to beginning of array
-  // 4. n   n   key key key n
+  // Get the most clockwise and counterclockwise from the origin point that do not intersect.
+  // Store point keys in a set; for each edge, remove if origin --> point intersects the edge.
+  // Remainder in set are viewable points.
+  // It is possible that if the polygon is not simple, one or more points that are on the
+  // viewable side
 
   const pts = [...this.iteratePoints({ close: false })];
-  const nPts = pts.length;
-  const startKeys = [];
-  const endKeys = [];
 
-  let foundNonKeyFirst = false;
-  let foundNonKeyAfter = false;
-  let foundKey = false;
-  for ( let i = 0; i < nPts; i += 1 ) {
-    let isKey = true;
-    const pt = pts[i];
-
-    for ( const edge of this.iterateEdges() ) {
-      if ( (edge.A.x === pt.x && edge.A.y === pt.y)
-        || (edge.B.x === pt.x && edge.B.y === pt.y) ) continue;
-
-      if ( foundry.utils.lineSegmentIntersects(origin, pt, edge.A, edge.B) ) {
-        isKey = false;
-        break;
-      }
+  // Store a map of the points so we can convert key to the exact point (no rounding).
+  const keyMap = new Map();
+  const keySet = new Set(pts.map(pt => {
+    const key = pt.key;
+    keyMap.set(key, pt);
+    return key;
+  }));
+  for ( const edge of this.iterateEdges() ) {
+    const { A, B } = edge;
+    for ( const key of keySet ) {
+      const pt = keyMap.get(key);
+      if ( A.equals(pt) || B.equals(pt) ) continue;
+      if ( foundry.utils.lineSegmentIntersects(origin, pt, A, B) ) keySet.delete(key);
     }
+  }
+  if ( !keySet.size ) {
+    console.warn(`No viewablePoints from ${origin.x},${origin.y}.`, this);
+    return [];
+  }
 
-    if ( isKey ) {
-      foundKey = true;
-      !foundNonKeyAfter && startKeys.push(i); // eslint-disable-line no-unused-expressions
-      foundNonKeyAfter && endKeys.push(i); // eslint-disable-line no-unused-expressions
-    } else { // !isKey
-      foundNonKeyFirst ||= !foundKey;
-      foundNonKeyAfter ||= foundKey;
-      if ( foundNonKeyFirst && foundKey ) break; // Finished the key sequence
+  // Measure how far each point is clockwise or counterclockwise from the origin --> center line.
+  // The farthest points are the outermost key points.
+  const center = this.center;
+  let cwPt;
+  let ccwPt;
+  let cwScore = Number.POSITIVE_INFINITY;
+  let ccwScore = Number.NEGATIVE_INFINITY;
+  for ( const key of keySet ) {
+    const pt = keyMap.get(key);
+    const score = foundry.utils.orient2dFast(origin, center, pt);
+    if ( score < cwScore ) {
+      cwPt = pt;
+      cwScore = score;
+    }
+    if ( score > ccwScore ) {
+      ccwPt = pt;
+      ccwScore = score;
     }
   }
 
-  // Keep the keys CW, same order as pts
-  let keys = [...endKeys, ...startKeys];
-  if ( outermostOnly ) keys = [keys[0], keys[keys.length - 1]];
-  return returnKeys ? keys : elementsByIndex(pts, keys);
+  // Points are from cwPt to ccwPt
+  // Can use `===` b/c we stored the original points in the map.
+  if ( cwPt === ccwPt ) {
+    // Should never happen?
+    console.warn(`Only one viewablePoint from ${origin.x},${origin.y}.`, this);
+    return [cwPt];
+  }
+  const ccwIdx = pts.indexOf(ccwPt);
+  const cwIdx = pts.indexOf(cwPt);
+  if ( !(~ccwIdx && ~cwIdx) ) {
+    // Should never happen.
+    console.warn(`No viewablePoints from ${origin.x},${origin.y}.`, this);
+    return [];
+  }
+
+  if ( outermostOnly ) {
+    if ( returnKeys ) return [cwIdx, ccwIdx];
+    return [pts[cwIdx], pts[ccwIdx]];
+  }
+  if ( returnKeys ) {
+    // Sequentially number the indices, from cwIdx to ccwIdx. Make sure to wrap counting if needed.
+    const ln = pts.length;
+    const indices = [];
+    for ( let i = 0; i < ln; i += 1 ) {
+      const j = (cwIdx + i) % ln;
+      indices.push(j);
+      if ( j === ccwIdx ) break;
+    }
+    return indices;
+  }
+
+  // Viewable will always be from cwIdx to ccwIdx, not inclusive, b/c that is forward half for origin --> center.
+  return wrapslice(pts, cwIdx, ccwIdx + 1);
 }
 
 /**
@@ -792,3 +787,50 @@ function equals(other) {
 
   return true;
 }
+
+
+PATCHES.PIXI.GETTERS = {
+  area,
+  center: centroid,
+  isClockwise,
+  key
+};
+
+PATCHES.PIXI.METHODS = {
+  // Iterators
+  iterateEdges,
+  iteratePoints,
+
+  // Other methods
+  toPolygon: function() { return this; },
+  clean,
+  clipperClip,
+  equals,
+  isSegmentEnclosed,
+  linesCross,
+  lineSegmentIntersects,
+  pad,
+  segmentIntersections,
+  pointsBetween,
+  translate,
+  viewablePoints,
+
+  // Overlap methods
+  overlaps,
+  _overlapsPolygon,
+  _overlapsCircle,
+
+  // Envelop methods
+  envelops,
+  _envelopsCircle,
+  _envelopsRectangle,
+  _envelopsPolygon,
+
+  // Helper/internal methods
+  scaledArea
+};
+
+PATCHES.PIXI.STATIC_METHODS = {
+  convexHull
+};
+

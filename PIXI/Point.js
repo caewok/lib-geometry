@@ -1,58 +1,13 @@
 /* globals
-CONFIG,
 PIXI,
 foundry
 */
 "use strict";
 
 import { Point3d } from "../3d/Point3d.js";
-import { addClassGetter, addClassMethod } from "../util.js";
 
-// Add methods to PIXI.Point
-export function registerPIXIPointMethods() {
-  CONFIG.GeometryLib ??= {};
-  CONFIG.GeometryLib.registered ??= new Set();
-  if ( CONFIG.GeometryLib.registered.has("PIXI.Point") ) return;
-
-  // ----- Getters/Setters ----- //
-  addClassGetter(PIXI.Point.prototype, "key", key);
-  addClassGetter(PIXI.Point.prototype, "sortKey", sortKey);
-
-  // ----- Static Methods ----- //
-  addClassMethod(PIXI.Point, "midPoint", midPoint);
-  addClassMethod(PIXI.Point, "fromAngle", fromAngleStatic);
-  addClassMethod(PIXI.Point, "distanceBetween", distanceBetween);
-  addClassMethod(PIXI.Point, "distanceSquaredBetween", distanceSquaredBetween);
-  addClassMethod(PIXI.Point, "angleBetween", angleBetween);
-  addClassMethod(PIXI.Point, "flatMapPoints", flatMapPoints);
-  addClassMethod(PIXI.Point, "fromObject", fromObject);
-  addClassMethod(PIXI.Point, "invertKey", invertKey);
-
-  // ----- Methods ----- //
-  addClassMethod(PIXI.Point.prototype, "add", add2d);
-  addClassMethod(PIXI.Point.prototype, "subtract", subtract2d);
-  addClassMethod(PIXI.Point.prototype, "multiply", multiply2d);
-  addClassMethod(PIXI.Point.prototype, "multiplyScalar", multiplyScalar2d);
-  addClassMethod(PIXI.Point.prototype, "dot", dot2d);
-  addClassMethod(PIXI.Point.prototype, "magnitude", magnitude2d);
-  addClassMethod(PIXI.Point.prototype, "magnitudeSquared", magnitudeSquared2d);
-  addClassMethod(PIXI.Point.prototype, "almostEqual", almostEqual2d);
-  addClassMethod(PIXI.Point.prototype, "normalize", normalize);
-  addClassMethod(PIXI.Point.prototype, "to3d", to3d);
-  addClassMethod(PIXI.Point.prototype, "projectToward", projectToward);
-  addClassMethod(PIXI.Point.prototype, "towardsPoint", towardsPoint);
-  addClassMethod(PIXI.Point.prototype, "towardsPointSquared", towardsPointSquared);
-  addClassMethod(PIXI.Point.prototype, "projectToAxisValue", projectToAxisValue);
-  addClassMethod(PIXI.Point.prototype, "translate", translate);
-  addClassMethod(PIXI.Point.prototype, "rotate", rotate);
-  addClassMethod(PIXI.Point.prototype, "roundDecimals", roundDecimals);
-  addClassMethod(PIXI.Point.prototype, "fromAngle", fromAngle);
-
-  // For parallel with Point3d
-  addClassMethod(PIXI.Point.prototype, "to2d", function() { return this; });
-
-  CONFIG.GeometryLib.registered.add("PIXI.Point");
-}
+export const PATCHES = {};
+PATCHES.PIXI = {};
 
 /**
  * Invert a wall key to get the coordinates.
@@ -99,10 +54,12 @@ function fromObject(obj) {
  * @returns {number}  Angle, in radians
  */
 function angleBetween(a, b, c, { clockwiseAngle = false } = {}) {
+  // See https://mathsathome.com/angle-between-two-vectors/
+  // Create new pixi points so that 2d distance works when passing 3d points.
   const ba = new PIXI.Point(a.x - b.x, a.y - b.y);
   const bc = new PIXI.Point(c.x - b.x, c.y - b.y);
   const dot = ba.dot(bc);
-  const denom = PIXI.Point.distanceBetween(a, b) * PIXI.Point.distanceBetween(b, c);
+  const denom = ba.magnitude() * bc.magnitude();
 
   let angle = Math.acos(dot / denom);
   if ( clockwiseAngle && foundry.utils.orient2dFast(a, b, c) > 0 ) angle = (Math.PI * 2) - angle;
@@ -195,6 +152,19 @@ function fromAngle(radians, distance, outPoint) {
 }
 
 /**
+ * Copies `x` and `y` and `z` from the given point into this point.
+ * Only copies properties that exist on p.
+ * So it is permissible to pass, e.g., pt.copyFrom({y: 2}).
+ * @param {Point} p - The point to copy from
+ * @returns {Point3d} The point instance itself
+ */
+function copyPartial(p) {
+  if ( Object.hasOwn(p, "x") ) this.x = p.x;
+  if ( Object.hasOwn(p, "y") ) this.y = p.y;
+  return this;
+}
+
+/**
  * Point between two points on a line
  * @param {PIXI.Point} a
  * @param {PIXI.Point} b
@@ -227,7 +197,7 @@ function to3d({ x = "x", y = "y", z} = {}) {
  *   (Will create new point if none provided.)
  * @returns {PIXI.Point}
  */
-function add2d(other, outPoint) {
+function add(other, outPoint) {
   outPoint ??= new this.constructor();
   outPoint.x = this.x + other.x;
   outPoint.y = this.y + other.y;
@@ -242,7 +212,7 @@ function add2d(other, outPoint) {
  *   (Will create new point if none provided.)
  * @returns {PIXI.Point}
  */
-function subtract2d(other, outPoint) {
+function subtract(other, outPoint) {
   outPoint ??= new this.constructor();
   outPoint.x = this.x - other.x;
   outPoint.y = this.y - other.y;
@@ -258,7 +228,7 @@ function subtract2d(other, outPoint) {
  *   (Will create new point if none provided.)
  * @returns {PIXI.Point}
  */
-function multiply2d(other, outPoint) {
+function multiply(other, outPoint) {
   outPoint ??= new this.constructor();
   outPoint.x = this.x * other.x;
   outPoint.y = this.y * other.y;
@@ -273,7 +243,7 @@ function multiply2d(other, outPoint) {
  *   (Will create new point if none provided.)
  * @returns {PIXI.Point}
  */
-function multiplyScalar2d(scalar, outPoint) {
+function multiplyScalar(scalar, outPoint) {
   outPoint ??= new this.constructor();
   outPoint.x = this.x * scalar;
   outPoint.y = this.y * scalar;
@@ -286,7 +256,7 @@ function multiplyScalar2d(scalar, outPoint) {
  * @param {PIXI.Point} other
  * @return {number}
  */
-function dot2d(other) {
+function dot(other) {
   return (this.x * other.x) + (this.y * other.y);
 }
 
@@ -295,7 +265,7 @@ function dot2d(other) {
  * Square root of the sum of squares of each component.
  * @returns {number}
  */
-function magnitude2d() {
+function magnitude() {
   // Same as Math.sqrt(this.x * this.x + this.y * this.y)
   return Math.hypot(this.x, this.y);
 }
@@ -305,7 +275,7 @@ function magnitude2d() {
  * Avoids square root calculations.
  * @returns {number}
  */
-function magnitudeSquared2d() {
+function magnitudeSquared() {
   return Math.pow(this.x, 2) + Math.pow(this.y, 2);
 }
 
@@ -315,7 +285,7 @@ function magnitudeSquared2d() {
  * @param {number} epsilon
  * @returns {boolean}
  */
-function almostEqual2d(other, epsilon = 1e-08) {
+function almostEqual(other, epsilon = 1e-08) {
   return this.x.almostEqual(other.x, epsilon) && this.y.almostEqual(other.y, epsilon);
 }
 
@@ -370,7 +340,6 @@ function towardsPointSquared(other, distance2, outPoint) {
   this.add(delta.multiplyScalar(t, outPoint), outPoint);
   return outPoint;
 }
-
 
 /**
  * Find the point along a line from this point to another point
@@ -439,3 +408,42 @@ function sortKey() {
   const y = Math.round(this.y);
   return (MAX_TEXTURE_SIZE * x) + y;
 }
+
+PATCHES.PIXI.GETTERS = {
+  key,
+  sortKey
+};
+
+PATCHES.PIXI.STATIC_METHODS = {
+  midPoint,
+  fromAngle: fromAngleStatic,
+  distanceBetween,
+  distanceSquaredBetween,
+  angleBetween,
+  flatMapPoints,
+  fromObject,
+  invertKey
+};
+
+PATCHES.PIXI.METHODS = {
+  add,
+  subtract,
+  multiply,
+  multiplyScalar,
+  copyPartial,
+  dot,
+  magnitude,
+  magnitudeSquared,
+  almostEqual,
+  normalize,
+  to3d,
+  projectToward,
+  towardsPoint,
+  towardsPointSquared,
+  projectToAxisValue,
+  translate,
+  rotate,
+  roundDecimals,
+  fromAngle,
+  to2d: function() { return this; } // For parallel with Point3d.
+};

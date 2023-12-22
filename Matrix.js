@@ -69,6 +69,28 @@ export class Matrix {
     return new Matrix(out);
   }
 
+  toRowMajorArray() { return this.arr.flat(); }
+
+  toColMajorArray() {
+    const nRow = this.dim1;
+    const nCol = this.dim2;
+    const flatArr = Array(nRow * nCol);
+    for ( let c = 0; c < nCol; c += 1 ) {
+      const cIdx = c * nRow;
+      for ( let r = 0; r < nRow; r += 1 ) {
+        flatArr[cIdx + r] = this.arr[r][c];
+      }
+    }
+    return flatArr;
+  }
+
+  toGLSLArray() {
+    // See https://austinmorlan.com/posts/opengl_matrices/
+    // Technically: this.transpose().toColMajorArray().
+    // But that is the same as this.toRowMajorArray().
+    return this.toRowMajorArray();
+  }
+
   static empty(rows, cols) {
     return Matrix.fromFlatArray(new Array(rows * cols), rows, cols);
   }
@@ -97,11 +119,73 @@ export class Matrix {
   }
 
   /**
-   * See https://webglfundamentals.org/webgl/lessons/webgl-3d-camera.html
-   * https://www.scratchapixel.com/lessons/mathematics-physics-for-computer-graphics/lookat-function
-   * https://www.geertarien.com/blog/2017/07/30/breakdown-of-the-lookAt-function-in-OpenGL/
+   * Specifies a viewing frustum in the world coordinate system.
+   * See
+   * https://registry.khronos.org/OpenGL-Refpages/gl2.1/xhtml/gluPerspective.xml
+   * https://gamedev.stackexchange.com/questions/12726/understanding-the-perspective-projection-matrix-in-opengl
+   * http://www.opengl-tutorial.org/beginners-tutorials/tutorial-3-matrices/
+   * http://www.songho.ca/opengl/gl_projectionmatrix.html
+   * https://webglfundamentals.org/webgl/lessons/webgl-3d-perspective.html
+   *
+   * @param {number} fovRadians     Field of view angle, in radians, in the y direction
+   * @param {number} aspect   Aspect ratio that determines fov in the x direction. Ratio of x (width) to y (height).
+   * @param {number} zNear    Distance from the viewer to the near clipping plane (always positive)
+   * @param {number} zFar     Distance from the viewer to the far clipping plane (always positive)
+   * @returns {Matrix} 4x4 Matrix, in row-major format
+   */
+  static perspective(fovRadians, aspect, zNear, zFar) {
+    const f = Math.tan((Math.PI * 0.5) - (0.5 * fovRadians));
+    const rangeInv = 1.0 / (zNear - zFar);
+    const DIAG0 = f / aspect;
+    const DIAG2 = (zNear + zFar) * rangeInv;
+    const A = zNear * zFar * rangeInv * 2;
+    return new Matrix([
+      [DIAG0,   0,    0,      0],
+      [0,       f,    0,      0],
+      [0,       0,    DIAG2,  -1],
+      [0,       0,    A,      0]
+    ]);
+  }
+
+  static perspectiveDegrees(fovDegrees, aspect, zNear, zFar) {
+    return this.perspective(Math.toRadians(fovDegrees), aspect, zNear, zFar);
+  }
+
+  /**
+   * Specifies a perspective matrix.
+   * See
+   * https://registry.khronos.org/OpenGL-Refpages/gl2.1/xhtml/glFrustum.xml
+   *
+   * @param {number} left   Coordinate for left vertical clipping plane
+   * @param {number} right  Coordinate for right vertical clipping plane
+   * @param {number} bottom Coordinate for the bottom horizontal clipping plane
+   * @param {number} top    Coordinate for the top horizontal clipping plane
+   * @param {number} zNear    Distance from the viewer to the near clipping plane (always positive)
+   * @param {number} zFar     Distance from the viewer to the far clipping plane (always positive)
+   * @returns {Matrix} 4x4 Matrix, in row-major format
+   */
+  static frustrum(left, right, bottom, top, zNear, zFar) {
+    const A = (right + left) / (right - left);
+    const B = (top + bottom) / (top - bottom);
+    const C = -((zFar + zNear) / (zFar - zNear));
+    const D = -((2 * zFar * zNear) / (zFar - zNear));
+    return new Matrix([
+      [(2 * zNear) / (right - left),  0,                            A,  0],
+      [0,                             (2 * zNear) / (top - bottom), B,  0],
+      [0,                             0,                            C,  D],
+      [0,                             0,                            -1, 0]
+    ]);
+  }
+
+  /**
    * Construct a camera matrix given the position of the camera, position of the
    * target the camera is observing, the a vector pointing directly up.
+   *
+   * See
+   * https://webglfundamentals.org/webgl/lessons/webgl-3d-camera.html
+   * https://www.scratchapixel.com/lessons/mathematics-physics-for-computer-graphics/lookat-function
+   * https://www.geertarien.com/blog/2017/07/30/breakdown-of-the-lookAt-function-in-OpenGL/
+   *
    * @param {Point3d} cameraPosition
    * @param {Point3d} target
    * @param {Point3d} up
@@ -263,12 +347,12 @@ export class Matrix {
 
     if ( angleX && angleY ) {
       const rotY = Matrix.rotationY(angleY, d3);
-      rot = rot[multFn](rotY, d3);
+      rot = rot[multFn](rotY);
     }
 
     if ( (angleX || angleY) && angleZ ) {
       const rotZ = Matrix.rotationZ(angleZ, d3);
-      rot = rot[multFn](rotZ, d3);
+      rot = rot[multFn](rotZ);
     }
 
     return rot;
@@ -486,8 +570,9 @@ export class Matrix {
    * @returns {Matrix}
    */
   transpose(outMatrix = Matrix.empty(this.dim1, this.dim2)) {
-    outMatrix.arr = Object.keys(this.arr[0]).map(function(c) {
-      return this.arr.map(function(r) { return r[c]; });
+    const arr = this.arr;
+    outMatrix.arr = Object.keys(arr[0]).map(function(c) {
+      return arr.map(function(r) { return r[c]; });
     });
     return outMatrix;
   }
