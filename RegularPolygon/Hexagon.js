@@ -16,26 +16,26 @@ Math.SQRT3 = Math.sqrt(3);
  * @param {Number}  height    Distance from top to bottom, through center.
  */
 export class Hexagon extends RegularPolygon {
-  constructor(origin, radius, { rotation = 0, width, height = 0 } = {}) {
-    radius ??= Math.max(width, height) / 2;
-    if ( width && height > width ) rotation = 90;
+  constructor(origin, radius = 0, { rotation = 0, width = 0, height = 0 } = {}) {
+    if ( !(radius || width || height) ) console.error("Hexagon requires radius, width, or height.");
+
+    // For calculating radius, divide width and height in half.
+    const w = width * 0.5;
+    const h = height * 0.5;
+
+    // Radius is the larger dimension.
+    radius = Math.max(radius, w, h);
+
+    // If height is greater than width, rotate 90º to make a row hexagon.
+    if ( h > w ) rotation += 90;
 
     super(origin, radius, {numSides: 6, rotation});
 
-    switch ( rotation ) {
-      case 0:
-      case 180:
-        this._apothem = height || (Math.SQRT3 * this.radius * 0.5);
-        break;
-
-      case 90:
-      case 270:
-        this._apothem = width || (Math.SQRT3 * this.radius * 0.5);
-        break;
-
-      default:
-        this._apothem = Math.SQRT3 * this.radius * 0.5;
-    }
+    // Apothem is the smaller dimension.
+    if ( height && width ) this._apothem = Math.min(h, w, radius);
+    else if ( height ) this._apothem = Math.min(radius, h);
+    else if ( width ) this._apothem = Math.min(radius, w);
+    else this._apothem =  Math.SQRT3 * this.radius * 0.5;
 
     this.radius2 = Math.pow(this.radius, 2);
   }
