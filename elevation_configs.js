@@ -59,7 +59,7 @@ export function registerElevationConfig(type, moduleLabel) {
 async function renderAmbientLightConfig(app, html, data) {
   const findString = "div[data-tab='basic']:last";
   addConfigData(data, "AmbientLightConfig");
-  await injectConfiguration(app, html, data, TEMPLATE, findString);
+  await injectConfiguration(app, html, data, TEMPLATE, findString, "append");
 }
 
 /**
@@ -68,7 +68,7 @@ async function renderAmbientLightConfig(app, html, data) {
 async function renderAmbientSoundConfig(app, html, data) {
   const findString = ".form-group:last";
   addConfigData(data, "AmbientSoundConfig");
-  await injectConfiguration(app, html, data, TEMPLATE, findString);
+  await injectConfiguration(app, html, data, TEMPLATE, findString, "after");
 }
 /**
  * Inject html to add controls to the tile configuration to allow user to set elevation.
@@ -77,22 +77,22 @@ async function renderTileConfig(app, html, data) {
   const findString = "div[data-tab='basic']:last";
   addConfigData(data, "TileConfig");
   data.gridUnits = canvas.scene.grid.units || game.i18n.localize("GridUnits");
-  await injectConfiguration(app, html, data, TEMPLATE, findString);
+  await injectConfiguration(app, html, data, TEMPLATE, findString, "append");
 }
 
 async function renderMeasuredTemplateConfig(app, html, data) {
-  const findString = "div[data-tab='basic']:last";
+  const findString = "button[type='submit']";
   addConfigData(data, "MeasuredTemplateConfig");
-  await injectConfiguration(app, html, data, TEMPLATE, findString);
+  await injectConfiguration(app, html, data, TEMPLATE, findString, "before");
 }
 
 /**
  * Helper to inject configuration html into the application config.
  */
-async function injectConfiguration(app, html, data, template, findString) {
+async function injectConfiguration(app, html, data, template, findString, attachMethod = "append") {
   const myHTML = await renderTemplate(template, data);
   const form = html.find(findString);
-  form.append(myHTML);
+  form[attachMethod](myHTML);
   app.setPosition(app.position);
 }
 
