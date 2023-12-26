@@ -1,6 +1,13 @@
+## 0.2.12
+Update Hexagon to better handle height/width.
+Edits to make elevation config appear properly in tiles and templates configs.
+Add `lineSegmentIntersects` method to `PIXI.Circle`.
+
 ## 0.2.11
 Use source.document instead of source.data.
 Set point sources to max integer elevation if undefined, to mimic infinite height.
+Use updated Patcher class.
+Add elevation config registration.
 
 ## 0.2.10
 Add ShapeHoled classes.
