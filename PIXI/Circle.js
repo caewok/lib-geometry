@@ -141,12 +141,30 @@ function _envelopsPolygon(poly) {
   return true;
 }
 
+/**
+ * Test whether line segment AB intersects this circle.
+ * Equivalent to PIXI.Rectangle.prototype.lineSegmentIntersects.
+ * @param {Point} a                       The first endpoint of segment AB
+ * @param {Point} b                       The second endpoint of segment AB
+ * @param {object} [options]              Options affecting the intersect test.
+ * @param {boolean} [options.inside]      If true, a line contained within the circle will
+ *                                        return true.
+ * @returns {boolean} True if intersects.
+ */
+function lineSegmentIntersects(a, b, { inside = false } = {}) {
+  const aContained = this.contains(a.x, a.y);
+  const bContained = this.contains(b.x, b.y);
+  if ( aContained && bContained ) return inside;
+  return aContained || bContained;
+}
+
 PATCHES.PIXI.GETTERS = { area };
 
 PATCHES.PIXI.METHODS = {
   angleAtPoint,
   translate,
   scaledArea,
+  lineSegmentIntersects,
 
   // Overlap methods
   overlaps,
