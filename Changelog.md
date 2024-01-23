@@ -1,3 +1,6 @@
+## 0.2.13
+Turn off console warnings for locating visible points.
+
 ## 0.2.12
 Update Hexagon to better handle height/width.
 Edits to make elevation config appear properly in tiles and templates configs.

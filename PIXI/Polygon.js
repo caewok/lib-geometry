@@ -617,7 +617,7 @@ function viewablePoints(origin, { returnKeys = false, outermostOnly = false } = 
     }
   }
   if ( !keySet.size ) {
-    console.warn(`No viewablePoints from ${origin.x},${origin.y}.`, this);
+    // console.warn(`No viewablePoints from ${origin.x},${origin.y}.`, this);
     return [];
   }
 
@@ -645,14 +645,14 @@ function viewablePoints(origin, { returnKeys = false, outermostOnly = false } = 
   // Can use `===` b/c we stored the original points in the map.
   if ( cwPt === ccwPt ) {
     // Should never happen?
-    console.warn(`Only one viewablePoint from ${origin.x},${origin.y}.`, this);
+    // console.warn(`Only one viewablePoint from ${origin.x},${origin.y}.`, this);
     return [cwPt];
   }
   const ccwIdx = pts.indexOf(ccwPt);
   const cwIdx = pts.indexOf(cwPt);
   if ( !(~ccwIdx && ~cwIdx) ) {
     // Should never happen.
-    console.warn(`No viewablePoints from ${origin.x},${origin.y}.`, this);
+    // console.warn(`No viewablePoints from ${origin.x},${origin.y}.`, this);
     return [];
   }
 
