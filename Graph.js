@@ -200,6 +200,20 @@ export class Graph {
   }
 
   /**
+   * Retrieve a specific edge given two vertices.
+   * @param {string} aKey     First vertex key
+   * @param {string} bKey     Other vertex key
+   * @returns {Set<GraphEdge>}
+   */
+  getEdgeByKeys(aKey, bKey) {
+    const aVertex = this.getVertexByKey(aKey);
+    const bVertex = this.getVertexByKey(bKey);
+    const aSet = aVertex?._edgeSet ?? new Set();
+    const bSet = bVertex?._edgeSet ?? new Set();
+    return aSet.intersection(bSet);
+  }
+
+  /**
    * @return {GraphVertex[]}
    */
   getAllVertices() {
