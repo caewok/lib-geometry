@@ -1,6 +1,7 @@
 ## 0.2.14
 Return `PIXI.Point` for edge vertices when iterating edges for `PIXI.Rectangle`.
 Add `iteratePoints` method to `PIXI.Rectangle`.
+Add `constrainedTokenBorder` methods to `Token` along with associated hooks for tracking wall updates.
 
 ## 0.2.13
 Turn off console warnings for locating visible points.

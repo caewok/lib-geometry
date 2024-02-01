@@ -60,6 +60,10 @@ import { PATCHES as PATCHES_Rectangle } from "./PIXI/Rectangle.js";
 // Elevation
 import { PATCHES as PATCHES_ELEVATION } from "./elevation.js";
 
+// Constrained Token Border
+import { PATCHES as PATCHES_Token } from "./Token.js";
+import { PATCHES as PATCHES_ConstrainedTokenBorder } from "./ConstrainedTokenBorder.js";
+
 const PATCHES = {
   "PIXI.Circle": PATCHES_Circle,
   "PIXI.Point": PATCHES_Point,
@@ -71,8 +75,11 @@ const PATCHES = {
   "VisionSource": PATCHES_ELEVATION.VisionSource,
   "PlaceableObject": PATCHES_ELEVATION.PlaceableObject,
   "Tile": PATCHES_ELEVATION.Tile,
-  "Token": PATCHES_ELEVATION.Token,
-  "Wall": PATCHES_ELEVATION.Wall
+  "Wall": PATCHES_ELEVATION.Wall,
+
+  // Elevation and Constrained Token patches
+  "Token": foundry.utils.mergeObject(PATCHES_ELEVATION.Token, PATCHES_Token),
+  "ConstrainedTokenBorder": PATCHES_ConstrainedTokenBorder // Only hooks.
 }
 
 export function registerGeometry() {
@@ -91,6 +98,7 @@ export function registerGeometry() {
   // Patches
   registerPIXIMethods();
   registerElevationAdditions();
+  registerConstrainedTokenBorder();
 
   // New classes
   registerFoundryUtilsMethods();
@@ -131,6 +139,10 @@ export function registerElevationAdditions() {
 
 export function registerPIXIMethods() {
   CONFIG.GeometryLib.PATCHER.registerGroup("PIXI");
+}
+
+export function registerConstrainedTokenBorder() {
+  CONFIG.GeometryLib.PATCHER.registerGroup("CONSTRAINED_TOKEN_BORDER");
 }
 
 export function registerCenteredPolygons() {
