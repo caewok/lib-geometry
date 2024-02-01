@@ -291,19 +291,21 @@ export class Graph {
    * @param {GraphEdge} edge
    */
   deleteEdge(edge) {
-    if ( this.edges.has(edge.key) ) this.edges.delete(edge.key);
-    else {
+    if ( !this.edges.has(edge.key) ) {
       console.warn("Edge not found in graph.");
       return;
     }
+    this.edges.delete(edge.key);
 
-    // TODO: This is probably unnecessary.
     // Locate vertices and delete the associated edge.
     const A = this.getVertexByKey(edge.A.key);
     const B = this.getVertexByKey(edge.B.key);
-
     A.deleteEdge(edge);
     B.deleteEdge(edge);
+
+    // Remove the vertex if the vertex has no edges.
+    if ( !A._edgeSet.size ) this.vertices.delete(A.key);
+    if ( !B._edgeSet.size ) this.vertices.delete(B.key);
   }
 
   /**
