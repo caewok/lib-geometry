@@ -2,6 +2,7 @@
 Return `PIXI.Point` for edge vertices when iterating edges for `PIXI.Rectangle`.
 Add `iteratePoints` method to `PIXI.Rectangle`.
 Add `constrainedTokenBorder` methods to `Token` along with associated hooks for tracking wall updates.
+Remove unconnected vertices after removing edges from a `Graph`.
 
 ## 0.2.13
 Turn off console warnings for locating visible points.
