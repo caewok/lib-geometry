@@ -15,21 +15,37 @@ function area() {
 }
 
 /**
+ * Iterate over the rectangles's {x, y} points in order.
+ * @param {object} [options]
+ * @param {boolean} [options.close]   If close, include the first point again.
+ * @returns {x, y} PIXI.Point
+ */
+function* iteratePoints({close = true} = {}) {
+  const A = new PIXI.Point(this.x, this.y);
+  yield A;
+  yield new PIXI.Point(this.x + this.width, this.y);
+  yield new PIXI.Point(this.x + this.width, this.y + this.height);
+  yield new PIXI.Point(this.x, this.y + this.height);
+  if ( close ) yield A;
+}
+
+/**
  * Iterate over the rectangle's edges in order.
  * (Use close = true to return the last --> first edge.)
  * @param {object} [options]
  * @param {boolean} [close]   If true, return last point --> first point as edge.
- * @returns Return an object { A: {x, y}, B: {x, y}} for each edge
+ * @returns Return an object { A: PIXI.Point, B: PIXI.Point} for each edge
  * Edges link, such that edge0.B === edge.1.A.
  */
 function* iterateEdges({close = true} = {}) {
-  const A = { x: this.x, y: this.y };
-  const B = { x: this.x + this.width, y: this.y };
-  const C = { x: this.x + this.width, y: this.y + this.height };
-  const D = { x: this.x, y: this.y + this.height };
-
+  const A = new PIXI.Point(this.x, this.y);
+  const B = new PIXI.Point(this.x + this.width, this.y);
   yield { A, B };
+
+  const C = new PIXI.Point(this.x + this.width, this.y + this.height);
   yield { A: B, B: C };
+
+  const D = new PIXI.Point(this.x, this.y + this.height);
   yield { A: C, B: D };
   if ( close ) yield { A: D, B: A };
 }
