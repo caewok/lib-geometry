@@ -73,8 +73,8 @@ function angleBetween(a, b, c, { clockwiseAngle = false } = {}) {
  * @returns {number}
  */
 function distanceBetween(a, b) {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
+  const dx = (b.x - a.x) || 0; // In case x is undefined.
+  const dy = (b.y - a.y) || 0;
   return Math.hypot(dx, dy);
 }
 
@@ -85,8 +85,8 @@ function distanceBetween(a, b) {
  * @returns {number}
  */
 function distanceSquaredBetween(a, b) {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
+  const dx = (b.x - a.x) || 0; // In case x is undefined.
+  const dy = (b.y - a.y) || 0;
   return Math.pow(dx, 2) + Math.pow(dy, 2);
 }
 
@@ -171,6 +171,10 @@ function copyPartial(p) {
  * @returns {PIXI.Point}
  */
 function midPoint(a, b) {
+  a.x ||= 0;
+  a.y ||= 0;
+  b.x ||= 0;
+  b.y ||= 0;
   return new this( a.x + ((b.x - a.x) / 2), a.y + ((b.y - a.y) / 2));
 }
 
