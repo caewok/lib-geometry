@@ -98,6 +98,8 @@ export class Point3d extends PIXI.Point {
    */
   static midPoint(a, b) {
     const point = super.midPoint(a, b);
+    a.z ||= 0;
+    b.z ||= 0;
     point.z = a.z + ((b.z - a.z) * 0.5);
     return point;
   }
@@ -123,9 +125,9 @@ export class Point3d extends PIXI.Point {
    * @returns {number}
    */
   static distanceBetween(a, b) {
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const dz = b.z - a.z;
+    const dx = (b.x - a.x) || 0; // In case x is undefined.
+    const dy = (b.y - a.y) || 0;
+    const dz = (b.z - a.z) || 0;
     return Math.hypot(dx, dy, dz);
   }
 
@@ -136,9 +138,9 @@ export class Point3d extends PIXI.Point {
    * @returns {number}
    */
   static distanceSquaredBetween(a, b) {
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const dz = b.z - a.z;
+    const dx = (b.x - a.x) || 0; // In case x is undefined.
+    const dy = (b.y - a.y) || 0;
+    const dz = (b.z - a.z) || 0;
     return Math.pow(dx, 2) + Math.pow(dy, 2) + Math.pow(dz, 2);
   }
 
@@ -413,7 +415,7 @@ export class Point3d extends PIXI.Point {
   add(other, outPoint) {
     outPoint ??= new this.constructor();
     super.add(other, outPoint);
-    outPoint.z = this.z + (other.z ?? 0);
+    outPoint.z = this.z + (other.z || 0);
 
     return outPoint;
   }
@@ -429,7 +431,7 @@ export class Point3d extends PIXI.Point {
   subtract(other, outPoint) {
     outPoint ??= new this.constructor();
     super.subtract(other, outPoint);
-    outPoint.z = this.z - (other.z ?? 0);
+    outPoint.z = this.z - (other.z || 0);
 
     return outPoint;
   }
@@ -445,7 +447,7 @@ export class Point3d extends PIXI.Point {
   multiply(other, outPoint) {
     outPoint ??= new this.constructor();
     super.multiply(other, outPoint);
-    outPoint.z = this.z * (other.z ?? 0);
+    outPoint.z = this.z * (other.z || 0);
 
     return outPoint;
   }
@@ -489,7 +491,7 @@ export class Point3d extends PIXI.Point {
    * @return {number}
    */
   dot(other) {
-    return super.dot(other) + (this.z * (other.z ?? 0));
+    return super.dot(other) + (this.z * (other.z || 0));
   }
 
   /**

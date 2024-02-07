@@ -1,3 +1,7 @@
+## 0.2.15
+Add checks to ensure that when measuring distance between points, missing x, y, or z properties will be treated as 0.
+Switch to faster `||` when testing for missing z properties. Also catches NaN values.
+
 ## 0.2.14
 Return `PIXI.Point` for edge vertices when iterating edges for `PIXI.Rectangle`.
 Add `iteratePoints` method to `PIXI.Rectangle`.
