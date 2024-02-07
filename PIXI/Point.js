@@ -171,6 +171,10 @@ function copyPartial(p) {
  * @returns {PIXI.Point}
  */
 function midPoint(a, b) {
+  a.x ||= 0;
+  a.y ||= 0;
+  b.x ||= 0;
+  b.y ||= 0;
   return new this( a.x + ((b.x - a.x) / 2), a.y + ((b.y - a.y) / 2));
 }
 

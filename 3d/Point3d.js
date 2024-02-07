@@ -98,6 +98,8 @@ export class Point3d extends PIXI.Point {
    */
   static midPoint(a, b) {
     const point = super.midPoint(a, b);
+    a.z ||= 0;
+    b.z ||= 0;
     point.z = a.z + ((b.z - a.z) * 0.5);
     return point;
   }
