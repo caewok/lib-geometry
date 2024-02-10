@@ -118,7 +118,7 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
       const config = {
         source: this._token.vision,
         type: "move",
-        boundaryShapes: [border] };
+        boundaryShapes: [border.toPolygon()] }; // Avoid WeilerAtherton.
 
       const center = this._token.center;
       super.initialize({ x: center.x, y: center.y }, config);
@@ -154,6 +154,9 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
     this.vertices.clear();
     this.edges.clear();
     this.rays.length = 0;
+
+    // If we screwed up, fall back on unrestricted.
+    if ( this.points.length < 6 ) this._unrestricted = true;
   }
 
   /** @override */
