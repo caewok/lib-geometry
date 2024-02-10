@@ -601,65 +601,44 @@ function viewablePoints(origin, { returnKeys = false, outermostOnly = false } = 
 
   const pts = [...this.iteratePoints({ close: false })];
 
-  // Store a map of the points so we can convert key to the exact point (no rounding).
-  const keyMap = new Map();
-  const keySet = new Set(pts.map(pt => {
-    const key = pt.key;
-    keyMap.set(key, pt);
-    return key;
-  }));
-  for ( const edge of this.iterateEdges() ) {
-    const { A, B } = edge;
-    for ( const key of keySet ) {
-      const pt = keyMap.get(key);
-      if ( A.equals(pt) || B.equals(pt) ) continue;
-      if ( foundry.utils.lineSegmentIntersects(origin, pt, A, B) ) keySet.delete(key);
-    }
-  }
-  if ( !keySet.size ) {
-    // console.warn(`No viewablePoints from ${origin.x},${origin.y}.`, this);
-    return [];
-  }
-
   // Measure how far each point is clockwise or counterclockwise from the origin --> center line.
   // The farthest points are the outermost key points.
+  // Farthest points must be viewable, even for non-simple polygons
   const center = this.center;
   let cwPt;
   let ccwPt;
+  let cwIdx = -1;
+  let ccwIdx = -1;
   let cwScore = Number.POSITIVE_INFINITY;
   let ccwScore = Number.NEGATIVE_INFINITY;
-  for ( const key of keySet ) {
-    const pt = keyMap.get(key);
+  const nPoints = pts.length;
+  for ( let i = 0; i < nPoints; i += 1 ) {
+    const pt = pts[i];
     const score = foundry.utils.orient2dFast(origin, center, pt);
     if ( score < cwScore ) {
       cwPt = pt;
       cwScore = score;
+      cwIdx = i;
     }
     if ( score > ccwScore ) {
       ccwPt = pt;
       ccwScore = score;
+      ccwIdx = i;
     }
   }
 
-  // Points are from cwPt to ccwPt
-  // Can use `===` b/c we stored the original points in the map.
-  if ( cwPt === ccwPt ) {
-    // Should never happen?
-    // console.warn(`Only one viewablePoint from ${origin.x},${origin.y}.`, this);
-    return [cwPt];
-  }
-  const ccwIdx = pts.indexOf(ccwPt);
-  const cwIdx = pts.indexOf(cwPt);
-  if ( !(~ccwIdx && ~cwIdx) ) {
-    // Should never happen.
-    // console.warn(`No viewablePoints from ${origin.x},${origin.y}.`, this);
+  if ( !(cwPt && ccwPt) ) {
+    console.warn("viewablePoints|Points not found", this);
     return [];
   }
 
+  if ( cwPt.equals(ccwPt) ) return returnKeys ? [cwIdx] : [cwPt];
+
   if ( outermostOnly ) {
     if ( returnKeys ) return [cwIdx, ccwIdx];
-    return [pts[cwIdx], pts[ccwIdx]];
+    return [cwPt, ccwPt];
   }
+
   if ( returnKeys ) {
     // Sequentially number the indices, from cwIdx to ccwIdx. Make sure to wrap counting if needed.
     const ln = pts.length;
