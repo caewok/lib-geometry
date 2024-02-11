@@ -5,7 +5,7 @@ Hooks
 */
 "use strict";
 
-const VERSION = "0.2.15";
+const VERSION = "0.2.16";
 
 // Foundry utils
 import { registerFoundryUtilsMethods } from "./util.js";
@@ -62,7 +62,7 @@ import { PATCHES as PATCHES_ELEVATION } from "./elevation.js";
 
 // Constrained Token Border
 import { PATCHES as PATCHES_Token } from "./Token.js";
-import { PATCHES as PATCHES_ConstrainedTokenBorder } from "./ConstrainedTokenBorder.js";
+import { PATCHES as PATCHES_ConstrainedTokenBorder, ConstrainedTokenBorder } from "./ConstrainedTokenBorder.js";
 
 const PATCHES = {
   "PIXI.Circle": PATCHES_Circle,
@@ -143,6 +143,7 @@ export function registerPIXIMethods() {
 
 export function registerConstrainedTokenBorder() {
   CONFIG.GeometryLib.PATCHER.registerGroup("CONSTRAINED_TOKEN_BORDER");
+  CONFIG.GeometryLib.ConstrainedTokenBorder = ConstrainedTokenBorder;
 }
 
 export function registerCenteredPolygons() {
