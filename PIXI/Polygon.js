@@ -582,6 +582,36 @@ function wrapslice(arr, start, end) {
 }
 
 /**
+ * Helper function for viewablePoints.
+ * Test if an angle is maximum compared to some other angle
+ * @param {PIXI.Point} pt
+ * @param {PIXI.Point} origin
+ * @param {PIXI.Point} center
+ * @param {number} angle
+ * @param {number} maxAngle
+ * @returns {boolean}
+ */
+function testMaxCWAngle(pt, origin, center, angle, maxAngle) {
+  if ( angle < maxAngle ) return false;
+  if ( foundry.utils.orient2dFast(origin, center, pt) > 0 ) return false; // CCW
+
+  // If the angles are equal, pick the closest point.
+  const dist2Between = PIXI.Point.distanceSquaredBetween;
+  if ( angle === maxAngle ) return dist2Between(origin, pt) < dist2Between(origin, pt);
+  return true;
+}
+
+function testMaxCCWAngle(pt, origin, center, angle, maxAngle) {
+  if ( angle < maxAngle ) return false;
+  if ( foundry.utils.orient2dFast(origin, center, pt) < 0 ) return false; // CW
+
+  // If the angles are equal, pick the closest point.
+  const dist2Between = PIXI.Point.distanceSquaredBetween;
+  if ( angle === maxAngle ) return dist2Between(origin, pt) < dist2Between(origin, pt);
+  return true;
+}
+
+/**
  * Returns the points of the polygon that make up the viewable perimeter
  * as seen from an origin.
  * @param {Point} origin                  Location of the viewer, in 2d.
@@ -591,6 +621,7 @@ function wrapslice(arr, start, end) {
  * @returns {Point[]|number[]}
  */
 function viewablePoints(origin, { returnKeys = false, outermostOnly = false } = {}) {
+
   // Viewable point is a line from origin to the point that does not intersect the polygon
   // the outermost key points are the most ccw and cw of the key points.
   // Get the most clockwise and counterclockwise from the origin point that do not intersect.
@@ -601,33 +632,58 @@ function viewablePoints(origin, { returnKeys = false, outermostOnly = false } = 
 
   const pts = [...this.iteratePoints({ close: false })];
 
-  // Measure how far each point is clockwise or counterclockwise from the origin --> center line.
-  // The farthest points are the outermost key points.
-  // Farthest points must be viewable, even for non-simple polygons
+  // Handle degenerate polygons.
+  // Also, if the polygon contains this origin, use all points of the polygon.
+  // Technically possible for the polygon to be complex and have some points blocked but not relevant
+  // for Foundry use cases.
+  const nPoints = pts.length;
+  if ( nPoints < 3 || this.contains(origin.x, origin.y) ) {
+    // Test if we have a single line segment collinear to the origin; keep the closest point.
+    if ( nPoints === 2 && !foundry.utils.orient2dFast(origin, pts[0], pts[1]) ) {
+      if ( PIXI.Point.distanceSquaredBetween(origin, pts[0]) < PIXI.Point.distanceSquaredBetween(origin, pts[1]) ) pts.pop();
+      else pts.shift();
+    }
+
+    if ( returnKeys ) return Array.fromRange(pts.length);
+    return pts;
+  }
+  // Find the points with the largest angle from center --> origin --> pt.
+  // These form the viewing triangle between origin and polygon.
+  // Widest points on either side of the polygon must be viewable.
+  // A point not viewable on one side of polygon center would be blocked by a point with a
+  // larger angle. Thus the point with the largest angle must be viewable.
+  // If two points have the same angle, pick the closer. (Edge is collinear with origin.)
+  // Only pick points after segregating into cw/ccw.
+
   const center = this.center;
   let cwPt;
   let ccwPt;
   let cwIdx = -1;
   let ccwIdx = -1;
-  let cwScore = Number.POSITIVE_INFINITY;
-  let ccwScore = Number.NEGATIVE_INFINITY;
-  const nPoints = pts.length;
+  let maxCWAngle = Number.NEGATIVE_INFINITY;
+  let maxCCWAngle = Number.NEGATIVE_INFINITY;
+
   for ( let i = 0; i < nPoints; i += 1 ) {
     const pt = pts[i];
-    const score = foundry.utils.orient2dFast(origin, center, pt);
-    if ( score < cwScore ) {
+    const angle = PIXI.Point.angleBetween(center, origin, pt);
+    if ( testMaxCWAngle(pt, origin, center, angle, maxCWAngle) ) {
       cwPt = pt;
-      cwScore = score;
+      maxCWAngle = angle;
       cwIdx = i;
     }
-    if ( score > ccwScore ) {
+    if ( testMaxCCWAngle(pt, origin, center, angle, maxCCWAngle) ) {
       ccwPt = pt;
-      ccwScore = score;
+      maxCCWAngle = angle;
       ccwIdx = i;
     }
   }
 
-  if ( !(cwPt && ccwPt) ) {
+  // Given the starting max angles, should not happen.
+  if ( !cwPt ) cwPt = ccwPt;
+  if ( !ccwPt ) ccwPt = cwPt;
+
+  // Should have defined both by now.
+  if ( !cwPt ) {
     console.warn("viewablePoints|Points not found", this);
     return [];
   }
