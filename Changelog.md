@@ -1,7 +1,6 @@
 ## 0.2.16
-Avoid WeilerAtherton in constrained token border for now as it returns failed polygons when
-a wall intersects at a border point.
-Redo `viewablePoints` to avoid intersection testing; simply take the outermost points CW and CCW. It seems that these would always be the outermost visible and is both simpler and faster.
+Avoid WeilerAtherton in constrained token border for now as it returns failed polygons when a wall intersects at a border point.
+Refactor `PIXI.Polygon.prototype.viewablePoints` to avoid intersection testing by taking the points with the largest angles as CW and CCW. This is faster and hopefully more accurate. Test for points contained within the polygon and for degenerate polygons.
 
 ## 0.2.15
 Add checks to ensure that when measuring distance between points, missing x, y, or z properties will be treated as 0.
