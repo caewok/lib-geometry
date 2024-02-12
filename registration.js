@@ -89,14 +89,15 @@ const PATCHES = {
 export function registerGeometry() {
   CONFIG.GeometryLib ??= {};
   CONFIG.GeometryLib.registered ??= new Set();
-  if ( !CONFIG.GeometryLib.PATCHER ) {
-    const PATCHER = CONFIG.GeometryLib.PATCHER = new Patcher();
-    PATCHER.addPatchesFromRegistrationObject(PATCHES);
-  }
-
   const currentVersion = CONFIG.GeometryLib.version;
   if ( currentVersion && !foundry.utils.isNewerVersion(VERSION, currentVersion) ) return;
-  if ( currentVersion ) deRegister();
+
+  // If older PATCHER is present, deregister it and remove it.
+  if ( CONFIG.GeometryLib.PATCHER ) deRegister();
+
+  // Create a new Patcher object and register the patches.
+  CONFIG.GeometryLib.PATCHER = new Patcher();
+  CONFIG.GeometryLib.PATCHER.addPatchesFromRegistrationObject(PATCHES);
   CONFIG.GeometryLib.version = VERSION;
 
   // Patches
