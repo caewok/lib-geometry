@@ -64,6 +64,9 @@ import { PATCHES as PATCHES_ELEVATION } from "./elevation.js";
 import { PATCHES as PATCHES_Token } from "./Token.js";
 import { PATCHES as PATCHES_ConstrainedTokenBorder, ConstrainedTokenBorder } from "./ConstrainedTokenBorder.js";
 
+// PixelCache
+import { PATCHES as PATCHES_Tile } from "./Tile.js";
+
 const PATCHES = {
   "PIXI.Circle": PATCHES_Circle,
   "PIXI.Point": PATCHES_Point,
@@ -74,7 +77,7 @@ const PATCHES = {
   "PointSource": PATCHES_ELEVATION.PointSource,
   "VisionSource": PATCHES_ELEVATION.VisionSource,
   "PlaceableObject": PATCHES_ELEVATION.PlaceableObject,
-  "Tile": PATCHES_ELEVATION.Tile,
+  "Tile": foundry.utils.mergeObject(PATCHES_ELEVATION.Tile, PATCHES_Tile), // Includes PixelCache patch.
   "Wall": PATCHES_ELEVATION.Wall,
 
   // Elevation and Constrained Token patches
@@ -99,6 +102,7 @@ export function registerGeometry() {
   registerPIXIMethods();
   registerElevationAdditions();
   registerConstrainedTokenBorder();
+  registerPixelCache();
 
   // New classes
   registerFoundryUtilsMethods();
@@ -118,6 +122,7 @@ function deRegister() {
   CONFIG.GeometryLib.registered?.clear();
   CONFIG.GeometryLib.PATCHER.deregisterGroup("ELEVATION");
   CONFIG.GeometryLib.PATCHER.deregisterGroup("PIXI");
+  CONFIG.GeometryLib.PATCHER.deregisterGroup("PIXEL_CACHE");
 }
 
 export function registerGraph() {
@@ -144,6 +149,10 @@ export function registerPIXIMethods() {
 export function registerConstrainedTokenBorder() {
   CONFIG.GeometryLib.PATCHER.registerGroup("CONSTRAINED_TOKEN_BORDER");
   CONFIG.GeometryLib.ConstrainedTokenBorder = ConstrainedTokenBorder;
+}
+
+export function registerPixelCache() {
+  CONFIG.GeometryLib.PATCHER.registerGroup("PIXEL_CACHE");
 }
 
 export function registerCenteredPolygons() {
