@@ -153,6 +153,7 @@ export function registerConstrainedTokenBorder() {
 
 export function registerPixelCache() {
   CONFIG.GeometryLib.PATCHER.registerGroup("PIXEL_CACHE");
+  CONFIG.GeometryLib.PixelCache = PixelCache;
 }
 
 export function registerCenteredPolygons() {
