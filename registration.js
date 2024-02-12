@@ -65,7 +65,7 @@ import { PATCHES as PATCHES_Token } from "./Token.js";
 import { PATCHES as PATCHES_ConstrainedTokenBorder, ConstrainedTokenBorder } from "./ConstrainedTokenBorder.js";
 
 // PixelCache
-import { PixelCache } from "./PixelCache.js";
+import { PixelCache, TilePixelCache } from "./PixelCache.js";
 import { PATCHES as PATCHES_Tile } from "./Tile.js";
 
 const PATCHES = {
@@ -156,6 +156,7 @@ export function registerConstrainedTokenBorder() {
 export function registerPixelCache() {
   CONFIG.GeometryLib.PATCHER.registerGroup("PIXEL_CACHE");
   CONFIG.GeometryLib.PixelCache = PixelCache;
+  CONFIG.GeometryLib.TilePixelCache = TilePixelCache;
 }
 
 export function registerCenteredPolygons() {

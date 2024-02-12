@@ -6,6 +6,7 @@ PIXI
 
 // Update tile pixel cache and add getter.
 // Pixel cache stored at _evPixelCache; getter uses evPixelCache
+import { TilePixelCache } from "./Tile.js";
 
 export const PATCHES = {};
 PATCHES.PIXEL_CACHE = {};
