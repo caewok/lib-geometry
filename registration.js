@@ -65,6 +65,7 @@ import { PATCHES as PATCHES_Token } from "./Token.js";
 import { PATCHES as PATCHES_ConstrainedTokenBorder, ConstrainedTokenBorder } from "./ConstrainedTokenBorder.js";
 
 // PixelCache
+import { PixelCache } from "./PixelCache.js";
 import { PATCHES as PATCHES_Tile } from "./Tile.js";
 
 const PATCHES = {
