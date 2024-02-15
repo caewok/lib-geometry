@@ -80,14 +80,12 @@ async function renderDrawingConfig(app, html, data) {
   await injectConfiguration(app, html, data, TEMPLATE, findString, "after");
 }
 
-
 /**
  * Inject html to add controls to the tile configuration to allow user to set elevation.
  */
 async function renderTileConfig(app, html, data) {
   const findString = "div[data-tab='basic']:last";
   addConfigData(data, "TileConfig");
-  data.gridUnits = canvas.scene.grid.units || game.i18n.localize("GridUnits");
   await injectConfiguration(app, html, data, TEMPLATE, findString, "append");
 }
 
@@ -108,6 +106,7 @@ async function injectConfiguration(app, html, data, template, findString, attach
 }
 
 function addConfigData(data, type) {
+  data.gridUnits = canvas.scene.grid.units || game.i18n.localize("GridUnits");
   data.geometrylib = {
     legend: LEGEND_LABELS[type].join(", ")
   };
