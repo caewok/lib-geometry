@@ -4,7 +4,6 @@ CONFIG,
 FormDataExtended,
 foundry,
 game,
-libWrapper,
 renderTemplate
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
@@ -31,7 +30,8 @@ const LEGEND_LABELS = {
   TileConfig: [],
   AmbientLightConfig: [],
   AmbientSoundConfig: [],
-  MeasuredTemplateConfig: []
+  MeasuredTemplateConfig: [],
+  DrawingConfig: []
 };
 
 /**
@@ -70,6 +70,17 @@ async function renderAmbientSoundConfig(app, html, data) {
   addConfigData(data, "AmbientSoundConfig");
   await injectConfiguration(app, html, data, TEMPLATE, findString, "after");
 }
+
+/**
+ * Inject html to add controls to the drawing configuration to allow user to set elevation.
+ */
+async function renderDrawingConfig(app, html, data) {
+  const findString = "div[data-tab='position']:last";
+  addConfigData(data, "DrawingConfig");
+  await injectConfiguration(app, html, data, TEMPLATE, findString, "after");
+}
+
+
 /**
  * Inject html to add controls to the tile configuration to allow user to set elevation.
  */
@@ -164,4 +175,8 @@ PATCHES.AmbientSoundConfig = [
 
 PATCHES.MeasuredTemplateConfig = [
   HookPatch.create("renderMeasuredTemplateConfig", renderMeasuredTemplateConfig, cfg)
+];
+
+PATCHES.DrawingConfig = [
+  HookPatch.create("renderDrawingConfig", renderDrawingConfig, cfg)
 ];
