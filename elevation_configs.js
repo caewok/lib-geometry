@@ -106,6 +106,8 @@ async function injectConfiguration(app, html, data, template, findString, attach
 }
 
 function addConfigData(data, type) {
+  // Some placeables use object instead of data.
+  if ( !data.object ) data.object = data.data;
   data.gridUnits = canvas.scene.grid.units || game.i18n.localize("GridUnits");
   data.geometrylib = {
     legend: LEGEND_LABELS[type].join(", ")
