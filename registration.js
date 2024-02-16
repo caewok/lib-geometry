@@ -5,7 +5,7 @@ Hooks
 */
 "use strict";
 
-const VERSION = "0.2.16";
+const VERSION = "0.2.17";
 
 // Foundry utils
 import { registerFoundryUtilsMethods } from "./util.js";
@@ -64,6 +64,10 @@ import { PATCHES as PATCHES_ELEVATION } from "./elevation.js";
 import { PATCHES as PATCHES_Token } from "./Token.js";
 import { PATCHES as PATCHES_ConstrainedTokenBorder, ConstrainedTokenBorder } from "./ConstrainedTokenBorder.js";
 
+// PixelCache
+import { PixelCache, TilePixelCache } from "./PixelCache.js";
+import { PATCHES as PATCHES_Tile } from "./Tile.js";
+
 const PATCHES = {
   "PIXI.Circle": PATCHES_Circle,
   "PIXI.Point": PATCHES_Point,
@@ -74,7 +78,7 @@ const PATCHES = {
   "PointSource": PATCHES_ELEVATION.PointSource,
   "VisionSource": PATCHES_ELEVATION.VisionSource,
   "PlaceableObject": PATCHES_ELEVATION.PlaceableObject,
-  "Tile": PATCHES_ELEVATION.Tile,
+  "Tile": foundry.utils.mergeObject(PATCHES_ELEVATION.Tile, PATCHES_Tile), // Includes PixelCache patch.
   "Wall": PATCHES_ELEVATION.Wall,
 
   // Elevation and Constrained Token patches
@@ -85,20 +89,22 @@ const PATCHES = {
 export function registerGeometry() {
   CONFIG.GeometryLib ??= {};
   CONFIG.GeometryLib.registered ??= new Set();
-  if ( !CONFIG.GeometryLib.PATCHER ) {
-    const PATCHER = CONFIG.GeometryLib.PATCHER = new Patcher();
-    PATCHER.addPatchesFromRegistrationObject(PATCHES);
-  }
-
   const currentVersion = CONFIG.GeometryLib.version;
   if ( currentVersion && !foundry.utils.isNewerVersion(VERSION, currentVersion) ) return;
-  if ( currentVersion ) deRegister();
+
+  // If older PATCHER is present, deregister it and remove it.
+  if ( CONFIG.GeometryLib.PATCHER ) deRegister();
+
+  // Create a new Patcher object and register the patches.
+  CONFIG.GeometryLib.PATCHER = new Patcher();
+  CONFIG.GeometryLib.PATCHER.addPatchesFromRegistrationObject(PATCHES);
   CONFIG.GeometryLib.version = VERSION;
 
   // Patches
   registerPIXIMethods();
   registerElevationAdditions();
   registerConstrainedTokenBorder();
+  registerPixelCache();
 
   // New classes
   registerFoundryUtilsMethods();
@@ -118,6 +124,7 @@ function deRegister() {
   CONFIG.GeometryLib.registered?.clear();
   CONFIG.GeometryLib.PATCHER.deregisterGroup("ELEVATION");
   CONFIG.GeometryLib.PATCHER.deregisterGroup("PIXI");
+  CONFIG.GeometryLib.PATCHER.deregisterGroup("PIXEL_CACHE");
 }
 
 export function registerGraph() {
@@ -144,6 +151,12 @@ export function registerPIXIMethods() {
 export function registerConstrainedTokenBorder() {
   CONFIG.GeometryLib.PATCHER.registerGroup("CONSTRAINED_TOKEN_BORDER");
   CONFIG.GeometryLib.ConstrainedTokenBorder = ConstrainedTokenBorder;
+}
+
+export function registerPixelCache() {
+  CONFIG.GeometryLib.PATCHER.registerGroup("PIXEL_CACHE");
+  CONFIG.GeometryLib.PixelCache = PixelCache;
+  CONFIG.GeometryLib.TilePixelCache = TilePixelCache;
 }
 
 export function registerCenteredPolygons() {

@@ -4,7 +4,6 @@ CONFIG,
 FormDataExtended,
 foundry,
 game,
-libWrapper,
 renderTemplate
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
@@ -31,7 +30,8 @@ const LEGEND_LABELS = {
   TileConfig: [],
   AmbientLightConfig: [],
   AmbientSoundConfig: [],
-  MeasuredTemplateConfig: []
+  MeasuredTemplateConfig: [],
+  DrawingConfig: []
 };
 
 /**
@@ -70,13 +70,22 @@ async function renderAmbientSoundConfig(app, html, data) {
   addConfigData(data, "AmbientSoundConfig");
   await injectConfiguration(app, html, data, TEMPLATE, findString, "after");
 }
+
+/**
+ * Inject html to add controls to the drawing configuration to allow user to set elevation.
+ */
+async function renderDrawingConfig(app, html, data) {
+  const findString = "div[data-tab='position']:last";
+  addConfigData(data, "DrawingConfig");
+  await injectConfiguration(app, html, data, TEMPLATE, findString, "after");
+}
+
 /**
  * Inject html to add controls to the tile configuration to allow user to set elevation.
  */
 async function renderTileConfig(app, html, data) {
   const findString = "div[data-tab='basic']:last";
   addConfigData(data, "TileConfig");
-  data.gridUnits = canvas.scene.grid.units || game.i18n.localize("GridUnits");
   await injectConfiguration(app, html, data, TEMPLATE, findString, "append");
 }
 
@@ -97,6 +106,9 @@ async function injectConfiguration(app, html, data, template, findString, attach
 }
 
 function addConfigData(data, type) {
+  // Some placeables use object instead of data.
+  if ( !data.object ) data.object = data.data;
+  data.gridUnits = canvas.scene.grid.units || game.i18n.localize("GridUnits");
   data.geometrylib = {
     legend: LEGEND_LABELS[type].join(", ")
   };
@@ -146,22 +158,24 @@ async function _onChangeInputTileConfig(wrapper, event) {
   this.document.object.refresh();
 }
 
-const cfg = { group, perf_mode };
-
 PATCHES.TileConfig = [
-  HookPatch.create("renderTileConfig", renderTileConfig, cfg),
-  LibWrapperPatch.create("TileConfig.prototype._onChangeInput", _onChangeInputTileConfig, cfg)
+  HookPatch.create("renderTileConfig", renderTileConfig, { group, perf_mode }),
+  LibWrapperPatch.create("TileConfig.prototype._onChangeInput", _onChangeInputTileConfig, { group, perf_mode })
 ];
 
 PATCHES.AmbientLightConfig = [
-  HookPatch.create("renderAmbientLightConfig", renderAmbientLightConfig, cfg)
+  HookPatch.create("renderAmbientLightConfig", renderAmbientLightConfig, { group, perf_mode })
 ];
 
 PATCHES.AmbientSoundConfig = [
-  HookPatch.create("renderAmbientSoundConfig", renderAmbientSoundConfig, cfg),
-  LibWrapperPatch.create("AmbientSoundConfig.defaultOptions", defaultOptionsAmbientSoundConfig, cfg)
+  HookPatch.create("renderAmbientSoundConfig", renderAmbientSoundConfig, { group, perf_mode }),
+  LibWrapperPatch.create("AmbientSoundConfig.defaultOptions", defaultOptionsAmbientSoundConfig, { group, perf_mode })
 ];
 
 PATCHES.MeasuredTemplateConfig = [
-  HookPatch.create("renderMeasuredTemplateConfig", renderMeasuredTemplateConfig, cfg)
+  HookPatch.create("renderMeasuredTemplateConfig", renderMeasuredTemplateConfig, { group, perf_mode })
+];
+
+PATCHES.DrawingConfig = [
+  HookPatch.create("renderDrawingConfig", renderDrawingConfig, { group, perf_mode })
 ];

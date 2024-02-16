@@ -1,3 +1,10 @@
+## 0.2.17
+Add `PixelCache` to geometry API. Track tile updates and update the tile pixel cache accordingly if the cache is present.
+Change registration flow to not rely on old versions of Patcher.
+Add grid units to all elevation configurations.
+Fix setting values for elevation configurations and display of values in the config.
+Fix libWrapper error when setting multiple elevation placeable configs.
+
 ## 0.2.16
 Avoid WeilerAtherton in constrained token border for now as it returns failed polygons when a wall intersects at a border point.
 Refactor `PIXI.Polygon.prototype.viewablePoints` to avoid intersection testing by taking the points with the largest angles as CW and CCW. This is faster and hopefully more accurate. Test for points contained within the polygon and for degenerate polygons.
