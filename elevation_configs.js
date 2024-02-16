@@ -156,26 +156,24 @@ async function _onChangeInputTileConfig(wrapper, event) {
   this.document.object.refresh();
 }
 
-const cfg = { group, perf_mode };
-
 PATCHES.TileConfig = [
-  HookPatch.create("renderTileConfig", renderTileConfig, cfg),
-  LibWrapperPatch.create("TileConfig.prototype._onChangeInput", _onChangeInputTileConfig, cfg)
+  HookPatch.create("renderTileConfig", renderTileConfig, { group, perf_mode }),
+  LibWrapperPatch.create("TileConfig.prototype._onChangeInput", _onChangeInputTileConfig, { group, perf_mode })
 ];
 
 PATCHES.AmbientLightConfig = [
-  HookPatch.create("renderAmbientLightConfig", renderAmbientLightConfig, cfg)
+  HookPatch.create("renderAmbientLightConfig", renderAmbientLightConfig, { group, perf_mode })
 ];
 
 PATCHES.AmbientSoundConfig = [
-  HookPatch.create("renderAmbientSoundConfig", renderAmbientSoundConfig, cfg),
-  LibWrapperPatch.create("AmbientSoundConfig.defaultOptions", defaultOptionsAmbientSoundConfig, cfg)
+  HookPatch.create("renderAmbientSoundConfig", renderAmbientSoundConfig, { group, perf_mode }),
+  LibWrapperPatch.create("AmbientSoundConfig.defaultOptions", defaultOptionsAmbientSoundConfig, { group, perf_mode })
 ];
 
 PATCHES.MeasuredTemplateConfig = [
-  HookPatch.create("renderMeasuredTemplateConfig", renderMeasuredTemplateConfig, cfg)
+  HookPatch.create("renderMeasuredTemplateConfig", renderMeasuredTemplateConfig, { group, perf_mode })
 ];
 
 PATCHES.DrawingConfig = [
-  HookPatch.create("renderDrawingConfig", renderDrawingConfig, cfg)
+  HookPatch.create("renderDrawingConfig", renderDrawingConfig, { group, perf_mode })
 ];
