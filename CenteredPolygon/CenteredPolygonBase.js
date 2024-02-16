@@ -69,7 +69,8 @@ export class CenteredPolygonBase extends PIXI.Polygon {
 
   /**
    * For compatibility with Ellipse.
-   * Convert this shape to a Polygon
+   * Convert this shape to a PIXI.Polygon
+   * @returns {PIXI.Polygon}
    */
   toPolygon() { return this; }
 

@@ -196,9 +196,6 @@ function tokenTopE() {
   return this.bottomE + this.verticalHeight;
 }
 
-
-
-
 /** @type {boolean} */
 function getIsProne() {
   const proneStatusId = CONFIG.GeometryLib.proneStatusId;
