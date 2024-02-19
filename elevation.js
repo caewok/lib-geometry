@@ -349,7 +349,7 @@ async function setZElevation(value) { return this.setElevationE(pixelsToGridUnit
 
 
 // ---- NOTE: PointSource ----- //
-PATCHES.PointSource.ELEVATION.METHODS = {
+PATCHES.PointSource.ELEVATION.GETTERS = {
   elevationE: pointSourceElevationE,
   elevationZ: zElevation
 };
