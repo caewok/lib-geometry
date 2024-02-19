@@ -4,6 +4,7 @@ Change registration flow to not rely on old versions of Patcher.
 Add grid units to all elevation configurations.
 Fix setting values for elevation configurations and display of values in the config.
 Fix libWrapper error when setting multiple elevation placeable configs.
+Fix for point sources not having `elevationE` and `elevationZ` getters. Fixes issue with elevated vision shadows being too long.
 
 ## 0.2.16
 Avoid WeilerAtherton in constrained token border for now as it returns failed polygons when a wall intersects at a border point.
