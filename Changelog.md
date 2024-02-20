@@ -1,3 +1,12 @@
+## 0.2.18
+Add enumerated `IX_TYPES` and segment functions:
+ - `doSegmentsOverlap`
+ - `findOverlappingPoints`
+ - `segmentCollision`
+ - `endpointIntersection`
+ - `segmentIntersection`
+ - `segmentOverlap`
+
 ## 0.2.17
 Add `PixelCache` to geometry API. Track tile updates and update the tile pixel cache accordingly if the cache is present.
 Change registration flow to not rely on old versions of Patcher.
