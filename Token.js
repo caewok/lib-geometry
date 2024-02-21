@@ -58,7 +58,7 @@ function calculateTokenShape(token) {
   // Hexagon (for width .5 or 1)
   // Square (for width === height)
   let shape;
-  if ( canvas.grid.isHex ) {
+  if ( canvas.grid.isHexagonal ) {
     const pts = canvas.grid.grid.getBorderPolygon(token.document.width, token.document.height, 0);
     if ( pts ) shape = new PIXI.Polygon(pts);
   }
