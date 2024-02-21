@@ -3,8 +3,7 @@ canvas,
 CONFIG,
 flattenObject,
 foundry,
-game,
-getProperty
+game
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
@@ -122,7 +121,7 @@ async function setVisionSourceElevationE(_value) {
 // TODO: Would be 2x faster by accessing the flag directly and not using getProperty.
 
 function placeableObjectElevationE() {
-  return getProperty(this.document, MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION) ?? 0;
+  return foundry.utils.getProperty(this.document, MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION) ?? 0;
 }
 
 async function setPlaceableObjectElevationE(value) {
@@ -131,14 +130,14 @@ async function setPlaceableObjectElevationE(value) {
 
 // NOTE: Wall Elevation
 function wallTopE() {
-  return getProperty(this.document, MODULE_KEYS.EV.FLAG_WALL_TOP)
-    ?? getProperty(this.document, MODULE_KEYS.WH.FLAG_WALL_TOP)
+  return foundry.utils.getProperty(this.document, MODULE_KEYS.EV.FLAG_WALL_TOP)
+    ?? foundry.utils.getProperty(this.document, MODULE_KEYS.WH.FLAG_WALL_TOP)
     ?? Number.POSITIVE_INFINITY;
 }
 
 function wallBottomE() {
-  return getProperty(this.document, MODULE_KEYS.EV.FLAG_WALL_BOTTOM)
-    ?? getProperty(this.document, MODULE_KEYS.WH.FLAG_WALL_BOTTOM)
+  return foundry.utils.getProperty(this.document, MODULE_KEYS.EV.FLAG_WALL_BOTTOM)
+    ?? foundry.utils.getProperty(this.document, MODULE_KEYS.WH.FLAG_WALL_BOTTOM)
     ?? Number.NEGATIVE_INFINITY;
 }
 
@@ -206,8 +205,8 @@ function getIsProne() {
 
 function getTokenHeight(token) {
   // Use || to ignore 0 height values.
-  return getProperty(token.document, MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT)
-    || getProperty(token.document, MODULE_KEYS.WH.FLAG_TOKEN_HEIGHT)
+  return foundry.utils.getProperty(token.document, MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT)
+    || foundry.utils.getProperty(token.document, MODULE_KEYS.WH.FLAG_TOKEN_HEIGHT)
     || calculateTokenHeightFromTokenShape(token);
 }
 
