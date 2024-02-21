@@ -22,13 +22,13 @@ function invertKey(key) {
 }
 
 /**
- * Use Math.roundDecimals to round the point coordinates to a certain number of decimals
+ * Use roundDecimals to round the point coordinates to a certain number of decimals
  * @param {number} places   Number of decimals places to use when rounding.
  * @returns {this}
  */
 function roundDecimals(places = 0) {
-  this.x = Math.roundDecimals(this.x, places);
-  this.y = Math.roundDecimals(this.y, places);
+  this.x = CONFIG.GeometryLib.utils.roundDecimals(this.x, places);
+  this.y = CONFIG.GeometryLib.utils.roundDecimals(this.y, places);
   return this;
 }
 
