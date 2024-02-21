@@ -2,6 +2,8 @@
 Foundry v12 compatibility. No tested backwards compatibility.
 Removed `Math.SQRT3` which is now set in base Foundry.
 Add `roundDecimals` to `CONFIG.GeometryLib.utils`.
+Change `getProperty` to `foundry.utils.getProperty`.
+Change `canvas.grid.isHex` to `isHexagonal`.
 
 ## 0.2.18
 Add enumerated `IX_TYPES` and segment functions:
