@@ -30,6 +30,11 @@ import { Plane } from "./3d/Plane.js";
 import { Point3d } from "./3d/Point3d.js";
 import { Ray3d } from "./3d/Ray3d.js";
 
+import { HPoint } from "./HPoint.js";
+import { HPoint3d } from "./HPoint3d.js";
+import { SPoint } from "./SPoint.js";
+import { SPoint3d } from "./SPoint3d.js";
+
 // Draw
 import { Draw } from "./Draw.js";
 
@@ -194,7 +199,11 @@ export function register3d() {
   CONFIG.GeometryLib.threeD = {
     Plane,
     Point3d,
-    Ray3d
+    Ray3d,
+    HPoint,
+    HPoint3d,
+    SPoint,
+    SPoint3d
   };
 }
 
