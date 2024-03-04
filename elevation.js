@@ -1,7 +1,6 @@
 /* globals
 canvas,
 CONFIG,
-flattenObject,
 foundry,
 game
 */
@@ -238,7 +237,7 @@ async function setTokenVerticalHeight(value) {
  * Note Tile Elevation has document.elevation already but does not save it (in v11).
  */
 function preUpdateTileHook(_tileD, changes, _options, _userId) {
-  const flatData = flattenObject(changes);
+  const flatData = foundry.utils.flattenObject(changes);
   const changeKeys = new Set(Object.keys(flatData));
   const evFlag = MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION;
   const updates = {};
@@ -248,7 +247,7 @@ function preUpdateTileHook(_tileD, changes, _options, _userId) {
 }
 
 function updateTileHook(tileD, changed, _options, _userId) {
-  const flatData = flattenObject(changed);
+  const flatData = foundry.utils.flattenObject(changed);
   const changeKeys = new Set(Object.keys(flatData));
   const evFlag = MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION;
   if ( changeKeys.has(evFlag) ) tileD.elevation = flatData[evFlag] ?? undefined; // Avoid setting null.
@@ -263,7 +262,7 @@ function updateTileHook(tileD, changed, _options, _userId) {
  * @param {string} userId                           The ID of the User who triggered the update workflow
  */
 function preUpdateTokenHook(tokenD, data, _options, _userId) {
-  const flatData = flattenObject(data);
+  const flatData = foundry.utils.flattenObject(data);
   const changes = new Set(Object.keys(flatData));
   const evFlag = MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT;
   const whFlag = MODULE_KEYS.WH.FLAG_TOKEN_HEIGHT;
@@ -288,7 +287,7 @@ function preUpdateTokenHook(tokenD, data, _options, _userId) {
  * @param {string} userId                           The ID of the User who triggered the update workflow
  */
 function preUpdateWallHook(wallD, data, _options, _userId) {
-  const flatData = flattenObject(data);
+  const flatData = foundry.utils.flattenObject(data);
   const changes = new Set(Object.keys(flatData));
   const evTopFlag = MODULE_KEYS.EV.FLAG_WALL_TOP;
   const evBottomFlag = MODULE_KEYS.EV.FLAG_WALL_BOTTOM;
