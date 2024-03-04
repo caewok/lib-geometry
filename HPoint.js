@@ -41,7 +41,7 @@ export class HPoint {
   add(pt, outPoint) {
     // Can only add when w is the same.
 		outPoint ??= new this.constructor();
-		if ( this._w !== pt._w ) pt = pt.divideScalar(pt._w / this._w, this.constructor.tmp);
+		if ( this._w !== pt._w ) pt = pt.multiply(this._w / pt._w, this.constructor.tmp);
 		outPoint._x = this._x + pt._x;
 	  outPoint._y = this._y + pt._y;
 		outPoint._w = pt._w;
@@ -49,7 +49,7 @@ export class HPoint {
   }
 
   /**
-   * Subtract two homogenous points
+   * Subtract two homogenous points.
    * @param {HPoint} pt           Point to add to this point
    * @param {HPoint} [outPoint]   Where to store the result
    * @returns {HPoint}
@@ -63,6 +63,21 @@ export class HPoint {
 		outPoint._w = pt._w;
 		return outPoint;
   }
+
+  /**
+   * Multiply two homogenous points.
+   * @param {HPoint} pt           Point to multiply with this point
+   * @param {HPoint} [outPoint]   Where to store the result
+   * @returns {HPoint}
+   */
+  multiply(pt, outPoint) {
+    outPoint ??= new this.constructor();
+    outPoint._x = this._x * pt._x;
+    outPoint._y = this._y * pt._y;
+    outPoint._w = this._w * pt._w;
+    return outPoint;
+  }
+
 
   /**
    * Multiply this point by a scalar.

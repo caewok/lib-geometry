@@ -56,6 +56,20 @@ export class HPoint3d extends HPoint {
   }
 
   /**
+   * Multiply two homogenous points.
+   * @param {HPoint} pt           Point to multiply with this point
+   * @param {HPoint} [outPoint]   Where to store the result
+   * @returns {HPoint}
+   */
+  multiply(pt, outPoint) {
+    outPoint ??= new this.constructor();
+		super.multiply(pt, outPoint);
+    outPoint ??= new this.constructor();
+    outPoint._z = this._z * pt._z;
+    return outPoint;
+  }
+
+  /**
    * Divide this point by a scalar.
    * @param {number} scalar         The number to divide by
    * @param {HPoint} [outPoint]     Where to store the result
