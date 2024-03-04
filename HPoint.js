@@ -39,11 +39,12 @@ export class HPoint {
    * @returns {HPoint}
    */
   add(pt, outPoint) {
-    // See https://community.khronos.org/t/adding-homogeneous-coordinates-is-too-easy/49573
+    // Can only add when w is the same.
 		outPoint ??= new this.constructor();
+		if ( this._w !== pt._w ) pt = pt.divideScalar(pt._w / this._w, this.constructor.tmp);
 		outPoint._x = this._x + pt._x;
 	  outPoint._y = this._y + pt._y;
-		outPoint._w = this._w + pt._w - 1; // Account for origin of [0,0,1].
+		outPoint._w = pt._w;
 		return outPoint;
   }
 
@@ -54,11 +55,12 @@ export class HPoint {
    * @returns {HPoint}
    */
   subtract(pt, outPoint) {
-    // See https://community.khronos.org/t/adding-homogeneous-coordinates-is-too-easy/49573
+    // Can only subtract when w is the same.
 		outPoint ??= new this.constructor();
+		if ( this._w !== pt._w ) pt = pt.divideScalar(pt._w / this._w, this.constructor.tmp);
 		outPoint._x = this._x - pt._x;
 	  outPoint._y = this._y - pt._y;
-		outPoint._w = this._w - pt._w - 1; // Account for origin of [0,0,1].
+		outPoint._w = pt._w;
 		return outPoint;
   }
 
