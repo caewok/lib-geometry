@@ -41,7 +41,7 @@ export class HPoint {
   add(pt, outPoint) {
     // Can only add when w is the same.
 		outPoint ??= new this.constructor();
-		if ( this._w !== pt._w ) pt = pt.multiply(this._w / pt._w, this.constructor.tmp);
+		if ( this._w !== pt._w ) pt = pt.scale(this._w / pt._w, this.constructor.tmp);
 		outPoint._x = this._x + pt._x;
 	  outPoint._y = this._y + pt._y;
 		outPoint._w = pt._w;
@@ -57,7 +57,7 @@ export class HPoint {
   subtract(pt, outPoint) {
     // Can only subtract when w is the same.
 		outPoint ??= new this.constructor();
-		if ( this._w !== pt._w ) pt = pt.divideScalar(pt._w / this._w, this.constructor.tmp);
+		if ( this._w !== pt._w ) pt = pt.scale(pt._w / this._w, this.constructor.tmp);
 		outPoint._x = this._x - pt._x;
 	  outPoint._y = this._y - pt._y;
 		outPoint._w = pt._w;
@@ -78,6 +78,21 @@ export class HPoint {
     return outPoint;
   }
 
+  /**
+   * Scale this point by a given number.
+   * Comparable to multiply but using a scalar instead of a point.
+   * E.g., if the point is {1,2,3} and it is scaled by 2, it would be {2,4,6}.
+   * @param {number} scalar         The number to multiply by
+   * @param {HPoint} [outPoint]     Where to store the result
+   * @returns {HPoint}
+   */
+  scale(scalar, outPoint) {
+    outPoint ??= new this.constructor();
+    outPoint._x = this._x * scalar;
+    outPoint._y = this._y * scalar;
+    outPoint._w = this._w * scalar;
+    return outPoint;
+  }
 
   /**
    * Multiply this point by a scalar.

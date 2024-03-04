@@ -29,9 +29,9 @@ export class HPoint3d extends HPoint {
 
   /**
    * Add two homogenous points.
-   * @param {HPoint} pt           Point to add to this point
-   * @param {HPoint} [outPoint]   Where to store the result
-   * @returns {HPoint}
+   * @param {HPoint3d} pt           Point to add to this point
+   * @param {HPoint3d} [outPoint]   Where to store the result
+   * @returns {HPoint3d}
    */
   add(pt, outPoint) {
     // See https://community.khronos.org/t/adding-homogeneous-coordinates-is-too-easy/49573
@@ -43,9 +43,9 @@ export class HPoint3d extends HPoint {
 
   /**
    * Subtract two homogenous points
-   * @param {HPoint} pt           Point to add to this point
-   * @param {HPoint} [outPoint]   Where to store the result
-   * @returns {HPoint}
+   * @param {HPoint3d} pt           Point to add to this point
+   * @param {HPoint3d} [outPoint]   Where to store the result
+   * @returns {HPoint3d}
    */
   subtract(pt, outPoint) {
     // See https://community.khronos.org/t/adding-homogeneous-coordinates-is-too-easy/49573
@@ -57,35 +57,49 @@ export class HPoint3d extends HPoint {
 
   /**
    * Multiply two homogenous points.
-   * @param {HPoint} pt           Point to multiply with this point
-   * @param {HPoint} [outPoint]   Where to store the result
-   * @returns {HPoint}
+   * @param {HPoint3d} pt           Point to multiply with this point
+   * @param {HPoint3d} [outPoint]   Where to store the result
+   * @returns {HPoint3d}
    */
   multiply(pt, outPoint) {
     outPoint ??= new this.constructor();
 		super.multiply(pt, outPoint);
-    outPoint ??= new this.constructor();
     outPoint._z = this._z * pt._z;
+    return outPoint;
+  }
+
+  /**
+   * Scale this point by a given number.
+   * Comparable to multiply but using a scalar instead of a point.
+   * E.g., if the point is {1,2,3} and it is scaled by 2, it would be {2,4,6}.
+   * @param {number} scalar         The number to multiply by
+   * @param {HPoint3d} [outPoint]     Where to store the result
+   * @returns {HPoint3d}
+   */
+  scale(scalar, outPoint) {
+    outPoint ??= new this.constructor();
+    super.scale(scalar, outPoint);
+    outPoint._z = this._z * scalar;
     return outPoint;
   }
 
   /**
    * Divide this point by a scalar.
    * @param {number} scalar         The number to divide by
-   * @param {HPoint} [outPoint]     Where to store the result
-   * @returns {HPoint}
+   * @param {HPoint3d} [outPoint]     Where to store the result
+   * @returns {HPoint3d}
    */
   divideScalar(scalar, outPoint) {
     outPoint ??= new this.constructor();
     super.divideScalar(scalar, outPoint);
-    outPoint.z = this._z;
+    outPoint._z = this._z;
     return outPoint;
   }
 
   /**
    * Dot product of this point with another.
    * (Sum of the products of the components)
-   * @param {HPoint} other
+   * @param {HPoint3d} other
    * @return {number}
    */
   dot(pt) {
