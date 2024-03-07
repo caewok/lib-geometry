@@ -640,6 +640,24 @@ export class Matrix {
   }
 
   /**
+   * Multiply this matrix by a scalar.
+   * @param {number} scalar
+   * @returns {Matrix}
+   */
+  multiplyScalar(scalar) {
+    const rowsA = this.dim1;
+    const colsA = this.dim2;
+
+    const multiplication = this.clone();
+    for ( let x = 0; x < rowsA; x += 1 ) {
+      for ( let y = 0; y < colsA; y += 1 ) {
+        multiplication.arr[x][y] *= scalar;
+      }
+    }
+    return multiplication;
+  }
+
+  /**
    * Faster 1x3 multiplication
    * @param {Matrix} other    A 1x3 matrix, like Matrix.prototype.fromPoint2d
    * @returns Matrix

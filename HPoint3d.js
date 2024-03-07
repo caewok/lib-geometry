@@ -19,10 +19,24 @@ export class HPoint3d extends HPoint {
    * @param {number} [w=1]
    */
   static create(x, y, z, w = 1) {
-    const pt = this.create(x, y, w);
+    const pt = super.create(x, y, w);
     pt._z = z;
     return pt;
   }
+
+  toMatrix() { return new Matrix([[this._x, this._y, this._z, this._w]]); }
+
+  /**
+   * Normalize the point by dividing the components by w.
+   * @returns {HPoint}
+   */
+  norm() { return this.constructor.create(this.x, this.y, this.z, 1); }
+
+  /**
+   * Convert to a Cartesian point.
+   * @returns {PIXI.Point}
+   */
+  cart() { return new Point3d(this.x, this.y, this.z); }
 
   /** @type {number} */
   get z() { return this._z / this._w; }
@@ -132,7 +146,36 @@ export class HPoint3d extends HPoint {
     return (Math.pow(this._x, 2) + Math.pow(this._y, 2) + Math.pow(this._z, 2)) / Math.pow(this._w, 2);
   }
 
+  static distanceBetween(a, b) {
+    // Simple: return a.subtract(b, this.tmp).magnitude();
+    if ( a._w === b._w ) {
+      const A = Math.pow(a._x - b._x, 2) + Math.pow(a._y - b._y, 2) + Math.pow(a._z - b._z, 2);
+      return Math.sqrt(A) / a._w;
+    }
+
+    const X2 = Math.pow((a._x * b._w) - (b._x * a._w), 2);
+    const Y2 = Math.pow((a._y * b._w) - (b._y * a._w), 2);
+    const Z2 = Math.pow((a._z * b._w) - (b._w * a._w), 2);
+    return Math.sqrt(X2 + Y2 + Z2) / (a._w * b._w);
+  }
+
+  static distanceSquaredBetween(a, b) {
+    // Simple: return a.subtract(b, this.tmp).magnitudeSquared();
+    if ( a._w === b._w ) {
+      const A = Math.pow(a._x - b._x, 2) + Math.pow(a._y - b._y, 2) + Math.pow(a._z - b._z, 2);
+      return A / Math.pow(a._w, 2);
+    }
+
+    const X2 = Math.pow((a._x * b._w) - (b._x * a._w), 2);
+    const Y2 = Math.pow((a._y * b._w) - (b._y * a._w), 2);
+    const Z2 = Math.pow((a._z * b._w) - (b._w * a._w), 2);
+    return (X2 + Y2) / Math.pow(a._w * b._w, 2);
+  }
+
   static tmp = new this();
 
   static tmp2 = new this();
 }
+
+
+
