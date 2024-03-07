@@ -28,13 +28,7 @@ export class HLine3d extends Matrix {
    * @returns {HLine3d}
    */
   static fromPoints(A, B) {
-    const matA = A.toMatrix();
-    const matAt = matA.transpose();
-    const matB = B.toMatrix();
-    const matBt = matB.transpose();
-    const res1 = matBt.multiply(matA);
-    const res2 = matAt.multiply(matB);
-    const out = new this(res1.subtract(res2).arr);
+    const out = new this(cross4d(A, B).arr);
     out.A = A;
     out.B = B;
     return out;
@@ -48,13 +42,7 @@ export class HLine3d extends Matrix {
    * @returns {HLine3d}
    */
   static fromPlanes(P0, P1) {
-    const matP0 = P0.toMatrix();
-    const matP0t = matP0.transpose();
-    const matP1 = P1.toMatrix();
-    const matP1t = matP1.transpose()
-    const res1 = matP1t.multiply(matP0);
-    const res2 = matP0t.multiply(matP1);
-    const Ldual = res1.subtract(res2);
+    const Ldual = cross4d(P0, P1);
     return new this(this._dualToSinglePlucker(Ldual).arr);
   }
 
@@ -165,6 +153,24 @@ export class HLine3d extends Matrix {
     return Math.hypot(vec[0], vec[1], vec[2]);
   }
 }
+
+/**
+ * Version of a cross in 4 dimensions.
+ * A * B_transposed - B * A_transposed
+ * @param {HPoint3d} A
+ * @param {HPoint3d} B
+ * @returns {Matrix[4][4]}
+ */
+function cross4d(A, B) {
+  const matA = A.toMatrix();
+  const matAt = matA.transpose();
+  const matB = B.toMatrix();
+  const matBt = matB.transpose();
+  const res1 = matBt.multiply(matA);
+  const res2 = matAt.multiply(matB);
+  return res1.subtract(res2);
+}
+
 
 /*
 w1 = canvas.walls.controlled[0];
