@@ -1,3 +1,6 @@
+## 0.2.20
+Fix for `Circle.prototype.area` calculation.
+
 ## 0.2.19
 Add `Ellipse.prototype.lineSegmentIntersects`.
 
