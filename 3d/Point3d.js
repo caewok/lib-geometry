@@ -394,13 +394,13 @@ export class Point3d extends PIXI.Point {
   }
 
   /**
-   * Use Math.roundDecimals to round the point coordinates to a certain number of decimals
+   * Use roundDecimals to round the point coordinates to a certain number of decimals
    * @param {number} places   Number of decimals places to use when rounding.
    * @returns {this}
    */
   roundDecimals(places = 0) {
     super.roundDecimals(places);
-    this.z = Math.roundDecimals(this.z, places);
+    this.z = CONFIG.GeometryLib.utils.roundDecimals(this.z, places);
     return this;
   }
 

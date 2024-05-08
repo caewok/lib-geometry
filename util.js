@@ -41,6 +41,7 @@ export function registerFoundryUtilsMethods() {
     endpointIntersection,
     segmentIntersection,
     segmentOverlap,
+    roundDecimals
   };
 
 
@@ -54,6 +55,14 @@ export function registerFoundryUtilsMethods() {
   };
   CONFIG.GeometryLib.registered.add("utils");
 }
+
+/**
+ * Formerly Math.roundDecimals before Foundry v12.
+ * @param {number} number     The number to round
+ * @param {number} places     Number of places past the decimal point to round
+ * @returns {number}
+ */
+function roundDecimals(number, places) { return Number(number.toFixed(places)); }
 
 // Just like foundry.utils.lineLineIntersection but with the typo in t1 calculation fixed.
 function lineLineIntersection(a, b, c, d, {t1=false}={}) {
