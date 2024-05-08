@@ -276,16 +276,34 @@ export class Ellipse extends PIXI.Ellipse {
    * @returns {Point[]}
    */
   segmentIntersections(a, b) {
-    // Translate to a circle
+    // Translate to a circle.
     const cir = this._toCircle();
 
-    // Move to ellipse coordinates and then to circle coordinates
+    // Move to ellipse coordinates and then to circle coordinates.
     a = this.toCircleCoords(this.fromCartesianCoords(a));
     b = this.toCircleCoords(this.fromCartesianCoords(b));
 
-    // Get the intersection points and convert back to cartesian coords;
+    // Get the intersection points and convert back to cartesian coords.
     const ixs = cir.segmentIntersections(a, b);
     return ixs.map(ix => this.toCartesianCoords(this.fromCircleCoords(ix)));
+  }
+
+  /**
+   * Does the segment a|b intersect this ellipse?
+   * @param {Point} a
+   * @param {Point} b
+   * @returns {boolean} True if intersection occurs
+   */
+  lineSegmentIntersects(a, b) {
+    // Translate to a circle.
+    const cir = this._toCircle();
+
+    // Move to ellipse coordinates and then to circle coordinates.
+    a = this.toCircleCoords(this.fromCartesianCoords(a));
+    b = this.toCircleCoords(this.fromCartesianCoords(b));
+
+    // Test for intersection on the circle.
+    return cir.lineSegmentIntersects(a, b);
   }
 
   /**
