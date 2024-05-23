@@ -41,7 +41,6 @@ export const PATCHES = {};
 PATCHES.PointSource = { ELEVATION: {} };
 PATCHES.VisionSource = { ELEVATION: {} };
 PATCHES.PlaceableObject = { ELEVATION: {} };
-PATCHES.Tile = { ELEVATION: {} };
 PATCHES.Token = { ELEVATION: {} };
 PATCHES.Wall = { ELEVATION: {} };
 
@@ -283,14 +282,6 @@ function preUpdateWallHook(wallD, data, _options, _userId) {
   }
 
   foundry.utils.mergeObject(data, updates);
-}
-
-/**
- * Monitor tiles drawn to canvas and sync elevation.
- */
-function drawTileHook(tile) {
-  if ( !MODULE_KEYS.EV.ACTIVE ) return;
-  if ( tile.document.elevation !== tile.elevationE ) tile.document.elevation = tile.elevationE;
 }
 
 
