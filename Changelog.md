@@ -5,6 +5,12 @@ Add `roundDecimals` to `CONFIG.GeometryLib.utils`.
 Change `getProperty` to `foundry.utils.getProperty`.
 Change `canvas.grid.isHex` to `isHexagonal`.
 
+## 0.2.20
+Fix for `Circle.prototype.area` calculation.
+
+## 0.2.19
+Add `Ellipse.prototype.lineSegmentIntersects`.
+
 ## 0.2.18
 Add enumerated `IX_TYPES` and segment functions:
  - `doSegmentsOverlap`
