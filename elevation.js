@@ -1,10 +1,8 @@
 /* globals
 canvas,
 CONFIG,
-flattenObject,
 foundry,
-game,
-getProperty
+game
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
@@ -43,7 +41,6 @@ export const PATCHES = {};
 PATCHES.PointSource = { ELEVATION: {} };
 PATCHES.VisionSource = { ELEVATION: {} };
 PATCHES.PlaceableObject = { ELEVATION: {} };
-PATCHES.Tile = { ELEVATION: {} };
 PATCHES.Token = { ELEVATION: {} };
 PATCHES.Wall = { ELEVATION: {} };
 
@@ -116,29 +113,22 @@ async function setVisionSourceElevationE(_value) {
 }
 
 // NOTE: PlaceableObject Elevation
-// Drawing, AmbientLight, AmbientSound, MeasuredTemplate, Note, Tile, Wall, Token
-// Default is to use the object's cached elevation property.
-// Wall, Tile, Token are broken out.
-// TODO: Would be 2x faster by accessing the flag directly and not using getProperty.
-
-function placeableObjectElevationE() {
-  return getProperty(this.document, MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION) ?? 0;
-}
+function placeableObjectElevationE() { return this.document.elevation; }
 
 async function setPlaceableObjectElevationE(value) {
-  return this.document.update({ [MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION]: value });
+  return this.document.update({ elevation: value });
 }
 
 // NOTE: Wall Elevation
 function wallTopE() {
-  return getProperty(this.document, MODULE_KEYS.EV.FLAG_WALL_TOP)
-    ?? getProperty(this.document, MODULE_KEYS.WH.FLAG_WALL_TOP)
+  return foundry.utils.getProperty(this.document, MODULE_KEYS.EV.FLAG_WALL_TOP)
+    ?? foundry.utils.getProperty(this.document, MODULE_KEYS.WH.FLAG_WALL_TOP)
     ?? Number.POSITIVE_INFINITY;
 }
 
 function wallBottomE() {
-  return getProperty(this.document, MODULE_KEYS.EV.FLAG_WALL_BOTTOM)
-    ?? getProperty(this.document, MODULE_KEYS.WH.FLAG_WALL_BOTTOM)
+  return foundry.utils.getProperty(this.document, MODULE_KEYS.EV.FLAG_WALL_BOTTOM)
+    ?? foundry.utils.getProperty(this.document, MODULE_KEYS.WH.FLAG_WALL_BOTTOM)
     ?? Number.NEGATIVE_INFINITY;
 }
 
@@ -206,8 +196,8 @@ function getIsProne() {
 
 function getTokenHeight(token) {
   // Use || to ignore 0 height values.
-  return getProperty(token.document, MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT)
-    || getProperty(token.document, MODULE_KEYS.WH.FLAG_TOKEN_HEIGHT)
+  return foundry.utils.getProperty(token.document, MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT)
+    || foundry.utils.getProperty(token.document, MODULE_KEYS.WH.FLAG_TOKEN_HEIGHT)
     || calculateTokenHeightFromTokenShape(token);
 }
 
@@ -235,27 +225,6 @@ async function setTokenVerticalHeight(value) {
 // NOTE: Hooks
 
 /**
- * Monitor tile document updates for updated elevation and sync the document with the flag.
- * Note Tile Elevation has document.elevation already but does not save it (in v11).
- */
-function preUpdateTileHook(_tileD, changes, _options, _userId) {
-  const flatData = flattenObject(changes);
-  const changeKeys = new Set(Object.keys(flatData));
-  const evFlag = MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION;
-  const updates = {};
-  if ( changeKeys.has(evFlag) ) updates.elevation = flatData[evFlag];
-  else if ( changeKeys.has("elevation") ) updates[evFlag] = changes.elevation;
-  foundry.utils.mergeObject(changes, updates);
-}
-
-function updateTileHook(tileD, changed, _options, _userId) {
-  const flatData = flattenObject(changed);
-  const changeKeys = new Set(Object.keys(flatData));
-  const evFlag = MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION;
-  if ( changeKeys.has(evFlag) ) tileD.elevation = flatData[evFlag] ?? undefined; // Avoid setting null.
-}
-
-/**
  * Monitor token updates for updated losHeight and update the cached data property accordingly.
  * Sync Wall Height and Elevated Vision flags. Prefer EV.
  * @param {Document} document                       The existing Document which was updated
@@ -264,7 +233,7 @@ function updateTileHook(tileD, changed, _options, _userId) {
  * @param {string} userId                           The ID of the User who triggered the update workflow
  */
 function preUpdateTokenHook(tokenD, data, _options, _userId) {
-  const flatData = flattenObject(data);
+  const flatData = foundry.utils.flattenObject(data);
   const changes = new Set(Object.keys(flatData));
   const evFlag = MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT;
   const whFlag = MODULE_KEYS.WH.FLAG_TOKEN_HEIGHT;
@@ -289,7 +258,7 @@ function preUpdateTokenHook(tokenD, data, _options, _userId) {
  * @param {string} userId                           The ID of the User who triggered the update workflow
  */
 function preUpdateWallHook(wallD, data, _options, _userId) {
-  const flatData = flattenObject(data);
+  const flatData = foundry.utils.flattenObject(data);
   const changes = new Set(Object.keys(flatData));
   const evTopFlag = MODULE_KEYS.EV.FLAG_WALL_TOP;
   const evBottomFlag = MODULE_KEYS.EV.FLAG_WALL_BOTTOM;
@@ -313,14 +282,6 @@ function preUpdateWallHook(wallD, data, _options, _userId) {
   }
 
   foundry.utils.mergeObject(data, updates);
-}
-
-/**
- * Monitor tiles drawn to canvas and sync elevation.
- */
-function drawTileHook(tile) {
-  if ( !MODULE_KEYS.EV.ACTIVE ) return;
-  if ( tile.document.elevation !== tile.elevationE ) tile.document.elevation = tile.elevationE;
 }
 
 
@@ -374,18 +335,10 @@ PATCHES.PlaceableObject.ELEVATION.METHODS = {
   setElevationZ: setZElevation
 };
 
-// ---- NOTE: Tile ----- //
-PATCHES.Tile.ELEVATION.HOOKS = {
-  preUpdateTile: preUpdateTileHook,
-  updateTile: updateTileHook,
-  drawTile: drawTileHook
-};
 
 // ---- NOTE: Token ----- //
 PATCHES.Token.ELEVATION.GETTERS = {
-  elevationE: tokenElevationE,
-  elevationZ: zElevation,
-  bottomE: tokenElevationE, // Alias
+  bottomE: placeableObjectElevationE, // Alias
   bottomZ: zBottom, // Alias
   topE: tokenTopE,
   topZ: zTop,
@@ -401,9 +354,7 @@ PATCHES.Token.ELEVATION.GETTERS = {
 };
 
 PATCHES.Token.ELEVATION.METHODS = {
-  setElevationE: setTokenElevationE,
-  setElevationZ: setZBottom,
-  setBottomE: setTokenElevationE, // Alias
+  setBottomE: setPlaceableObjectElevationE, // Alias
   setBottomZ: setZBottom, // Alias
   setVerticalHeight: setTokenVerticalHeight // Async
 };

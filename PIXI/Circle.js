@@ -22,7 +22,7 @@ function angleAtPoint(point) {
  * @returns {number}
  */
 function area() {
-  return Math.pow(this.radius * 2) * Math.PI;
+  return Math.pow(this.radius, 2) * Math.PI;
 }
 
 /**
