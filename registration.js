@@ -5,7 +5,7 @@ Hooks
 */
 "use strict";
 
-const VERSION = "0.2.19";
+const VERSION = "0.3.0";
 
 // Foundry utils
 import { registerFoundryUtilsMethods } from "./util.js";
@@ -74,11 +74,13 @@ const PATCHES = {
   "PIXI.Polygon": PATCHES_Polygon,
   "PIXI.Rectangle": PATCHES_Rectangle,
 
+  // PixelCache
+  "Tile": PATCHES_Tile,
+
   // Elevation patches.
-  "PointSource": PATCHES_ELEVATION.PointSource,
-  "VisionSource": PATCHES_ELEVATION.VisionSource,
+  "foundry.canvas.sources.BaseEffectSource": PATCHES_ELEVATION.PointSource,
+  "foundry.canvas.sources.PointVisionSource": PATCHES_ELEVATION.VisionSource,
   "PlaceableObject": PATCHES_ELEVATION.PlaceableObject,
-  "Tile": foundry.utils.mergeObject(PATCHES_ELEVATION.Tile, PATCHES_Tile), // Includes PixelCache patch.
   "Wall": PATCHES_ELEVATION.Wall,
 
   // Elevation and Constrained Token patches

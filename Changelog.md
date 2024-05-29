@@ -1,3 +1,13 @@
+## 0.3.0
+Foundry v12 compatibility. No tested backwards compatibility.
+Removed `Math.SQRT3` which is now set in base Foundry.
+Add `roundDecimals` to `CONFIG.GeometryLib.utils`.
+Change `getProperty` to `foundry.utils.getProperty`.
+Change `canvas.grid.isHex` to `isHexagonal`.
+
+## 0.2.20
+Fix for `Circle.prototype.area` calculation.
+
 ## 0.2.19
 Add `Ellipse.prototype.lineSegmentIntersects`.
 

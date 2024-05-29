@@ -6,9 +6,6 @@ canvas
 
 import { RegularPolygon } from "./RegularPolygon.js";
 
-// Store √3 as a constant
-Math.SQRT3 = Math.sqrt(3);
-
 /**
  * "Column" hexagon with points at W and E
  * If height is greater than width, a row hexagon will be returned; otherwise column or rotated.

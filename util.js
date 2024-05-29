@@ -238,11 +238,11 @@ Math.PI_1_2 = Math.PI * 0.5;
  */
 function centeredPolygonFromDrawing(drawing) {
   switch ( drawing.document.shape.type ) {
-    case CONST.DRAWING_TYPES.RECTANGLE:
+    case Drawing.SHAPE_TYPES.RECTANGLE:
       return CenteredRectangle.fromDrawing(drawing);
-    case CONST.DRAWING_TYPES.ELLIPSE:
+    case Drawing.SHAPE_TYPES.ELLIPSE:
       return Ellipse.fromDrawing(drawing);
-    case CONST.DRAWING_TYPES.POLYGON:
+    case Drawing.SHAPE_TYPES.POLYGON:
       return CenteredPolygon.fromDrawing(drawing);
     default:
       console.error("fromDrawing shape type not supported");

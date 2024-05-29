@@ -5,9 +5,6 @@ PIXI
 
 import { RegularPolygon } from "./RegularPolygon.js";
 
-// Store √3 as a constant
-Math.SQRT3 = Math.sqrt(3);
-
 export class EquilateralTriangle extends RegularPolygon {
   constructor(origin, radius, {rotation = 0} = {}) {
     super(origin, radius, { rotation, numSides: 3 });
