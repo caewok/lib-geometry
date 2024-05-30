@@ -169,27 +169,35 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
    * @protected
    */
   _testEdgeInclusion(edge, edgeTypes, bounds) {
-     // Only include edges of the appropriate type
+     // Need to include scene boundaries in case we need to run sweep.
     const m = edgeTypes[edge.type];
     if ( !m ) return false;
     if ( m === 2 ) return true;
 
     // Drop edges collinear to the border.
-    if ( this.#edgeIsCollinearToBounds(edge, bounds) ) return false;
+    if ( this.#edgeIsCollinearToBoundary(edge) ) return false;
 
     return super._testEdgeInclusion(edge, edgeTypes, bounds);
   }
 
   /**
    * Test whether a given edge lies precisely on a boundary edge.
-   * @param {Edge} edge               The Edge being considered
-   * @param {PIXI.Rectangle} bounds   Overall bounding box
+   * @param {Edge} edge                               The Edge being considered
    * @returns {boolean}
    */
-  #edgeIsCollinearToBounds(edge, bounds) {
-    const delta = edge.b.subtract(edge.a, PIXI.Point._tmp);
-    if ( !delta.x && (edge.a.x.almostEqual(bounds.left) || edge.a.x.almostEqual(bounds.right)) ) return true;
-    if ( !delta.y && (edge.a.y.almostEqual(bounds.top) || edge.a.y.almostEqual(bounds.bottom)) ) return true;
+  #edgeIsCollinearToBoundary(edge) {
+    const boundary = this.config.boundaryShapes[0]; // Always a single shape b/c set in initialize.
+    if ( boundary instanceof PIXI.Rectangle ) {
+      const delta = edge.b.subtract(edge.a, PIXI.Point._tmp);
+      if ( !delta.x && (edge.a.x.almostEqual(bounds.left) || edge.a.x.almostEqual(bounds.right)) ) return true;
+      if ( !delta.y && (edge.a.y.almostEqual(bounds.top) || edge.a.y.almostEqual(bounds.bottom)) ) return true;
+    } else if ( boundary instanceof PIXI.Polygon ) {
+      const orient2d = foundry.utils.orient2dFast;
+      for ( const boundaryEdge of boundary.iterateEdges() ) {
+        // Works b/c the boundary polygon is simple.
+        if ( orient2d(boundaryEdge.A, boundaryEdge.B, edge.a, edge.b).almostEqual(0) ) return true;
+      }
+    }
     return false;
   }
 
@@ -200,12 +208,12 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
   _identifyEdges() {
     super._identifyEdges();
 
-    // If only border edges left, confirm those edges don't intersect the boundary.
-    let bounds = this.config.boundingBox
+    // Can skip sweep if only border edges left and those edges don't intersect the boundary.
+    const boundary = this.config.boundaryShapes[0];
     for ( const edge of this.edges ) {
       if ( !(edge.type === "innerBounds" || edge.type === "outerBounds") ) return false;
-      if ( bounds.lineSegmentIntersects(edge.a, edge.b, { inside: true }) &&
-          !this.#edgeIsCollinearToBounds(edge, bounds) ) return false;
+      if ( boundary.lineSegmentIntersects(edge.a, edge.b, { inside: true }) &&
+          !this.#edgeIsCollinearToBounds(edge) ) return false;
     }
     return true; // Can skip the sweep.
   }
