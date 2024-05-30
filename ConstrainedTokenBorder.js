@@ -1,5 +1,6 @@
 /* globals
 ClockwiseSweepPolygon,
+foundry,
 PIXI
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
@@ -189,8 +190,8 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
     const boundary = this.config.boundaryShapes[0]; // Always a single shape b/c set in initialize.
     if ( boundary instanceof PIXI.Rectangle ) {
       const delta = edge.b.subtract(edge.a, PIXI.Point._tmp);
-      if ( !delta.x && (edge.a.x.almostEqual(bounds.left) || edge.a.x.almostEqual(bounds.right)) ) return true;
-      if ( !delta.y && (edge.a.y.almostEqual(bounds.top) || edge.a.y.almostEqual(bounds.bottom)) ) return true;
+      if ( !delta.x && (edge.a.x.almostEqual(boundary.left) || edge.a.x.almostEqual(boundary.right)) ) return true;
+      if ( !delta.y && (edge.a.y.almostEqual(boundary.top) || edge.a.y.almostEqual(boundary.bottom)) ) return true;
     } else if ( boundary instanceof PIXI.Polygon ) {
       const orient2d = foundry.utils.orient2dFast;
       for ( const boundaryEdge of boundary.iterateEdges() ) {
@@ -213,7 +214,7 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
     for ( const edge of this.edges ) {
       if ( !(edge.type === "innerBounds" || edge.type === "outerBounds") ) return false;
       if ( boundary.lineSegmentIntersects(edge.a, edge.b, { inside: true }) &&
-          !this.#edgeIsCollinearToBounds(edge) ) return false;
+          !this.#edgeIsCollinearToBoundary(edge) ) return false;
     }
     return true; // Can skip the sweep.
   }
