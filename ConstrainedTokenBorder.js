@@ -116,14 +116,12 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
     if ( tokenMoved ||  this.#wallsID !== ConstrainedTokenBorder._wallsID ) {
       this.#wallsID = ConstrainedTokenBorder._wallsID;
       this.#dirty = true;
-      const border = _token.tokenBorder;
       const config = {
         source: _token.vision,
         type: "move",
-        boundaryShapes: border // [border.toPolygon()] }; // Avoid WeilerAtherton.
+        boundaryShapes: [_token.tokenBorder] // [_token.tokenBorder.toPolygon()] }; // Avoid WeilerAtherton.
       };
-      const center = _token.center;
-      super.initialize({ x: center.x, y: center.y }, config);
+      super.initialize(_token.center, config);
     }
   }
 
