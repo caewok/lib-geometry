@@ -5,7 +5,7 @@ Hooks
 */
 "use strict";
 
-const VERSION = "0.3.0";
+const VERSION = "0.3.1";
 
 // Foundry utils
 import { registerFoundryUtilsMethods } from "./util.js";
@@ -85,7 +85,7 @@ const PATCHES = {
 
   // Elevation and Constrained Token patches
   "Token": foundry.utils.mergeObject(PATCHES_ELEVATION.Token, PATCHES_Token),
-  "ConstrainedTokenBorder": PATCHES_ConstrainedTokenBorder // Only hooks.
+  "foundry.canvas.edges.CanvasEdges": PATCHES_ConstrainedTokenBorder
 }
 
 export function registerGeometry() {
