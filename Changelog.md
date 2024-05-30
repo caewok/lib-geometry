@@ -1,3 +1,7 @@
+## 0.3.1
+Add temporary static points to `PIXI.Point` and `Point3d`.
+Redo constrained token border to use CanvasEdges in v12.
+
 ## 0.3.0
 Foundry v12 compatibility. No tested backwards compatibility.
 Removed `Math.SQRT3` which is now set in base Foundry.

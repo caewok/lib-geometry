@@ -49,6 +49,8 @@ export class Point3d extends PIXI.Point {
     this.z = z;
   }
 
+
+
   /**
    * Construct a Point3d from any object that has x and y and z properties.
    * Recognizes elevationZ and elevation as potential z properties.
@@ -548,6 +550,11 @@ export class Point3d extends PIXI.Point {
     return super.normalize(outPoint);
   }
 }
+
+// Temporary points that can be passed to PIXI.Point methods
+Point3d._tmp = new Point3d();
+Point3d._tmp2 = new Point3d();
+Point3d._tmp3 = new Point3d();
 
 /**
  * The effective maximum texture size that Foundry VTT "ever" has to worry about.
