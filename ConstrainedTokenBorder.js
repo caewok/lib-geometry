@@ -204,7 +204,7 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
 
   /**
    * If all edges are collinear to the token border, then we can just use the token border.
-   * @returns {boolean} True if all edges are outside the token border or collinear to the border.
+   * @returns {boolean} True if sweep should be run (edges not all collinear or outside the token border).
    @override */
   _identifyEdges() {
     super._identifyEdges();
@@ -212,11 +212,11 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
     // Can skip sweep if only border edges left and those edges don't intersect the boundary.
     const boundary = this.config.boundaryShapes[0];
     for ( const edge of this.edges ) {
-      if ( !(edge.type === "innerBounds" || edge.type === "outerBounds") ) return false;
+      if ( !(edge.type === "innerBounds" || edge.type === "outerBounds") ) return true;
       if ( boundary.lineSegmentIntersects(edge.a, edge.b, { inside: true }) &&
-          !this.#edgeIsCollinearToBoundary(edge) ) return false;
+          !this.#edgeIsCollinearToBoundary(edge) ) return true;
     }
-    return true; // Can skip the sweep.
+    return false; // Can skip the sweep.
   }
 
   /** @override */
