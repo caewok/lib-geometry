@@ -1,6 +1,5 @@
 /* globals
 ClockwiseSweepPolygon,
-foundry,
 PIXI
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
@@ -58,20 +57,27 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
    * Properties to test if relevant token characterics have changed.
    * @type {object}
    */
-  _tokenDimensions = {
-    "document.x": null,
-    "document.y": null,
-    "document.elevation": null,
-    "visionHeight": null,
-    "document.width": null,
-    "document.height": null
+  _tokenProperties = {
+    visionHeight: null
   };
+
+  /**
+   * More properties to test if relevant token characterics have changed, specific to the document.
+   * @type {object}
+   */
+  _tokenDocumentProperties = {
+    x: null,
+    y: null,
+    elevation: null,
+    width: null,
+    height: null
+  }
 
   /** @type {Token} */
   _token;
 
   /** @type {number} */
-  _wallsID = -1;
+  #wallsID = -1;
 
   /**
    * If true, no walls constrain token.
@@ -80,7 +86,7 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
   _unrestricted;
 
   /** @type {boolean} */
-  _dirty = true;
+  #dirty = true;
 
   constructor(token) {
     super();
@@ -89,28 +95,34 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
 
   /** @override */
   initialize() {
-    const { getProperty, setProperty } = foundry.utils;
-    const token = this._token;
-    const tokenDimensions = this._tokenDimensions;
+    const { _token, _tokenProperties, _tokenDocumentProperties } = this;
 
     // Determine if the token has changed.
+    // Could use getProperty/setProperty, but may be a bit slow and unnecessary, given
+    // that all properties are either on the token or the document.
     let tokenMoved = false;
-    for ( const key of tokenDimensions.keys() ) {
-      const value = getProperty(token, key)
-      tokenMoved ||= (getProperty(tokenDimensions, key) !== value);
-      setProperty(tokenDimensions, key, value);
+    for ( const key of Object.keys(_tokenProperties) ) {
+      const value = _token[key];
+      tokenMoved ||= _tokenProperties[key] !== value;
+      _tokenProperties[key] = value;
+    }
+    const doc = _token.document;
+    for ( const key of Object.keys(_tokenDocumentProperties) ) {
+      const value = doc[key];
+      tokenMoved ||= _tokenDocumentProperties[key] !== value;
+      _tokenDocumentProperties[key] = value;
     }
 
-    if ( tokenMoved ||  this._wallsID !== ConstrainedTokenBorder._wallsID ) {
-      this._wallsID = ConstrainedTokenBorder._wallsID;
-      this._dirty = true;
-      const border = this._token.tokenBorder;
+    if ( tokenMoved ||  this.#wallsID !== ConstrainedTokenBorder._wallsID ) {
+      this.#wallsID = ConstrainedTokenBorder._wallsID;
+      this.#dirty = true;
+      const border = _token.tokenBorder;
       const config = {
-        source: this._token.vision,
+        source: _token.vision,
         type: "move",
         boundaryShapes: border // [border.toPolygon()] }; // Avoid WeilerAtherton.
       };
-      const center = this._token.center;
+      const center = _token.center;
       super.initialize({ x: center.x, y: center.y }, config);
     }
   }
@@ -122,8 +134,8 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
 
   /** @override */
   compute() {
-    if ( this._dirty ) {
-      this._dirty = false;
+    if ( this.#dirty ) {
+      this.#dirty = false;
       super.compute();
     }
   }
