@@ -619,7 +619,7 @@ export class Shadow extends PIXI.Polygon {
     if ( Ve <= Te ) return null; // Vision object blocked completely by wall
 
     // Need the point of the wall that forms a perpendicular line to the vision object
-    const Tix = CONFIG.GeometryLib.utils.perpendicularPoint(wall.edge.A, wall.edge.B, source);
+    const Tix = CONFIG.GeometryLib.utils.perpendicularPoint(wall.edge.a, wall.edge.b, source);
     if ( !Tix ) return null; // Line collinear with vision object
     const VT = new Ray(source, Tix);
 
@@ -646,22 +646,22 @@ export class Shadow extends PIXI.Polygon {
     */
 
     // We know the small triangle on each side:
-    // V --> T --> wall.edge.A and
-    // V --> T --> wall.edge.B
+    // V --> T --> wall.edge.a and
+    // V --> T --> wall.edge.b
     // We need the larger encompassing triangle:
-    // V --> O --> ? (wall.edge.A side and wall.edge.B side)
+    // V --> O --> ? (wall.edge.a side and wall.edge.b side)
 
     // Get the distances between Tix and the wall endpoints.
-    const distA = PIXI.Point.distanceBetween(wall.edge.A, Tix);
-    const distB = PIXI.Point.distanceBetween(wall.edge.B, Tix);
+    const distA = PIXI.Point.distanceBetween(wall.edge.a, Tix);
+    const distB = PIXI.Point.distanceBetween(wall.edge.b, Tix);
 
 
     /* Testing
     // Ray extending Tix --> Wall.A
-    rayTA = new Ray(wall.edge.A, Tix);
+    rayTA = new Ray(wall.edge.a, Tix);
     rayTA.distance
 
-    rayTB = new Ray(wall.edge.B, Tix);
+    rayTB = new Ray(wall.edge.b, Tix);
     rayTB.distance;
     */
 
@@ -679,8 +679,8 @@ export class Shadow extends PIXI.Polygon {
     // Each distance is the hypotenuse ont he side.
     // given angle alpha.
     // Should form the parallelogram with wall T on one parallel side
-    const VOa = Ray.towardsPoint(source, wall.edge.A, hypA);
-    const VOb = Ray.towardsPoint(source, wall.edge.B, hypB);
+    const VOa = Ray.towardsPoint(source, wall.edge.a, hypA);
+    const VOb = Ray.towardsPoint(source, wall.edge.b, hypB);
 
     /* Testing
     // Rays extending V --> T.A or T.B --> end of shadow
@@ -689,7 +689,7 @@ export class Shadow extends PIXI.Polygon {
     api.drawing.drawSegment({A: VOa.B, B: VOb.B}, {color: api.drawing.COLORS.gray})
     */
 
-    const shadow = new this([wall.edge.A, VOa.B, VOb.B, wall.edge.B]);
+    const shadow = new this([wall.edge.a, VOa.B, VOb.B, wall.edge.b]);
 
     /* Testing
     api.drawing.drawShape(shadow)
