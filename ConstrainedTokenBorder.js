@@ -1,8 +1,7 @@
 /* globals
-canvas,
 ClockwiseSweepPolygon,
-PIXI,
-PolygonEdge
+foundry,
+PIXI
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
@@ -10,24 +9,20 @@ PolygonEdge
 export const PATCHES = {};
 PATCHES.CONSTRAINED_TOKEN_BORDER = {};
 
-// ----- NOTE: Hooks ----- //
+// ----- NOTE: Hooks to mark edge changes ----- //
 
-/** Hooks to increment wall ids. */
 function canvasInit() { ConstrainedTokenBorder._wallsID++; }
 
-function createWall(wallD) { if ( wallD.rendered ) ConstrainedTokenBorder._wallsID++; }
+PATCHES.CONSTRAINED_TOKEN_BORDER.HOOKS = { canvasInit };
 
-function updateWall(_wallD) { if ( document.rendered ) ConstrainedTokenBorder._wallsID++; }
+// ----- NOTE: Wraps to mark edge changes ----- //
 
-function deleteWall(_wallD) { if ( document.rendered ) ConstrainedTokenBorder._wallsID++; }
+function refreshCanvasEdge(wrapped) {
+  ConstrainedTokenBorder._wallsID++;
+  wrapped();
+}
 
-
-PATCHES.CONSTRAINED_TOKEN_BORDER.HOOKS = {
-  canvasInit,
-  createWall,
-  updateWall,
-  deleteWall
-};
+PATCHES.CONSTRAINED_TOKEN_BORDER.WRAPS = { refresh: refreshCanvasEdge };
 
 /**
  * Generate a polygon of the token bounds with portions intersected by walls stripped out.
@@ -54,7 +49,7 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
     return polygon;
   }
 
-  /** Indicator of wall changes
+  /** Indicator of wall/edge changes
    * @type {number}
    */
   static _wallsID = 0;
@@ -63,20 +58,27 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
    * Properties to test if relevant token characterics have changed.
    * @type {object}
    */
-  _tokenDimensions = {
-    x: Number.NEGATIVE_INFINITY,
-    y: Number.NEGATIVE_INFINITY,
-    topZ: Number.POSITIVE_INFINITY,
-    bottomZ: Number.NEGATIVE_INFINITY,
-    width: -1,
-    height: -1 };
+  _tokenProperties = {
+    visionHeight: null
+  };
+
+  /**
+   * More properties to test if relevant token characterics have changed, specific to the document.
+   * @type {object}
+   */
+  _tokenDocumentProperties = {
+    x: null,
+    y: null,
+    elevation: null,
+    width: null,
+    height: null
+  }
 
   /** @type {Token} */
   _token;
 
-  // TODO: Change this to a boolean "dirty" flag
   /** @type {number} */
-  _wallsID = -1;
+  #wallsID = -1;
 
   /**
    * If true, no walls constrain token.
@@ -85,7 +87,7 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
   _unrestricted;
 
   /** @type {boolean} */
-  _dirty = true;
+  #dirty = true;
 
   constructor(token) {
     super();
@@ -94,34 +96,33 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
 
   /** @override */
   initialize() {
-    const { topZ, bottomZ } = this._token;
-    const { x, y, width, height } = this._token.document;
+    const { _token, _tokenProperties, _tokenDocumentProperties } = this;
 
-    const tokenMoved = this._tokenDimensions.x !== x
-      || this._tokenDimensions.y !== y
-      || this._tokenDimensions.topZ !== topZ
-      || this._tokenDimensions.bottomZ !== bottomZ
-      || this._tokenDimensions.width !== width
-      || this._tokenDimensions.height !== height;
+    // Determine if the token has changed.
+    // Could use getProperty/setProperty, but may be a bit slow and unnecessary, given
+    // that all properties are either on the token or the document.
+    let tokenMoved = false;
+    for ( const key of Object.keys(_tokenProperties) ) {
+      const value = _token[key];
+      tokenMoved ||= _tokenProperties[key] !== value;
+      _tokenProperties[key] = value;
+    }
+    const doc = _token.document;
+    for ( const key of Object.keys(_tokenDocumentProperties) ) {
+      const value = doc[key];
+      tokenMoved ||= _tokenDocumentProperties[key] !== value;
+      _tokenDocumentProperties[key] = value;
+    }
 
-    if ( tokenMoved || this._wallsID !== ConstrainedTokenBorder._wallsID ) {
-      this._tokenDimensions.x = x;
-      this._tokenDimensions.y = y;
-      this._tokenDimensions.topZ = topZ;
-      this._tokenDimensions.bottomZ = bottomZ;
-      this._tokenDimensions.width = width;
-      this._tokenDimensions.height = height;
-      this._wallsID = ConstrainedTokenBorder._wallsID;
-      this._dirty = true;
-
-      const border = this._token.tokenBorder;
+    if ( tokenMoved ||  this.#wallsID !== ConstrainedTokenBorder._wallsID ) {
+      this.#wallsID = ConstrainedTokenBorder._wallsID;
+      this.#dirty = true;
       const config = {
-        source: this._token.vision,
+        source: _token.vision,
         type: "move",
-        boundaryShapes: [border.toPolygon()] }; // Avoid WeilerAtherton.
-
-      const center = this._token.center;
-      super.initialize({ x: center.x, y: center.y }, config);
+        boundaryShapes: [_token.tokenBorder] // [_token.tokenBorder.toPolygon()] }; // Avoid WeilerAtherton.
+      };
+      super.initialize(_token.center, config);
     }
   }
 
@@ -132,8 +133,8 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
 
   /** @override */
   compute() {
-    if ( this._dirty ) {
-      this._dirty = false;
+    if ( this.#dirty ) {
+      this.#dirty = false;
       super.compute();
     }
   }
@@ -159,40 +160,63 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
     if ( this.points.length < 6 ) this._unrestricted = true;
   }
 
-  /** @override */
-  _identifyEdges() {
-    const walls = this._getWalls();
-    const type = this.config.type;
-    const bounds = this._token.bounds;
-    for ( const wall of walls ) {
-      // If only walls on a token bounds, then we can stop and return the unrestricted token shape.
-      // Token borders are either square or hex.
-      // Too hard to properly reject walls on the hex border, so just use bounds to omit some.
-      const dx = wall.B.x - wall.A.x;
-      const dy = wall.B.y - wall.A.y;
-      if ( !dx && (wall.A.x.almostEqual(bounds.left) || wall.A.x.almostEqual(bounds.right)) ) continue;
-      if ( !dy && (wall.A.y.almostEqual(bounds.top) || wall.A.y.almostEqual(bounds.bottom)) ) continue;
+  /**
+   * Reject walls collinear to the bounding shape.
+   * Test whether a wall should be included in the computed polygon for a given origin and type
+   * @param {Edge} edge                     The Edge being considered
+   * @param {Record<EdgeTypes, 0|1|2>} edgeTypes Which types of edges are being used? 0=no, 1=maybe, 2=always
+   * @param {PIXI.Rectangle} bounds         The overall bounding box
+   * @returns {boolean}                     Should the edge be included?
+   * @protected
+   */
+  _testEdgeInclusion(edge, edgeTypes, bounds) {
+     // Need to include scene boundaries in case we need to run sweep.
+    const m = edgeTypes[edge.type];
+    if ( !m ) return false;
+    if ( m === 2 ) return true;
 
-      // Otherwise, use this wall in constructing the constrained border
-      this.edges.add(PolygonEdge.fromWall(wall, type));
-    }
+    // Drop edges collinear to the border.
+    if ( this.#edgeIsCollinearToBoundary(edge) ) return false;
 
-    // If no edges, we return early and ultimately use the token border instead of sweep.
-    if ( this.edges.size === 0 ) return false;
-
-    // Add in the canvas boundaries as in the original _identifyEdges.
-    for ( const boundary of canvas.walls.outerBounds ) {
-      const edge = PolygonEdge.fromWall(boundary, type);
-      edge._isBoundary = true;
-      this.edges.add(edge);
-    }
-
-    return true;
+    return super._testEdgeInclusion(edge, edgeTypes, bounds);
   }
 
-  /** @override */
-  _defineBoundingBox() {
-    return this._token.bounds.clone().ceil().pad(1);
+  /**
+   * Test whether a given edge lies precisely on a boundary edge.
+   * @param {Edge} edge                               The Edge being considered
+   * @returns {boolean}
+   */
+  #edgeIsCollinearToBoundary(edge) {
+    const boundary = this.config.boundaryShapes[0]; // Always a single shape b/c set in initialize.
+    if ( boundary instanceof PIXI.Rectangle ) {
+      const delta = edge.b.subtract(edge.a, PIXI.Point._tmp);
+      if ( !delta.x && (edge.a.x.almostEqual(boundary.left) || edge.a.x.almostEqual(boundary.right)) ) return true;
+      if ( !delta.y && (edge.a.y.almostEqual(boundary.top) || edge.a.y.almostEqual(boundary.bottom)) ) return true;
+    } else if ( boundary instanceof PIXI.Polygon ) {
+      const orient2d = foundry.utils.orient2dFast;
+      for ( const boundaryEdge of boundary.iterateEdges() ) {
+        // Works b/c the boundary polygon is simple.
+        if ( orient2d(boundaryEdge.A, boundaryEdge.B, edge.a, edge.b).almostEqual(0) ) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * If all edges are collinear to the token border, then we can just use the token border.
+   * @returns {boolean} True if sweep should be run (edges not all collinear or outside the token border).
+   @override */
+  _identifyEdges() {
+    super._identifyEdges();
+
+    // Can skip sweep if only border edges left and those edges don't intersect the boundary.
+    const boundary = this.config.boundaryShapes[0];
+    for ( const edge of this.edges ) {
+      if ( !(edge.type === "innerBounds" || edge.type === "outerBounds") ) return true;
+      if ( boundary.lineSegmentIntersects(edge.a, edge.b, { inside: true }) &&
+          !this.#edgeIsCollinearToBoundary(edge) ) return true;
+    }
+    return false; // Can skip the sweep.
   }
 
   /** @override */

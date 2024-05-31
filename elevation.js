@@ -163,7 +163,7 @@ async function setTokenElevationE(value) { return this.document.update({ elevati
  */
 function getTokenVerticalHeight() {
   const isProne = this.isProne;
-  const heightMult = isProne ? Math.clamped(CONFIG.GeometryLib.proneMultiplier, 0, 1) : 1;
+  const heightMult = isProne ? Math.clamp(CONFIG.GeometryLib.proneMultiplier, 0, 1) : 1;
   return (getTokenHeight(this) * heightMult) || 1; // Force at least 1 pixel high.
 }
 
@@ -171,7 +171,7 @@ function getTokenVerticalHeight() {
  * Calculated vision height.
  */
 function getTokenVisionHeight() {
-  return Math.max(1, this.verticalHeight * Math.clamped(CONFIG.GeometryLib.visionHeightMultiplier, 0, 1));
+  return Math.max(1, this.verticalHeight * Math.clamp(CONFIG.GeometryLib.visionHeightMultiplier, 0, 1));
 }
 
 function getTokenVisionE() { return this.bottomE + this.visionHeight; }

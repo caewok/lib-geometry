@@ -9,6 +9,11 @@ import { Point3d } from "../3d/Point3d.js";
 export const PATCHES = {};
 PATCHES.PIXI = {};
 
+// Temporary points that can be passed to PIXI.Point methods
+PIXI.Point._tmp = new PIXI.Point();
+PIXI.Point._tmp2 = new PIXI.Point();
+PIXI.Point._tmp3 = new PIXI.Point();
+
 /**
  * Invert a wall key to get the coordinates.
  * Key = (MAX_TEXTURE_SIZE * x) + y, where x and y are integers.
