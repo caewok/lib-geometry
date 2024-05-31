@@ -1,5 +1,6 @@
 ## 0.3.2
 Use `token#getShape()` instead of `token#shape` in `token#tokenBorder` so it works even if the token shape is not yet defined.
+Use `wall.edge.A` instead of `wall.A`.
 
 ## 0.3.1
 Add temporary static points to `PIXI.Point` and `Point3d`.
