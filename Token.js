@@ -32,7 +32,7 @@ function isConstrainedTokenBorder() { return !ConstrainedTokenBorder.get(this)._
  * Determine the correct border shape for this token. Utilize the cached token shape.
  * @returns {PIXI.Polygon|PIXI.Rectangle}
  */
-function tokenBorder() { return this.shape.translate(this.document.x, this.document.y); }
+function tokenBorder() { return this.getShape().translate(this.document.x, this.document.y); }
 
 /**
  * New getter: Token.prototype.tokenShape

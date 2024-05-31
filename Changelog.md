@@ -1,7 +1,11 @@
+## 0.3.2
+Use `token#getShape()` instead of `token#shape` in `token#tokenBorder` so it works even if the token shape is not yet defined.
+
 ## 0.3.1
 Add temporary static points to `PIXI.Point` and `Point3d`.
 Redo constrained token border to use CanvasEdges in v12.
 Change `Math.clamped` to `Math.clamp`.
+Deprecate `Token#tokenShape`.
 
 ## 0.3.0
 Foundry v12 compatibility. No tested backwards compatibility.
