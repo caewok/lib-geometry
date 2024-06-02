@@ -1,3 +1,6 @@
+## 0.3.3
+Switch to using TextureLoader.getTextureAlphaData.
+
 ## 0.3.2
 Use `token#getShape()` instead of `token#shape` in `token#tokenBorder` so it works even if the token shape is not yet defined.
 Use `wall.edge.a` instead of `wall.A`.
