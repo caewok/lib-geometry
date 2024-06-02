@@ -1907,7 +1907,9 @@ export class TilePixelCache extends PixelCache {
    * @returns {TilePixelCache}
    */
   static fromOverheadTileAlpha(tile) {
-    if ( !tile.document.overhead ) return this.fromTileAlpha(tile);
+    // TODO: More nuanced test for overhead tiles.
+    // Here, if not overhead, return fromTileAlpha.
+    if ( tile.document.elevation < tile.document.parent.foregroundElevation ) return this.fromTileAlpha(tile);
     const textureData = TextureLoader.getTextureAlphaData(tile.texture);
 
     // Resolution consistent with `_createTextureData` which divides by 4.
