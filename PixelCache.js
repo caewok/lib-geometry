@@ -1908,15 +1908,15 @@ export class TilePixelCache extends PixelCache {
    */
   static fromOverheadTileAlpha(tile) {
     if ( !tile.document.overhead ) return this.fromTileAlpha(tile);
-    if ( !tile.mesh._textureData ) tile.mesh.updateTextureData();
+    const textureData = TextureLoader.getTextureAlphaData(tile.mesh);
 
     // Resolution consistent with `_createTextureData` which divides by 4.
-    const pixelWidth = tile.mesh._textureData.aw;
+    const pixelWidth = textureData.aw;
     const texWidth = tile.mesh.texture.baseTexture.realWidth;
-    const pixelHeight = tile.mesh._textureData.ah;
+    const pixelHeight = textureData.ah;
     const resolution = pixelWidth / texWidth;
 
-    return new this(tile.mesh._textureData.pixels, pixelWidth, { pixelHeight, tile, resolution });
+    return new this(textureData.pixels, pixelWidth, { pixelHeight, tile, resolution });
   }
 
   /**
