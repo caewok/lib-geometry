@@ -214,7 +214,7 @@ export class Point3d extends PIXI.Point {
    * @returns {Point3dWall}
    */
   static fromWall(wall, { finite = false } = {}) {
-    const { topZ, bottomZ, A, B } = wall;
+    const { topZ, bottomZ, edge } = wall;
 
     // Use MAX instead of Number.MAX_SAFE_INTEGER to improve numerical accuracy
     // particularly when converting to/from 2d.
@@ -226,12 +226,12 @@ export class Point3d extends PIXI.Point {
 
     return {
       A: {
-        top: new this(A.x, A.y, top),
-        bottom: new this(A.x, A.y, bottom)
+        top: new this(edge.a.x, edge.a.y, top),
+        bottom: new this(edge.a.x, edge.a.y, bottom)
       },
       B: {
-        top: new this(B.x, B.y, top),
-        bottom: new this(B.x, B.y, bottom)
+        top: new this(edge.b.x, edge.b.y, top),
+        bottom: new this(edge.b.x, edge.b.y, bottom)
       }
     };
   }
