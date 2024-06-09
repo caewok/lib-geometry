@@ -1,5 +1,11 @@
+## 0.3.4
+Handle Wall, Edge classes in Draw.segment.
+
 ## 0.3.3
 Switch to using TextureLoader.getTextureAlphaData.
+Fix the `fromOverheadTileAlpha` method given changes to `TextureLoader.getTextureAlphaData`.
+Use `wall.edge.a`.
+Change Tile overhead test.
 
 ## 0.3.2
 Use `token#getShape()` instead of `token#shape` in `token#tokenBorder` so it works even if the token shape is not yet defined.
