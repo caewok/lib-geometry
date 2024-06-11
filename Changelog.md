@@ -1,6 +1,7 @@
 ## 0.3.4
 Handle Wall, Edge classes in Draw.segment.
 Add an internal PIXI.Point.invert that returns object, for non-keys.
+Fix for test if can convert polygon to rectangle.
 
 ## 0.3.3
 Switch to using TextureLoader.getTextureAlphaData.

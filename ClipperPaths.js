@@ -67,8 +67,8 @@ export class ClipperPaths {
    */
   static polygonToRectangle(polygon) {
     const pts = polygon.points;
-    if ( !(polygon.isClosed && pts.length === 10)
-      || !(!polygon.isClosed && pts.length === 8) ) return polygon;
+    if ( (polygon.isClosed && pts.length !== 10)
+      || (!polygon.isClosed && pts.length !== 8) ) return polygon;
 
     // Layout must be clockwise.
     // Layout options:
