@@ -330,8 +330,8 @@ export class ClipperPaths {
     c.AddPaths(this.paths, ClipperLib.PolyType.ptSubject, true);
     c.Execute(ClipperLib.ClipType.ctUnion,
       union.paths,
-      ClipperLib.PolyFillType.ClipperLib.PolyFillType.pftNonZero,
-      ClipperLib.PolyFillType.ClipperLib.PolyFillType.pftNonZero
+      ClipperLib.PolyFillType.pftNonZero,
+      ClipperLib.PolyFillType.pftNonZero
       );
     return union;
   }
