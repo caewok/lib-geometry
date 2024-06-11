@@ -319,6 +319,20 @@ export class ClipperPaths {
   }
 
   /**
+   * Union the paths.
+   * @returns {ClipperPaths}
+   */
+  union() {
+    if ( this.paths.length === 1 ) return this;
+    const c = new ClipperLib.Clipper();
+    const union = new ClipperPaths();
+    union.scalingFactor = this.scalingFactor;
+    c.AddPaths(this.paths, ClipperLib.PolyType.ptSubject, true);
+    c.Execute(ClipperLib.ClipType.ctUnion, union.paths);
+    return union;
+  }
+
+  /**
    * Union the paths, using a positive fill.
    * This version uses a positive fill type so any overlap is filled.
    * @returns {ClipperPaths}
