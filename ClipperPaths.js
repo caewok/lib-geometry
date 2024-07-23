@@ -360,11 +360,11 @@ export class ClipperPaths {
   }
 
   /**
-   * Combine 2+ ClipperPaths objects using a union with a positive fill.
+   * Join paths into a single ClipperPaths object
    * @param {ClipperPaths[]} pathsArr
    * @returns {ClipperPaths}
    */
-  static combinePaths(pathsArr) {
+  static joinPaths(pathsArr) {
     const ln = pathsArr.length;
     if ( !ln ) return undefined;
 
@@ -380,7 +380,17 @@ export class ClipperPaths {
 
       cPaths.paths.push(...obj.paths);
     }
+    return cPaths;
+  }
 
+  /**
+   * Combine 2+ ClipperPaths objects using a union with a positive fill.
+   * @param {ClipperPaths[]} pathsArr
+   * @returns {ClipperPaths}
+   */
+  static combinePaths(pathsArr) {
+    const cPaths = this.joinPaths(pathsArr);
+    if ( !cPaths ) return undefined;
     return cPaths.combine();
   }
 
