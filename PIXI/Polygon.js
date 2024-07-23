@@ -232,10 +232,10 @@ function linesCross(lines) {
  *                                        return true.
  * @returns {boolean} True if intersects.
  */
-function lineSegmentIntersects(a, b, { inside = false } = {}) {
+function lineSegmentIntersects(a, b, { edges, inside = false } = {}) {
   if (this.contains(a.x, a.y) && this.contains(b.x, b.y) ) return inside;
 
-  const edges = this.iterateEdges({ close: true });
+  edges ??= this.iterateEdges({ close: true });
   for ( const edge of edges ) {
     if ( foundry.utils.lineSegmentIntersects(a, b, edge.A, edge.B) ) return true;
   }

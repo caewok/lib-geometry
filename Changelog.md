@@ -1,3 +1,8 @@
+## 0.3.5.
+Use PIXI.Points for `_fixedPoints` in CenteredPolygon so that the points can be rotated. Closes issue #108 in Elevation Ruler.
+Add `ClipperPaths#joinPaths` method.
+Passthrough pregenerated edges for `Polygon#lineSegmentIntersects` to avoid rebuilding the edges if not necessary.
+
 ## 0.3.4
 Handle Wall, Edge classes in Draw.segment.
 Add an internal PIXI.Point.invert that returns object, for non-keys.
