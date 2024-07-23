@@ -67,8 +67,8 @@ export class ClipperPaths {
    */
   static polygonToRectangle(polygon) {
     const pts = polygon.points;
-    if ( !(polygon.isClosed && pts.length === 10)
-      || !(!polygon.isClosed && pts.length === 8) ) return polygon;
+    if ( (polygon.isClosed && pts.length !== 10)
+      || (!polygon.isClosed && pts.length !== 8) ) return polygon;
 
     // Layout must be clockwise.
     // Layout options:
@@ -316,6 +316,24 @@ export class ClipperPaths {
    */
   diffPolygon(polygon) {
     return this._clipperClip(polygon, ClipperLib.ClipType.ctDifference);
+  }
+
+  /**
+   * Union the paths.
+   * @returns {ClipperPaths}
+   */
+  union() {
+    if ( this.paths.length === 1 ) return this;
+    const c = new ClipperLib.Clipper();
+    const union = new ClipperPaths();
+    union.scalingFactor = this.scalingFactor;
+    c.AddPaths(this.paths, ClipperLib.PolyType.ptSubject, true);
+    c.Execute(ClipperLib.ClipType.ctUnion,
+      union.paths,
+      ClipperLib.PolyFillType.pftNonZero,
+      ClipperLib.PolyFillType.pftNonZero
+      );
+    return union;
   }
 
   /**

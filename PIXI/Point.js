@@ -20,10 +20,15 @@ PIXI.Point._tmp3 = new PIXI.Point();
  * @param {number} key      Integer key
  * @returns {PIXI.Point} coordinates
  */
-function invertKey(key) {
+function invertKey(key, outPoint) {
+  outPoint ??= new this();
+  return outPoint.copyFrom(this._invertKey(key));
+}
+
+function _invertKey(key) {
   const x = Math.floor(key * MAX_TEXTURE_SIZE_INV);
   const y = key - (MAX_TEXTURE_SIZE * x);
-  return new PIXI.Point(x, y);
+  return { x, y };
 }
 
 /**
@@ -431,7 +436,8 @@ PATCHES.PIXI.STATIC_METHODS = {
   angleBetween,
   flatMapPoints,
   fromObject,
-  invertKey
+  invertKey,
+  _invertKey
 };
 
 PATCHES.PIXI.METHODS = {
