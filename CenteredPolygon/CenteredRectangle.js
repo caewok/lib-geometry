@@ -113,10 +113,10 @@ export class CenteredRectangle extends CenteredPolygonBase {
     const h1_2 = height * 0.5;
 
     return [
-      { x: -w1_2, y: -h1_2 },
-      { x: w1_2, y: -h1_2 },
-      { x: w1_2, y: h1_2 },
-      { x: -w1_2, y: h1_2 }
+      new PIXI.Point(-w1_2, -h1_2),
+      new PIXI.Point(w1_2, -h1_2),
+      new PIXI.Point(w1_2, h1_2),
+      new PIXI.Point(-w1_2, h1_2)
     ];
   }
 
