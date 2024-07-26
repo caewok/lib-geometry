@@ -1907,17 +1907,20 @@ export class TilePixelCache extends PixelCache {
    * @returns {TilePixelCache}
    */
   static fromOverheadTileAlpha(tile) {
+    // TODO: Use TextureLoader.getTextureAlphaData, which requires setting the x,y to the minX, minY
+    //       and possibly changing how the conversion from tile to coordinate is done.
+    return this.fromTileAlpha(tile);
     // TODO: More nuanced test for overhead tiles.
     // Here, if not overhead, return fromTileAlpha.
-    if ( tile.document.elevation < tile.document.parent.foregroundElevation ) return this.fromTileAlpha(tile);
-    const textureData = TextureLoader.getTextureAlphaData(tile.texture);
-
-    // Resolution consistent with `_createTextureData` which divides by 4.
-    const pixelWidth = textureData.width;
-    const pixelHeight = textureData.height;
-    const resolution = pixelWidth / tile.texture.baseTexture.realWidth;
-
-    return new this(textureData.data, pixelWidth, { pixelHeight, tile, resolution });
+//     if ( tile.document.elevation < tile.document.parent.foregroundElevation ) return this.fromTileAlpha(tile);
+//     const textureData = TextureLoader.getTextureAlphaData(tile.texture);
+//
+//     // Resolution consistent with `_createTextureData` which divides by 4.
+//     const pixelWidth = textureData.width;
+//     const pixelHeight = textureData.height;
+//     const resolution = pixelWidth / tile.texture.baseTexture.realWidth;
+//
+//     return new this(textureData.data, pixelWidth, { pixelHeight, tile, resolution });
   }
 
   /**
