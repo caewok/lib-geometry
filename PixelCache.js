@@ -516,6 +516,40 @@ export class PixelCache extends PIXI.Rectangle {
   }
 
   /**
+   * For this rectangular frame of local pixels, step backward or forward in the x and y directions
+   * from a current index. Presumes index is row-based, such that:
+   * 0 1 2 3
+   * 4 5 6 7...
+   * @param {number} currIdx
+   * @param {number} [xStep = 0]
+   * @param {number} [yStep = 0]
+   * @returns {number} The new index position
+   */
+  localPixelStep(currIdx, xStep = 0, yStep = 0) {
+    return currIdx + (yStep * this.#localWidth) + xStep;
+  }
+
+  /**
+   * Retrieve the 8 neighbors to a given index on the local cache.
+   * @param {number} currIdx
+   * @param {boolean} [trimBorder=true]    If true, exclude the border values
+   * @returns {number[]} The values, in column order, skipping the middle value.
+   */
+  localNeighbors(currIdx, trimBorder = true) {
+    const arr = [];
+    for ( let xi = -1; xi < 2; xi += 1 ) {
+      for ( let yi = -1; yi < 2; yi += 1 ) {
+        if ( !(xi || yi) ) continue;
+        const neighborIdx = this.localPixelStep(currIdx, xi, yi);
+        const value = this.pixels[neighborIdx];
+        if ( trimBorder && value == null ) continue;
+        arr.push(value);
+      }
+    }
+    return arr;
+  }
+
+  /**
    * Pixel index for a specific texture location
    * @param {number} x      Local texture x coordinate
    * @param {number} y      Local texture y coordinate
@@ -1309,7 +1343,7 @@ export class PixelCache extends PIXI.Rectangle {
       for ( let i = 0, j = 0; i < nPoints; i += 2, j += 1 ) {
         const x = testPoints[i];
         const y = testPoints[i + 1];
-        ((h > y) != (c > y)) && (x < (((l - a) * ((y - h)) / (c - h)) + a)) && (res[j] = !res[j]); // eslint-disable-line no-unused-expressions, eqeqeq
+        ((h > y) != (c > y)) && (x < (((l - a) * ((y - h)) / (c - h)) + a)) && (res[j] = !res[j]);
       }
     }
     return res;
