@@ -545,7 +545,7 @@ export class PixelCache extends PIXI.Rectangle {
         arr.push(neighborIdx);
       }
     }
-    return neighborIdx;
+    return arr;
   }
 
   /**
