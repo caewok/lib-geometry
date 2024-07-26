@@ -530,23 +530,32 @@ export class PixelCache extends PIXI.Rectangle {
   }
 
   /**
+   * Indices of the 8 neighbors to this local pixel index. Does not
+   * @param {number} currIdx
+   * @returns {number[]}
+   */
+  localNeighborIndices(currIdx, trimBorder = true) {
+    const arr = [];
+    const maxIdx = this.pixels.length - 1;
+    for ( let xi = -1; xi < 2; xi += 1 ) {
+      for ( let yi = -1; yi < 2; yi += 1 ) {
+        if ( !(xi || yi) ) continue;
+        const neighborIdx = this.localPixelStep(currIdx, xi, yi);
+        if ( trimBorder && !neighborIdx.between(0, maxIdx) ) continue;
+        arr.push(neighborIdx);
+      }
+    }
+    return neighborIdx;
+  }
+
+  /**
    * Retrieve the 8 neighbors to a given index on the local cache.
    * @param {number} currIdx
    * @param {boolean} [trimBorder=true]    If true, exclude the border values
    * @returns {number[]} The values, in column order, skipping the middle value.
    */
   localNeighbors(currIdx, trimBorder = true) {
-    const arr = [];
-    for ( let xi = -1; xi < 2; xi += 1 ) {
-      for ( let yi = -1; yi < 2; yi += 1 ) {
-        if ( !(xi || yi) ) continue;
-        const neighborIdx = this.localPixelStep(currIdx, xi, yi);
-        const value = this.pixels[neighborIdx];
-        if ( trimBorder && value == null ) continue;
-        arr.push(value);
-      }
-    }
-    return arr;
+    return this.localNeighborIndices(currIdx, trimBorder).map(idx => this.pixels[idx]);
   }
 
   /**
