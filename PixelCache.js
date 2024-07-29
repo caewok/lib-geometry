@@ -937,6 +937,241 @@ export class PixelCache extends PIXI.Rectangle {
     return acc;
   }
 
+  // ----- NOTE: Offset shapes ----- //
+
+  /**
+   * Construct a set of offsets from a shape center. An offset is an x,y combination
+   * that says how far to move from a given pixel.
+   * Used to walk a line and aggregate pixels that are covered by that shape.
+   */
+  static pixelOffsetGrid(shape, skip = 0) {
+    if ( shape instanceof PIXI.Rectangle ) return this.rectanglePixelOffsetGrid(shape, skip);
+    if ( shape instanceof PIXI.Polygon ) return this.polygonPixelOffsetGrid(shape, skip);
+    if ( shape instanceof PIXI.Circle ) return this.shapePixelOffsetGrid(shape, skip);
+    console.warn("PixelCache|pixelOffsetGrid|shape not recognized.", shape);
+    return this.polygonPixelOffsetGrid(shape.toPolygon(), skip);
+  }
+
+  /**
+   * For a rectangle, construct an array of pixel offsets from the center of the rectangle.
+   * @param {PIXI.Rectangle} rect
+   * @returns {number[]}
+   */
+  static rectanglePixelOffsetGrid(rect, skip = 0) {
+    /* Example
+    Draw = CONFIG.GeometryLib.Draw
+    api = game.modules.get("elevatedvision").api
+    PixelCache = api.PixelCache
+
+    rect = new PIXI.Rectangle(100, 200, 275, 300)
+    offsets = PixelCache.rectanglePixelOffsetGrid(rect, skip = 10)
+
+    tmpPt = new PIXI.Point;
+    center = rect.center;
+    for ( let i = 0; i < offsets.length; i += 2 ) {
+      tmpPt.copyFrom({ x: offsets[i], y: offsets[i + 1] });
+      tmpPt.translate(center.x, center.y, tmpPt);
+      Draw.point(tmpPt, { radius: 1 })
+      if ( !rect.contains(tmpPt.x, tmpPt.y) )
+      log(`Rectangle does not contain {tmpPt.x},${tmpPt.y} (${offsets[i]},${offsets[i+1]})`)
+    }
+    Draw.shape(rect)
+
+    */
+
+    const width = Math.floor(rect.width);
+    const height = Math.floor(rect.height);
+    const incr = skip + 1;
+    const w_1_2 = Math.floor(width * 0.5);
+    const h_1_2 = Math.floor(height * 0.5);
+    const xiMax = width - w_1_2;
+    const yiMax = height - h_1_2;
+
+    // Handle 0 row and 0 column. Add only if it would have been added by the increment or half increment.
+    const addZeroX = ((xiMax - 1) % (Math.ceil(incr * 0.5))) === 0;
+    const addZeroY = ((yiMax - 1) % (Math.ceil(incr * 0.5))) === 0;
+
+    // Faster to pre-allocate the array, although the math is hard.
+    const startSkip = -3; // -3 to skip outermost edge and next closest pixel. Avoids issues with borders.
+    const xMod = Boolean((xiMax - 1) % incr);
+    const yMod = Boolean((yiMax - 1) % incr);
+    const numX = (xiMax < 2) ? 0 : Math.floor((xiMax + startSkip) / incr) + xMod;
+    const numY = (yiMax < 2) ? 0 : Math.floor((yiMax + startSkip) / incr) + yMod;
+    const total = (numX * numY * 4 * 2) + (addZeroX * 4 * numY) + (addZeroY * 4 * numX) + 2;
+    const offsets = new Array(total);
+
+    // To make skipping pixels work well, set up so it always captures edges and corners
+    // and works its way in.
+    // And always add the 0,0 point.
+    offsets[0] = 0;
+    offsets[1] = 0;
+    offsets._centerPoint = rect.center; // Helpful when processing pixel values later.
+    let j = 2;
+    for ( let xi = xiMax + startSkip; xi > 0; xi -= incr ) {
+      for ( let yi = yiMax + startSkip; yi > 0; yi -= incr ) {
+        // BL quadrant
+        offsets[j++] = xi;
+        offsets[j++] = yi;
+
+        // BR quadrant
+        offsets[j++] = -xi;
+        offsets[j++] = yi;
+
+        // TL quadrant
+        offsets[j++] = -xi;
+        offsets[j++] = -yi;
+
+        // TR quadrant
+        offsets[j++] = xi;
+        offsets[j++] = -yi;
+      }
+    }
+
+    // Handle 0 row and 0 column. Add only if it would have been added by the increment or half increment.
+    if ( addZeroX ) {
+      for ( let yi = yiMax - 3; yi > 0; yi -= incr ) {
+        offsets[j++] = 0;
+        offsets[j++] = yi;
+        offsets[j++] = 0;
+        offsets[j++] = -yi;
+      }
+    }
+
+    if ( addZeroY ) {
+      for ( let xi = xiMax - 3; xi > 0; xi -= incr ) {
+        offsets[j++] = xi;
+        offsets[j++] = 0;
+        offsets[j++] = -xi;
+        offsets[j++] = 0;
+      }
+    }
+
+    return offsets;
+  }
+
+  // For checking that offsets are not repeated:
+  //   s = new Set();
+  //   pts = []
+  //   for ( let i = 0; i < offsets.length; i += 2 ) {
+  //     pt = new PIXI.Point(offsets[i], offsets[i + 1]);
+  //     pts.push(pt)
+  //     s.add(pt.key)
+  //   }
+
+  /**
+   * For a polygon, construct an array of pixel offsets from the bounds center.
+   * Uses a faster multiple contains test specific to PIXI.Polygon.
+   * @param {PIXI.Rectangle} poly
+   * @param {number} skip
+   * @returns {number[]}
+   */
+  static polygonPixelOffsetGrid(poly, skip = 0) {
+    /* Example
+    poly = new PIXI.Polygon({x: 100, y: 100}, {x: 200, y: 100}, {x: 150, y: 300});
+    offsets = PixelCache.polygonPixelOffsetGrid(poly, skip = 10)
+    tmpPt = new PIXI.Point;
+    center = poly.getBounds().center;
+    for ( let i = 0; i < offsets.length; i += 2 ) {
+      tmpPt.copyFrom({ x: offsets[i], y: offsets[i + 1] });
+      tmpPt.translate(center.x, center.y, tmpPt);
+      Draw.point(tmpPt, { radius: 1 })
+      if ( !poly.contains(tmpPt.x, tmpPt.y) )
+      log(`Poly does not contain {tmpPt.x},${tmpPt.y} (${offsets[i]},${offsets[i+1]})`)
+    }
+    Draw.shape(poly)
+    */
+    const bounds = poly.getBounds();
+    const { x, y } = bounds.center;
+    const offsets = this.rectanglePixelOffsetGrid(bounds, skip);
+    const nOffsets = offsets.length;
+    const testPoints = new Array(offsets.length);
+    for ( let i = 0; i < nOffsets; i += 2 ) {
+      testPoints[i] = x + offsets[i];
+      testPoints[i + 1] = y + offsets[i + 1];
+    }
+    const isContained = this.polygonMultipleContains(poly, testPoints);
+    const polyOffsets = []; // Unclear how many pixels until we test containment.
+    polyOffsets._centerPoint = offsets._centerPoint;
+    for ( let i = 0, j = 0; i < nOffsets; i += 2 ) {
+      if ( isContained[j++] ) polyOffsets.push(offsets[i], offsets[i + 1]);
+    }
+    return polyOffsets;
+  }
+
+  /**
+   * Run contains test on a polygon for multiple points.
+   * @param {PIXI.Polygon} poly
+   * @param {number[]} testPoints     Array of [x0, y0, x1, y1,...] coordinates
+   * @returns {number[]} Array of 0 or 1 values
+   */
+  static polygonMultipleContains(poly, testPoints) {
+    // Modification of PIXI.Polygon.prototype.contains
+    const nPoints = testPoints.length;
+    if ( nPoints < 2 ) return undefined;
+    const res = new Uint8Array(nPoints * 0.5); // If we really need speed, could use bit packing
+    const r = poly.points.length / 2;
+    for ( let n = 0, o = r - 1; n < r; o = n++ ) {
+      const a = poly.points[n * 2];
+      const h = poly.points[(n * 2) + 1];
+      const l = poly.points[o * 2];
+      const c = poly.points[(o * 2) + 1];
+
+      for ( let i = 0, j = 0; i < nPoints; i += 2, j += 1 ) {
+        const x = testPoints[i];
+        const y = testPoints[i + 1];
+        ((h > y) != (c > y)) && (x < (((l - a) * ((y - h)) / (c - h)) + a)) && (res[j] = !res[j]);
+      }
+    }
+    return res;
+  }
+
+  /**
+   * For an arbitrary shape with contains and bounds methods,
+   * construct a grid of pixels from the bounds center that are within the shape.
+   * @param {object} shape      Shape to test
+   * @param {number} [skip=0]   How many pixels to skip when constructing the grid
+   * @returns {number[]}
+   */
+  static shapePixelOffsetGrid(shape, skip = 0) {
+    const bounds = shape.getBounds();
+    const { x, y } = bounds.center;
+    const offsets = this.rectanglePixelOffsetGrid(bounds, skip);
+    const nOffsets = offsets.length;
+    const shapeOffsets = []; // Unclear how many pixels until we test containment.
+    shapeOffsets._centerPoint = offsets._centerPoint;
+    for ( let i = 0; i < nOffsets; i += 2 ) {
+      const xOffset = offsets[i];
+      const yOffset = offsets[i + 1];
+      if ( shape.contains(x + xOffset, y + yOffset) ) shapeOffsets.push(xOffset, yOffset);
+    }
+    return shapeOffsets;
+  }
+
+  /**
+   * Convert a canvas offset grid to a local one.
+   * @param {number[]} canvasOffsets
+   * @returns {number[]} localOffsets. May return canvasOffsets if no scaling required.
+   */
+  convertCanvasOffsetGridToLocal(canvasOffsets) {
+    // Determine what one pixel move in the x direction equates to for a local move.
+    const canvasOrigin = this._toCanvasCoordinates(0, 0);
+    const xShift = this._fromCanvasCoordinates(canvasOrigin.x + 1, canvasOrigin.y);
+    const yShift = this._fromCanvasCoordinates(canvasOrigin.x, canvasOrigin.y + 1);
+    if ( xShift.equals(new PIXI.Point(1, 0)) && yShift.equals(new PIXI.Point(0, 1)) ) return canvasOffsets;
+
+    const nOffsets = canvasOffsets.length;
+    const localOffsets = Array(nOffsets);
+    for ( let i = 0; i < nOffsets; i += 2 ) {
+      const xOffset = canvasOffsets[i];
+      const yOffset = canvasOffsets[i + 1];
+
+      // A shift of 1 pixel in a canvas direction could shift both x and y locally, if rotated.
+      localOffsets[i] = (xOffset * xShift.x) + (xOffset * yShift.x);
+      localOffsets[i + 1] = (yOffset * xShift.y) + (yOffset * yShift.y);
+    }
+    return localOffsets;
+  }
+
   // ----- NOTE: Static constructors ----- //
     /**
    * Construct a pixel cache from a texture.
