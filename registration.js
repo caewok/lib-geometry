@@ -156,6 +156,7 @@ export function registerConstrainedTokenBorder() {
 }
 
 export function registerPixelCache() {
+  CONFIG.GeometryLib.pixelCacheResolution = 1;
   CONFIG.GeometryLib.PATCHER.registerGroup("PIXEL_CACHE");
   CONFIG.GeometryLib.PixelCache = PixelCache;
   CONFIG.GeometryLib.TrimmedPixelCache = TrimmedPixelCache;
