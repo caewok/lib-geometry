@@ -971,10 +971,10 @@ export class PixelCache extends PIXI.Rectangle {
     skip += 1; // For incrementing.
     for ( let localX = left; localX <= right; localX += skip ) {
       for ( let localY = top; localY <= bottom; localY += skip ) {
-        const value = valueFn(localX, localY);
+        const value = valueFn.call(this, localX, localY);
         if ( !value ) continue;
         const alpha = Math.pow(value / 255, gammaExp);
-        const pt = coordFn(localX, localY);
+        const pt = coordFn.call(this, localX, localY);
         Draw.point(pt, { color, alpha, radius });
       }
     }
