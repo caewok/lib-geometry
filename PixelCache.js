@@ -1,6 +1,7 @@
 /* globals
 PIXI,
 canvas,
+foundry,
 TextureLoader,
 Ray
 */
@@ -768,6 +769,159 @@ export class PixelCache extends PIXI.Rectangle {
     localOffsets ??= this.convertCanvasOffsetGridToLocal(canvasOffsets);
     const pt = this._fromCanvasCoordinates(x, y, PIXI.Point._tmp);
     return this._pixelsForRelativePointsFromLocal(pt.x, pt.y, localOffsets);
+  }
+
+  // ----- NOTE: Aggregators ----- //
+    /**
+   * Utility method to construct a function that can aggregate pixel array generated from offsets
+   * @param {string} type     Type of aggregation to perform
+   *   - first: take the first value, which in the case of offsets will be [0,0]
+   *   - min: Minimum pixel value, excluding undefined pixels.
+   *   - max: Maximum pixel value, excluding undefined pixels
+   *   - sum: Add pixels. Returns object with total, numUndefined, numPixels.
+   *   - countThreshold: Count pixels greater than a threshold.
+   *     Returns object with count, numUndefined, numPixels, threshold.
+   * @param {number} [threshold]    Optional pixel value used by "count" methods
+   * @returns {function}
+   */
+  static pixelAggregator(type, threshold = -1) {
+    let reducerFn;
+    let startValue;
+    switch ( type ) {
+      case "first": return pixels => pixels[0];
+      case "min": {
+        reducerFn = (acc, curr) => {
+          if ( curr == null ) return acc; // Undefined or null.
+          return Math.min(acc, curr);
+        };
+        break;
+      }
+      case "max": {
+        reducerFn = (acc, curr) => {
+          if ( curr == null ) return acc;
+          return Math.max(acc, curr);
+        };
+        break;
+      }
+      case "average":
+      case "sum": {
+        startValue = { numNull: 0, numPixels: 0, total: 0 };
+        reducerFn = (acc, curr) => {
+          acc.numPixels += 1;
+          if ( curr == null ) acc.numNull += 1; // Undefined or null.
+          else acc.total += curr;
+          return acc;
+        };
+
+        // Re-zero values in case of rerunning with the same reducer function.
+        reducerFn.initialize = () => {
+          startValue.numNull = 0;
+          startValue.numPixels = 0;
+          startValue.total = 0;
+        };
+
+        break;
+      }
+
+      case "average_eq_threshold":
+      case "count_eq_threshold": {
+        startValue = { numNull: 0, numPixels: 0, threshold, count: 0 };
+        reducerFn = (acc, curr) => {
+          acc.numPixels += 1;
+          if ( curr == null ) acc.numNull += 1; // Undefined or null.
+          else if ( curr === acc.threshold ) acc.count += 1;
+          return acc;
+        };
+
+        // Re-zero values in case of rerunning with the same reducer function.
+        reducerFn.initialize = () => {
+          startValue.numNull = 0;
+          startValue.numPixels = 0;
+          startValue.count = 0;
+        };
+        break;
+      }
+
+      case "average_gt_threshold":
+      case "count_gt_threshold": {
+        startValue = { numNull: 0, numPixels: 0, threshold, count: 0 };
+        reducerFn = (acc, curr) => {
+          acc.numPixels += 1;
+          if ( curr == null ) acc.numNull += 1; // Undefined or null.
+          else if ( curr > acc.threshold ) acc.count += 1;
+          return acc;
+        };
+
+        // Re-zero values in case of rerunning with the same reducer function.
+        reducerFn.initialize = () => {
+          startValue.numNull = 0;
+          startValue.numPixels = 0;
+          startValue.count = 0;
+        };
+
+        break;
+      }
+      case "median_no_null": {
+        return pixels => {
+          pixels = pixels.filter(x => x != null); // Strip null or undefined (undefined should not occur).
+          const nPixels = pixels.length;
+          const half = Math.floor(nPixels / 2);
+          pixels.sort((a, b) => a - b);
+          if ( nPixels % 2 ) return pixels[half];
+          else return Math.round((pixels[half - 1] + pixels[half]) / 2);
+        };
+      }
+
+      case "median_zero_null": {
+        return pixels => {
+          // Sorting puts undefined at end, null in front. Pixels should never be null.
+          const nPixels = pixels.length;
+          const half = Math.floor(nPixels / 2);
+          pixels.sort((a, b) => a - b);
+          if ( nPixels % 2 ) return pixels[half];
+          else return Math.round((pixels[half - 1] + pixels[half]) / 2);
+        };
+      }
+    }
+
+    switch ( type ) {
+      case "average": reducerFn.finalize = acc => acc.total / acc.numPixels; break; // Treats undefined as 0.
+      case "average_eq_threshold":
+      case "average_gt_threshold": reducerFn.finalize = acc => acc.count / acc.numPixels; break; // Treats undefined as 0.
+    }
+
+    const reducePixels = this.reducePixels;
+    const out = pixels => reducePixels(pixels, reducerFn, startValue);
+    out.type = type; // For debugging.
+    return out;
+  }
+
+  /**
+   * Version of array.reduce that improves speed and handles some unique cases.
+   * @param {number[]} pixels
+   * @param {function} reducerFn      Function that takes accumulated values and current value
+   *   If startValue is undefined, the first acc will be pixels[0]; the first curr will be pixels[1].
+   * @param {object} startValue
+   * @returns {object} The object returned by the reducerFn
+   */
+  static reducePixels(pixels, reducerFn, startValue) {
+    const numPixels = pixels.length;
+    if ( numPixels < 2 ) return pixels[0];
+
+    if ( reducerFn.initialize ) reducerFn.initialize();
+    let acc = startValue;
+    let startI = 0;
+    if ( typeof startValue === "undefined" ) {
+      acc = pixels[0];
+      startI = 1;
+    }
+    for ( let i = startI; i < numPixels; i += 1 ) {
+      const curr = pixels[i];
+      acc = reducerFn(acc, curr);
+    }
+
+    if ( reducerFn.finalize ) acc = reducerFn.finalize(acc);
+    return acc;
   }
 
   // ----- NOTE: Static constructors ----- //
