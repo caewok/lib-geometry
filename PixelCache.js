@@ -627,7 +627,7 @@ export class PixelCache extends PIXI.Rectangle {
    * @param {boolean} forceLast        Include the last pixel (at b) even if unmarked
    * @param {number[]} [localOffsets]  Numbers to add to the local x,y position when pulling the pixel(s)
    * @param {function} [reducerFn]     Function that takes pixel array and reduces to a value or object to return
-   * @returns {object[]} Array of objects, each of which have:
+   * @returns {PIXI.Point[]} Array of objects, each of which have:
    *   - {number} x           Local coordinates
    *   - {number} y           Local coordinates
    *   - {number} currPixel
@@ -652,19 +652,23 @@ export class PixelCache extends PIXI.Rectangle {
 
     const nPts = bresPts.length;
     for ( let i = 0; i < nPts; i += 2 ) {
-      const x = bresPts[i];
-      const y = bresPts[i + 1];
-      const pixelsAtPoint = this._pixelsForRelativePointsFromLocal(x, y, localOffsets);
+      const pt = new PIXI.Point(bresPts[i], bresPts[i + 1]);
+      const pixelsAtPoint = this._pixelsForRelativePointsFromLocal(pt.x, pt.y, localOffsets);
       const currPixel = reducerFn(pixelsAtPoint);
-      if ( markPixelFn(currPixel, prevPixel) ) pixels.push({ currPixel, prevPixel, x, y });
+      if ( markPixelFn(currPixel, prevPixel) ) {
+        pt.currPixel = currPixel;
+        pt.prevPixel = prevPixel;
+        pixels.push(pt);
+      }
       prevPixel = currPixel;
     }
 
     if ( forceLast ) {
-      const x = bresPts.at(-2);
-      const y = bresPts.at(-1);
+      const pt = new PIXI.Point(bresPts.at(-2), bresPts.at(-1));
+      pt.currPixel = prevPixel;
+      pt.forceLast = forceLast;
       // Add the last pixel regardless.
-      pixels.push({ currPixel: prevPixel, x, y, forceLast });
+      pixels.push(pt);
     }
 
     return pixels;
@@ -702,7 +706,7 @@ export class PixelCache extends PIXI.Rectangle {
    * @param {Point} b   Ending location, in local coordinates
    * @param {function} markPixelFn    Function to test pixels.
    *   Function takes current pixel, previous pixel
-   * @returns {object|null} If pixel found, returns:
+   * @returns {PIXI.Point|null} If pixel found, returns:
    *   - {number} x         Local coordinate
    *   - {number} y         Local coordinate
    *   - {number} currPixel
@@ -728,13 +732,22 @@ export class PixelCache extends PIXI.Rectangle {
     for ( pt of bresIter ) {
       const pixelsAtPoint = this._pixelsForRelativePointsFromLocal(pt.x, pt.y, localOffsets);
       const currPixel = reducerFn(pixelsAtPoint);
-      if ( markPixelFn(currPixel, prevPixel) ) return { currPixel, prevPixel, x: pt.x, y: pt.y };
+      if ( markPixelFn(currPixel, prevPixel) ) {
+        pt.currPixel = currPixel;
+        pt.prevPixel = prevPixel;
+        return pt;
+      }
       prevPixel = currPixel;
     }
 
     // Might be a repeat but more consistent to always pass a forceLast object when requested.
     // Faster than checking for last in the for loop.
-    if ( forceLast ) return { currPixel: prevPixel, x: b.x, y: b.y, forceLast };
+    if ( forceLast ) {
+      const out = PIXI.Point.fromObject(b);
+      out.currPixel = prevPixel;
+      out.forceLast = forceLast;
+      return out;
+    }
     return null;
   }
 
