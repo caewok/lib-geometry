@@ -581,11 +581,11 @@ export class PixelCache extends PIXI.Rectangle {
     const nPts = bresPts.length;
     const pixels = Array(nPts * 0.5);
     for ( let i = 0, j = 0; i < nPts; i += 2, j += 1 ) {
-      const x = bresPts[i];
-      const y = bresPts[i + 1];
-      const pixelsAtPoint = this._pixelsForRelativePointsFromLocal(x, y, localOffsets);
+      const pt = new PIXI.Point(bresPts[i], bresPts[i + 1]);
+      const pixelsAtPoint = this._pixelsForRelativePointsFromLocal(pt.x, pt.y, localOffsets);
       const currPixel = reducerFn(pixelsAtPoint);
-      pixels[j] = { x, y, currPixel };
+      pt.currPixel = currPixel
+      pixels[j] = pt;
     }
     return pixels;
   }
