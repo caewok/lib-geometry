@@ -37,7 +37,7 @@ export class PixelCache extends PIXI.Rectangle {
   pixels = new Uint8ClampedArray(0);
 
   /** @type {number} */
-  _maximumPixelValue = 255;
+  maximumPixelValue = 255;
 
   /** @type {Map<number,PIXI.Rectangle>} */
   #thresholdLocalBoundingBoxes = new Map();
