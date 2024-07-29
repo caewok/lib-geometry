@@ -73,10 +73,9 @@ export class PixelCache extends PIXI.Rectangle {
 
     // Define this local rectangle.
     super(0, 0, pixelWidth, pixelHeight);
-
+    this.pixels = pixels;
     this.scale = opts.scale ?? {};
     this.scale.resolution ??= 1;
-
   }
 
   // ----- NOTE: Getters and setters ----- //
@@ -1015,7 +1014,6 @@ export class TrimmedPixelCache extends PixelCache {
    * From a non-trimmed pixel array, trim the pixels and create a new pixel cache.
    * @param {TypedArray} pixels
    * @param {number} pixelWidth     The width of the pixel rectangle
-   * @param {number} [pixelHeight]  Height of the pixel rectangle; otherwise calculated from length
    * @param {object} [opts]         Options passed to the constructor
    * @returns {TrimmedPixelCache}
    */
@@ -1243,8 +1241,7 @@ export class TilePixelCache extends TrimmedPixelCache {
     const textureData = TextureLoader.getTextureAlphaData(tile.texture, resolution);
     const { minX, maxX, minY, maxY, data } = textureData;
     const pixelWidth = maxX - minX;
-    const pixelHeight = maxY - minY;
-    return new this(data, pixelWidth, { pixelHeight, minX, maxX, minY, maxY, scale: { resolution } });
+    return new this(data, pixelWidth, { minX, maxX, minY, maxY, scale: { resolution } });
   }
 
   /**
