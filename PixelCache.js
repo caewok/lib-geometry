@@ -185,7 +185,7 @@ export class PixelCache extends PIXI.Rectangle {
    */
   #calculateLocalBoundingBox(threshold=0.75) {
     // (Faster or equal to the old method that used one double non-breaking loop.)
-    threshold = threshold * this._maximumPixelValue;
+    threshold = threshold * this.maximumPixelValue;
 
     // By definition, the local frame uses 0 or positive integers. So we can use -1 as a placeholder value.
     const { left, right, top, bottom } = this;
@@ -408,6 +408,25 @@ export class PixelCache extends PIXI.Rectangle {
     canvas.y = fastFixed(canvas.y);
     return canvas;
   }
+
+ /**
+   * Test whether the pixel cache contains a specific canvas point.
+   * See Tile.prototype.containsPixel
+   * @param {number} x    Canvas x-coordinate
+   * @param {number} y    Canvas y-coordinate
+   * @param {number} [alphaThreshold=0.75]  Value required for the pixel to "count."
+   * @returns {boolean}
+   */
+  containsPixel(x, y, alphaThreshold = 0.75) {
+    // First test against the bounding box
+    const bounds = this.getThresholdCanvasBoundingBox(alphaThreshold);
+    if ( !bounds.contains(x, y) ) return false;
+
+    // Next test a specific pixel
+    const value = this.pixelAtCanvas(x, y);
+    return value > (alphaThreshold * this.maximumPixelValue);
+  }
+
 
   // ----- NOTE: Shape conversions to local coordinates
 
@@ -942,7 +961,7 @@ export class PixelCache extends PIXI.Rectangle {
     for ( let i = 0; i < ln; i += skip ) {
       const value = this.pixels[i];
       if ( !value ) continue;
-      const alpha = Math.pow(value / this._maximumPixelValue, gammaExp);
+      const alpha = Math.pow(value / this.maximumPixelValue, gammaExp);
       const pt = coordFn.call(this, i, PIXI.Point._tmp);
       Draw.point(pt, { color, alpha, radius });
     }
