@@ -1076,7 +1076,7 @@ export class TrimmedPixelCache extends PixelCache {
    */
   _calculateToLocalTransform() {
     // Translate to account for the trimmed border.
-    const mTranslate = Matrix.translation(-this.#fullLocalBounds.x, -this.#fullLocalBounds.y);
+    const mTranslate = Matrix.translation(this.#fullLocalBounds.x, this.#fullLocalBounds.y);
     return mTranslate.multiply3x3(super._calculateToLocalTransform());
   }
 
