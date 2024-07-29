@@ -245,11 +245,11 @@ export class PixelCache extends PIXI.Rectangle {
     }
 
     // Pad right/bottom by 1 b/c otherwise they would be inset.
-    // Pad all by 1 to ensure that any pixel on the thresholdBounds is under the threshold.
-    minLeft -= 1;
-    minTop -= 1;
-    maxRight += 2;
-    maxBottom += 2;
+    // Don't Pad all by 1 to ensure that any pixel on the thresholdBounds is under the threshold.
+    // minLeft -= 1;
+    // minTop -= 1;
+    maxRight += 1;
+    maxBottom += 1;
     return (new PIXI.Rectangle(minLeft, minTop, maxRight - minLeft, maxBottom - minTop));
   }
 
