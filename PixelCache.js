@@ -1240,7 +1240,7 @@ export class TilePixelCache extends TrimmedPixelCache {
     const textureData = TextureLoader.getTextureAlphaData(tile.texture, resolution);
     const { minX, maxX, minY, maxY, data } = textureData;
     const pixelWidth = maxX - minX;
-    return new this(data, pixelWidth, { minX, maxX, minY, maxY, scale: { resolution } });
+    return new this(data, pixelWidth, { tile, minX, maxX, minY, maxY, scale: { resolution } });
   }
 
   /**
