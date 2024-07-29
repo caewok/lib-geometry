@@ -74,8 +74,7 @@ export class PixelCache extends PIXI.Rectangle {
     // Define this local rectangle.
     super(0, 0, pixelWidth, pixelHeight);
     this.pixels = pixels;
-    this.scale = opts.scale ?? {};
-    this.scale.resolution ??= 1;
+    if ( opts.scale ) foundry.utils.mergeObject(this.scale, opts.scale);
   }
 
   // ----- NOTE: Getters and setters ----- //
