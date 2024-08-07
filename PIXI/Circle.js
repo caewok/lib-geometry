@@ -167,16 +167,16 @@ function lineSegmentIntersects(a, b, { inside = false } = {}) {
  * @param {number} [opts.top=1e06]        Top (elevation in pixel units) of the polygon
  * @param {number} [opts.bottom=-1e06]    Bottom (elevation in pixel units) of the polygon
  * @param {number} [opts.isHole=false]    Treat this shape as a hole; reverse the points of the returned polygon
- * @returns {PIXI.Polygon}
+ * @returns {PIXI.Polygon[]}
  */
 function cutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole = false } = {}) {
-  if ( !this.lineSegmentIntersects(start, end, { inside: true }) ) return null;
+  if ( !this.lineSegmentIntersects(start, end, { inside: true }) ) return [];
   start ??= a;
   end ??= b;
 
   const ixs = this.segmentIntersections(start, end);
   const quadCutaway = PIXI.Rectangle.quadCutaway;
-  if ( ixs.length === 0 ) return [quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole })];
+  if ( ixs.length === 0 ) return quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
   if ( ixs.length === 1 ) {
     const ix0 = ixs[0];
 
@@ -197,7 +197,7 @@ function cutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPoint
     ixs.sort((a, b) => a.t0 - b.t0);
     return quadCutaway(ixs[0], ixs[1], { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
   }
-  return null; // Should not happen.``
+  return []; // Should not happen.``
 }
 
 PATCHES.PIXI.GETTERS = { area };

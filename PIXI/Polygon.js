@@ -845,17 +845,17 @@ function cutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPoint
   // Handle unlimited intersections with the polygon.
   // Possible if the polygon is not simple. May go in and out of it.
   const ixs = this.segmentIntersections(a, b);
-  if ( ixs.length === 0 ) return [quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole })];
+  if ( ixs.length === 0 ) return quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
   if ( ixs.length === 1 ) {
     const ix0 = ixs[0];
 
     // Intersects only at start point. Infer that end is inside; go from start --> end.
-    if ( a.to2d().almostEqual(ix0) )  return [quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole })];
+    if ( a.to2d().almostEqual(ix0) )  return quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
 
     // Intersects only at end point. Expand one pixel beyond to get a valid polygon.
     if ( b.to2d().almostEqual(ix0) ) {
       const newB = PIXI.Point._tmp.copyFrom(end).towardsPoint(PIXI.Point._tmp2.copyFrom(start), -1);
-      return [quadCutaway(a, newB, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole })];
+      return quadCutaway(a, newB, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
     }
   }
   ixs.sort((a, b) => a.t0 - b.t0);
@@ -867,7 +867,7 @@ function cutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPoint
   let prevIx = start;
   let isInside = this.contains(a.x, a.y);
   for ( const ix of ixs ) {
-    if ( isInside ) quads.push(quadCutaway(prevIx, ix, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole }));
+    if ( isInside ) quads.push(...quadCutaway(prevIx, ix, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole }));
     isInside = !isInside;
     prevIx = ix;
   }

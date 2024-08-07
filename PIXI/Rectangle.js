@@ -4,6 +4,8 @@ PIXI
 */
 "use strict";
 
+import { Matrix } from "./Matrix.js";
+
 export const PATCHES = {};
 PATCHES.PIXI = {};
 
@@ -407,16 +409,16 @@ function gridRectangles(rect1, rect2) {
  * @param {function} [opts.bottomElevationFn] Function to calculate the bottom elevation for a position
  * @param {function} [opts.cutPointsFn]       Function that returns the steps along the a|b segment top
  * @param {number} [opts.isHole=false]        Treat this shape as a hole; reverse the points of the returned polygon
- * @returns {PIXI.Polygon}
+ * @returns {PIXI.Polygon[]}
  */
 function cutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole = false } = {}) {
-  if ( !this.lineSegmentIntersects(a, b, { inside: true }) ) return null;
+  if ( !this.lineSegmentIntersects(a, b, { inside: true }) ) return [];
   start ??= a;
   end ??= b;
 
   const ixs = this.segmentIntersections(a, b);
   const quadCutaway = PIXI.Rectangle.quadCutaway;
-  if ( ixs.length === 0 ) return [quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole })];
+  if ( ixs.length === 0 ) return quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
   if ( ixs.length === 1 ) {
     const ix0 = ixs[0];
 
@@ -437,7 +439,7 @@ function cutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPoint
     ixs.sort((a, b) => a.t0 - b.t0);
     return quadCutaway(ixs[0], ixs[1], { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
   }
-  return null; // Should not happen.``
+  return []; // Should not happen.``
 }
 
 /**
@@ -451,7 +453,7 @@ function cutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPoint
  * @param {function} [opts.bottomElevationFn] Function to calculate the bottom elevation for a position
  * @param {function} [opts.cutPointsFn]       Function that returns the steps along the a|b segment top
  * @param {boolean} [opts.isHole=false]       Is this polygon a hole? If so, reverse points and use max/min elevations.
- * @returns {PIXI.Polygon|null}
+ * @returns {PIXI.Polygon[]}
  */
 function quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole = false } = {}) {
   const to2d = CONFIG.GeometryLib.utils.cutaway.to2d;
@@ -481,7 +483,7 @@ function quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutP
   const BR = { x: b2d.x, y: bottomB };
 
   // _isPositive is y-down clockwise. For Foundry canvas, this is CCW.
-  return isHole ? new PIXI.Polygon(TL, ...steps, TR, BR, BL) : new PIXI.Polygon(TL, BL, BR, TR, ...steps);
+  return [isHole ? new PIXI.Polygon(TL, ...steps, TR, BR, BL) : new PIXI.Polygon(TL, BL, BR, TR, ...steps)];
 }
 
 /**
