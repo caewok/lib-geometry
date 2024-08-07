@@ -1,8 +1,8 @@
 /* globals
 CONFIG,
-CONST,
 canvas,
 foundry,
+Drawing,
 PIXI
 */
 "use strict";
@@ -94,8 +94,8 @@ function to2dCutaway(currPt, start, end, outPoint) {
  */
 function from2dCutaway(cutawayPt, start, end, outPoint) {
   outPoint ??= new Point3d();
-  const canvasPt = start.towardsPointSquared(end, pt.x, outPoint);
-  outPoint.z = pt.y;
+  start.towardsPointSquared(end, cutawayPt.x, outPoint);
+  outPoint.z = canvasPt.y;
   return outPoint;
 }
 
@@ -327,6 +327,10 @@ function centeredPolygonFromDrawing(drawing) {
       return Ellipse.fromDrawing(drawing);
     case Drawing.SHAPE_TYPES.POLYGON:
       return CenteredPolygon.fromDrawing(drawing);
+    case Drawing.SHAPE_TYPES.CIRCLE: {
+      const width = drawing.document.shape.width;
+      return PIXI.Circle(drawing.document.x + width * 0.5, drawing.document.y + width * 0.5, width);
+    }
     default:
       console.error("fromDrawing shape type not supported");
   }
