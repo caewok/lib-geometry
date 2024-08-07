@@ -4,7 +4,7 @@ PIXI
 */
 "use strict";
 
-import { Matrix } from "./Matrix.js";
+import { Matrix } from "../Matrix.js";
 
 export const PATCHES = {};
 PATCHES.PIXI = {};
