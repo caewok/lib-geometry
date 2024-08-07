@@ -5,7 +5,7 @@ Hooks
 */
 "use strict";
 
-const VERSION = "0.3.5";
+const VERSION = "0.3.6";
 
 // Foundry utils
 import { registerFoundryUtilsMethods } from "./util.js";
@@ -65,7 +65,7 @@ import { PATCHES as PATCHES_Token } from "./Token.js";
 import { PATCHES as PATCHES_ConstrainedTokenBorder, ConstrainedTokenBorder } from "./ConstrainedTokenBorder.js";
 
 // PixelCache
-import { PixelCache, TilePixelCache } from "./PixelCache.js";
+import { PixelCache, TilePixelCache, TrimmedPixelCache } from "./PixelCache.js";
 import { PATCHES as PATCHES_Tile } from "./Tile.js";
 
 const PATCHES = {
@@ -156,8 +156,10 @@ export function registerConstrainedTokenBorder() {
 }
 
 export function registerPixelCache() {
+  CONFIG.GeometryLib.pixelCacheResolution = 1;
   CONFIG.GeometryLib.PATCHER.registerGroup("PIXEL_CACHE");
   CONFIG.GeometryLib.PixelCache = PixelCache;
+  CONFIG.GeometryLib.TrimmedPixelCache = TrimmedPixelCache;
   CONFIG.GeometryLib.TilePixelCache = TilePixelCache;
 }
 

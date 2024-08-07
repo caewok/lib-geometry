@@ -557,7 +557,7 @@ export function* bresenhamLineIterator(x0, y0, x1, y1) {
   const sx = (x0 < x1) ? 1 : -1;
   const sy = (y0 < y1) ? 1 : -1;
   let err = dx - dy;
-  yield { x: x0, y: y0 };
+  yield new PIXI.Point(x0, y0);
   while ( x0 !== x1 || y0 !== y1 ) {
     const e2 = err * 2;
     if ( e2 > -dy ) {
@@ -569,7 +569,7 @@ export function* bresenhamLineIterator(x0, y0, x1, y1) {
       y0 += sy;
     }
 
-    yield { x: x0, y: y0 };
+    yield new PIXI.Point(x0, y0);
   }
 }
 

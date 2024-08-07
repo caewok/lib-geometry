@@ -1,4 +1,8 @@
-## 0.3.5.
+## 0.3.6
+Fix for tile pixel cache in v12.
+Add `localNeighbors` and `localPixelStep` methods to PixelCache.
+
+## 0.3.5
 Use PIXI.Points for `_fixedPoints` in CenteredPolygon so that the points can be rotated. Closes issue #108 in Elevation Ruler.
 Add `ClipperPaths#joinPaths` method.
 Passthrough pregenerated edges for `Polygon#lineSegmentIntersects` to avoid rebuilding the edges if not necessary.
