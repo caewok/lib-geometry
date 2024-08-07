@@ -1,3 +1,6 @@
+## 0.3.7
+Add `cutaway` methods to construct a vertical 2d slice of a 3d shape.
+
 ## 0.3.6
 Fix for tile pixel cache in v12.
 Add `localNeighbors` and `localPixelStep` methods to PixelCache.
