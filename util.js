@@ -10,6 +10,7 @@ PIXI
 import { CenteredRectangle } from "./CenteredPolygon/CenteredRectangle.js";
 import { CenteredPolygon } from "./CenteredPolygon/CenteredPolygon.js";
 import { Ellipse } from "./Ellipse.js";
+import { Point3d } from "./3d/Point3d.js";
 
 // Functions that would go in foundry.utils if that object were extensible
 export function registerFoundryUtilsMethods() {
