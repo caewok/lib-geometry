@@ -823,6 +823,57 @@ function equals(other) {
   return true;
 }
 
+/**
+ * Cutaway a line segment start|end that moves through this polygon.
+ * Depending on the line and the polygon, could have multiple quads.
+ * @param {Point3d} a     Starting endpoint for the segment
+ * @param {Point3d} b       Ending endpoint for the segment
+ * @param {object} [opts]
+ * @param {Point3d} [opts.start]              Starting endpoint for the segment
+ * @param {Point3d} [opts.end]                Ending endpoint for the segment
+ * @param {number} [opts.top=1e06]        Top (elevation in pixel units) of the polygon
+ * @param {number} [opts.bottom=-1e06]    Bottom (elevation in pixel units) of the polygon
+ * @returns {PIXI.Polygon[]}
+ */
+function cutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn } = {}) {
+  if ( !this.lineSegmentIntersects(a, b, { inside: true }) ) return [];
+  const isHole = !this.isPositive;
+  const quadCutaway = PIXI.Rectangle.quadCutaway;
+  start ??= a;
+  end ??= b;
+
+  // Handle unlimited intersections with the polygon.
+  // Possible if the polygon is not simple. May go in and out of it.
+  const ixs = this.segmentIntersections(a, b);
+  if ( ixs.length === 0 ) return [quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole })];
+  if ( ixs.length === 1 ) {
+    const ix0 = ixs[0];
+
+    // Intersects only at start point. Infer that end is inside; go from start --> end.
+    if ( a.to2d().almostEqual(ix0) )  return [quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole })];
+
+    // Intersects only at end point. Expand one pixel beyond to get a valid polygon.
+    if ( b.to2d().almostEqual(ix0) ) {
+      const newB = PIXI.Point._tmp.copyFrom(end).towardsPoint(PIXI.Point._tmp2.copyFrom(start), -1);
+      return [quadCutaway(a, newB, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole })];
+    }
+  }
+  ixs.sort((a, b) => a.t0 - b.t0);
+  if ( !b.to2d.almostEqual(ixs.at(-1)) ) ixs.push(b);
+  if ( a.to2d.almostEqual(ixs[0]) ) ixs.shift();
+
+  // Shoelace: move in and out of the polygon, constructing a quad for every "in"
+  const quads = [];
+  let prevIx = start;
+  let isInside = this.contains(a.x, a.y);
+  for ( const ix of ixs ) {
+    if ( isInside ) quads.push(quadCutaway(prevIx, ix, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole }));
+    isInside = !isInside;
+    prevIx = ix;
+  }
+  return quads;
+}
+
 
 PATCHES.PIXI.GETTERS = {
   area,
@@ -860,6 +911,9 @@ PATCHES.PIXI.METHODS = {
   _envelopsCircle,
   _envelopsRectangle,
   _envelopsPolygon,
+
+  // 2d cutaway
+  cutaway,
 
   // Helper/internal methods
   scaledArea

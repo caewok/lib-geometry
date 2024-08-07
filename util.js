@@ -41,7 +41,15 @@ export function registerFoundryUtilsMethods() {
     endpointIntersection,
     segmentIntersection,
     segmentOverlap,
-    roundDecimals
+    roundDecimals,
+    cutaway: {
+      to2d: to2dCutaway,
+      from2d: from2dCutaway,
+      convertToDistance: convertToDistanceCutaway,
+      convertToElevation: convertToElevationCutaway,
+      convertFromDistance: convertFromDistanceCutaway,
+      convertFromElevation: convertFromElevationCutaway
+    }
   };
 
 
@@ -54,6 +62,80 @@ export function registerFoundryUtilsMethods() {
     }, { min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY});
   };
   CONFIG.GeometryLib.registered.add("utils");
+}
+
+/**
+ * Convert a point on a line to a coordinate representing the line direction in the x direction
+ * and the elevation in the y direction.
+ *
+ * @param {Point3d} currPt      A point on the line start|end
+ * @param {Point3d} start       Beginning endpoint of the line segment
+ * @param {Point3d} [end]       End of the line segment; required only if the current point is before start
+ * @param {PIXI.Point} [outPoint]
+ * @returns {PIXI.Point} X value is 0 at start, negative if further from end than start.
+ *  - x: Distance-squared from start, in direction of end.
+ *  - y: Elevation in pixel units
+ */
+function to2dCutaway(currPt, start, end, outPoint) {
+  outPoint ??= new PIXI.Point();
+  const pt = outPoint.set(PIXI.Point.distanceSquaredBetween(start, currPt), currPt.z);
+  if ( end && PIXI.Point.distanceSquaredBetween(currPt, end) > PIXI.Point.distanceSquaredBetween(start, end) ) pt.x *= -1;
+  return pt;
+}
+
+/**
+ * Convert a cutaway point to its respective position on the line start|end.
+ * @param {PIXI.Point} cutawayPt      2d cutaway point created from _to2dCutaway
+ * @param {Point3d} start             Beginning endpoint of the line segment
+ * @param {Point3d} end               End of the line segment
+ * @param {Point3d} [outPoint]
+ * @returns {Point3d}
+ */
+function from2dCutaway(cutawayPt, start, end, outPoint) {
+  outPoint ??= new Point3d();
+  const canvasPt = start.towardsPointSquared(end, pt.x, outPoint);
+  outPoint.z = pt.y;
+  return outPoint;
+}
+
+/**
+ * Convert a cutaway point to use distance instead of distance squared.
+ * @param {PIXI.Point} cutawayPt
+ * @returns {PIXI.Point} The same point, modified in place.
+ */
+function convertToDistanceCutaway(cutawayPt) {
+  cutawayPt.x = Math.sqrt(cutawayPt.x);
+  return cutawayPt;
+}
+
+/**
+ * Convert a cutaway point to use grid elevation instead of pixel units for y.
+ * @param {PIXI.Point} cutawayPt
+ * @returns {PIXI.Point} The same point, modified in place.
+ */
+function convertToElevationCutaway(cutawayPt) {
+  cutawayPt.y = pixelsToGridUnits(cutawayPt.y);
+  return cutawayPt;
+}
+
+/**
+ * Convert a cutaway point to use distance-squared instead of distance.
+ * @param {PIXI.Point} cutawayPt
+ * @returns {PIXI.Point} The same point, modified in place.
+ */
+function convertFromDistanceCutaway(cutawayPt) {
+  cutawayPt.x = Math.sqrt(cutawayPt.x);
+  return cutawayPt;
+}
+
+/**
+ * Convert a cutaway point to use pixel units instead of grid units for y.
+ * @param {PIXI.Point} cutawayPt
+ * @returns {PIXI.Point} The same point, modified in place.
+ */
+function convertFromElevationCutaway(cutawayPt) {
+  cutawayPt.y = gridUnitsToPixels(cutawayPt.y);
+  return cutawayPt;
 }
 
 /**
