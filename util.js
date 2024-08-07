@@ -95,7 +95,7 @@ function to2dCutaway(currPt, start, end, outPoint) {
 function from2dCutaway(cutawayPt, start, end, outPoint) {
   outPoint ??= new Point3d();
   start.towardsPointSquared(end, cutawayPt.x, outPoint);
-  outPoint.z = canvasPt.y;
+  outPoint.z = cutawayPt.y;
   return outPoint;
 }
 
