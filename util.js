@@ -66,6 +66,13 @@ export function registerFoundryUtilsMethods() {
 }
 
 /**
+ * @typedef {PIXI.Point} CutawayPoint
+ * A point in cutaway space.
+ * @param {number} x      Distance-squared from start point
+ * @param {number} y      Elevation in pixel units
+ */
+
+/**
  * Convert a point on a line to a coordinate representing the line direction in the x direction
  * and the elevation in the y direction.
  *
@@ -73,7 +80,7 @@ export function registerFoundryUtilsMethods() {
  * @param {Point3d} start       Beginning endpoint of the line segment
  * @param {Point3d} [end]       End of the line segment; required only if the current point is before start
  * @param {PIXI.Point} [outPoint]
- * @returns {PIXI.Point} X value is 0 at start, negative if further from end than start.
+ * @returns {CutawayPoint} X value is 0 at start, negative if further from end than start.
  *  - x: Distance-squared from start, in direction of end.
  *  - y: Elevation in pixel units
  */
@@ -86,7 +93,7 @@ function to2dCutaway(currPt, start, end, outPoint) {
 
 /**
  * Convert a cutaway point to its respective position on the line start|end.
- * @param {PIXI.Point} cutawayPt      2d cutaway point created from _to2dCutaway
+ * @param {CutawayPoint} cutawayPt      2d cutaway point created from _to2dCutaway
  * @param {Point3d} start             Beginning endpoint of the line segment
  * @param {Point3d} end               End of the line segment
  * @param {Point3d} [outPoint]
@@ -101,7 +108,7 @@ function from2dCutaway(cutawayPt, start, end, outPoint) {
 
 /**
  * Convert a cutaway point to use distance instead of distance squared.
- * @param {PIXI.Point} cutawayPt
+ * @param {CutawayPoint} cutawayPt
  * @returns {PIXI.Point} The same point, modified in place.
  */
 function convertToDistanceCutaway(cutawayPt) {
@@ -111,7 +118,7 @@ function convertToDistanceCutaway(cutawayPt) {
 
 /**
  * Convert a cutaway point to use grid elevation instead of pixel units for y.
- * @param {PIXI.Point} cutawayPt
+ * @param {CutawayPoint} cutawayPt
  * @returns {PIXI.Point} The same point, modified in place.
  */
 function convertToElevationCutaway(cutawayPt) {
@@ -121,7 +128,7 @@ function convertToElevationCutaway(cutawayPt) {
 
 /**
  * Convert a cutaway point to use distance-squared instead of distance.
- * @param {PIXI.Point} cutawayPt
+ * @param {CutawayPoint} cutawayPt
  * @returns {PIXI.Point} The same point, modified in place.
  */
 function convertFromDistanceCutaway(cutawayPt) {
@@ -131,7 +138,7 @@ function convertFromDistanceCutaway(cutawayPt) {
 
 /**
  * Convert a cutaway point to use pixel units instead of grid units for y.
- * @param {PIXI.Point} cutawayPt
+ * @param {CutawayPoint} cutawayPt
  * @returns {PIXI.Point} The same point, modified in place.
  */
 function convertFromElevationCutaway(cutawayPt) {
