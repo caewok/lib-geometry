@@ -859,8 +859,8 @@ function cutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPoint
     }
   }
   ixs.sort((a, b) => a.t0 - b.t0);
-  if ( !b.to2d.almostEqual(ixs.at(-1)) ) ixs.push(b);
-  if ( a.to2d.almostEqual(ixs[0]) ) ixs.shift();
+  if ( !b.to2d().almostEqual(ixs.at(-1)) ) ixs.push(b);
+  if ( a.to2d().almostEqual(ixs[0]) ) ixs.shift();
 
   // Shoelace: move in and out of the polygon, constructing a quad for every "in"
   const quads = [];
