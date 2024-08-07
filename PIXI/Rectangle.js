@@ -513,6 +513,42 @@ function stepsForCutPointsFn(a, b, { start, end, cutPointsFn } = {}) {
   return steps;
 }
 
+/**
+ * Rotate this rectangle around its center point.
+ * @param {number} rotation               Rotation in degrees
+ * @returns {PIXI.Rectangle|PIXI.Polygon} Polygon if the rotation is not multiple of 90º
+ */
+function rotateAroundCenter(rotation = 0) {
+  rotation = normalizeDegrees(rotation);
+
+  // Handle the simple cases where the shape is still a rectangle after rotation.
+  if ( rotation === 0 || rotation === 180 ) return this.clone();
+  const center = this.center;
+  if ( rotation === 90 || rotation === 270 ) {
+    const dx1_2 = center.x - this.x;
+    const dy1_2 = center.y - this.y;
+    return new PIXI.Rectangle(center.x - dy1_2, center.y - dx1_2, this.height, this.width);
+  }
+
+  // For all other rotations, translate center to 0,0, rotate, and then invert the translation.
+  const tMat = Matrix.translation(-center.x, -center.y);
+  const rMat = Matrix.rotationZ(Math.toRadians(rotation));
+  const M = tMat.multiply3x3(rMat).multiply3x3(tMat.invert);
+  const pts = [...this.iteratePoints({ close: true })];
+  const tPts = pts.map(pt => M.multiplyPoint2d(pt));
+  return new PIXI.Polygon(...tPts);
+}
+
+/**
+ * Helper to normalize degrees to be between 0º–359º
+ * @param {number} degrees
+ * @returns {number}
+ */
+function normalizeDegrees(degrees) {
+  const d = degrees % 360;
+  return d < 0 ? d + 360 : d;
+}
+
 
 PATCHES.PIXI.STATIC_METHODS = { gridRectangles, quadCutaway };
 
@@ -541,7 +577,9 @@ PATCHES.PIXI.METHODS = {
   _envelopsRectangle,
   _envelopsPolygon,
 
+  // Used by Elevation Ruler and Terrain Mapper
   cutaway,
+  rotateAroundCenter,
 
   // Helper methods
   scaledArea
