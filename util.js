@@ -937,7 +937,7 @@ export function cutawayBasicShape(shape, a, b, { start, end, topElevationFn, bot
     }
 
     // Intersects somewhere along the segment.
-    if ( this.contains(a.x, a.y) ) return quadCutaway(a, ix0, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
+    if ( shape.contains(a.x, a.y) ) return quadCutaway(a, ix0, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
     else return quadCutaway(ix0, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
   }
 
@@ -950,7 +950,7 @@ export function cutawayBasicShape(shape, a, b, { start, end, topElevationFn, bot
   // Shoelace: move in and out of the polygon, constructing a quad for every "in"
   const quads = [];
   let prevIx = start;
-  let isInside = this.contains(a.x, a.y);
+  let isInside = shape.contains(a.x, a.y);
   for ( const ix of ixs ) {
     if ( isInside ) quads.push(...quadCutaway(prevIx, ix, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole }));
     isInside = !isInside;
