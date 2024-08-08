@@ -4,6 +4,8 @@ WeilerAthertonClipper
 */
 "use strict";
 
+import { cutawayBasicShape } from "./util.js";
+
 /* Testing
 api = game.modules.get('tokenvisibility').api;
 drawing = api.drawing
@@ -357,4 +359,17 @@ export class Ellipse extends PIXI.Ellipse {
     const approx = this.toPolygon({ density });
     return polygon.intersectPolygon(approx, options);
   }
+
+  /**
+   * Cutaway a line segment start|end that moves through this circle.
+   * Assumes a cylinder, not a sphere.
+   * @param {Point3d} start     Starting endpoint for the segment
+   * @param {Point3d} end       Ending endpoint for the segment
+   * @param {object} [opts]
+   * @param {number} [opts.top=1e06]        Top (elevation in pixel units) of the polygon
+   * @param {number} [opts.bottom=-1e06]    Bottom (elevation in pixel units) of the polygon
+   * @param {number} [opts.isHole=false]    Treat this shape as a hole; reverse the points of the returned polygon
+   * @returns {PIXI.Polygon[]}
+   */
+  cutaway(a, b, opts) { return cutawayBasicShape(this, a, b, opts); }
 }

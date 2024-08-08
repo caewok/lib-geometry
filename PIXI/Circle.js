@@ -3,6 +3,8 @@ PIXI
 */
 "use strict";
 
+import { cutawayBasicShape } from "../util.js";
+
 export const PATCHES = {};
 PATCHES.PIXI = {};
 
@@ -169,36 +171,8 @@ function lineSegmentIntersects(a, b, { inside = false } = {}) {
  * @param {number} [opts.isHole=false]    Treat this shape as a hole; reverse the points of the returned polygon
  * @returns {PIXI.Polygon[]}
  */
-function cutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole = false } = {}) {
-  if ( !this.lineSegmentIntersects(start, end, { inside: true }) ) return [];
-  start ??= a;
-  end ??= b;
+function cutaway(a, b, opts) { return cutawayBasicShape(this, a, b, opts); }
 
-  const ixs = this.segmentIntersections(start, end);
-  const quadCutaway = PIXI.Rectangle.quadCutaway;
-  if ( ixs.length === 0 ) return quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
-  if ( ixs.length === 1 ) {
-    const ix0 = ixs[0];
-
-    // Intersects only at start point. Infer that end is inside; go from start --> end.
-    if ( a.to2d().almostEqual(ix0) ) return quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
-
-    // Intersects only at end point. Expand one pixel beyond to get a valid polygon.
-    if ( b.to2d().almostEqual(ix0)  ) {
-      const newB = PIXI.Point._tmp.copyFrom(b).towardsPoint(PIXI.Point._tmp2.copyFrom(a), -1);
-      return quadCutaway(a, newB, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
-    }
-
-    // Intersects somewhere along the segment.
-    if ( this.contains(a.x, a.y) ) return quadCutaway(a, ix0, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
-    else return quadCutaway(ix0, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
-  }
-  if ( ixs.length === 2 ) {
-    ixs.sort((a, b) => a.t0 - b.t0);
-    return quadCutaway(ixs[0], ixs[1], { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
-  }
-  return []; // Should not happen.``
-}
 
 PATCHES.PIXI.GETTERS = { area };
 

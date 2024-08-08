@@ -5,6 +5,7 @@ PIXI
 "use strict";
 
 import { Matrix } from "../Matrix.js";
+import { cutawayBasicShape } from "../util.js";
 
 export const PATCHES = {};
 PATCHES.PIXI = {};
@@ -411,109 +412,8 @@ function gridRectangles(rect1, rect2) {
  * @param {number} [opts.isHole=false]        Treat this shape as a hole; reverse the points of the returned polygon
  * @returns {PIXI.Polygon[]}
  */
-function cutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole = false } = {}) {
-  if ( !this.lineSegmentIntersects(a, b, { inside: true }) ) return [];
-  start ??= a;
-  end ??= b;
+function cutaway(a, b, opts) { return cutawayBasicShape(this, a, b, opts); }
 
-  const ixs = this.segmentIntersections(a, b);
-  const quadCutaway = PIXI.Rectangle.quadCutaway;
-  if ( ixs.length === 0 ) return quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
-  if ( ixs.length === 1 ) {
-    const ix0 = ixs[0];
-
-    // Intersects only at start point. Infer that end is inside; go from start --> end.
-    if ( a.to2d().almostEqual(ix0) ) return quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
-
-    // Intersects only at end point. Expand one pixel beyond to get a valid polygon.
-    if ( b.to2d().almostEqual(ix0)  ) {
-      const newB = PIXI.Point._tmp.copyFrom(b).towardsPoint(PIXI.Point._tmp2.copyFrom(a), -1);
-      return quadCutaway(a, newB, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
-    }
-
-    // Intersects somewhere along the segment.
-    if ( this.contains(a.x, a.y) ) return quadCutaway(a, ix0, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
-    else return quadCutaway(ix0, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
-  }
-  if ( ixs.length === 2 ) {
-    ixs.sort((a, b) => a.t0 - b.t0);
-    return quadCutaway(ixs[0], ixs[1], { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
-  }
-  return []; // Should not happen.``
-}
-
-/**
- * Helper function to construct a single vertical quadrangle based on a line moving through a 3d polygon.
- * @param {Point3d} a               Starting cutaway point for the segment
- * @param {Point3d} b               Ending cutaway point for the segment
- * @param {object} [opts]
- * @param {Point3d} [opts.start]              Starting endpoint for the segment
- * @param {Point3d} [opts.end]                Ending endpoint for the segment
- * @param {function} [opts.topElevationFn]    Function to calculate the top elevation for a position
- * @param {function} [opts.bottomElevationFn] Function to calculate the bottom elevation for a position
- * @param {function} [opts.cutPointsFn]       Function that returns the steps along the a|b segment top
- * @param {boolean} [opts.isHole=false]       Is this polygon a hole? If so, reverse points and use max/min elevations.
- * @returns {PIXI.Polygon[]}
- */
-function quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole = false } = {}) {
-  const to2d = CONFIG.GeometryLib.utils.cutaway.to2d;
-  start ??= a;
-  end ??= b;
-
-  // Retrieve the pixel elevation for the a and b points. Holes should extend very high and very low so they cut everything.
-  let topA, topB, bottomA, bottomB;
-  topA = topB = 1e06;
-  bottomA = bottomB = -1e06;
-  if ( !isHole ) {
-    if ( topElevationFn ) {
-      topA = topElevationFn(a);
-      topB = topElevationFn(b);
-    }
-    if ( bottomElevationFn ) {
-      bottomA = bottomElevationFn(a);
-      bottomB = bottomElevationFn(b);
-    }
-  }
-  const steps = (!isHole && cutPointsFn) ? stepsForCutPointsFn(a, b, { start, end, cutPointsFn }) : [];
-  const a2d = to2d(a, start, end);
-  const b2d = to2d(b, start, end);
-  const TL = { x: a2d.x, y: topA };
-  const TR = { x: b2d.x, y: topB };
-  const BL = { x: a2d.x, y: bottomA };
-  const BR = { x: b2d.x, y: bottomB };
-
-  // _isPositive is y-down clockwise. For Foundry canvas, this is CCW.
-  return [isHole ? new PIXI.Polygon(TL, ...steps, TR, BR, BL) : new PIXI.Polygon(TL, BL, BR, TR, ...steps)];
-}
-
-/**
- * Helper function to calculate steps along an a|b segment.
- * @param {Point3d} a               Starting cutaway point for the segment
- * @param {Point3d} b               Ending cutaway point for the segment
- * @param {object} [opts]
- * @param {Point3d} [opts.start]              Starting endpoint for the segment
- * @param {Point3d} [opts.end]                Ending endpoint for the segment
- * @param {function} [opts.topElevationFn]    Function to calculate the top elevation for a position
- * @param {function} [opts.bottomElevationFn] Function to calculate the bottom elevation for a position
- * @param {function} [opts.cutPointsFn]       Function that returns the steps along the a|b segment top
- * @returns {PIXI.Point[]} The cutaway steps.
- */
-function stepsForCutPointsFn(a, b, { start, end, cutPointsFn } = {}) {
-  start ??= a;
-  end ??= b;
-  const cutPoints = cutPointsFn(a, b); // ? { ...a, elevation: topA }, { ...b, elevation: topB }
-  const nCuts = cutPoints.length;
-  const steps = [];
-  let currElev = Math.min(a.z, b.z)
-  for ( let i = 0; i < nCuts; i += 1 ) {
-    const cutPoint = cutPoints[i];
-    const x = CONFIG.GeometryLib.utils.cutaway.to2d(cutPoint, start, end).x;
-    steps.push({ x, y: currElev}, { x, y: cutPoint.z });
-    currElev = cutPoint.z;
-  }
-  if ( a.z < b.z ) steps.reverse();
-  return steps;
-}
 
 /**
  * Rotate this rectangle around its center point.
