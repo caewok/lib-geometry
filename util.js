@@ -910,7 +910,6 @@ export function cutawayBasicShape(shape, a, b, { start, end, topElevationFn, bot
   end ??= b;
 
   const ixs = shape.segmentIntersections(a, b);
-  const quadCutaway = PIXI.Rectangle.quadCutaway;
   if ( ixs.length === 0 ) return quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
   if ( ixs.length === 1 ) {
     const ix0 = Point3d.fromObject(ixs[0]);
