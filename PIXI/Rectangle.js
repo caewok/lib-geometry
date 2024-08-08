@@ -1,5 +1,4 @@
 /* globals
-CONFIG,
 PIXI
 */
 "use strict";
@@ -452,7 +451,7 @@ function normalizeDegrees(degrees) {
 }
 
 
-PATCHES.PIXI.STATIC_METHODS = { gridRectangles, quadCutaway };
+PATCHES.PIXI.STATIC_METHODS = { gridRectangles };
 
 PATCHES.PIXI.GETTERS = { area };
 
