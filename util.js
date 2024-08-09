@@ -914,6 +914,7 @@ export function cutawayBasicShape(shape, a, b, { start, end, topElevationFn, bot
   if ( ixs.length === 0 ) return quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
   if ( ixs.length === 1 ) {
     const ix0 = Point3d.fromObject(ixs[0]);
+    ix0.t0 = ixs[0].t0;
     const a2 = a.to2d();
     const b2 = b.to2d();
 
