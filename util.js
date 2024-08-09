@@ -132,7 +132,7 @@ function convertToElevationCutaway(cutawayPt) {
  * @returns {PIXI.Point} The same point, modified in place.
  */
 function convertFromDistanceCutaway(cutawayPt) {
-  cutawayPt.x = Math.sqrt(cutawayPt.x);
+  cutawayPt.x = Math.pow(cutawayPt.x, 2);
   return cutawayPt;
 }
 
@@ -891,7 +891,6 @@ export function segmentOverlap(a, b, c, d) {
 
 /**
  * Helper function to return a quadrangle cutaway for a given PIXI shape.
- * Does not handle polygons with multiple intersections.
  * @param {PIXI.Polygon|PIXI.Rectangle|PIXI.Circle|PIXI.Ellipse} shape
  * @param {Point3d} a       Starting endpoint for the segment
  * @param {Point3d} b       Ending endpoint for the segment
