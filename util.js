@@ -916,7 +916,7 @@ export function cutawayBasicShape(shape, a, b, { start, end, topElevationFn, bot
     const b2 = b.to2d();
 
     // Intersects only at start point.
-    if ( a2.almostEqual(ix0) ) {
+    if ( ix0.t0.almostEqual(0) ) {
       const bInside = shape.contains(b.x, b.y);
       if ( bInside ) return quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
 
@@ -926,7 +926,7 @@ export function cutawayBasicShape(shape, a, b, { start, end, topElevationFn, bot
     }
 
     // Intersects only at end point.
-    if ( b2.almostEqual(ix0)  ) {
+    if ( ix0.t0.almostEqual(1) ) {
       const aInside = shape.contains(a.x, a.y);
       if ( aInside ) return quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
 
@@ -943,8 +943,8 @@ export function cutawayBasicShape(shape, a, b, { start, end, topElevationFn, bot
   // Handle 2+ intersections with a polygon shape.
   // More than 2 are possible if the polygon is not simple. May go in and out of it.
   ixs.sort((a, b) => a.t0 - b.t0);
-  if ( !b.to2d().almostEqual(ixs.at(-1)) ) ixs.push(b);
-  if ( a.to2d().almostEqual(ixs[0]) ) ixs.shift();
+  if ( !ixs.at(-1).t0.almostEqual(1) ) ixs.push(b);
+  if ( ixs[0].t0.almostEqual(0) ) ixs.shift();
 
   // Shoelace: move in and out of the polygon, constructing a quad for every "in"
   const quads = [];
@@ -981,49 +981,53 @@ export function cutawayBasicIntersections(shape, a, b, { start, end, topElevatio
   const ixs = shape.segmentIntersections(a, b);
   if ( ixs.length === 0 ) return segmentCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn } = {});
   if ( ixs.length === 1 ) {
-    const ix0 = Point3d.fromObject(ixs[0]);
-    const a2 = a.to2d();
-    const b2 = b.to2d();
+    const ix0 = ixs[0];
 
     // Intersects only at start point.
-    if ( a2.almostEqual(ix0) ) {
+    if ( ix0.t0.almostEqual(0) ) {
       const bInside = shape.contains(b.x, b.y);
       if ( bInside ) return segmentCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
 
-      // A is the end. Back up one to construct proper polygon and return.
-      const newA = a2.towardsPoint(b2, -1);
-      return segmentCutaway(newA, a, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
+      // A is the end.
+      const a2d = CONFIG.GeometryLib.utils.cutaway.to2d(a, start, end);
+      a2d.movingInto = false;
+      return [a2d];
     }
 
     // Intersects only at end point.
-    if ( b2.almostEqual(ix0)  ) {
+    if ( ix0.t0.almostEqual(1) ) {
       const aInside = shape.contains(a.x, a.y);
       if ( aInside ) return segmentCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
 
-      // B is at end. Move one step further from the end to construct proper polygon and return.
-      const newB = b2.towardsPoint(a2, -1);
-      return segmentCutaway(b, newB, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
+      // B is at end.
+      const b2d = CONFIG.GeometryLib.utils.cutaway.to2d(b, start, end);
+      b2d.movingInto = true;
+      return [b2d];
     }
 
+    // Project to determine the correct z value.
+    const ix3d = a.projectToward(b, ix0.t0);
+
     // Intersects somewhere along the segment.
-    if ( shape.contains(a.x, a.y) ) return segmentCutaway(a, ix0, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
-    else return segmentCutaway(ix0, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
+    if ( shape.contains(a.x, a.y) ) return segmentCutaway(a, ix3d, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
+    else return segmentCutaway(ix3d, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
   }
 
   // Handle 2+ intersections with a polygon shape.
   // More than 2 are possible if the polygon is not simple. May go in and out of it.
   ixs.sort((a, b) => a.t0 - b.t0);
-  if ( !b.to2d().almostEqual(ixs.at(-1)) ) ixs.push(b);
-  if ( a.to2d().almostEqual(ixs[0]) ) ixs.shift();
+  if ( !ixs.at(-1).t0.almostEqual(1) ) ixs.push(b);
+  if ( ixs[0].t0.almostEqual(0) ) ixs.shift();
 
   // Shoelace: move in and out of the polygon, constructing a quad for every "in"
   const pts = [];
   let prevIx = start;
   let isInside = shape.contains(a.x, a.y);
   for ( const ix of ixs ) {
-    if ( isInside ) pts.push(...segmentCutaway(prevIx, ix, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole }));
+    const ix3d = a.projectToward(b, ix.t0);
+    if ( isInside ) pts.push(...segmentCutaway(prevIx, ix3d, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole }));
     isInside = !isInside;
-    prevIx = ix;
+    prevIx = ix3d;
   }
   return pts;
 }
@@ -1056,12 +1060,11 @@ function segmentCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, c
     const pts = quad.segmentIntersections(a2d, b2d).map(ix => PIXI.Point.fromObject(ix));
     switch ( pts.length ) {
       case 1: pts[0].movingInto = true; break;
-      case 2: {
+      case 2:
         pts.sort((a, b) => a.x - b.x);
         pts[0].movingInto = true;
         pts[1].movingInto = false;
         break;
-      }
     }
     return pts;
   }
