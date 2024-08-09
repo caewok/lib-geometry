@@ -907,6 +907,8 @@ export function cutawayBasicShape(shape, a, b, { start, end, topElevationFn, bot
   if ( !shape.lineSegmentIntersects(a, b, { inside: true }) ) return [];
   start ??= a;
   end ??= b;
+  topElevationFn ??= () => 1e06;
+  bottomElevationFn ??= () => -1e06;
 
   const ixs = shape.segmentIntersections(a, b);
   if ( ixs.length === 0 ) return quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
@@ -977,6 +979,8 @@ export function cutawayBasicIntersections(shape, a, b, { start, end, topElevatio
   if ( !shape.lineSegmentIntersects(a, b, { inside: true }) ) return [];
   start ??= a;
   end ??= b;
+  topElevationFn ??= () => 1e06;
+  bottomElevationFn ??= () => -1e06;
 
   const ixs = shape.segmentIntersections(a, b);
   if ( ixs.length === 0 ) return segmentCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn } = {});
