@@ -837,12 +837,12 @@ function equals(other) {
  * @param {number} [opts.bottom=-1e06]    Bottom (elevation in pixel units) of the polygon
  * @returns {PIXI.Polygon[]}
  */
-function cutaway(a, b, opts) {
+function cutaway(a, b, opts = {}) {
   opts.isHole ??= !this.isPositive;
   return cutawayBasicShape(this, a, b, opts);
 }
 
-function cutawayIntersections(a, b, opts) {
+function cutawayIntersections(a, b, opts = {}) {
   opts.isHole ??= !this.isPositive;
   return cutawayBasicIntersections(this, a, b, opts);
 }
