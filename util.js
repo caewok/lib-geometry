@@ -983,7 +983,7 @@ export function cutawayBasicIntersections(shape, a, b, { start, end, topElevatio
   bottomElevationFn ??= () => -1e06;
 
   const ixs = shape.segmentIntersections(a, b);
-  if ( ixs.length === 0 ) return segmentCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn } = {});
+  if ( ixs.length === 0 ) return segmentCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
   if ( ixs.length === 1 ) {
     const ix0 = ixs[0];
 
