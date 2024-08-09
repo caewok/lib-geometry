@@ -4,7 +4,7 @@ PIXI
 "use strict";
 
 import { Matrix } from "../Matrix.js";
-import { cutawayBasicShape } from "../util.js";
+import { cutawayBasicShape, cutawayBasicIntersections } from "../util.js";
 
 export const PATCHES = {};
 PATCHES.PIXI = {};
@@ -413,6 +413,7 @@ function gridRectangles(rect1, rect2) {
  */
 function cutaway(a, b, opts) { return cutawayBasicShape(this, a, b, opts); }
 
+function cutawayIntersections(a, b, opts) { return cutawayBasicIntersections(this, a, b, opts); }
 
 /**
  * Rotate this rectangle around its center point.
@@ -481,6 +482,7 @@ PATCHES.PIXI.METHODS = {
   // Used by Elevation Ruler and Terrain Mapper
   cutaway,
   rotateAroundCenter,
+  cutawayIntersections,
 
   // Helper methods
   scaledArea

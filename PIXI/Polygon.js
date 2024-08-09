@@ -6,7 +6,7 @@ CONFIG
 */
 "use strict";
 
-import { cutawayBasicShape, quadCutaway } from "../util.js";
+import { cutawayBasicShape, cutawayBasicIntersections } from "../util.js";
 
 export const PATCHES = {};
 PATCHES.PIXI = {};
@@ -842,6 +842,11 @@ function cutaway(a, b, opts) {
   return cutawayBasicShape(this, a, b, opts);
 }
 
+function cutawayIntersections(a, b, opts) {
+  opts.isHole ??= !this.isPositive;
+  return cutawayBasicIntersections(this, a, b, opts);
+}
+
 
 PATCHES.PIXI.GETTERS = {
   area,
@@ -882,6 +887,7 @@ PATCHES.PIXI.METHODS = {
 
   // 2d cutaway
   cutaway,
+  cutawayIntersections,
 
   // Helper/internal methods
   scaledArea

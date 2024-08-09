@@ -3,7 +3,7 @@ PIXI
 */
 "use strict";
 
-import { cutawayBasicShape } from "../util.js";
+import { cutawayBasicShape, cutawayBasicIntersections } from "../util.js";
 
 export const PATCHES = {};
 PATCHES.PIXI = {};
@@ -173,6 +173,8 @@ function lineSegmentIntersects(a, b, { inside = false } = {}) {
  */
 function cutaway(a, b, opts) { return cutawayBasicShape(this, a, b, opts); }
 
+function cutawayIntersections(a, b, opts) { return cutawayBasicIntersections(this, a, b, opts); }
+
 
 PATCHES.PIXI.GETTERS = { area };
 
@@ -192,5 +194,6 @@ PATCHES.PIXI.METHODS = {
   _envelopsRectangle,
   _envelopsPolygon,
 
-  cutaway
+  cutaway,
+  cutawayIntersections
 };
