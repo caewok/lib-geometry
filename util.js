@@ -1050,7 +1050,7 @@ export function cutawayBasicIntersections(shape, a, b, { start, end, topElevatio
  * @returns {PIXI.Point[]}
  */
 
-function segmentCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole }) {
+function segmentCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole } = {}) {
   const to2d = CONFIG.GeometryLib.utils.cutaway.to2d;
   const a2d = to2d(a, start, end);
   const b2d = to2d(b, start, end);
