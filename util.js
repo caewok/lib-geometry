@@ -1122,7 +1122,7 @@ function quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutP
   const BR = { x: b2d.x, y: bottomB };
 
   // _isPositive is y-down clockwise. For Foundry canvas, this is CCW.
-  return [isHole ? new PIXI.Polygon(TL, ...steps, TR, BR, BL) : new PIXI.Polygon(TL, BL, BR, TR, ...steps)];
+  return isHole ? new PIXI.Polygon(TL, ...steps, TR, BR, BL) : new PIXI.Polygon(TL, BL, BR, TR, ...steps);
 }
 
 /**
