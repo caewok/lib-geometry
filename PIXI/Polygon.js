@@ -838,13 +838,12 @@ function equals(other) {
  * @returns {PIXI.Polygon[]}
  */
 function cutaway(a, b, opts = {}) {
-  opts.isHole ??= !this.isPositive;
-  return cutawayBasicShape(this, a, b, opts);
+  return cutawayBasicShape(this, a, b, { isHole: !this.isPositive, ...opts }); // Avoid setting the isHole parameter in opts; will get overriden if set in opts.
 }
 
 function cutawayIntersections(a, b, opts = {}) {
   opts.isHole ??= !this.isPositive;
-  return cutawayBasicIntersections(this, a, b, opts);
+  return cutawayBasicIntersections(this, a, b, { isHole: !this.isPositive, ...opts }); // Avoid setting the isHole parameter in opts; will get overriden if set in opts.
 }
 
 
