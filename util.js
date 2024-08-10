@@ -911,7 +911,7 @@ export function cutawayBasicShape(shape, a, b, { start, end, topElevationFn, bot
   bottomElevationFn ??= () => -1e06;
 
   const ixs = shape.segmentIntersections(a, b);
-  if ( ixs.length === 0 ) return quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
+  if ( ixs.length === 0 ) return [quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole })];
   if ( ixs.length === 1 ) {
     const ix0 = Point3d.fromObject(ixs[0]);
     ix0.t0 = ixs[0].t0;
@@ -921,26 +921,26 @@ export function cutawayBasicShape(shape, a, b, { start, end, topElevationFn, bot
     // Intersects only at start point.
     if ( ix0.t0.almostEqual(0) ) {
       const bInside = shape.contains(b.x, b.y);
-      if ( bInside ) return quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
+      if ( bInside ) return [quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole })];
 
       // A is the end. Back up one to construct proper polygon and return.
       const newA = a2.towardsPoint(b2, -1);
-      return quadCutaway(newA, a, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
+      return [quadCutaway(newA, a, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole })];
     }
 
     // Intersects only at end point.
     if ( ix0.t0.almostEqual(1) ) {
       const aInside = shape.contains(a.x, a.y);
-      if ( aInside ) return quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
+      if ( aInside ) return [quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole })];
 
       // B is at end. Move one step further from the end to construct proper polygon and return.
       const newB = b2.towardsPoint(a2, -1);
-      return quadCutaway(b, newB, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
+      return [quadCutaway(b, newB, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole })];
     }
 
     // Intersects somewhere along the segment.
-    if ( shape.contains(a.x, a.y) ) return quadCutaway(a, ix0, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
-    else return quadCutaway(ix0, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
+    if ( shape.contains(a.x, a.y) ) return [quadCutaway(a, ix0, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole })];
+    else return [quadCutaway(ix0, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole })];
   }
 
   // Handle 2+ intersections with a polygon shape.
@@ -954,7 +954,7 @@ export function cutawayBasicShape(shape, a, b, { start, end, topElevationFn, bot
   let prevIx = start;
   let isInside = shape.contains(a.x, a.y);
   for ( const ix of ixs ) {
-    if ( isInside ) quads.push(...quadCutaway(prevIx, ix, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole }));
+    if ( isInside ) quads.push(quadCutaway(prevIx, ix, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole }));
     isInside = !isInside;
     prevIx = ix;
   }
@@ -1061,7 +1061,7 @@ function segmentCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, c
   // Intersect the quad shape in that instance.
   if ( !(a.z.between(topElevationFn(a), bottomElevationFn(a))
       && b.z.between(topElevationFn(b), bottomElevationFn(b))) ) {
-    const quad = quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
+    const quad = quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole })[0];
     const pts = quad.segmentIntersections(a2d, b2d).map(ix => PIXI.Point.fromObject(ix));
     switch ( pts.length ) {
       case 1: pts[0].movingInto = true; break;
@@ -1092,7 +1092,7 @@ function segmentCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, c
  * @param {function} [opts.bottomElevationFn] Function to calculate the bottom elevation for a position
  * @param {function} [opts.cutPointsFn]       Function that returns the steps along the a|b segment top
  * @param {boolean} [opts.isHole=false]       Is this polygon a hole? If so, reverse points and use max/min elevations.
- * @returns {PIXI.Polygon[]}
+ * @returns {PIXI.Polygon}
  */
 function quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole = false } = {}) {
   const to2d = CONFIG.GeometryLib.utils.cutaway.to2d;
