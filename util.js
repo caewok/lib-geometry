@@ -1061,7 +1061,7 @@ function segmentCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, c
   // Intersect the quad shape in that instance.
   if ( !(a.z.between(topElevationFn(a), bottomElevationFn(a))
       && b.z.between(topElevationFn(b), bottomElevationFn(b))) ) {
-    const quad = quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole })[0];
+    const quad = quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
     const pts = quad.segmentIntersections(a2d, b2d).map(ix => PIXI.Point.fromObject(ix));
     switch ( pts.length ) {
       case 1: pts[0].movingInto = true; break;
