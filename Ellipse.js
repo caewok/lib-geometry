@@ -4,7 +4,7 @@ WeilerAthertonClipper
 */
 "use strict";
 
-import { cutawayBasicShape } from "./util.js";
+import { cutawayBasicShape, cutawayBasicIntersections } from "./util.js";
 
 /* Testing
 api = game.modules.get('tokenvisibility').api;
