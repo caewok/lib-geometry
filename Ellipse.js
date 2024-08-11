@@ -286,8 +286,13 @@ export class Ellipse extends PIXI.Ellipse {
     b = this.toCircleCoords(this.fromCartesianCoords(b));
 
     // Get the intersection points and convert back to cartesian coords.
-    const ixs = cir.segmentIntersections(a, b);
-    return ixs.map(ix => this.toCartesianCoords(this.fromCircleCoords(ix)));
+    // Add t0 to indicate distance from a, to match other segmentIntersection functions.
+    const dist2 = PIXI.Point.distanceSquaredBetween(a, b);
+    return cir.segmentIntersections(a, b).map(ix => {
+      const newIx = this.toCartesianCoords(this.fromCircleCoords(ix));
+      newIx.t0 =  Math.sqrt(PIXI.Point.distanceSquaredBetween(a, ix) / dist2);
+      return newIx;
+    });
   }
 
   /**
