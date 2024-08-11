@@ -361,15 +361,33 @@ export class Ellipse extends PIXI.Ellipse {
   }
 
   /**
-   * Cutaway a line segment start|end that moves through this circle.
-   * Assumes a cylinder, not a sphere.
-   * @param {Point3d} start     Starting endpoint for the segment
-   * @param {Point3d} end       Ending endpoint for the segment
+   * Return a quadrangle cutaway for this ellipse
+   * @param {Point3d} a       Starting endpoint for the segment
+   * @param {Point3d} b       Ending endpoint for the segment
    * @param {object} [opts]
-   * @param {number} [opts.top=1e06]        Top (elevation in pixel units) of the polygon
-   * @param {number} [opts.bottom=-1e06]    Bottom (elevation in pixel units) of the polygon
-   * @param {number} [opts.isHole=false]    Treat this shape as a hole; reverse the points of the returned polygon
+   * @param {Point3d} [opts.start]              Starting endpoint for the segment
+   * @param {Point3d} [opts.end]                Ending endpoint for the segment
+   * @param {function} [opts.topElevationFn]    Function to calculate the top elevation for a position
+   * @param {function} [opts.bottomElevationFn] Function to calculate the bottom elevation for a position
+   * @param {function} [opts.cutPointsFn]       Function that returns the steps along the a|b segment top
+   * @param {number} [opts.isHole=false]        Treat this shape as a hole; reverse the points of the returned polygon
    * @returns {PIXI.Polygon[]}
    */
   cutaway(a, b, opts) { return cutawayBasicShape(this, a, b, opts); }
+
+  /**
+   * Return the cutaway intersections for this ellipse
+   * Similar to cutaway but returns the intersections instead of a new polygon.
+   * @param {Point3d} a       Starting endpoint for the segment
+   * @param {Point3d} b       Ending endpoint for the segment
+   * @param {object} [opts]
+   * @param {Point3d} [opts.start]              Starting endpoint for the segment
+   * @param {Point3d} [opts.end]                Ending endpoint for the segment
+   * @param {function} [opts.topElevationFn]    Function to calculate the top elevation for a position
+   * @param {function} [opts.bottomElevationFn] Function to calculate the bottom elevation for a position
+   * @param {function} [opts.cutPointsFn]       Function that returns the steps along the a|b segment top
+   * @param {number} [opts.isHole=false]        Treat this shape as a hole; reverse the points of the returned polygon
+   * @returns {PIXI.Point[]}
+   */
+  cutawayIntersections(a, b, opts) { return cutawayBasicIntersections(this, a, b, opts); }
 }
