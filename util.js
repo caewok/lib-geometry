@@ -752,7 +752,7 @@ export function findOverlappingPoints(a, b, c, d) {
   );
 
   const xEqual = p0.x.almostEqual(p1.x);
-  const yEqual = p1.y.almostEqual(p1.y);
+  const yEqual = p0.y.almostEqual(p1.y);
   if ( xEqual && yEqual ) return [p0];
   if ( xEqual ^ yEqual
   || (p0.x < p1.x && p0.y < p1.y)) return [p0, p1];
