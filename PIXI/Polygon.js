@@ -6,6 +6,8 @@ CONFIG
 */
 "use strict";
 
+import { cutawayBasicShape, cutawayBasicIntersections } from "../util.js";
+
 export const PATCHES = {};
 PATCHES.PIXI = {};
 
@@ -823,6 +825,27 @@ function equals(other) {
   return true;
 }
 
+/**
+ * Cutaway a line segment start|end that moves through this polygon.
+ * Depending on the line and the polygon, could have multiple quads.
+ * @param {Point3d} a     Starting endpoint for the segment
+ * @param {Point3d} b       Ending endpoint for the segment
+ * @param {object} [opts]
+ * @param {Point3d} [opts.start]              Starting endpoint for the segment
+ * @param {Point3d} [opts.end]                Ending endpoint for the segment
+ * @param {number} [opts.top=1e06]        Top (elevation in pixel units) of the polygon
+ * @param {number} [opts.bottom=-1e06]    Bottom (elevation in pixel units) of the polygon
+ * @returns {PIXI.Polygon[]}
+ */
+function cutaway(a, b, opts = {}) {
+  return cutawayBasicShape(this, a, b, { isHole: !this.isPositive, ...opts }); // Avoid setting the isHole parameter in opts; will get overriden if set in opts.
+}
+
+function cutawayIntersections(a, b, opts = {}) {
+  opts.isHole ??= !this.isPositive;
+  return cutawayBasicIntersections(this, a, b, { isHole: !this.isPositive, ...opts }); // Avoid setting the isHole parameter in opts; will get overriden if set in opts.
+}
+
 
 PATCHES.PIXI.GETTERS = {
   area,
@@ -860,6 +883,10 @@ PATCHES.PIXI.METHODS = {
   _envelopsCircle,
   _envelopsRectangle,
   _envelopsPolygon,
+
+  // 2d cutaway
+  cutaway,
+  cutawayIntersections,
 
   // Helper/internal methods
   scaledArea

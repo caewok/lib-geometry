@@ -3,6 +3,9 @@ PIXI
 */
 "use strict";
 
+import { Matrix } from "../Matrix.js";
+import { cutawayBasicShape, cutawayBasicIntersections } from "../util.js";
+
 export const PATCHES = {};
 PATCHES.PIXI = {};
 
@@ -395,12 +398,67 @@ function gridRectangles(rect1, rect2) {
   };
 }
 
+/**
+ * Cutaway a line segment start|end that moves through this rectangle.
+ * @param {Point3d} a       Starting endpoint for the segment
+ * @param {Point3d} b       Ending endpoint for the segment
+ * @param {object} [opts]
+ * @param {Point3d} [opts.start]              Starting endpoint for the segment
+ * @param {Point3d} [opts.end]                Ending endpoint for the segment
+ * @param {function} [opts.topElevationFn]    Function to calculate the top elevation for a position
+ * @param {function} [opts.bottomElevationFn] Function to calculate the bottom elevation for a position
+ * @param {function} [opts.cutPointsFn]       Function that returns the steps along the a|b segment top
+ * @param {number} [opts.isHole=false]        Treat this shape as a hole; reverse the points of the returned polygon
+ * @returns {PIXI.Polygon[]}
+ */
+function cutaway(a, b, opts) { return cutawayBasicShape(this, a, b, opts); }
+
+function cutawayIntersections(a, b, opts) { return cutawayBasicIntersections(this, a, b, opts); }
+
+/**
+ * Rotate this rectangle around its center point.
+ * @param {number} rotation               Rotation in degrees
+ * @returns {PIXI.Rectangle|PIXI.Polygon} Polygon if the rotation is not multiple of 90º
+ */
+function rotateAroundCenter(rotation = 0) {
+  rotation = normalizeDegrees(rotation);
+
+  // Handle the simple cases where the shape is still a rectangle after rotation.
+  if ( rotation === 0 || rotation === 180 ) return this.clone();
+  const center = this.center;
+  if ( rotation === 90 || rotation === 270 ) {
+    const dx1_2 = center.x - this.x;
+    const dy1_2 = center.y - this.y;
+    return new PIXI.Rectangle(center.x - dy1_2, center.y - dx1_2, this.height, this.width);
+  }
+
+  // For all other rotations, translate center to 0,0, rotate, and then invert the translation.
+  const tMat = Matrix.translation(-center.x, -center.y);
+  const rMat = Matrix.rotationZ(Math.toRadians(rotation));
+  const M = tMat.multiply3x3(rMat).multiply3x3(tMat.invert);
+  const pts = [...this.iteratePoints({ close: true })];
+  const tPts = pts.map(pt => M.multiplyPoint2d(pt));
+  return new PIXI.Polygon(...tPts);
+}
+
+/**
+ * Helper to normalize degrees to be between 0º–359º
+ * @param {number} degrees
+ * @returns {number}
+ */
+function normalizeDegrees(degrees) {
+  const d = degrees % 360;
+  return d < 0 ? d + 360 : d;
+}
+
+
 PATCHES.PIXI.STATIC_METHODS = { gridRectangles };
 
 PATCHES.PIXI.GETTERS = { area };
 
 PATCHES.PIXI.METHODS = {
   // Iterators
+  iteratePoints,
   iterateEdges,
 
   // Other methods
@@ -420,6 +478,11 @@ PATCHES.PIXI.METHODS = {
   _envelopsCircle,
   _envelopsRectangle,
   _envelopsPolygon,
+
+  // Used by Elevation Ruler and Terrain Mapper
+  cutaway,
+  rotateAroundCenter,
+  cutawayIntersections,
 
   // Helper methods
   scaledArea

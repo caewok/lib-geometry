@@ -1,8 +1,8 @@
 /* globals
 CONFIG,
-CONST,
 canvas,
 foundry,
+Drawing,
 PIXI
 */
 "use strict";
@@ -10,6 +10,7 @@ PIXI
 import { CenteredRectangle } from "./CenteredPolygon/CenteredRectangle.js";
 import { CenteredPolygon } from "./CenteredPolygon/CenteredPolygon.js";
 import { Ellipse } from "./Ellipse.js";
+import { Point3d } from "./3d/Point3d.js";
 
 // Functions that would go in foundry.utils if that object were extensible
 export function registerFoundryUtilsMethods() {
@@ -41,7 +42,15 @@ export function registerFoundryUtilsMethods() {
     endpointIntersection,
     segmentIntersection,
     segmentOverlap,
-    roundDecimals
+    roundDecimals,
+    cutaway: {
+      to2d: to2dCutaway,
+      from2d: from2dCutaway,
+      convertToDistance: convertToDistanceCutaway,
+      convertToElevation: convertToElevationCutaway,
+      convertFromDistance: convertFromDistanceCutaway,
+      convertFromElevation: convertFromElevationCutaway
+    }
   };
 
 
@@ -54,6 +63,87 @@ export function registerFoundryUtilsMethods() {
     }, { min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY});
   };
   CONFIG.GeometryLib.registered.add("utils");
+}
+
+/**
+ * @typedef {PIXI.Point} CutawayPoint
+ * A point in cutaway space.
+ * @param {number} x      Distance-squared from start point
+ * @param {number} y      Elevation in pixel units
+ */
+
+/**
+ * Convert a point on a line to a coordinate representing the line direction in the x direction
+ * and the elevation in the y direction.
+ *
+ * @param {Point3d} currPt      A point on the line start|end
+ * @param {Point3d} start       Beginning endpoint of the line segment
+ * @param {Point3d} [end]       End of the line segment; required only if the current point is before start
+ * @param {PIXI.Point} [outPoint]
+ * @returns {CutawayPoint} X value is 0 at start, negative if further from end than start.
+ *  - x: Distance-squared from start, in direction of end.
+ *  - y: Elevation in pixel units
+ */
+function to2dCutaway(currPt, start, end, outPoint) {
+  outPoint ??= new PIXI.Point();
+  const pt = outPoint.set(PIXI.Point.distanceSquaredBetween(start, currPt), currPt.z);
+  if ( end && PIXI.Point.distanceSquaredBetween(currPt, end) > PIXI.Point.distanceSquaredBetween(start, end) ) pt.x *= -1;
+  return pt;
+}
+
+/**
+ * Convert a cutaway point to its respective position on the line start|end.
+ * @param {CutawayPoint} cutawayPt      2d cutaway point created from _to2dCutaway
+ * @param {Point3d} start             Beginning endpoint of the line segment
+ * @param {Point3d} end               End of the line segment
+ * @param {Point3d} [outPoint]
+ * @returns {Point3d}
+ */
+function from2dCutaway(cutawayPt, start, end, outPoint) {
+  outPoint ??= new Point3d();
+  start.towardsPointSquared(end, cutawayPt.x, outPoint);
+  outPoint.z = cutawayPt.y;
+  return outPoint;
+}
+
+/**
+ * Convert a cutaway point to use distance instead of distance squared.
+ * @param {CutawayPoint} cutawayPt
+ * @returns {PIXI.Point} The same point, modified in place.
+ */
+function convertToDistanceCutaway(cutawayPt) {
+  cutawayPt.x = Math.sqrt(cutawayPt.x);
+  return cutawayPt;
+}
+
+/**
+ * Convert a cutaway point to use grid elevation instead of pixel units for y.
+ * @param {CutawayPoint} cutawayPt
+ * @returns {PIXI.Point} The same point, modified in place.
+ */
+function convertToElevationCutaway(cutawayPt) {
+  cutawayPt.y = pixelsToGridUnits(cutawayPt.y);
+  return cutawayPt;
+}
+
+/**
+ * Convert a cutaway point to use distance-squared instead of distance.
+ * @param {CutawayPoint} cutawayPt
+ * @returns {PIXI.Point} The same point, modified in place.
+ */
+function convertFromDistanceCutaway(cutawayPt) {
+  cutawayPt.x = Math.pow(cutawayPt.x, 2);
+  return cutawayPt;
+}
+
+/**
+ * Convert a cutaway point to use pixel units instead of grid units for y.
+ * @param {CutawayPoint} cutawayPt
+ * @returns {PIXI.Point} The same point, modified in place.
+ */
+function convertFromElevationCutaway(cutawayPt) {
+  cutawayPt.y = gridUnitsToPixels(cutawayPt.y);
+  return cutawayPt;
 }
 
 /**
@@ -244,6 +334,10 @@ function centeredPolygonFromDrawing(drawing) {
       return Ellipse.fromDrawing(drawing);
     case Drawing.SHAPE_TYPES.POLYGON:
       return CenteredPolygon.fromDrawing(drawing);
+    case Drawing.SHAPE_TYPES.CIRCLE: {
+      const width = drawing.document.shape.width;
+      return PIXI.Circle(drawing.document.x + width * 0.5, drawing.document.y + width * 0.5, width);
+    }
     default:
       console.error("fromDrawing shape type not supported");
   }
@@ -794,3 +888,269 @@ export function segmentOverlap(a, b, c, d) {
 
   return res;
 }
+
+/**
+ * Helper function to return a quadrangle cutaway for a given PIXI shape.
+ * @param {PIXI.Polygon|PIXI.Rectangle|PIXI.Circle|PIXI.Ellipse} shape
+ * @param {Point3d} a       Starting endpoint for the segment
+ * @param {Point3d} b       Ending endpoint for the segment
+ * @param {object} [opts]
+ * @param {Point3d} [opts.start]              Starting endpoint for the segment
+ * @param {Point3d} [opts.end]                Ending endpoint for the segment
+ * @param {function} [opts.topElevationFn]    Function to calculate the top elevation for a position
+ * @param {function} [opts.bottomElevationFn] Function to calculate the bottom elevation for a position
+ * @param {function} [opts.cutPointsFn]       Function that returns the steps along the a|b segment top
+ * @param {number} [opts.isHole=false]        Treat this shape as a hole; reverse the points of the returned polygon
+ * @returns {PIXI.Polygon[]}
+ */
+export function cutawayBasicShape(shape, a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole = false } = {}) {
+  if ( !shape.lineSegmentIntersects(a, b, { inside: true }) ) return [];
+  start ??= a;
+  end ??= b;
+  topElevationFn ??= () => 1e06;
+  bottomElevationFn ??= () => -1e06;
+
+  const ixs = shape.segmentIntersections(a, b);
+  if ( ixs.length === 0 ) return [quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole })];
+  if ( ixs.length === 1 ) {
+    const ix0 = Point3d.fromObject(ixs[0]);
+    ix0.t0 = ixs[0].t0;
+    const a2 = a.to2d();
+    const b2 = b.to2d();
+
+    // Intersects only at start point.
+    if ( ix0.t0.almostEqual(0) ) {
+      const bInside = shape.contains(b.x, b.y);
+      if ( bInside ) return [quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole })];
+
+      // A is the end. Back up one to construct proper polygon and return.
+      const newA = a2.towardsPoint(b2, -1);
+      return [quadCutaway(newA, a, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole })];
+    }
+
+    // Intersects only at end point.
+    if ( ix0.t0.almostEqual(1) ) {
+      const aInside = shape.contains(a.x, a.y);
+      if ( aInside ) return [quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole })];
+
+      // B is at end. Move one step further from the end to construct proper polygon and return.
+      const newB = b2.towardsPoint(a2, -1);
+      return [quadCutaway(b, newB, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole })];
+    }
+
+    // Intersects somewhere along the segment.
+    if ( shape.contains(a.x, a.y) ) return [quadCutaway(a, ix0, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole })];
+    else return [quadCutaway(ix0, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole })];
+  }
+
+  // Handle 2+ intersections with a polygon shape.
+  // More than 2 are possible if the polygon is not simple. May go in and out of it.
+  ixs.sort((a, b) => a.t0 - b.t0);
+  if ( !ixs.at(-1).t0.almostEqual(1) ) ixs.push(b);
+  if ( ixs[0].t0.almostEqual(0) ) ixs.shift();
+
+  // Shoelace: move in and out of the polygon, constructing a quad for every "in"
+  const quads = [];
+  let prevIx = start;
+  let isInside = shape.contains(a.x, a.y);
+  for ( const ix of ixs ) {
+    if ( isInside ) quads.push(quadCutaway(prevIx, ix, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole }));
+    isInside = !isInside;
+    prevIx = ix;
+  }
+  return quads;
+}
+
+/**
+ * Return the cutaway intersections for a PIXI shape.
+ * Similar to cutawayBasicShape but returns the intersections instead of a new polygon.
+ * @param {PIXI.Polygon|PIXI.Rectangle|PIXI.Circle|PIXI.Ellipse} shape
+ * @param {Point3d} a       Starting endpoint for the segment
+ * @param {Point3d} b       Ending endpoint for the segment
+ * @param {object} [opts]
+ * @param {Point3d} [opts.start]              Starting endpoint for the segment
+ * @param {Point3d} [opts.end]                Ending endpoint for the segment
+ * @param {function} [opts.topElevationFn]    Function to calculate the top elevation for a position
+ * @param {function} [opts.bottomElevationFn] Function to calculate the bottom elevation for a position
+ * @param {function} [opts.cutPointsFn]       Function that returns the steps along the a|b segment top
+ * @param {number} [opts.isHole=false]        Treat this shape as a hole; reverse the points of the returned polygon
+ * @returns {PIXI.Point[]}
+ */
+export function cutawayBasicIntersections(shape, a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole } = {}) {
+  if ( !shape.lineSegmentIntersects(a, b, { inside: true }) ) return [];
+  start ??= a;
+  end ??= b;
+  topElevationFn ??= () => 1e06;
+  bottomElevationFn ??= () => -1e06;
+
+  const ixs = shape.segmentIntersections(a, b);
+  if ( ixs.length === 0 ) return segmentCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
+  if ( ixs.length === 1 ) {
+    const ix0 = ixs[0];
+
+    // Intersects only at start point.
+    if ( ix0.t0.almostEqual(0) ) {
+      const bInside = shape.contains(b.x, b.y);
+      if ( bInside ) return segmentCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
+
+      // A is the end.
+      const a2d = CONFIG.GeometryLib.utils.cutaway.to2d(a, start, end);
+      a2d.movingInto = false;
+      return [a2d];
+    }
+
+    // Intersects only at end point.
+    if ( ix0.t0.almostEqual(1) ) {
+      const aInside = shape.contains(a.x, a.y);
+      if ( aInside ) return segmentCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
+
+      // B is at end.
+      const b2d = CONFIG.GeometryLib.utils.cutaway.to2d(b, start, end);
+      b2d.movingInto = true;
+      return [b2d];
+    }
+
+    // Project to determine the correct z value.
+    const ix3d = a.projectToward(b, ix0.t0);
+
+    // Intersects somewhere along the segment.
+    if ( shape.contains(a.x, a.y) ) return segmentCutaway(a, ix3d, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
+    else return segmentCutaway(ix3d, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
+  }
+
+  // Handle 2+ intersections with a polygon shape.
+  // More than 2 are possible if the polygon is not simple. May go in and out of it.
+  ixs.sort((a, b) => a.t0 - b.t0);
+  if ( !ixs.at(-1).t0.almostEqual(1) ) ixs.push(b);
+  if ( ixs[0].t0.almostEqual(0) ) ixs.shift();
+
+  // Shoelace: move in and out of the polygon, constructing a quad for every "in"
+  const pts = [];
+  let prevIx = start;
+  let isInside = shape.contains(a.x, a.y);
+  for ( const ix of ixs ) {
+    const ix3d = a.projectToward(b, ix.t0);
+    if ( isInside ) pts.push(...segmentCutaway(prevIx, ix3d, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole }));
+    isInside = !isInside;
+    prevIx = ix3d;
+  }
+  return pts;
+}
+
+/**
+ * Return the cutaway intersections for a quad
+ * @param {Point3d} a       Starting endpoint for the segment
+ * @param {Point3d} b       Ending endpoint for the segment
+ * @param {object} [opts]
+ * @param {Point3d} [opts.start]              Starting endpoint for the segment
+ * @param {Point3d} [opts.end]                Ending endpoint for the segment
+ * @param {function} [opts.topElevationFn]    Function to calculate the top elevation for a position
+ * @param {function} [opts.bottomElevationFn] Function to calculate the bottom elevation for a position
+ * @param {function} [opts.cutPointsFn]       Function that returns the steps along the a|b segment top
+ * @param {number} [opts.isHole=false]        Treat this shape as a hole; reverse the points of the returned polygon
+ * @returns {PIXI.Point[]}
+ */
+
+function segmentCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole } = {}) {
+  const to2d = CONFIG.GeometryLib.utils.cutaway.to2d;
+  const a2d = to2d(a, start, end);
+  const b2d = to2d(b, start, end);
+
+  // If the a elevation or b elevation is not within the elevation bounds,
+  // then the intersection runs into the top or bottom elevation.
+  // Intersect the quad shape in that instance.
+  if ( !(a.z.between(topElevationFn(a), bottomElevationFn(a))
+      && b.z.between(topElevationFn(b), bottomElevationFn(b))) ) {
+    const quad = quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole });
+    const pts = quad.segmentIntersections(a2d, b2d).map(ix => PIXI.Point.fromObject(ix));
+    switch ( pts.length ) {
+      case 1: pts[0].movingInto = true; break;
+      case 2:
+        pts.sort((a, b) => a.x - b.x);
+        pts[0].movingInto = true;
+        pts[1].movingInto = false;
+        break;
+    }
+    return pts;
+  }
+
+  // a and b are the intersection points.
+  a2d.movingInto = true;
+  b2d.movingInto = false;
+  return [a2d, b2d];
+}
+
+
+/**
+ * Helper function to construct a single vertical quadrangle based on a line moving through a 3d polygon.
+ * @param {Point3d} a               Starting cutaway point for the segment
+ * @param {Point3d} b               Ending cutaway point for the segment
+ * @param {object} [opts]
+ * @param {Point3d} [opts.start]              Starting endpoint for the segment
+ * @param {Point3d} [opts.end]                Ending endpoint for the segment
+ * @param {function} [opts.topElevationFn]    Function to calculate the top elevation for a position
+ * @param {function} [opts.bottomElevationFn] Function to calculate the bottom elevation for a position
+ * @param {function} [opts.cutPointsFn]       Function that returns the steps along the a|b segment top
+ * @param {boolean} [opts.isHole=false]       Is this polygon a hole? If so, reverse points and use max/min elevations.
+ * @returns {PIXI.Polygon}
+ */
+function quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole = false } = {}) {
+  const to2d = CONFIG.GeometryLib.utils.cutaway.to2d;
+  start ??= a;
+  end ??= b;
+
+  // Retrieve the pixel elevation for the a and b points. Holes should extend very high and very low so they cut everything.
+  let topA, topB, bottomA, bottomB;
+  topA = topB = 1e06;
+  bottomA = bottomB = -1e06;
+  if ( !isHole ) {
+    if ( topElevationFn ) {
+      topA = topElevationFn(a);
+      topB = topElevationFn(b);
+    }
+    if ( bottomElevationFn ) {
+      bottomA = bottomElevationFn(a);
+      bottomB = bottomElevationFn(b);
+    }
+  }
+  const steps = (!isHole && cutPointsFn) ? stepsForCutPointsFn(a, b, { start, end, cutPointsFn }) : [];
+  const a2d = to2d(a, start, end);
+  const b2d = to2d(b, start, end);
+  const TL = { x: a2d.x, y: topA };
+  const TR = { x: b2d.x, y: topB };
+  const BL = { x: a2d.x, y: bottomA };
+  const BR = { x: b2d.x, y: bottomB };
+
+  // _isPositive is y-down clockwise. For Foundry canvas, this is CCW.
+  return isHole ? new PIXI.Polygon(TL, ...steps, TR, BR, BL) : new PIXI.Polygon(TL, BL, BR, TR, ...steps);
+}
+
+/**
+ * Helper function to calculate steps along an a|b segment.
+ * @param {Point3d} a               Starting cutaway point for the segment
+ * @param {Point3d} b               Ending cutaway point for the segment
+ * @param {object} [opts]
+ * @param {Point3d} [opts.start]              Starting endpoint for the segment
+ * @param {Point3d} [opts.end]                Ending endpoint for the segment
+ * @param {function} [opts.topElevationFn]    Function to calculate the top elevation for a position
+ * @param {function} [opts.bottomElevationFn] Function to calculate the bottom elevation for a position
+ * @param {function} [opts.cutPointsFn]       Function that returns the steps along the a|b segment top
+ * @returns {PIXI.Point[]} The cutaway steps.
+ */
+function stepsForCutPointsFn(a, b, { start, end, cutPointsFn } = {}) {
+  start ??= a;
+  end ??= b;
+  const cutPoints = cutPointsFn(a, b); // ? { ...a, elevation: topA }, { ...b, elevation: topB }
+  const nCuts = cutPoints.length;
+  const steps = [];
+  let currElev = Math.min(a.z, b.z)
+  for ( let i = 0; i < nCuts; i += 1 ) {
+    const cutPoint = cutPoints[i];
+    const x = CONFIG.GeometryLib.utils.cutaway.to2d(cutPoint, start, end).x;
+    steps.push({ x, y: currElev}, { x, y: cutPoint.z });
+    currElev = cutPoint.z;
+  }
+  if ( a.z < b.z ) steps.reverse();
+  return steps;
+}
+
