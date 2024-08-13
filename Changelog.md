@@ -1,3 +1,6 @@
+## 0.3.8
+Fix `findOverlappingPoints` when one segment is completely encompassed by a longer segment. (Was returning 1 endpoint when should be returning 2 endpoints.)
+
 ## 0.3.7
 Add `cutaway` methods to construct a vertical 2d slice of a 3d shape.
 Add `rotateAroundCenter` method to `PIXI.Rectangle`.
