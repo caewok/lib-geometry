@@ -68,6 +68,11 @@ import { PATCHES as PATCHES_ConstrainedTokenBorder, ConstrainedTokenBorder } fro
 import { PixelCache, TilePixelCache, TrimmedPixelCache } from "./PixelCache.js";
 import { PATCHES as PATCHES_Tile } from "./Tile.js";
 
+// Grid measurement
+import { GridCoordinates } from "./GridCoordinates.js";
+import { GridCoordinates3d } from "./GridCoordinates3d.js";
+import { RegionMovementWaypoint3d } from "./RegionMovementWaypoint3d.js";
+
 const PATCHES = {
   "PIXI.Circle": PATCHES_Circle,
   "PIXI.Point": PATCHES_Point,
@@ -120,6 +125,7 @@ export function registerGeometry() {
   registerClipperPaths();
   registerGraph();
   registerShapeHoled();
+  registerGridMeasurement();
 }
 
 function deRegister() {
@@ -127,6 +133,14 @@ function deRegister() {
   CONFIG.GeometryLib.PATCHER.deregisterGroup("ELEVATION");
   CONFIG.GeometryLib.PATCHER.deregisterGroup("PIXI");
   CONFIG.GeometryLib.PATCHER.deregisterGroup("PIXEL_CACHE");
+}
+
+export function registerGridMeasurement() {
+  CONFIG.GeometryLib ??= {};
+  CONFIG.GeometryLib.threeD ??= {};
+  CONFIG.GeometryLib.GridCoordinates = GridCoordinates;
+  CONFIG.GeometryLib.threeD.RegionMovementWaypoint3d = RegionMovementWaypoint3d;
+  CONFIG.GeometryLib.threeD.GridCoordinates3d = GridCoordinates3d;
 }
 
 export function registerGraph() {
@@ -195,11 +209,10 @@ export function registerDraw() {
 
 export function register3d() {
   CONFIG.GeometryLib ??= {};
-  CONFIG.GeometryLib.threeD = {
-    Plane,
-    Point3d,
-    Ray3d
-  };
+  CONFIG.GeometryLib.threeD ??= {};
+  CONFIG.GeometryLib.threeD.Plane = Plane;
+  CONFIG.GeometryLib.threeD.Plane = Point3d;
+  CONFIG.GeometryLib.threeD.Plane = Ray3d;
 }
 
 export function registerEllipse() {

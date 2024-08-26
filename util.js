@@ -66,6 +66,35 @@ export function registerFoundryUtilsMethods() {
 }
 
 /**
+ * Is this number even?
+ * @param {number} n
+ * @returns {boolean}
+ */
+export function isEven(n) { return  ~n & 1; }
+
+/**
+ * Is this number odd?
+ * @param {number} n
+ * @returns {boolean}
+ */
+export function isOdd(n) { return n & 1; }
+
+/**
+ * Calculate the unit elevation for a given set of coordinates.
+ * @param {number} elevation    Elevation in grid units
+ * @returns {number} Elevation in number of grid steps.
+ */
+export function unitElevation(elevation) { return Math.round(elevation / canvas.scene.dimensions.distance); }
+
+/**
+ * Calculate the grid unit elevation from unit elevation.
+ * Inverse of `unitElevation`.
+ * @param {number} k            Unit elevation
+ * @returns {number} Elevation in grid units
+ */
+export function elevationForUnit(k) { return k * canvas.scene.dimensions.distance; }
+
+/**
  * @typedef {PIXI.Point} CutawayPoint
  * A point in cutaway space.
  * @param {number} x      Distance-squared from start point
