@@ -555,11 +555,6 @@ export class Point3d extends PIXI.Point {
   static _tmp3 = new this();
 }
 
-// Temporary points that can be passed to PIXI.Point methods
-Point3d._tmp = new Point3d();
-Point3d._tmp2 = new Point3d();
-Point3d._tmp3 = new Point3d();
-
 /**
  * The effective maximum texture size that Foundry VTT "ever" has to worry about.
  * @type {number}
