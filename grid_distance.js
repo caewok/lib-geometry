@@ -46,6 +46,7 @@ export function gridDistanceBetween(a, b, altGridDistFn, diagonals) {
  * @returns {number} Number of hexes accounting for grid size.
  */
 function hexGridDistanceBetween(p0, p1, altGridDistFn, diagonals) {
+  diagonals ??= canvas.grid.diagonals;
   const D = GRID_DIAGONALS;
   if ( !(p0 instanceof Point3d) ) p0 = Point3d.fromObject(p0);
   if ( !(p1 instanceof Point3d) ) p1 = Point3d.fromObject(p1);
@@ -88,6 +89,7 @@ function hexGridDistanceBetween(p0, p1, altGridDistFn, diagonals) {
  * @returns {number} Distance accounting for grid size.
  */
 function squareGridDistanceBetween(p0, p1, altGridDistFn, diagonals) {
+  diagonals ??= canvas.grid.diagonals;
   const D = GRID_DIAGONALS;
   if ( !(p0 instanceof Point3d) ) p0 = Point3d.fromObject(p0);
   if ( !(p1 instanceof Point3d) ) p1 = Point3d.fromObject(p1);
