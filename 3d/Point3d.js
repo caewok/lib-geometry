@@ -1,5 +1,6 @@
 /* globals
 canvas,
+CONFIG,
 PIXI
 */
 "use strict";
@@ -49,8 +50,6 @@ export class Point3d extends PIXI.Point {
     this.z = z;
   }
 
-
-
   /**
    * Construct a Point3d from any object that has x and y and z properties.
    * Recognizes elevationZ and elevation as potential z properties.
@@ -59,7 +58,7 @@ export class Point3d extends PIXI.Point {
    */
   static fromObject(obj) {
     const pt = super.fromObject(obj);
-    pt.z = obj.z ?? obj.elevationZ ?? obj.elevation ?? 0;
+    pt.z = obj.z ?? obj.elevationZ ?? (CONFIG.GeometryLib.utils.gridUnitsToPixels(obj.elevation) || 0); // gridUnitsToPixels(undefined) = NaN. Use || b/c NaN || 0 returns 0.
     return pt;
   }
 
