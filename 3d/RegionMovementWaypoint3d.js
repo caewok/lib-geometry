@@ -5,8 +5,8 @@ CONFIG
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { Point3d } from "./geometry/3d/Point3d.js";
-import { elevationForUnit, unitElevation } from "./util.js";
+import { Point3d } from "./Point3d.js";
+import { elevationForUnit, unitElevation } from "../util.js";
 
 // ----- NOTE: 3d versions of Foundry typedefs ----- //
 

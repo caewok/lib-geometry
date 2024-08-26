@@ -7,7 +7,7 @@ foundry
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { Point3d } from "../geometry/3d/Point3d.js";
+import { Point3d } from "./3d/Point3d.js";
 
 
 /**

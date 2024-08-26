@@ -8,7 +8,7 @@ PIXI
 
 import { isOdd } from "./util.js";
 import { GRID_DIAGONALS, gridDistanceBetween, alternatingGridDistance } from "./grid_distance.js";
-import { GridCoordinates3d } from "./GridCoordinates3d.js";
+import { GridCoordinates3d } from "./3d/GridCoordinates3d.js";
 
 // ----- NOTE: Foundry typedefs  ----- //
 

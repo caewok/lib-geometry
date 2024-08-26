@@ -6,10 +6,10 @@ CONST
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { isOdd } from "./util.js";
+import { isOdd } from "../util.js";
 import { RegionMovementWaypoint3d } from "./RegionMovementWaypoint3d.js";
-import { GridCoordinates } from "./GridCoordinates.js";
-import { GRID_DIAGONALS, gridDistanceBetween, alternatingGridDistance } from "./grid_distance.js";
+import { GridCoordinates } from "../GridCoordinates.js";
+import { GRID_DIAGONALS, gridDistanceBetween, alternatingGridDistance } from "../grid_distance.js";
 
 // ----- NOTE: 3d versions of Foundry typedefs ----- //
 
