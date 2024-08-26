@@ -70,8 +70,8 @@ import { PATCHES as PATCHES_Tile } from "./Tile.js";
 
 // Grid measurement
 import { GridCoordinates } from "./GridCoordinates.js";
-import { GridCoordinates3d } from "./GridCoordinates3d.js";
-import { RegionMovementWaypoint3d } from "./RegionMovementWaypoint3d.js";
+import { GridCoordinates3d } from "./3d/GridCoordinates3d.js";
+import { RegionMovementWaypoint3d } from "./3d/RegionMovementWaypoint3d.js";
 
 const PATCHES = {
   "PIXI.Circle": PATCHES_Circle,
