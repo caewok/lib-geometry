@@ -548,6 +548,11 @@ export class Point3d extends PIXI.Point {
   normalize(outPoint = new Point3d()) {
     return super.normalize(outPoint);
   }
+
+  // Temporary points that can be passed to PIXI.Point methods
+  static _tmp = new this();
+  static _tmp2 = new this();
+  static _tmp3 = new this();
 }
 
 // Temporary points that can be passed to PIXI.Point methods
