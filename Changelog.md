@@ -1,3 +1,6 @@
+## 0.3.9
+Move `Point3d._tmp` to a static object so that inherited methods have a `_tmp` for their class.
+
 ## 0.3.8
 Fix `findOverlappingPoints` when one segment is completely encompassed by a longer segment. (Was returning 1 endpoint when should be returning 2 endpoints.)
 
