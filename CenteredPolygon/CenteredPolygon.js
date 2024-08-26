@@ -1,4 +1,5 @@
 /* globals
+PIXI
 */
 "use strict";
 

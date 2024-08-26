@@ -56,7 +56,7 @@ export class CenteredPolygonBase extends PIXI.Polygon {
 
   get y() { return this.origin.y; }
 
-  set y(value) { return this.origin.y = value; }
+  set y(value) { this.origin.y = value; }
 
 
   get center() { return { x: this.x, y: this.y }; }

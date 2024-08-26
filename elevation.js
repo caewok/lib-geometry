@@ -1,8 +1,7 @@
 /* globals
 canvas,
 CONFIG,
-foundry,
-game
+foundry
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
@@ -147,14 +146,6 @@ async function setWallBottomE(value) {
   }
   return this.document.update({ [MODULE_KEYS.EV.FLAG_WALL_BOTTOM]: value });
 }
-
-// NOTE: Token Elevation
-// Has document.elevation already
-function tokenElevationE() { return this.document.elevation; }
-
-async function setTokenElevationE(value) { return this.document.update({ elevation: value }); }
-
-// Don't allow setting of token.topE b/c it is ambiguous.
 
 /**
  * Calculated vertical height of a token.

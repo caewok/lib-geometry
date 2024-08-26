@@ -1,6 +1,5 @@
 /* globals
-canvas,
-PIXI
+CONFIG
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 

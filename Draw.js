@@ -2,6 +2,7 @@
 
 /* globals
 canvas,
+foundry,
 PIXI,
 CONFIG
 */

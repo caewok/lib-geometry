@@ -1,7 +1,6 @@
 /* globals
 CONFIG,
-foundry,
-Hooks
+foundry
 */
 "use strict";
 
