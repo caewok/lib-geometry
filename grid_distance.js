@@ -21,11 +21,12 @@ export const GRID_DIAGONALS = { EUCLIDEAN: -1, ...CONST.GRID_DIAGONALS };
  * For square, this accounts for the diagonal rules. For hex, measures in number of hexes.
  * @param {Point} a
  * @param {Point} b
- * @param {function} [altGridDistFn]    Function generated from alternatingGridDistance; used for alternating rules
- * @param {GRID_DIAGONALS} [diagonals]  Diagonal rule to use
+ * @param {object} [opts]
+ * @param {function} [opts.altGridDistFn]    Function generated from alternatingGridDistance; used for alternating rules
+ * @param {GRID_DIAGONALS} [opts.diagonals]  Diagonal rule to use
  * @returns {number} Distance, in grid units
  */
-export function gridDistanceBetween(a, b, altGridDistFn, diagonals) {
+export function gridDistanceBetween(a, b, { altGridDistFn, diagonals } = {}) {
   if ( canvas.grid.isGridless ) return CONFIG.GeometryLib.utils.pixelsToGridUnits(Point3d.distanceBetween(a, b));
   const distFn = canvas.grid.isHexagonal ? hexGridDistanceBetween : squareGridDistanceBetween;
   const dist = distFn(a, b, altGridDistFn, diagonals);

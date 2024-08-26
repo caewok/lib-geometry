@@ -153,16 +153,22 @@ export class GridCoordinates extends PIXI.Point {
    * Uses `gridDistanceBetween`.
    * @param {GridOffset} aOffset
    * @param {GridOffset} bOffset
-   * @param {function} [altGridDistFn]    Function generated from alternatingGridDistance; used for alternating rules
-   * @param {GRID_DIAGONALS} [diagonals]  Diagonal rule to use
+   * @param {object} [opts]
+   * @param {function} [opts.altGridDistFn]    Function generated from alternatingGridDistance; used for alternating rules
+   * @param {GRID_DIAGONALS} [opts.diagonals]  Diagonal rule to use
    * @returns {number} Distance, in grid units
    */
-  static gridDistanceBetweenOffsets(aOffset, bOffset, altGridDistFn, diagonals) {
-    return this.gridDistanceBetween(this.fromOffset(aOffset), this.fromOffset(bOffset), altGridDistFn, diagonals);
+  static gridDistanceBetweenOffsets(aOffset, bOffset, opts) {
+    return this.gridDistanceBetween(this.fromOffset(aOffset), this.fromOffset(bOffset), opts);
   }
 
   /**
    * Return a function that can repeatedly measure segments, tracking the alternating diagonals.
+   * @param {Point} a
+   * @param {Point} b
+   * @param {object} [opts]
+   * @param {function} [opts.altGridDistFn]    Function generated from alternatingGridDistance; used for alternating rules
+   * @param {GRID_DIAGONALS} [opts.diagonals]  Diagonal rule to use
    */
   static alternatingGridDistanceFn = alternatingGridDistance;
 
@@ -171,23 +177,27 @@ export class GridCoordinates extends PIXI.Point {
    * Uses `gridDistanceBetween`.
    * @param {Point} a                   Start of the segment
    * @param {Point} b                   End of the segment
-   * @param {number} [numPrevDiagonal=0]  Number of diagonals thus far
-   * @param {function} [costFn]           Optional cost function; defaults to canvas.controls.ruler._getCostFunction
-   * @param {GRID_DIAGONALS} diagonals    Diagonal rule to use
+   * @param {object} [opts]
+   * @param {number} [opts.numPrevDiagonal=0]  Number of diagonals thus far
+   * @param {function} [opts.costFn]           Optional cost function; defaults to canvas.controls.ruler._getCostFunction
+   * @param {GRID_DIAGONALS} [opts.diagonals]  Diagonal rule to use
    * @returns {object}
    *   - @prop {number} distance          gridDistanceBetween for a|b
    *   - @prop {number} offsetDistance    gridDistanceBetweenOffsets for a|b
    *   - @prop {number} cost              Measured cost using the cost function
    *   - @prop {number} numDiagonal       Number of diagonals between the offsets if square or hex elevation
    */
-  static gridMeasurementForSegment(a, b, numPrevDiagonal = 0, costFn, diagonals) {
+  static gridMeasurementForSegment(a, b, { numPrevDiagonal = 0, costFn, diagonals } = {}) {
     costFn ??= canvas.controls.ruler._getCostFunction();
     const lPrevStart = diagonals === CONST.GRID_DIAGONALS.ALTERNATING_2 ? 1 : 0;
     const lPrev = isOdd(numPrevDiagonal) ? lPrevStart : Number(!lPrevStart);
     const aOffset = this.fromObject(a);
     const bOffset = this.fromObject(b);
-    const distance = this.gridDistanceBetween(a, b, this.alternatingGridDistanceFn({ lPrev }), diagonals);
-    const offsetDistance = this.gridDistanceBetweenOffsets(a, b, this.alternatingGridDistanceFn({ lPrev }), diagonals);
+
+    const altGridDistFn1 = this.alternatingGridDistanceFn({ lPrev });
+    const altGridDistFn2 = this.alternatingGridDistanceFn({ lPrev });
+    const distance = this.gridDistanceBetween(a, b, { altGridDistFn: altGridDistFn1, diagonals });
+    const offsetDistance = this.gridDistanceBetweenOffsets(a, b, { altGridDistFn: altGridDistFn2, diagonals });
     const cost = costFn ? costFn(a, b, offsetDistance) : offsetDistance;
     const numDiagonal = this.numDiagonal(aOffset, bOffset);
     return { distance, offsetDistance, cost, numDiagonal };
