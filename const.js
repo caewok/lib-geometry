@@ -4,6 +4,12 @@ Hooks
 */
 "use strict";
 
+export const GEOMETRY_CONFIG = {};
+GEOMETRY_CONFIG.CenteredPolygons = {};
+GEOMETRY_CONFIG.Graph = {};
+GEOMETRY_CONFIG.RegularPolygons = {};
+GEOMETRY_CONFIG.threeD = {};
+
 export const MODULE_KEYS = {
   EV: {
     ID: "elevatedvision",

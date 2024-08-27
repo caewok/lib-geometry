@@ -3,7 +3,8 @@ PIXI
 */
 "use strict";
 
-import { CenteredPolygonBase } from "./CenteredPolygonBase.js";
+import { GEOMETRY_CONFIG } from "./const.js";
+import "./CenteredPolygonBase.js";
 
 /* Testing
 api = game.modules.get('tokenvisibility').api;
@@ -56,7 +57,7 @@ drawing.drawShape(bounds)
  * Follows the approach of polygon Drawing and RegularPolygon class.
  * Holds a set of points that can be rotated.
  */
-export class CenteredPolygon extends CenteredPolygonBase {
+export class CenteredPolygon extends GEOMETRY_CONFIG.CenteredPolygons.CenteredPolygonBase {
 
   /**
    * @param {Point} origin    Center point of the polygon.
@@ -110,3 +111,5 @@ export class CenteredPolygon extends CenteredPolygonBase {
 
   }
 }
+
+GEOMETRY_CONFIG.CenteredPolygons.CenteredPolygon ??= CenteredPolygon;

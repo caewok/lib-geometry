@@ -5,8 +5,9 @@ CONFIG
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { Point3d } from "./Point3d.js";
+import "./Point3d.js";
 import { elevationForUnit, unitElevation } from "../util.js";
+import { GEOMETRY_CONFIG } from "./const.js";
 
 // ----- NOTE: 3d versions of Foundry typedefs ----- //
 
@@ -23,7 +24,7 @@ import { elevationForUnit, unitElevation } from "../util.js";
  * Does not handle GridOffset3d so that it can be passed to 2d Foundry functions that
  * treat objects with {i,j} parameters differently.
  */
-export class RegionMovementWaypoint3d extends Point3d {
+export class RegionMovementWaypoint3d extends GEOMETRY_CONFIG.threeD.Point3d {
   /** @type {number<grid units>} */
   get elevation() { return CONFIG.GeometryLib.utils.pixelsToGridUnits(this.z); }
 
@@ -99,3 +100,6 @@ export class RegionMovementWaypoint3d extends Point3d {
   static _tmp2 = new this();
   static _tmp3 = new this();
 }
+
+GEOMETRY_CONFIG.threeD.RegionMovementWaypoint3d ??= RegionMovementWaypoint3d;
+

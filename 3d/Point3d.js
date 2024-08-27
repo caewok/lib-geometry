@@ -32,8 +32,8 @@ PIXI
  * @property {Point3d} bl
  * @property {Point3d} br
  */
-
-import { Matrix } from "../Matrix.js";
+import { GEOMETRY_CONFIG } from "./const.js";
+import "../Matrix.js";
 
 /**
  * 3-D version of PIXI.Point
@@ -258,13 +258,13 @@ export class Point3d extends PIXI.Point {
 
     // Rotate points to match tile rotation.
     if ( rotation ) {
-      const rotZ = Matrix.rotationZ(Math.toRadians(rotation));
+      const rotZ = CONFIG.GeometryLib.Matrix.rotationZ(Math.toRadians(rotation));
       pts.forEach(pt => rotZ.multiplyPoint3d(pt, pt));
     }
 
     // Translate to canvas position.
     const center = bounds.center;
-    const trM = Matrix.translation(center.x + offsetX, center.y + offsetY, elevationZ);
+    const trM = CONFIG.GeometryLib.Matrix.translation(center.x + offsetX, center.y + offsetY, elevationZ);
     pts.forEach(pt => trM.multiplyPoint3d(pt, pt));
 
     return {
@@ -595,3 +595,4 @@ export function numPositiveDigits(n) {
   return (Math.log(n) * Math.LOG10E) + 1 | 0;
 }
 
+GEOMETRY_CONFIG.threeD.Point3d ??= Point3d;

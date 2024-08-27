@@ -3,8 +3,9 @@ PIXI
 */
 "use strict";
 
-import { Matrix } from "../Matrix.js";
+import "../Matrix.js";
 import { cutawayBasicShape, cutawayBasicIntersections } from "../util.js";
+import { GEOMETRY_CONFIG } from "./const.js";
 
 export const PATCHES = {};
 PATCHES.PIXI = {};
@@ -433,8 +434,8 @@ function rotateAroundCenter(rotation = 0) {
   }
 
   // For all other rotations, translate center to 0,0, rotate, and then invert the translation.
-  const tMat = Matrix.translation(-center.x, -center.y);
-  const rMat = Matrix.rotationZ(Math.toRadians(rotation));
+  const tMat = CONFIG.GeometryLib.Matrix.translation(-center.x, -center.y);
+  const rMat = CONFIG.GeometryLib.Matrix.rotationZ(Math.toRadians(rotation));
   const M = tMat.multiply3x3(rMat).multiply3x3(tMat.invert);
   const pts = [...this.iteratePoints({ close: true })];
   const tPts = pts.map(pt => M.multiplyPoint2d(pt));

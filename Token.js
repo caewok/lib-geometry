@@ -5,6 +5,7 @@ foundry
 
 import { ConstrainedTokenBorder } from "./ConstrainedTokenBorder.js";
 
+
 // Patches for the Token class
 export const PATCHES = {};
 PATCHES.CONSTRAINED_TOKEN_BORDER = {};

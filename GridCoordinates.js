@@ -8,7 +8,8 @@ PIXI
 
 import { isOdd } from "./util.js";
 import { GRID_DIAGONALS, gridDistanceBetween, alternatingGridDistance } from "./grid_distance.js";
-import { GridCoordinates3d } from "./3d/GridCoordinates3d.js";
+import "./3d/GridCoordinates3d.js";
+import { GEOMETRY_CONFIG } from "./const.js";
 
 // ----- NOTE: Foundry typedefs  ----- //
 
@@ -121,7 +122,7 @@ export class GridCoordinates extends PIXI.Point {
    * Convert to 3d.
    * @returns {GridCoordinates3d}
    */
-  to3d() { return GridCoordinates3d.fromObject(this); }
+  to3d() { return CONFIG.GeometryLib.threeD.GridCoordinates3d.fromObject(this); }
 
   /**
    * Test if this offset is equal to another
@@ -217,3 +218,6 @@ export class GridCoordinates extends PIXI.Point {
   static _tmp2 = new this();
   static _tmp3 = new this();
 }
+
+
+GEOMETRY_CONFIG.GridCoordinates ??= GridCoordinates;

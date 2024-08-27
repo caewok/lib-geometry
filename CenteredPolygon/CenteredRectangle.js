@@ -3,7 +3,8 @@ PIXI
 */
 "use strict";
 
-import { CenteredPolygonBase } from "./CenteredPolygonBase.js";
+import { GEOMETRY_CONFIG } from "./const.js";
+import "./CenteredPolygonBase.js";
 
 /* Testing
 api = game.modules.get('tokenvisibility').api;
@@ -41,7 +42,7 @@ drawing.drawShape(bounds)
  * Comparable to RegularPolygon and PIXI.Rectangle class, where
  * the Platonic shape is stored at the origin 0, 0 and translated.
  */
-export class CenteredRectangle extends CenteredPolygonBase {
+export class CenteredRectangle extends GEOMETRY_CONFIG.CenteredPolygons.CenteredPolygonBase {
 
   /**
    * @param {Point} origin   Center point of the rectangle. Can be left undefined if leftCorner is provided.
@@ -209,3 +210,5 @@ export class CenteredRectangle extends CenteredPolygonBase {
     return super.getBounds();
   }
 }
+
+GEOMETRY_CONFIG.CenteredPolygons.CenteredRectangle ??= CenteredRectangle;

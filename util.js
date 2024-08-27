@@ -7,10 +7,11 @@ PIXI
 */
 "use strict";
 
-import { CenteredRectangle } from "./CenteredPolygon/CenteredRectangle.js";
-import { CenteredPolygon } from "./CenteredPolygon/CenteredPolygon.js";
-import { Ellipse } from "./Ellipse.js";
-import { Point3d } from "./3d/Point3d.js";
+import "./CenteredPolygon/CenteredRectangle.js";
+import "./CenteredPolygon/CenteredPolygon.js";
+import "./Ellipse.js";
+import "./3d/Point3d.js";
+import { GEOMETRY_CONFIG } from "./const.js";
 
 // Functions that would go in foundry.utils if that object were extensible
 export function registerFoundryUtilsMethods() {
@@ -358,11 +359,11 @@ Math.PI_1_2 = Math.PI * 0.5;
 function centeredPolygonFromDrawing(drawing) {
   switch ( drawing.document.shape.type ) {
     case Drawing.SHAPE_TYPES.RECTANGLE:
-      return CenteredRectangle.fromDrawing(drawing);
+      return CONFIG.GeometryLib.CenteredPolygons.CenteredRectangle.fromDrawing(drawing);
     case Drawing.SHAPE_TYPES.ELLIPSE:
-      return Ellipse.fromDrawing(drawing);
+      return CONFIG.GeometryLib.Ellipse.fromDrawing(drawing);
     case Drawing.SHAPE_TYPES.POLYGON:
-      return CenteredPolygon.fromDrawing(drawing);
+      return CONFIG.GeometryLib.CenteredPolygons.CenteredPolygon.fromDrawing(drawing);
     case Drawing.SHAPE_TYPES.CIRCLE: {
       const width = drawing.document.shape.width;
       return PIXI.Circle(drawing.document.x + width * 0.5, drawing.document.y + width * 0.5, width);
@@ -942,7 +943,7 @@ export function cutawayBasicShape(shape, a, b, { start, end, topElevationFn, bot
   const ixs = shape.segmentIntersections(a, b);
   if ( ixs.length === 0 ) return [quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole })];
   if ( ixs.length === 1 ) {
-    const ix0 = Point3d.fromObject(ixs[0]);
+    const ix0 = CONFIG.GeometryLib.threeD.Point3d.fromObject(ixs[0]);
     ix0.t0 = ixs[0].t0;
     const a2 = a.to2d();
     const b2 = b.to2d();

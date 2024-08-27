@@ -7,9 +7,10 @@ CONST
 "use strict";
 
 import { isOdd } from "../util.js";
-import { RegionMovementWaypoint3d } from "./RegionMovementWaypoint3d.js";
-import { GridCoordinates } from "../GridCoordinates.js";
+import "./RegionMovementWaypoint3d.js";
+import "../GridCoordinates.js";
 import { GRID_DIAGONALS, gridDistanceBetween, alternatingGridDistance } from "../grid_distance.js";
+import { GEOMETRY_CONFIG } from "./const.js";
 
 // ----- NOTE: 3d versions of Foundry typedefs ----- //
 
@@ -40,7 +41,7 @@ import { GRID_DIAGONALS, gridDistanceBetween, alternatingGridDistance } from "..
  * A 3d point that can function as Point3d|GridOffset3d|RegionMovementWaypoint.
  * Links z to the elevation property.
  */
-export class GridCoordinates3d extends RegionMovementWaypoint3d {
+export class GridCoordinates3d extends GEOMETRY_CONFIG.threeD.RegionMovementWaypoint3d {
   static GRID_DIAGONALS = GRID_DIAGONALS;
 
   /**
@@ -137,7 +138,7 @@ export class GridCoordinates3d extends RegionMovementWaypoint3d {
    * Convert this point to a RegionMovementWaypoint.
    * @returns {RegionMovementWaypoint3d}
    */
-  toWaypoint() { return RegionMovementWaypoint3d.fromObject(this); }
+  toWaypoint() { return CONFIG.GeometryLib.threeD.RegionMovementWaypoint3d.fromObject(this); }
 
   /**
    * Change this point to a specific offset value.
@@ -173,7 +174,7 @@ export class GridCoordinates3d extends RegionMovementWaypoint3d {
    * Conversion to 2d.
    * @returns {GridCoordinates}
    */
-  to2d() { return GridCoordinates.fromObject(this); }
+  to2d() { return CONFIG.GeometryLib.GridCoordinates.fromObject(this); }
 
   /**
    * @returns {this}
@@ -295,3 +296,5 @@ export class GridCoordinates3d extends RegionMovementWaypoint3d {
   static _tmp2 = new this();
   static _tmp3 = new this();
 }
+
+GEOMETRY_CONFIG.threeD.GridCoordinates3d ??= GridCoordinates3d;

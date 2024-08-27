@@ -6,6 +6,8 @@ WeilerAthertonClipper
 */
 "use strict";
 
+import { GEOMETRY_CONFIG } from "./const.js";
+
 /* Define a set of Regular Polygon shapes
 Each should extend PIXI.Polygon like LimitedAnglePolygon does.
 Each is non-changeable; modifications result in new object.
@@ -444,3 +446,5 @@ export class RegularPolygon extends PIXI.Polygon {
   }
 
 }
+
+GEOMETRY_CONFIG.RegularPolygons.RegularPolygon ??= RegularPolygon;

@@ -4,7 +4,8 @@ canvas
 */
 "use strict";
 
-import { RegularPolygon } from "./RegularPolygon.js";
+import { GEOMETRY_CONFIG } from "./const.js";
+import "./RegularPolygon.js";
 
 /**
  * "Column" hexagon with points at W and E
@@ -12,7 +13,7 @@ import { RegularPolygon } from "./RegularPolygon.js";
  * @param {Number}  width     Distance from left to right, through center.
  * @param {Number}  height    Distance from top to bottom, through center.
  */
-export class Hexagon extends RegularPolygon {
+export class Hexagon extends GEOMETRY_CONFIG.RegularPolygons.RegularPolygon {
   constructor(origin, radius = 0, { rotation = 0, width = 0, height = 0 } = {}) {
     if ( !(radius || width || height) ) console.error("Hexagon requires radius, width, or height.");
 
@@ -175,3 +176,5 @@ export class Hexagon extends RegularPolygon {
     return super.getBounds();
   }
 }
+
+GEOMETRY_CONFIG.RegularPolygons.Hexagon ??= Hexagon;

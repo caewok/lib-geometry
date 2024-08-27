@@ -4,6 +4,7 @@
 
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 
+import { GEOMETRY_CONFIG } from "./const.js";
 import { radixSortObj } from "./RadixSort.js";
 
 
@@ -501,6 +502,9 @@ export class Graph {
   }
 }
 
+GEOMETRY_CONFIG.Graph.Graph ??= Graph;
+GEOMETRY_CONFIG.Graph.GraphVertex ??= GraphVertex;
+GEOMETRY_CONFIG.Graph.GraphEdge ??= GraphEdge;
 
 /**
  * Disjoint set data structure, also called union-find or merge-find set.
