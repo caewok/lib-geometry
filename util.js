@@ -106,9 +106,9 @@ export function elevationForUnit(k) { return k * canvas.scene.dimensions.distanc
  * Convert a point on a line to a coordinate representing the line direction in the x direction
  * and the elevation in the y direction.
  *
- * @param {Point3d} currPt      A point on the line start|end
- * @param {Point3d} start       Beginning endpoint of the line segment
- * @param {Point3d} [end]       End of the line segment; required only if the current point is before start
+ * @param {RegionMovementWaypoint3d} currPt      A point on the line start|end
+ * @param {RegionMovementWaypoint3d} start       Beginning endpoint of the line segment
+ * @param {RegionMovementWaypoint3d} [end]       End of the line segment; required only if the current point is before start
  * @param {PIXI.Point} [outPoint]
  * @returns {CutawayPoint} X value is 0 at start, negative if further from end than start.
  *  - x: Distance-squared from start, in direction of end.
@@ -124,14 +124,14 @@ function to2dCutaway(currPt, start, end, outPoint) {
 /**
  * Convert a cutaway point to its respective position on the line start|end.
  * @param {CutawayPoint} cutawayPt      2d cutaway point created from _to2dCutaway
- * @param {Point3d} start             Beginning endpoint of the line segment
- * @param {Point3d} end               End of the line segment
- * @param {Point3d} [outPoint]
- * @returns {Point3d}
+ * @param {RegionMovementWaypoint3d} start             Beginning endpoint of the line segment
+ * @param {RegionMovementWaypoint3d} end               End of the line segment
+ * @param {RegionMovementWaypoint3d} [outPoint]
+ * @returns {RegionMovementWaypoint3d}
  */
 function from2dCutaway(cutawayPt, start, end, outPoint) {
-  outPoint ??= new Point3d();
-  start.towardsPointSquared(end, cutawayPt.x, outPoint);
+  outPoint ??= new CONFIG.GeometryLib.threeD.RegionMovementWaypoint3d();
+  start.to2d().towardsPointSquared(end, cutawayPt.x, outPoint);
   outPoint.z = cutawayPt.y;
   return outPoint;
 }
