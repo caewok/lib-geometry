@@ -563,7 +563,7 @@ export class Shadow extends PIXI.Polygon {
 
   }
 
-  static upV = new CONFIG.GeometryLib.threeD.Point3d(0, 0, 1);
+  static upV = new GEOMETRY_CONFIG.threeD.Point3d(0, 0, 1);
 
   /**
    * Build the parallelogram representing a shadow cast from a wall.
