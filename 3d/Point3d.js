@@ -531,7 +531,7 @@ export class Point3d extends PIXI.Point {
    */
   equalXY(other) {
     const pt2d = PIXI.Point._tmp.set(this.x, this.y);
-    return pt2d.equal(other);
+    return pt2d.equals(other);
   }
 
   /**
