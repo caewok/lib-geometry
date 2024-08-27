@@ -516,12 +516,33 @@ export class Point3d extends PIXI.Point {
 
   /**
    * Test if `this` is nearly equal to another point.
-   * @param {PIXI.Point} other
-   * @param {number} epsilon
+   * @param {Point3d} other
+   * @param {number} [epsilon=1e-08]
    * @returns {boolean}
    */
   almostEqual(other, epsilon = 1e-08) {
     return super.almostEqual(other, epsilon) && this.z.almostEqual(other.z ?? 0, epsilon);
+  }
+
+  /**
+   * Test if `this` is equal in 2d to another point.
+   * @param {Point3d|PIXI.Point} other
+   * @returns {boolean}
+   */
+  equalXY(other) {
+    const pt2d = PIXI.Point._tmp.set(this.x, this.y);
+    return pt2d.equal(other);
+  }
+
+  /**
+   * Test if `this` is almost equal in 2d to another point.
+   * @param {Point3d|PIXI.Point} other
+   * @param {number} [epsilon=1e-08]
+   * @returns {boolean}
+   */
+  almostEqualXY(other) {
+    const pt2d = PIXI.Point._tmp.set(this.x, this.y);
+    return pt2d.almostEqual(other);
   }
 
   /**

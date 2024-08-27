@@ -124,6 +124,15 @@ export class GridCoordinates extends PIXI.Point {
   to3d() { return GridCoordinates3d.fromObject(this); }
 
   /**
+   * Test if this offset is equal to another
+   * @param {GridOffset} other
+   * @returns {boolean}
+   */
+  offsetsEqual(other) {
+    return this.i === other.i && this.j === other.j;
+  }
+
+  /**
    * Determine the number of diagonals based on two 2d offsets for a square grid.
    * If hexagonal, no diagonals.
    * @param {GridOffset} aOffset

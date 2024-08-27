@@ -181,6 +181,24 @@ export class GridCoordinates3d extends RegionMovementWaypoint3d {
   to3d() { return this; }
 
   /**
+   * Test if this offset is equal to another.
+   * @param {GridOffset} other
+   * @returns {boolean}
+   */
+  offsetsEqual(other) {
+    return this.i === other.i && this.j === other.j && this.k === other.k;
+  }
+
+  /**
+   * Test if this offset is equal to another in 2d (i,j).
+   * @param {GridOffset} other
+   * @returns {boolean}
+   */
+  offsetsEqual2d(other) {
+    return this.i === other.i && this.j === other.j;
+  }
+
+  /**
    * Determine the number of diagonals based on two offsets.
    * If hexagonal, only elevation diagonals count.
    * @param {GridOffset} aOffset
