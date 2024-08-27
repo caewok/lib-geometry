@@ -58,6 +58,18 @@ export class RegionMovementWaypoint3d extends Point3d {
   }
 
   /**
+   * Construct a point given a 2d location and an elevation in grid units.
+   * @param {Point} location      Object with {x, y} properties
+   * @param {number} [elevation = 0]    Elevation in grid units
+   * @returns {RegionMovementWaypoint3d}
+   */
+  static fromLocationWithElevation(location, [elevation = 0]) {
+    const pt = new this(location.x, location.y);
+    pt.elevation = elevation;
+    return pt;
+  }
+
+  /**
    * Given a token, modify this point to match the center point of the token for that position.
    * @param {Token} token
    * @param {RegionMovementWaypoint3d} outPoint
