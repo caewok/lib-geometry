@@ -131,7 +131,10 @@ function to2dCutaway(currPt, start, end, outPoint) {
  */
 function from2dCutaway(cutawayPt, start, end, outPoint) {
   outPoint ??= new CONFIG.GeometryLib.threeD.RegionMovementWaypoint3d();
-  start.to2d().towardsPointSquared(end, cutawayPt.x, outPoint);
+  // b/c outPoint is 3d, makes sure to get the 2d values.
+  const xy = start.to2d().towardsPointSquared(end, cutawayPt.x, PIXI.Point._tmp);
+  outPoint.x = xy.x;
+  outPoint.y = xy.y;
   outPoint.z = cutawayPt.y;
   return outPoint;
 }
