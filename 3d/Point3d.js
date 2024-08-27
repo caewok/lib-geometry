@@ -540,9 +540,9 @@ export class Point3d extends PIXI.Point {
    * @param {number} [epsilon=1e-08]
    * @returns {boolean}
    */
-  almostEqualXY(other) {
+  almostEqualXY(other, epsilon) {
     const pt2d = PIXI.Point._tmp.set(this.x, this.y);
-    return pt2d.almostEqual(other);
+    return pt2d.almostEqual(other, epsilon);
   }
 
   /**
