@@ -63,7 +63,7 @@ export class RegionMovementWaypoint3d extends Point3d {
    * @param {number} [elevation = 0]    Elevation in grid units
    * @returns {RegionMovementWaypoint3d}
    */
-  static fromLocationWithElevation(location, [elevation = 0]) {
+  static fromLocationWithElevation(location, elevation = 0) {
     const pt = new this(location.x, location.y);
     pt.elevation = elevation;
     return pt;
