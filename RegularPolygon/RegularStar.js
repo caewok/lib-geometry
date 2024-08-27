@@ -5,7 +5,7 @@ PIXI
 "use strict";
 
 import "./RegularPolygon.js";
-import { GEOMETRY_CONFIG } from "./const.js";
+import { GEOMETRY_CONFIG } from "../const.js";
 
 /**
  * A regular star is a polygon built from a regular polygon by

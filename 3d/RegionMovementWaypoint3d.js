@@ -7,7 +7,7 @@ CONFIG
 
 import "./Point3d.js";
 import { elevationForUnit, unitElevation } from "../util.js";
-import { GEOMETRY_CONFIG } from "./const.js";
+import { GEOMETRY_CONFIG } from "../const.js";
 
 // ----- NOTE: 3d versions of Foundry typedefs ----- //
 

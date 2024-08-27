@@ -4,7 +4,7 @@ canvas
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "./const.js";
+import { GEOMETRY_CONFIG } from "../const.js";
 import "./RegularPolygon.js";
 
 /**

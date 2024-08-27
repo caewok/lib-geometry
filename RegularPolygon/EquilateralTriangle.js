@@ -3,7 +3,7 @@ PIXI
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "./const.js";
+import { GEOMETRY_CONFIG } from "../const.js";
 import "./RegularPolygon.js";
 
 export class EquilateralTriangle extends GEOMETRY_CONFIG.RegularPolygons.RegularPolygon {

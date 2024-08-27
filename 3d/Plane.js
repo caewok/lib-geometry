@@ -6,7 +6,7 @@ PIXI
 
 import "./Point3d.js";
 import "../Matrix.js";
-import { GEOMETRY_CONFIG } from "./const.js";
+import { GEOMETRY_CONFIG } from "../const.js";
 
 
 // Class to represent a plane

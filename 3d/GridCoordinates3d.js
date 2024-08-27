@@ -10,7 +10,7 @@ import { isOdd } from "../util.js";
 import "./RegionMovementWaypoint3d.js";
 import "../GridCoordinates.js";
 import { GRID_DIAGONALS, gridDistanceBetween, alternatingGridDistance } from "../grid_distance.js";
-import { GEOMETRY_CONFIG } from "./const.js";
+import { GEOMETRY_CONFIG } from "../const.js";
 
 // ----- NOTE: 3d versions of Foundry typedefs ----- //
 

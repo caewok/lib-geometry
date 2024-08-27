@@ -5,7 +5,6 @@ PIXI
 
 import "../Matrix.js";
 import { cutawayBasicShape, cutawayBasicIntersections } from "../util.js";
-import { GEOMETRY_CONFIG } from "./const.js";
 
 export const PATCHES = {};
 PATCHES.PIXI = {};

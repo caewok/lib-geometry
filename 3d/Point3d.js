@@ -32,7 +32,7 @@ PIXI
  * @property {Point3d} bl
  * @property {Point3d} br
  */
-import { GEOMETRY_CONFIG } from "./const.js";
+import { GEOMETRY_CONFIG } from "../const.js";
 import "../Matrix.js";
 
 /**
