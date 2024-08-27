@@ -210,8 +210,8 @@ export function register3d() {
   CONFIG.GeometryLib ??= {};
   CONFIG.GeometryLib.threeD ??= {};
   CONFIG.GeometryLib.threeD.Plane = Plane;
-  CONFIG.GeometryLib.threeD.Plane = Point3d;
-  CONFIG.GeometryLib.threeD.Plane = Ray3d;
+  CONFIG.GeometryLib.threeD.Point3d = Point3d;
+  CONFIG.GeometryLib.threeD.Ray3d = Ray3d;
 }
 
 export function registerEllipse() {
