@@ -1220,6 +1220,7 @@ export class PixelCache extends PIXI.Rectangle {
       skip: opts.combineFn ? 1 : 4,
       arrayClass: opts.arrayClass });
 
+    opts.scale ??= {};
     opts.scale.x = opts.x + frame.x;
     opts.scale.y = opts.y + frame.y;
     opts.scale.resolution = (opts.resolution * opts.textureResolution);
