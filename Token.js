@@ -1,10 +1,10 @@
 /* globals
-canvas,
-PIXI
+foundry
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 
 import { ConstrainedTokenBorder } from "./ConstrainedTokenBorder.js";
+
 
 // Patches for the Token class
 export const PATCHES = {};

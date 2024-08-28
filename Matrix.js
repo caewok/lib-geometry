@@ -3,11 +3,13 @@ PIXI
 */
 "use strict";
 
-import { Point3d } from "./3d/Point3d.js";
+import { GEOMETRY_CONFIG } from "./const.js";
+import "./3d/Point3d.js";
 
 // Basic matrix operations
 // May eventually replace with math.js (when installed, call "math" to get functions)
 // Row-major format
+
 
 export class Matrix {
   constructor(arr) {
@@ -191,14 +193,14 @@ export class Matrix {
    * @param {Point3d} up
    * @returns {Matrix} 4x4 matrix
    */
-  static lookAt(cameraPosition, targetPosition, up = new Point3d(0, -1, 1)) {
+  static lookAt(cameraPosition, targetPosition, up = new CONFIG.GeometryLib.threeD.Point3d(0, -1, 1)) {
     // NOTE: Foundry uses a left-hand coordinate system, with y reversed.
 
     const zAxis = cameraPosition.subtract(targetPosition); // ZAxis = forward
     if ( zAxis.magnitudeSquared ) zAxis.normalize(zAxis); // Don't normalize if 0, 0, 0
 
-    const xAxis = new Point3d(1, 0, 0);
-    const yAxis = new Point3d(0, 1, 0);
+    const xAxis = new CONFIG.GeometryLib.threeD.Point3d(1, 0, 0);
+    const yAxis = new CONFIG.GeometryLib.threeD.Point3d(0, 1, 0);
     if ( zAxis.x || zAxis.y ) {
       up.cross(zAxis, xAxis); // XAxis = right
       if ( xAxis.magnitudeSquared() ) xAxis.normalize(xAxis); // Don't normalize if 0, 0, 0
@@ -208,8 +210,8 @@ export class Matrix {
       console.warn("lookAt zAxis.x and y are zero.");
       // Camera either directly overhead or directly below
       // Overhead if zAxis.z is positive
-      // xAxis = new Point3d(1, 0, 0);
-      // yAxis = new Point3d(0, 1, 0);
+      // xAxis = new CONFIG.GeometryLib.threeD.Point3d(1, 0, 0);
+      // yAxis = new CONFIG.GeometryLib.threeD.Point3d(0, 1, 0);
 
     }
 
@@ -531,7 +533,7 @@ export class Matrix {
    * @param {Point3d} [options.outPoint]    Placeholder for the new Point3d.
    * @returns {PIXI.Point}
    */
-  toPoint3d({ xIndex = 0, yIndex = 1, zIndex = 2, homogenous = true, outPoint = new Point3d() } = {}) {
+  toPoint3d({ xIndex = 0, yIndex = 1, zIndex = 2, homogenous = true, outPoint = new CONFIG.GeometryLib.threeD.Point3d() } = {}) {
     const row = this.arr[0];
 
     outPoint.x = row[xIndex];
@@ -759,7 +761,7 @@ export class Matrix {
    * @param {Point3d} outPoint Optional point in which to store the result.
    * @returns {Point3d}
    */
-  multiplyPoint3d(point, outPoint = new Point3d()) {
+  multiplyPoint3d(point, outPoint = new CONFIG.GeometryLib.threeD.Point3d()) {
     const a0 = this.arr[0];
     const a1 = this.arr[1];
     const a2 = this.arr[2];
@@ -1098,3 +1100,5 @@ export class Matrix {
     return k[mk];
   }
 }
+
+GEOMETRY_CONFIG.Matrix ??= Matrix;

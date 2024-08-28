@@ -32,8 +32,8 @@ PIXI
  * @property {Point3d} bl
  * @property {Point3d} br
  */
-
-import { Matrix } from "../Matrix.js";
+import { GEOMETRY_CONFIG } from "../const.js";
+import "../Matrix.js";
 
 /**
  * 3-D version of PIXI.Point
@@ -258,13 +258,13 @@ export class Point3d extends PIXI.Point {
 
     // Rotate points to match tile rotation.
     if ( rotation ) {
-      const rotZ = Matrix.rotationZ(Math.toRadians(rotation));
+      const rotZ = CONFIG.GeometryLib.Matrix.rotationZ(Math.toRadians(rotation));
       pts.forEach(pt => rotZ.multiplyPoint3d(pt, pt));
     }
 
     // Translate to canvas position.
     const center = bounds.center;
-    const trM = Matrix.translation(center.x + offsetX, center.y + offsetY, elevationZ);
+    const trM = CONFIG.GeometryLib.Matrix.translation(center.x + offsetX, center.y + offsetY, elevationZ);
     pts.forEach(pt => trM.multiplyPoint3d(pt, pt));
 
     return {
@@ -516,12 +516,33 @@ export class Point3d extends PIXI.Point {
 
   /**
    * Test if `this` is nearly equal to another point.
-   * @param {PIXI.Point} other
-   * @param {number} epsilon
+   * @param {Point3d} other
+   * @param {number} [epsilon=1e-08]
    * @returns {boolean}
    */
   almostEqual(other, epsilon = 1e-08) {
     return super.almostEqual(other, epsilon) && this.z.almostEqual(other.z ?? 0, epsilon);
+  }
+
+  /**
+   * Test if `this` is equal in 2d to another point.
+   * @param {Point3d|PIXI.Point} other
+   * @returns {boolean}
+   */
+  equalXY(other) {
+    const pt2d = PIXI.Point._tmp.set(this.x, this.y);
+    return pt2d.equals(other);
+  }
+
+  /**
+   * Test if `this` is almost equal in 2d to another point.
+   * @param {Point3d|PIXI.Point} other
+   * @param {number} [epsilon=1e-08]
+   * @returns {boolean}
+   */
+  almostEqualXY(other, epsilon) {
+    const pt2d = PIXI.Point._tmp.set(this.x, this.y);
+    return pt2d.almostEqual(other, epsilon);
   }
 
   /**
@@ -548,12 +569,12 @@ export class Point3d extends PIXI.Point {
   normalize(outPoint = new Point3d()) {
     return super.normalize(outPoint);
   }
-}
 
-// Temporary points that can be passed to PIXI.Point methods
-Point3d._tmp = new Point3d();
-Point3d._tmp2 = new Point3d();
-Point3d._tmp3 = new Point3d();
+  // Temporary points that can be passed to PIXI.Point methods
+  static _tmp = new this();
+  static _tmp2 = new this();
+  static _tmp3 = new this();
+}
 
 /**
  * The effective maximum texture size that Foundry VTT "ever" has to worry about.
@@ -574,3 +595,4 @@ export function numPositiveDigits(n) {
   return (Math.log(n) * Math.LOG10E) + 1 | 0;
 }
 
+GEOMETRY_CONFIG.threeD.Point3d ??= Point3d;

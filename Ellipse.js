@@ -5,6 +5,7 @@ WeilerAthertonClipper
 "use strict";
 
 import { cutawayBasicShape, cutawayBasicIntersections } from "./util.js";
+import { GEOMETRY_CONFIG } from "./const.js";
 
 /* Testing
 api = game.modules.get('tokenvisibility').api;
@@ -396,3 +397,5 @@ export class Ellipse extends PIXI.Ellipse {
    */
   cutawayIntersections(a, b, opts) { return cutawayBasicIntersections(this, a, b, opts); }
 }
+
+GEOMETRY_CONFIG.Ellipse ??= Ellipse;

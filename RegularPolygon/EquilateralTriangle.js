@@ -3,9 +3,10 @@ PIXI
 */
 "use strict";
 
-import { RegularPolygon } from "./RegularPolygon.js";
+import { GEOMETRY_CONFIG } from "../const.js";
+import "./RegularPolygon.js";
 
-export class EquilateralTriangle extends RegularPolygon {
+export class EquilateralTriangle extends GEOMETRY_CONFIG.RegularPolygons.RegularPolygon {
   constructor(origin, radius, {rotation = 0} = {}) {
     super(origin, radius, { rotation, numSides: 3 });
   }
@@ -90,3 +91,4 @@ export class EquilateralTriangle extends RegularPolygon {
   }
 }
 
+GEOMETRY_CONFIG.RegularPolygons.EquilateralTriangle ??= EquilateralTriangle;

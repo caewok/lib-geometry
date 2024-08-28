@@ -4,7 +4,8 @@ PIXI
 */
 "use strict";
 
-import { RegularPolygon } from "./RegularPolygon.js";
+import "./RegularPolygon.js";
+import { GEOMETRY_CONFIG } from "../const.js";
 
 /**
  * A regular star is a polygon built from a regular polygon by
@@ -16,7 +17,7 @@ import { RegularPolygon } from "./RegularPolygon.js";
  *
  * See https://martiancraft.com/blog/2017/03/geometry-of-stars/
  */
-export class RegularStar extends RegularPolygon {
+export class RegularStar extends GEOMETRY_CONFIG.RegularPolygons.RegularPolygon {
 
   /** @type {PIXI.Point[]} */
   _outerPoints;
@@ -179,3 +180,6 @@ export class RegularStar extends RegularPolygon {
   }
 
 }
+
+GEOMETRY_CONFIG.RegularPolygons.RegularStar ??= RegularStar;
+

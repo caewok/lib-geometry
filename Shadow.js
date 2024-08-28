@@ -8,11 +8,12 @@ foundry
 */
 "use strict";
 
-import { Point3d } from "./3d/Point3d.js";
-import { ClipperPaths } from "./ClipperPaths.js";
-import { Plane } from "./3d/Plane.js";
-import { Draw } from "./Draw.js";
-import { Matrix } from "./Matrix.js";
+import "./3d/Point3d.js";
+import "./ClipperPaths.js";
+import "./3d/Plane.js";
+import "./Draw.js";
+import "./Matrix.js";
+import { GEOMETRY_CONFIG } from "./const.js";
 
 /* Testing
 api = game.modules.get("tokenvisibility").api
@@ -120,7 +121,7 @@ export class ShadowProjection {
    */
   get sourceOrigin() {
     // Don't cache so that the source origin is always up-to-date with current source location.
-    return Point3d.fromPointSource(this.source);
+    return CONFIG.GeometryLib.threeD.Point3d.fromPointSource(this.source);
   }
 
   /**
@@ -161,7 +162,7 @@ export class ShadowProjection {
 
     const dot = (P.a * L.x) + (P.b * L.y) + (P.c * L.z) + P.d;
 
-    return new Matrix([
+    return new CONFIG.GeometryLib.Matrix([
       [dot - (L.x * P.a), -(L.y * P.a), -(L.z * P.a), -1 * P.a],
       [-(L.x * P.b), dot - (L.y * P.b), -(L.z * P.b), -1 * P.b],
       [-(L.x * P.c), -(L.y * P.c), dot - (L.z * P.c), -1 * P.c],
@@ -272,10 +273,10 @@ export class ShadowProjection {
 
     const srcOrigin = this.sourceOrigin;
 
-    const topShadow = { A: new Point3d(0, 0, planeZ), B: new Point3d(0, 0, planeZ) };
+    const topShadow = { A: new CONFIG.GeometryLib.threeD.Point3d(0, 0, planeZ), B: new CONFIG.GeometryLib.threeD.Point3d(0, 0, planeZ) };
     const bottomShadow = {
-      A: new Point3d(pts.A.bottom.x, pts.A.bottom.y, planeZ),
-      B: new Point3d(pts.B.bottom.x, pts.B.bottom.y, planeZ)
+      A: new CONFIG.GeometryLib.threeD.Point3d(pts.A.bottom.x, pts.A.bottom.y, planeZ),
+      B: new CONFIG.GeometryLib.threeD.Point3d(pts.B.bottom.x, pts.B.bottom.y, planeZ)
     };
 
     if ( pts.A.top.z >= sourceZ ) {
@@ -323,7 +324,7 @@ export class ShadowProjection {
    * @returns {Point3d[]}
    */
   constructShadowPointsForWall(wall) {
-    const pts = Point3d.fromWall(wall, { finite: true });
+    const pts = CONFIG.GeometryLib.threeD.Point3d.fromWall(wall, { finite: true });
     return this._constructShadowPointsForWallPoints(pts);
   }
 
@@ -379,8 +380,8 @@ export class ShadowProjection {
 
         // Is the intersection on the correct side of the point?
         // Should be further from the source than the point.
-        const dist2Pt = Point3d.distanceSquaredBetween(sourceOrigin, pt);
-        const dist2Ix = Point3d.distanceSquaredBetween(sourceOrigin, ix);
+        const dist2Pt = CONFIG.GeometryLib.threeD.Point3d.distanceSquaredBetween(sourceOrigin, pt);
+        const dist2Ix = CONFIG.GeometryLib.threeD.Point3d.distanceSquaredBetween(sourceOrigin, ix);
 
         if ( dist2Pt < dist2Ix ) {
           // We have source --> pt --> ix
@@ -491,7 +492,7 @@ export class ShadowProjection {
    * @param {Point3d} v
    * @returns {Point3d}
    */
-  _intersectionWith(v, outPoint = new Point3d()) {
+  _intersectionWith(v, outPoint = new CONFIG.GeometryLib.threeD.Point3d()) {
     return this.shadowMatrix.multiplyPoint3d(v, outPoint);
   }
 
@@ -509,7 +510,7 @@ export class ShadowProjection {
     const dotNV = N.dot(v);
     const scaledDotNV = dotNV + d;
 
-    return new Matrix([[
+    return new CONFIG.GeometryLib.Matrix([[
       -(scaledDotNL * v.x) + (scaledDotNV * l.x),
       -(scaledDotNL * v.y) + (scaledDotNV * l.y),
       -(scaledDotNL * v.z) + (scaledDotNV * l.z),
@@ -535,7 +536,7 @@ export class ShadowProjection {
       l0.z + delta.z * fac
     )
     */
-    return new Matrix([[
+    return new CONFIG.GeometryLib.Matrix([[
       (l0.x * dotNdelta) + (delta.x * -dotNw),
       (l0.y * dotNdelta) + (delta.y * -dotNw),
       (l0.z * dotNdelta) + (delta.z * -dotNw),
@@ -562,7 +563,7 @@ export class Shadow extends PIXI.Polygon {
 
   }
 
-  static upV = new Point3d(0, 0, 1);
+  static upV = new GEOMETRY_CONFIG.threeD.Point3d(0, 0, 1);
 
   /**
    * Build the parallelogram representing a shadow cast from a wall.
@@ -766,13 +767,13 @@ export class Shadow extends PIXI.Polygon {
       // Can use the intersection point: will create a triangle shadow.
       // (Think flagpole shadow.)
       if ( A.z < ixAB.z ) {
-        const newA = new Point3d();
+        const newA = new CONFIG.GeometryLib.threeD.Point3d();
         const t = B.projectToAxisValue(A, 0, "z", newA);
         if ( !t || t < 0 || t > 1 ) return null; // Wall portion completely behind surface.
         if ( newA.almostEqual(B) ) return null;
         A = newA;
       } else if ( B.z < ixAB.z ) {
-        const newB = new Point3d();
+        const newB = new CONFIG.GeometryLib.threeD.Point3d();
         const t = A.projectToAxisValue(B, 0, "z", newB);
         if ( !t || t < 0 || t > 1 ) return null; // Wall portion completely behind surface.
         if ( newB.almostEqual(A) ) return null;
@@ -863,8 +864,8 @@ export class Shadow extends PIXI.Polygon {
     if ( origin.z <= C.z ) return null; // Viewer is below the wall bottom.
 
     // Because the surfacePlane is parallel to XY, we can infer the intersection of the wall.
-    const ixAC = new Point3d(A.x, A.y, surfacePlane.point.z);
-    const ixBD = new Point3d(B.x, B.y, surfacePlane.point.z);
+    const ixAC = new CONFIG.GeometryLib.threeD.Point3d(A.x, A.y, surfacePlane.point.z);
+    const ixBD = new CONFIG.GeometryLib.threeD.Point3d(B.x, B.y, surfacePlane.point.z);
 
     const ixOriginA = wallPointSurfaceIntersection(A, origin, surfacePlane);
     const ixOriginB = wallPointSurfaceIntersection(B, origin, surfacePlane);
@@ -957,7 +958,7 @@ export class Shadow extends PIXI.Polygon {
    * @returns {Shadow|null}
    */
   static constructFromWall(wall, origin, surfaceElevation = 0) {
-    const wallPoints = Point3d.fromWall(wall, { finite: true });
+    const wallPoints = CONFIG.GeometryLib.threeD.Point3d.fromWall(wall, { finite: true });
     return Shadow.constructFromPoints3d(
       wallPoints.A.top,
       wallPoints.B.top,
@@ -998,7 +999,7 @@ export class Shadow extends PIXI.Polygon {
       // Projecting upward from source; if above bottom of wall, no shadow.
       || origin.z <= surfaceElevation && origin.z >= topZ ) return null;
 
-    const surfacePlane = new Plane(new Point3d(0, 0, surfaceElevation), Shadow.upV);
+    const surfacePlane = new CONFIG.GeometryLib.threeD.Plane(new CONFIG.GeometryLib.threeD.Point3d(0, 0, surfaceElevation), Shadow.upV);
     return origin.z > surfaceElevation
       ? Shadow.simpleSurfaceOriginAbove(A, B, C, D, origin, surfacePlane)
       : Shadow.simpleSurfaceOriginBelow(A, B, C, D, origin, surfacePlane);
@@ -1012,8 +1013,8 @@ export class Shadow extends PIXI.Polygon {
    * @param {HexString} fill    Color used to fill the shape
    * @param {number} fillAlpha      Alpha transparency between 0 and 1
    */
-  draw({ color = Draw.COLORS.gray, width = 1, fill = Draw.COLORS.gray, fillAlpha = .5 } = {} ) {
-    Draw.shape(this, { color, width, fill, fillAlpha });
+  draw({ color = CONFIG.GeometryLib.Draw.COLORS.gray, width = 1, fill = CONFIG.GeometryLib.Draw.COLORS.gray, fillAlpha = .5 } = {} ) {
+    CONFIG.GeometryLib.Draw.shape(this, { color, width, fill, fillAlpha });
   }
 
   /**
@@ -1030,7 +1031,7 @@ export class Shadow extends PIXI.Polygon {
 
     if ( !shadows.length ) return boundary;
 
-    const shadowPaths = ClipperPaths.fromPolygons(shadows, { scalingFactor });
+    const shadowPaths = CONFIG.GeometryLib.ClipperPaths.fromPolygons(shadows, { scalingFactor });
 
     // Make all the shadow paths orient the same direction
     shadowPaths.paths.forEach(path => {
@@ -1056,6 +1057,9 @@ function wallPointSurfaceIntersection(A, origin, surfacePlane) {
   // Viewer is below top of the wall, so find far point to use
   const maxR2 = Math.pow(canvas.dimensions.maxR, 2);
   const rA = Ray.towardsPointSquared(origin, A, maxR2);
-  const pA = new Point3d(rA.B.x, rA.B.y, origin.z);
+  const pA = new CONFIG.GeometryLib.threeD.Point3d(rA.B.x, rA.B.y, origin.z);
   return surfacePlane.lineIntersection(pA, Shadow.upV);
 }
+
+GEOMETRY_CONFIG.Shadow ??= Shadow;
+GEOMETRY_CONFIG.ShadowProjection ??= ShadowProjection;

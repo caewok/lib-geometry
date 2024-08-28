@@ -5,7 +5,8 @@ canvas
 */
 "use strict";
 
-import { Draw } from "./Draw.js";
+import { GEOMETRY_CONFIG } from "./const.js";
+import "./Draw.js";
 
 /**
  * Class to manage ClipperPaths for multiple polygons.
@@ -397,7 +398,7 @@ export class ClipperPaths {
   /**
    * Draw the clipper paths, to the extent possible
    */
-  draw({ color = Draw.COLORS.black, width = 1, fill, fillAlpha = 1 } = {}) {
+  draw({ color = CONFIG.GeometryLib.Draw.COLORS.black, width = 1, fill, fillAlpha = 1 } = {}) {
     if ( !fill ) fill = color;
     const polys = this.toPolygons();
 
@@ -410,3 +411,5 @@ export class ClipperPaths {
     canvas.controls.debug.endFill();
   }
 }
+
+GEOMETRY_CONFIG.ClipperPaths ??= ClipperPaths;

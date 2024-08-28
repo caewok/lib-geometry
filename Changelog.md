@@ -1,3 +1,7 @@
+## 0.3.9
+Move `Point3d._tmp` to a static object and add `_tmp` for subclasses.
+Add `RegionWaypoint3d`, `GridCoordinates`, and `GridCoordinates3d` classes.
+
 ## 0.3.8
 Fix `findOverlappingPoints` when one segment is completely encompassed by a longer segment. (Was returning 1 endpoint when should be returning 2 endpoints.)
 

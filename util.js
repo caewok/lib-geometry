@@ -7,10 +7,11 @@ PIXI
 */
 "use strict";
 
-import { CenteredRectangle } from "./CenteredPolygon/CenteredRectangle.js";
-import { CenteredPolygon } from "./CenteredPolygon/CenteredPolygon.js";
-import { Ellipse } from "./Ellipse.js";
-import { Point3d } from "./3d/Point3d.js";
+import "./CenteredPolygon/CenteredRectangle.js";
+import "./CenteredPolygon/CenteredPolygon.js";
+import "./Ellipse.js";
+import "./3d/Point3d.js";
+import { GEOMETRY_CONFIG } from "./const.js";
 
 // Functions that would go in foundry.utils if that object were extensible
 export function registerFoundryUtilsMethods() {
@@ -66,6 +67,35 @@ export function registerFoundryUtilsMethods() {
 }
 
 /**
+ * Is this number even?
+ * @param {number} n
+ * @returns {boolean}
+ */
+export function isEven(n) { return  ~n & 1; }
+
+/**
+ * Is this number odd?
+ * @param {number} n
+ * @returns {boolean}
+ */
+export function isOdd(n) { return n & 1; }
+
+/**
+ * Calculate the unit elevation for a given set of coordinates.
+ * @param {number} elevation    Elevation in grid units
+ * @returns {number} Elevation in number of grid steps.
+ */
+export function unitElevation(elevation) { return Math.round(elevation / canvas.scene.dimensions.distance); }
+
+/**
+ * Calculate the grid unit elevation from unit elevation.
+ * Inverse of `unitElevation`.
+ * @param {number} k            Unit elevation
+ * @returns {number} Elevation in grid units
+ */
+export function elevationForUnit(k) { return k * canvas.scene.dimensions.distance; }
+
+/**
  * @typedef {PIXI.Point} CutawayPoint
  * A point in cutaway space.
  * @param {number} x      Distance-squared from start point
@@ -76,9 +106,9 @@ export function registerFoundryUtilsMethods() {
  * Convert a point on a line to a coordinate representing the line direction in the x direction
  * and the elevation in the y direction.
  *
- * @param {Point3d} currPt      A point on the line start|end
- * @param {Point3d} start       Beginning endpoint of the line segment
- * @param {Point3d} [end]       End of the line segment; required only if the current point is before start
+ * @param {RegionMovementWaypoint3d} currPt      A point on the line start|end
+ * @param {RegionMovementWaypoint3d} start       Beginning endpoint of the line segment
+ * @param {RegionMovementWaypoint3d} [end]       End of the line segment; required only if the current point is before start
  * @param {PIXI.Point} [outPoint]
  * @returns {CutawayPoint} X value is 0 at start, negative if further from end than start.
  *  - x: Distance-squared from start, in direction of end.
@@ -94,14 +124,17 @@ function to2dCutaway(currPt, start, end, outPoint) {
 /**
  * Convert a cutaway point to its respective position on the line start|end.
  * @param {CutawayPoint} cutawayPt      2d cutaway point created from _to2dCutaway
- * @param {Point3d} start             Beginning endpoint of the line segment
- * @param {Point3d} end               End of the line segment
- * @param {Point3d} [outPoint]
- * @returns {Point3d}
+ * @param {RegionMovementWaypoint3d} start             Beginning endpoint of the line segment
+ * @param {RegionMovementWaypoint3d} end               End of the line segment
+ * @param {RegionMovementWaypoint3d} [outPoint]
+ * @returns {RegionMovementWaypoint3d}
  */
 function from2dCutaway(cutawayPt, start, end, outPoint) {
-  outPoint ??= new Point3d();
-  start.towardsPointSquared(end, cutawayPt.x, outPoint);
+  outPoint ??= new CONFIG.GeometryLib.threeD.RegionMovementWaypoint3d();
+  // b/c outPoint is 3d, makes sure to get the 2d values.
+  const xy = start.to2d().towardsPointSquared(end, cutawayPt.x, PIXI.Point._tmp);
+  outPoint.x = xy.x;
+  outPoint.y = xy.y;
   outPoint.z = cutawayPt.y;
   return outPoint;
 }
@@ -329,11 +362,11 @@ Math.PI_1_2 = Math.PI * 0.5;
 function centeredPolygonFromDrawing(drawing) {
   switch ( drawing.document.shape.type ) {
     case Drawing.SHAPE_TYPES.RECTANGLE:
-      return CenteredRectangle.fromDrawing(drawing);
+      return CONFIG.GeometryLib.CenteredPolygons.CenteredRectangle.fromDrawing(drawing);
     case Drawing.SHAPE_TYPES.ELLIPSE:
-      return Ellipse.fromDrawing(drawing);
+      return CONFIG.GeometryLib.Ellipse.fromDrawing(drawing);
     case Drawing.SHAPE_TYPES.POLYGON:
-      return CenteredPolygon.fromDrawing(drawing);
+      return CONFIG.GeometryLib.CenteredPolygons.CenteredPolygon.fromDrawing(drawing);
     case Drawing.SHAPE_TYPES.CIRCLE: {
       const width = drawing.document.shape.width;
       return PIXI.Circle(drawing.document.x + width * 0.5, drawing.document.y + width * 0.5, width);
@@ -913,7 +946,7 @@ export function cutawayBasicShape(shape, a, b, { start, end, topElevationFn, bot
   const ixs = shape.segmentIntersections(a, b);
   if ( ixs.length === 0 ) return [quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, cutPointsFn, isHole })];
   if ( ixs.length === 1 ) {
-    const ix0 = Point3d.fromObject(ixs[0]);
+    const ix0 = CONFIG.GeometryLib.threeD.Point3d.fromObject(ixs[0]);
     ix0.t0 = ixs[0].t0;
     const a2 = a.to2d();
     const b2 = b.to2d();

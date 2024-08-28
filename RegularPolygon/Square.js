@@ -3,7 +3,8 @@ PIXI
 */
 "use strict";
 
-import { RegularPolygon } from "./RegularPolygon.js";
+import "./RegularPolygon.js";
+import { GEOMETRY_CONFIG } from "../const.js";
 
 const squareRotations = new Set([45, 135, 225, 315]); // Oriented []
 const diagonalRotations = new Set([0, 90, 180, 270]); // Oriented [] turned 45º
@@ -17,7 +18,7 @@ const diagonalRotations = new Set([0, 90, 180, 270]); // Oriented [] turned 45º
  * @param {number} [options.rotation]   Rotation in degrees
  * @param {number} [options.width]      Alternative specification when skipping radius
  */
-export class Square extends RegularPolygon {
+export class Square extends GEOMETRY_CONFIG.RegularPolygons.RegularPolygon {
 
   constructor(origin, radius, {rotation = 0, width} = {}) {
     if ( !radius && !width ) {
@@ -162,3 +163,6 @@ export class Square extends RegularPolygon {
     return super.overlaps(other);
   }
 }
+
+GEOMETRY_CONFIG.RegularPolygons.Square ??= Square;
+

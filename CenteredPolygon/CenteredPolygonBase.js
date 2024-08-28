@@ -3,6 +3,10 @@ PIXI
 */
 "use strict";
 
+import { GEOMETRY_CONFIG } from "../const.js";
+CONFIG.GeometryLib ??= {};
+CONFIG.GeometryLib.CenteredPolygons ??= {};
+
 /**
  * Base class to be extended by others.
  * Follows the approach of Drawing and RegularPolygon class.
@@ -56,7 +60,7 @@ export class CenteredPolygonBase extends PIXI.Polygon {
 
   get y() { return this.origin.y; }
 
-  set y(value) { return this.origin.y = value; }
+  set y(value) { this.origin.y = value; }
 
 
   get center() { return { x: this.x, y: this.y }; }
@@ -151,3 +155,5 @@ export class CenteredPolygonBase extends PIXI.Polygon {
     return outPoint;
   }
 }
+
+GEOMETRY_CONFIG.CenteredPolygons.CenteredPolygonBase ??= CenteredPolygonBase;
