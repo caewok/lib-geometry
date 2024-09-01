@@ -28,7 +28,7 @@ import { GEOMETRY_CONFIG } from "../const.js";
  * A 3d point that can also represent a 4d hex coordinate (q, r, s, k).
  * Links z to the elevation property.
  */
-export class HexCoordinates3d extends GEOMETRY_CONFIG.threeD.GridCoordinates3d {
+export class HexGridCoordinates3d extends GEOMETRY_CONFIG.threeD.GridCoordinates3d {
 
   /**
    * Create this point from hex coordinates plus optional elevation.
