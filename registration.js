@@ -72,6 +72,7 @@ import { PATCHES as PATCHES_Tile } from "./Tile.js";
 import "./GridCoordinates.js";
 import "./3d/GridCoordinates3d.js";
 import "./3d/RegionMovementWaypoint3d.js";
+import "./3d/HexCoordinates3d.js";
 
 const PATCHES = {
   "PIXI.Circle": PATCHES_Circle,
