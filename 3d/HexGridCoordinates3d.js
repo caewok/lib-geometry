@@ -89,8 +89,8 @@ export class HexGridCoordinates3d extends GEOMETRY_CONFIG.threeD.GridCoordinates
    */
   setToHexCube(hexCube, elevation) {
     if ( typeof elevation === "undefined" ) {
-      if ( Object.hasProperty(hexCube, "z") ) elevation = GEOMETRY_CONFIG.utils.pixelsToGridUnits(hexCube.z);
-      else if ( Object.hasProperty(hexCube, "k") ) elevation = this.constructor.elevationForUnit(hexCube.k);
+      if ( typeof hexCube.z !== "undefined" ) elevation = GEOMETRY_CONFIG.utils.pixelsToGridUnits(hexCube.z);
+      else if ( typeof hexCube.k !== "undefined" ) elevation = this.constructor.elevationForUnit(hexCube.k);
       else elevation = 0;
     }
     const { x, y } = canvas.grid.cubeToPoint(hexCube);
