@@ -69,6 +69,17 @@ export function registerFoundryUtilsMethods() {
 }
 
 /**
+ * Round numbers that are close to 0 or 1.
+ * @param {number} n            Number to round
+ * @param {number} [epsilon]    Passed to almostEqual
+ */
+export function roundNearWhole(n, epsilon) {
+  const roundedN = Math.round(n);
+  if ( n.almostEqual(roundedN, epsilon) ) return roundedN;
+  return n;
+}
+
+/**
  * Is this number even?
  * @param {number} n
  * @returns {boolean}
@@ -95,7 +106,7 @@ export function unitElevation(elevation) { return Math.round(elevation / canvas.
  * @param {number} k            Unit elevation
  * @returns {number} Elevation in grid units
  */
-export function elevationForUnit(k) { return k * canvas.scene.dimensions.distance; }
+export function elevationForUnit(k) { return roundNearWhole(k * canvas.scene.dimensions.distance); }
 
 /**
  * @typedef {PIXI.Point} CutawayPoint

@@ -7,6 +7,7 @@ canvas
 import "./RegionMovementWaypoint3d.js";
 import "../GridCoordinates.js";
 import { GEOMETRY_CONFIG } from "../const.js";
+import { roundNearWhole } from "../util.js";
 
 /**
  * Cube coordinates in a hexagonal grid. q + r + s = 0.
@@ -110,16 +111,7 @@ export class HexGridCoordinates3d extends GEOMETRY_CONFIG.threeD.GridCoordinates
   }
 }
 
-/**
- * Round numbers that are close to 0 or 1.
- * @param {number} n            Number to round
- * @param {number} [epsilon]    Passed to almostEqual
- */
-function roundNearWhole(n, epsilon) {
-  const roundedN = Math.round(n);
-  if ( n.almostEqual(roundedN, epsilon) ) return roundedN;
-  return n;
-}
+
 
 
 GEOMETRY_CONFIG.threeD.HexGridCoordinates3d ??= HexGridCoordinates3d;

@@ -46,8 +46,8 @@ export class RegionMovementWaypoint3d extends GEOMETRY_CONFIG.threeD.Point3d {
       y = pt.y;
     } else if ( Object.hasOwn(pt, "i") ) {
       const res = canvas.grid.getCenterPoint(pt);
-      x = res.x;
-      y = res.y;
+      x = roundNearWhole(res.x);
+      y = roundNearWhole(res.y);
     }
 
     // Process elevation.
