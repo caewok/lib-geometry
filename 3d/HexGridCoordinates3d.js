@@ -34,7 +34,7 @@ export class HexGridCoordinates3d extends GEOMETRY_CONFIG.threeD.GridCoordinates
    * Create this point from hex coordinates plus optional elevation.
    * @param {HexagonalGridCube} hexCube
    * @param {number} [elevation]            Elevation in grid units
-   * @returns {HexCoordinates3d}
+   * @returns {HexGridCoordinates3d}
    */
   static fromHexCube(hexCube, elevation) {
     const pt = new this();
@@ -107,5 +107,5 @@ export class HexGridCoordinates3d extends GEOMETRY_CONFIG.threeD.GridCoordinates
 }
 
 
-GEOMETRY_CONFIG.threeD.HexCoordinates3d ??= HexCoordinates3d;
+GEOMETRY_CONFIG.threeD.HexGridCoordinates3d ??= HexGridCoordinates3d;
 
