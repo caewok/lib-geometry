@@ -817,6 +817,7 @@ export function bresenhamLine3d(x0, y0, z0, x1, y1, z1) {
  * @testing
  */
 export function* bresenhamLine3dIterator(a, b) {
+  const Point3d = CONFIG.GeometryLib.threeD.Point3d;
   a = Point3d._tmp.copyFrom(a);
   b = Point3d._tmp2.copyFrom(b);
   a.roundDecimals();
