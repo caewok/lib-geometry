@@ -53,15 +53,15 @@ export class HexGridCoordinates3d extends GEOMETRY_CONFIG.threeD.GridCoordinates
   /** @type {number} */
   set q(value) {
     const pt = canvas.grid.cubeToPoint({ q: value, r: this.r });
-    this.x = pt.x;
-    this.y = pt.y;
+    this.x = roundNearWhole(pt.x);
+    this.y = roundNearWhole(pt.y);
   }
 
   /** @type {number} */
   set r(value) {
     const pt = canvas.grid.cubeToPoint({ q: this.q, r: value });
-    this.x = pt.x;
-    this.y = pt.y;
+    this.x = roundNearWhole(pt.x);
+    this.y = roundNearWhole(pt.y);
   }
 
   /** @type {number} */
@@ -94,8 +94,8 @@ export class HexGridCoordinates3d extends GEOMETRY_CONFIG.threeD.GridCoordinates
       else elevation = 0;
     }
     const { x, y } = canvas.grid.cubeToPoint(hexCube);
-    this.x = x;
-    this.y = y;
+    this.x = roundNearWhole(x);
+    this.y = roundNearWhole(y);
     this.elevation = elevation;
     return this;
   }
@@ -103,7 +103,22 @@ export class HexGridCoordinates3d extends GEOMETRY_CONFIG.threeD.GridCoordinates
   /**
    * Set x, y, z to center of hex.
    */
-  centerToHexCube() { return this.setToHexCube(this, this.elevation); }
+  centerToHexCube() {
+    const q = Math.round(this.q);
+    const r = Math.round(this.r);
+    return this.setToHexCube({ q, r }, this.elevation);
+  }
+}
+
+/**
+ * Round numbers that are close to 0 or 1.
+ * @param {number} n            Number to round
+ * @param {number} [epsilon]    Passed to almostEqual
+ */
+function roundNearWhole(n, epsilon) {
+  const roundedN = Math.round(n);
+  if ( n.almostEqual(roundedN, epsilon) ) return roundedN;
+  return n;
 }
 
 
