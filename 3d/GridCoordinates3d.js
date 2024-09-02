@@ -6,7 +6,7 @@ CONST
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { isOdd } from "../util.js";
+import { isOdd, roundNearWhole } from "../util.js";
 import "./RegionMovementWaypoint3d.js";
 import "../GridCoordinates.js";
 import { GRID_DIAGONALS, gridDistanceBetween, alternatingGridDistance } from "../grid_distance.js";
@@ -147,9 +147,9 @@ export class GridCoordinates3d extends GEOMETRY_CONFIG.threeD.RegionMovementWayp
    */
   setOffset(offset) {
     const { x, y } = canvas.grid.getCenterPoint(offset);
-    this.x = x;
-    this.y = y;
-    this.elevation = this.constructor.elevationForUnit(offset.k || 0);
+    this.x = roundNearWhole(x);
+    this.y = roundNearWhole(y);
+    this.elevation = roundNearWhole(this.constructor.elevationForUnit(offset.k || 0));
     return this;
   }
 
@@ -160,8 +160,8 @@ export class GridCoordinates3d extends GEOMETRY_CONFIG.threeD.RegionMovementWayp
    */
   setOffset2d(offset) {
     const { x, y } = canvas.grid.getCenterPoint(offset);
-    this.x = x;
-    this.y = y;
+    this.x = roundNearWhole(x);
+    this.y = roundNearWhole(y);
     return this;
   }
 
@@ -229,7 +229,7 @@ export class GridCoordinates3d extends GEOMETRY_CONFIG.threeD.RegionMovementWayp
    * @param {number} k            Unit elevation
    * @returns {number} Elevation in grid units
    */
-  static elevationForUnit(k) { return k * canvas.scene.dimensions.distance; }
+  static elevationForUnit(k) { return roundNearWhole(k * canvas.scene.dimensions.distance); }
 
   /**
    * Measure the distance between two points accounting for the current grid rules.

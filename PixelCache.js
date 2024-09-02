@@ -719,7 +719,7 @@ export class PixelCache extends PIXI.Rectangle {
     localOffsets ??= [0, 0];
     reducerFn ??= this.constructor.pixelAggregator("first");
 
-    const bresIter = bresenhamLineIterator(a.x, a.y, b.x, b.y);
+    const bresIter = bresenhamLineIterator(a, b);
     let prevPixel;
     let pt; // Needed to recall the last point for forceLast.
     if ( skipFirst ) {
