@@ -158,7 +158,7 @@ function exactGridDistance(maxAxis = 0, midAxis = 0, minAxis = 0) {
  *   - @returns {number} The distance in number of squares or hexes
  */
 export function alternatingGridDistance(opts = {}) {
-  let lPrev = opts.lPrev ?? canvas.grid.diagonals === CONST.GRID_DIAGONALS.ALTERNATING_2 ? 0 : 1;
+  let lPrev = opts.lPrev ?? canvas.grid.diagonals === CONST.GRID_DIAGONALS.ALTERNATING_1 ? 1 : 0;
   let prevMaxAxis = opts.prevMaxAxis ?? lPrev;
   let prevMidAxis = opts.prevMidAxis ?? lPrev;
   let prevMinAxis = opts.prevMinAxis ?? lPrev;
