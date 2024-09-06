@@ -2,7 +2,8 @@
 canvas,
 CONFIG,
 CONST,
-foundry
+foundry,
+game
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
@@ -27,7 +28,8 @@ export const GRID_DIAGONALS = { EUCLIDEAN: -1, ...CONST.GRID_DIAGONALS };
  * @returns {number} Distance, in grid units
  */
 export function gridDistanceBetween(a, b, { altGridDistFn, diagonals } = {}) {
-  if ( canvas.grid.isGridless ) return CONFIG.GeometryLib.utils.pixelsToGridUnits(CONFIG.GeometryLib.threeD.Point3d.distanceBetween(a, b));
+  const geom = CONFIG.GeometryLib;
+  if ( canvas.grid.isGridless ) return geom.utils.pixelsToGridUnits(geom.threeD.Point3d.distanceBetween(a, b));
   const distFn = canvas.grid.isHexagonal ? hexGridDistanceBetween : squareGridDistanceBetween;
   const dist = distFn(a, b, altGridDistFn, diagonals);
 
@@ -118,13 +120,14 @@ function squareGridDistanceBetween(p0, p1, altGridDistFn, diagonals) {
     case D.APPROXIMATE: l = approxGridDistance(maxAxis, midAxis, minAxis); break;
     case D.ALTERNATING_1:
     case D.ALTERNATING_2: {
-      altGridDistFn ??= alternatingGridDistance();
+      altGridDistFn ??= alternatingGridDistance({ diagonals });
       l = altGridDistFn(maxAxis, midAxis, minAxis);
       break;
     }
     case D.RECTILINEAR:
     case D.ILLEGAL: l = maxAxis + midAxis + minAxis; break;
   }
+
   return l * canvas.grid.distance;
 }
 
@@ -158,7 +161,8 @@ function exactGridDistance(maxAxis = 0, midAxis = 0, minAxis = 0) {
  *   - @returns {number} The distance in number of squares or hexes
  */
 export function alternatingGridDistance(opts = {}) {
-  let lPrev = opts.lPrev ?? canvas.grid.diagonals === CONST.GRID_DIAGONALS.ALTERNATING_2 ? 0 : 1;
+  const diagonals = opts.diagonals ??= canvas.grid.diagonals ?? game.settings.get("core", "gridDiagonals");
+  let lPrev = opts.lPrev ?? ((diagonals === CONST.GRID_DIAGONALS.ALTERNATING_2) ? 1 : 0);
   let prevMaxAxis = opts.prevMaxAxis ?? lPrev;
   let prevMidAxis = opts.prevMidAxis ?? lPrev;
   let prevMinAxis = opts.prevMinAxis ?? lPrev;
@@ -170,7 +174,7 @@ export function alternatingGridDistance(opts = {}) {
     const l = lCurr - lPrev; // If 2:1:2, this will cause the flip along with dxPrev and dyPrev.
     lPrev = lCurr;
     return l;
-  }
+  };
 }
 
 function _alternatingGridDistance(maxAxis = 0, midAxis = 0, minAxis = 0) {
@@ -196,6 +200,3 @@ function _alternatingGridDistance(maxAxis = 0, midAxis = 0, minAxis = 0) {
   // Same as
   // (A * (1 - deltaX)) + (B * (deltaX - deltaY)) + (C * (deltaY - deltaZ)) + (D * deltaZ);
 }
-
-
-
