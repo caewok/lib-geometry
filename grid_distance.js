@@ -200,3 +200,37 @@ function _alternatingGridDistance(maxAxis = 0, midAxis = 0, minAxis = 0) {
   // Same as
   // (A * (1 - deltaX)) + (B * (deltaX - deltaY)) + (C * (deltaY - deltaZ)) + (D * deltaZ);
 }
+
+/**
+ * Constructs a direct path grid, accounting for elevation and diagonal elevation.
+ * @param {RegionMovementWaypoint3d} start
+ * @param {RegionMovementWaypoint3d} end
+ * @param {GridOffset[]} [path2d]             Optional path2d for the start and end waypoints.
+ * @returns {GridCoordinates3d[]}
+ */
+export function getDirectPath(start, end) {
+  const { HexGridCoordinates3d, GridCoordinates3d } = CONFIG.GeometryLib.threeD;
+  switch ( canvas.grid.type ) {
+    case CONST.GRID_TYPES.GRIDLESS: return GridCoordinates3d._directPathGridless(start, end);
+    case CONST.GRID_TYPES.SQUARE: return GridCoordinates3d._directPathSquare(start, end);
+    default: return HexGridCoordinates3d._directPathHex(start, end);
+  }
+}
+
+
+/**
+ * Get the function to measure the offset distance for a given distance with given previous diagonals.
+ * @param {number} [diagonals=0]
+ * @returns {function}
+ */
+export function getOffsetDistanceFn(diagonals = 0) {
+  const { HexGridCoordinates3d, GridCoordinates3d, Point3d } = CONFIG.GeometryLib.threeD;
+  switch ( canvas.grid.type ) {
+    case CONST.GRID_TYPES.GRIDLESS:
+      return (a, b) => CONFIG.GeometryLib.utils.pixelsToGridUnits(Point3d.distanceBetween(a, b));
+    case CONST.GRID_TYPES.SQUARE: return GridCoordinates3d._singleOffsetDistanceFn(diagonals);
+    default: return HexGridCoordinates3d._singleOffsetDistanceFn(diagonals);
+  }
+}
+
+
