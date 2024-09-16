@@ -409,7 +409,7 @@ function gridRectangles(rect1, rect2) {
  * @param {number} [opts.isHole=false]        Treat this shape as a hole; reverse the points of the returned polygon
  * @returns {CutawayPolygon[]}
  */
-function cutaway(a, b, opts) { return CONFIG.GeometryLib.cutaway.CutawayPolygon.cutawayBasicShape(this, a, b, opts); }
+function cutaway(a, b, opts) { return CONFIG.GeometryLib.CutawayPolygon.cutawayBasicShape(this, a, b, opts); }
 
 /**
  * Rotate this rectangle around its center point.

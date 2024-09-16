@@ -378,7 +378,7 @@ export class Ellipse extends PIXI.Ellipse {
    * @param {number} [opts.isHole=false]        Treat this shape as a hole; reverse the points of the returned polygon
    * @returns {PIXI.Polygon[]}
    */
-  cutaway(a, b, opts) { return CONFIG.GeometryLib.cutaway.CutawayPolygon.cutawayBasicShape(this, a, b, opts); }
+  cutaway(a, b, opts) { return CONFIG.GeometryLib.CutawayPolygon.cutawayBasicShape(this, a, b, opts); }
 }
 
 GEOMETRY_CONFIG.Ellipse ??= Ellipse;

@@ -251,5 +251,4 @@ class CutawayPolygon extends PIXI.Polygon {
   }
 }
 
-GEOMETRY_CONFIG.cutaway ??= {}
-GEOMETRY_CONFIG.cutaway.CutawayPolygon = CutawayPolygon;
+GEOMETRY_CONFIG.CutawayPolygon = CutawayPolygon;

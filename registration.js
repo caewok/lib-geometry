@@ -74,6 +74,9 @@ import "./3d/GridCoordinates3d.js";
 import "./3d/RegionMovementWaypoint3d.js";
 import "./3d/HexGridCoordinates3d.js";
 
+// Cutaway
+import "./CutawayPolygon.js";
+
 const PATCHES = {
   "PIXI.Circle": PATCHES_Circle,
   "PIXI.Point": PATCHES_Point,

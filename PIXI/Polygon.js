@@ -834,7 +834,7 @@ function equals(other) {
  * @returns {CutawayPolygon[]}
  */
 function cutaway(a, b, opts = {}) {
-  return CONFIG.GeometryLib.cutaway.CutawayPolygon.cutawayBasicShape(this, a, b, { isHole: !this.isPositive, ...opts }); // Avoid setting the isHole parameter in opts; will get overriden if set in opts.
+  return CONFIG.GeometryLib.CutawayPolygon.cutawayBasicShape(this, a, b, { isHole: !this.isPositive, ...opts }); // Avoid setting the isHole parameter in opts; will get overriden if set in opts.
 }
 
 /**
