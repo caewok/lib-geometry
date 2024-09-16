@@ -477,7 +477,7 @@ PATCHES.PIXI.METHODS = {
 
   // Used by Elevation Ruler and Terrain Mapper
   cutaway,
-  rotateAroundCenter
+  rotateAroundCenter,
 
   // Helper methods
   scaledArea
