@@ -35,14 +35,29 @@ class CutawayPolygon extends PIXI.Polygon {
   }
 
   /**
-   * Create a new polygon from an existing
+   * Create a new polygon from an existing.
    * @param {PIXI.Polygon} cutawayPoly    Polygon, already converted points
    * @param {Point3d} start
    * @param {Point3d} end
-   * @returns {CutawayPolygon}
+   * @returns {CutawayPolygon} New polygon
    */
   static _fromCutawayPoly(cutawayPoly, start, end) {
     const poly = new this(cutawayPoly.points);
+    poly.start.copyFrom(start);
+    poly.end.copyFrom(end);
+    return poly;
+  }
+
+  /**
+   * Like _fromCutawayPoly but uses the same poly points array instead of copying it.
+   * @param {PIXI.Polygon} poly    Polygon, already converted points
+   * @param {Point3d} start
+   * @param {Point3d} end
+   * @returns {CutawayPolygon} Polygon with the poly's points array
+   */
+  static _convertFromPolygon(poly, start, end) {
+    const cutawayPoly = new this();
+    cutawayPoly.points = poly.points;
     poly.start.copyFrom(start);
     poly.end.copyFrom(end);
     return poly;
