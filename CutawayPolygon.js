@@ -239,7 +239,7 @@ class CutawayPolygon extends PIXI.Polygon {
    * Change the elevation dimension to match.
    * Set min elevation to one grid unit below the scene.
    */
-  static draw(poly, opts = {}) {
+  draw(opts = {}) {
     if ( !Object.hasOwn(opts, "sceneFloor") && game.modules.get("terrainnmapper")?.active ) {
       opts.sceneFloor = canvas.scene?.getFlag("terrainmapper", "backgroundElevation");
     }
@@ -252,9 +252,9 @@ class CutawayPolygon extends PIXI.Polygon {
     opts.fillAlpha ??= 0.3;
     const invertedPolyPoints = [];
     const floor = CONFIG.GeometryLib.utils.gridUnitsToPixels(opts.sceneFloor - canvas.dimensions.distance);
-    for ( let i = 0, n = poly.points.length; i < n; i += 2 ) {
-      const x = poly.points[i];
-      const y = poly.points[i+1];
+    const pts = this.pixiPoints({ close: false });
+    for ( let i = 0, n = pts.length; i < n; i += 1 ) {
+      const { x, y } = pts[i];
       const pt = { x, y: -Math.max(floor, y) };
 
       // Convert to smaller values for displaying.
