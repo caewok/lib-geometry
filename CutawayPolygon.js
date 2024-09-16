@@ -1,5 +1,4 @@
 /* globals
-canvas,
 CONFIG,
 PIXI
 */
@@ -258,7 +257,7 @@ class CutawayPolygon extends PIXI.Polygon {
     const LOWEST = CONFIG.GeometryLib.utils.gridUnitsToPixels(-100);
     pts.forEach(pt => {
       if ( pt.y > LOWEST ) minY = Math.min(minY, pt.y);
-    }
+    });
     minY -= 100;
 
     for ( let i = 0, n = pts.length; i < n; i += 1 ) {
