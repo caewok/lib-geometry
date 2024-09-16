@@ -189,6 +189,5 @@ PATCHES.PIXI.METHODS = {
   _envelopsRectangle,
   _envelopsPolygon,
 
-  cutaway,
-  cutawayIntersections
+  cutaway
 };
