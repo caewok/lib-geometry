@@ -254,9 +254,13 @@ class CutawayPolygon extends PIXI.Polygon {
     const pts = this.pixiPoints({ close: false });
 
     // Locate the minimum point that is above an arbitrarily low value so we don't draw excessively large polys.
-    let minY = 0;
+    let minY = Number.POSITIVE_INFINITY;
     const LOWEST = CONFIG.GeometryLib.utils.gridUnitsToPixels(-100);
-    pts.forEach(pt => minY = Math.max(LOWEST, CONFIG.GeometryLib.utils.pixelsMath.min(pt.y, minY)));
+    pts.forEach(pt => {
+      if ( pt.y > LOWEST ) minY = Math.min(minY, pt.y);
+    }
+    minY -= 100;
+
     for ( let i = 0, n = pts.length; i < n; i += 1 ) {
       const { x, y } = pts[i];
       const pt = { x, y: -Math.max(minY, y) }; // Arbitrary cutoff for low elevations.
