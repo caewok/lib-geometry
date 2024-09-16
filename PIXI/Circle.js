@@ -3,8 +3,6 @@ PIXI
 */
 "use strict";
 
-import { cutawayBasicShape, cutawayBasicIntersections } from "../util.js";
-
 export const PATCHES = {};
 PATCHES.PIXI = {};
 
@@ -169,12 +167,9 @@ function lineSegmentIntersects(a, b, { inside = false } = {}) {
  * @param {number} [opts.top=1e06]        Top (elevation in pixel units) of the polygon
  * @param {number} [opts.bottom=-1e06]    Bottom (elevation in pixel units) of the polygon
  * @param {number} [opts.isHole=false]    Treat this shape as a hole; reverse the points of the returned polygon
- * @returns {PIXI.Polygon[]}
+ * @returns {CutawayPolygon[]}
  */
-function cutaway(a, b, opts) { return cutawayBasicShape(this, a, b, opts); }
-
-function cutawayIntersections(a, b, opts) { return cutawayBasicIntersections(this, a, b, opts); }
-
+function cutaway(a, b, opts) { return CONFIG.GeometryLib.cutaway.CutawayPolygon.cutawayBasicShape(this, a, b, opts); }
 
 PATCHES.PIXI.GETTERS = { area };
 

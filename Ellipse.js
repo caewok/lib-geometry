@@ -4,7 +4,6 @@ WeilerAthertonClipper
 */
 "use strict";
 
-import { cutawayBasicShape, cutawayBasicIntersections } from "./util.js";
 import { GEOMETRY_CONFIG } from "./const.js";
 
 /* Testing
@@ -379,23 +378,7 @@ export class Ellipse extends PIXI.Ellipse {
    * @param {number} [opts.isHole=false]        Treat this shape as a hole; reverse the points of the returned polygon
    * @returns {PIXI.Polygon[]}
    */
-  cutaway(a, b, opts) { return cutawayBasicShape(this, a, b, opts); }
-
-  /**
-   * Return the cutaway intersections for this ellipse
-   * Similar to cutaway but returns the intersections instead of a new polygon.
-   * @param {Point3d} a       Starting endpoint for the segment
-   * @param {Point3d} b       Ending endpoint for the segment
-   * @param {object} [opts]
-   * @param {Point3d} [opts.start]              Starting endpoint for the segment
-   * @param {Point3d} [opts.end]                Ending endpoint for the segment
-   * @param {function} [opts.topElevationFn]    Function to calculate the top elevation for a position
-   * @param {function} [opts.bottomElevationFn] Function to calculate the bottom elevation for a position
-   * @param {function} [opts.cutPointsFn]       Function that returns the steps along the a|b segment top
-   * @param {number} [opts.isHole=false]        Treat this shape as a hole; reverse the points of the returned polygon
-   * @returns {PIXI.Point[]}
-   */
-  cutawayIntersections(a, b, opts) { return cutawayBasicIntersections(this, a, b, opts); }
+  cutaway(a, b, opts) { return CONFIG.GeometryLib.cutaway.CutawayPolygon.cutawayBasicShape(this, a, b, opts); }
 }
 
 GEOMETRY_CONFIG.Ellipse ??= Ellipse;

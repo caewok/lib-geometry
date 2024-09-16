@@ -4,7 +4,6 @@ PIXI
 "use strict";
 
 import "../Matrix.js";
-import { cutawayBasicShape, cutawayBasicIntersections } from "../util.js";
 
 export const PATCHES = {};
 PATCHES.PIXI = {};
@@ -407,13 +406,10 @@ function gridRectangles(rect1, rect2) {
  * @param {Point3d} [opts.end]                Ending endpoint for the segment
  * @param {function} [opts.topElevationFn]    Function to calculate the top elevation for a position
  * @param {function} [opts.bottomElevationFn] Function to calculate the bottom elevation for a position
- * @param {function} [opts.cutPointsFn]       Function that returns the steps along the a|b segment top
  * @param {number} [opts.isHole=false]        Treat this shape as a hole; reverse the points of the returned polygon
- * @returns {PIXI.Polygon[]}
+ * @returns {CutawayPolygon[]}
  */
-function cutaway(a, b, opts) { return cutawayBasicShape(this, a, b, opts); }
-
-function cutawayIntersections(a, b, opts) { return cutawayBasicIntersections(this, a, b, opts); }
+function cutaway(a, b, opts) { return CONFIG.GeometryLib.cutaway.CutawayPolygon.cutawayBasicShape(this, a, b, opts); }
 
 /**
  * Rotate this rectangle around its center point.
