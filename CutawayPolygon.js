@@ -214,7 +214,7 @@ class CutawayPolygon extends PIXI.Polygon {
     const BR = { x: b2d.x, y: bottomB };
 
     // _isPositive is y-down clockwise. For Foundry canvas, this is CCW.
-    return isHole ? this.fromPoints([TL, TR, BR, BL], start, end) : this.fromPoints([TL, BL, BR, TR], start, end);
+    return isHole ? this.fromCutawayPoints([TL, TR, BR, BL], start, end) : this.fromCutawayPoints([TL, BL, BR, TR], start, end);
   }
 
   /**
