@@ -71,8 +71,9 @@ class CutawayPolygon extends PIXI.Polygon {
    */
   insertTopSteps(stepsFn) {
     const isHole = !this.isPositive;
-    const TL = this.pixiPoints[0];
-    const TR = isHole ? this.pixiPoints[1] : this.pixiPoints[3];
+    const pts = this.pixiPoints();
+    const TL = pts[0];
+    const TR = isHole ? pts[1] : pts[3];
     const TL3d = this._from2d(TL);
     const TR3d = this._from2d(TR);
     const steps = stepsFn(TL3d, TR3d);
