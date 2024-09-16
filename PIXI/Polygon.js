@@ -846,8 +846,10 @@ function cutaway(a, b, opts = {}) {
  */
 function pixiPoints({ close = true } = {}) {
   if ( !this._pixiPoints ) {
-    if ( !(this.points instanceof Proxy) ) {
+    if ( !this._pixiPointsProxy ) {
       // See https://stackoverflow.com/questions/5100376/how-to-watch-for-array-changes
+      // We cannot access the constructor, so do it the hard way.
+      this._pixiPointsProxy = true;
       this.points = new Proxy(this.points, {
         deleteProperty: function(target, property) {
           delete target[property];
@@ -878,8 +880,10 @@ function pixiPoints({ close = true } = {}) {
  */
 function pixiEdges({ close = true } = {}) {
   if ( !this._pixiEdges ) {
-    if ( !(this.points instanceof Proxy) ) {
+    if ( !this._pixiPointsProxy ) {
       // See https://stackoverflow.com/questions/5100376/how-to-watch-for-array-changes
+      // We cannot access the constructor, so do it the hard way.
+      this._pixiPointsProxy = true;
       this.points = new Proxy(this.points, {
         deleteProperty: function(target, property) {
           delete target[property];
