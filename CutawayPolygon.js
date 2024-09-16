@@ -21,10 +21,10 @@ class CutawayPolygon extends PIXI.Polygon {
   end = new GEOMETRY_CONFIG.threeD.Point3d();
 
   /** @type {number} */
-  get top() { return this.bounds.bottom; } // Y values are reversed.
+  get top() { return this.getBounds().bottom; } // Y values are reversed.
 
   /** @type {number} */
-  get bottom() { return this.bounds.top; } // Y values are reversed.
+  get bottom() { return this.getBounds().top; } // Y values are reversed.
 
   /**
    * Create a new polygon from a series of cutaway points.
