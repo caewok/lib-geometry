@@ -850,17 +850,18 @@ function pixiPoints({ close = true } = {}) {
       // See https://stackoverflow.com/questions/5100376/how-to-watch-for-array-changes
       // We cannot access the constructor, so do it the hard way.
       this._pixiPointsProxy = true;
+      const selfPoly = this;
       this.points = new Proxy(this.points, {
-        deleteProperty: function(target, property) {
+        deleteProperty: (target, property) => {
           delete target[property];
-          this._pixiPoints = undefined;
-          this._pixiEdges = undefined;
+          selfPoly._pixiPoints = undefined;
+          selfPoly._pixiEdges = undefined;
           return true;
         },
-        set: function(target, property, value, receiver) {
+        set: (target, property, value, receiver) => {
           target[property] = value;
-          this._pixiPoints = undefined;
-          this._pixiEdges = undefined;
+          selfPoly._pixiPoints = undefined;
+          selfPoly._pixiEdges = undefined;
           return true;
         }
       });
@@ -884,17 +885,18 @@ function pixiEdges({ close = true } = {}) {
       // See https://stackoverflow.com/questions/5100376/how-to-watch-for-array-changes
       // We cannot access the constructor, so do it the hard way.
       this._pixiPointsProxy = true;
+      const selfPoly = this;
       this.points = new Proxy(this.points, {
-        deleteProperty: function(target, property) {
+        deleteProperty: (target, property) => {
           delete target[property];
-          this._pixiPoints = undefined;
-          this._pixiEdges = undefined;
+          selfPoly._pixiPoints = undefined;
+          selfPoly._pixiEdges = undefined;
           return true;
         },
-        set: function(target, property, value, receiver) {
+        set: (target, property, value, receiver) => {
           target[property] = value;
-          this._pixiPoints = undefined;
-          this._pixiEdges = undefined;
+          selfPoly._pixiPoints = undefined;
+          selfPoly._pixiEdges = undefined;
           return true;
         }
       });
