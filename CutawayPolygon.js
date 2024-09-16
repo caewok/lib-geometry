@@ -1,7 +1,6 @@
 /* globals
 canvas,
 CONFIG,
-game,
 PIXI
 */
 "use strict";
@@ -246,22 +245,21 @@ class CutawayPolygon extends PIXI.Polygon {
    * Set min elevation to one grid unit below the scene.
    */
   draw(opts = {}) {
-    if ( !Object.hasOwn(opts, "sceneFloor") && game.modules.get("terrainnmapper")?.active ) {
-      opts.sceneFloor = canvas.scene?.getFlag("terrainmapper", "backgroundElevation");
-    }
-    opts.sceneFloor ||= 0;
-
     const Draw = CONFIG.GeometryLib.Draw;
     const { convertToDistance, convertToElevation } = CONFIG.GeometryLib.utils.cutaway;
     opts.color ??= Draw.COLORS.red;
     opts.fill ??= Draw.COLORS.red;
     opts.fillAlpha ??= 0.3;
     const invertedPolyPoints = [];
-    const floor = CONFIG.GeometryLib.utils.gridUnitsToPixels(opts.sceneFloor - canvas.dimensions.distance);
     const pts = this.pixiPoints({ close: false });
+
+    // Locate the minimum point that is above an arbitrarily low value so we don't draw excessively large polys.
+    let minY = 0;
+    const LOWEST = CONFIG.GeometryLib.utils.gridUnitsToPixels(-100);
+    pts.forEach(pt => minY = Math.max(LOWEST, CONFIG.GeometryLib.utils.pixelsMath.min(pt.y, minY)));
     for ( let i = 0, n = pts.length; i < n; i += 1 ) {
       const { x, y } = pts[i];
-      const pt = { x, y: -Math.max(floor - 100, y) }; // Arbitrary cutoff near scene floor
+      const pt = { x, y: -Math.max(minY, y) }; // Arbitrary cutoff for low elevations.
 
       // Convert to smaller values for displaying.
       convertToDistance(pt);
