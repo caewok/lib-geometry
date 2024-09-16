@@ -943,7 +943,7 @@ PATCHES.PIXI.METHODS = {
   _envelopsPolygon,
 
   // 2d cutaway
-  cutaway
+  cutaway,
 
   // Helper/internal methods
   scaledArea
