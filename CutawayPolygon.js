@@ -42,10 +42,10 @@ class CutawayPolygon extends PIXI.Polygon {
    * @returns {CutawayPolygon} New polygon
    */
   static _fromCutawayPoly(cutawayPoly, start, end) {
-    const poly = new this(cutawayPoly.points);
-    poly.start.copyFrom(start);
-    poly.end.copyFrom(end);
-    return poly;
+    const cutawayPoly = new this(poly.points);
+    cutawayPoly.start.copyFrom(start);
+    cutawayPoly.end.copyFrom(end);
+    return cutawayPoly;
   }
 
   /**
@@ -58,9 +58,9 @@ class CutawayPolygon extends PIXI.Polygon {
   static _convertFromPolygon(poly, start, end) {
     const cutawayPoly = new this();
     cutawayPoly.points = poly.points;
-    poly.start.copyFrom(start);
-    poly.end.copyFrom(end);
-    return poly;
+    cutawayPoly.start.copyFrom(start);
+    cutawayPoly.end.copyFrom(end);
+    return cutawayPoly;
   }
 
   /**
