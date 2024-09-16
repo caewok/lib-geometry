@@ -901,7 +901,7 @@ function pixiEdges({ close = true } = {}) {
         }
       });
     }
-    this._edges = [...this.iterateEdges({ close: true })];
+    this._pixiEdges = [...this.iterateEdges({ close: true })];
   }
   return close ? this._pixiEdges : this._pixiEdges.slice(0, -1);
 }
