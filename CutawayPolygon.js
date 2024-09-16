@@ -261,7 +261,7 @@ class CutawayPolygon extends PIXI.Polygon {
     const pts = this.pixiPoints({ close: false });
     for ( let i = 0, n = pts.length; i < n; i += 1 ) {
       const { x, y } = pts[i];
-      const pt = { x, y: -Math.max(floor, y) };
+      const pt = { x, y: -Math.max(floor - 100, y) }; // Arbitrary cutoff near scene floor
 
       // Convert to smaller values for displaying.
       convertToDistance(pt);
