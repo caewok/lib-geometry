@@ -6,7 +6,7 @@ PIXI
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "../const.js";
+import { GEOMETRY_CONFIG } from "./const.js";
 
 /**
  * A cutaway polygon is a 2d representation of a vertical slice of a shape.
