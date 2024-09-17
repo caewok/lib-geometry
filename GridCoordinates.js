@@ -1,15 +1,19 @@
 /* globals
 canvas,
-CONST,
+CONFIG,
 PIXI
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { isOdd } from "./util.js";
-import { GRID_DIAGONALS, gridDistanceBetween, alternatingGridDistance } from "./grid_distance.js";
 import "./3d/GridCoordinates3d.js";
 import { GEOMETRY_CONFIG } from "./const.js";
+import {
+  GRID_DIAGONALS,
+  gridDistanceBetween,
+  alternatingGridDistance,
+  getOffsetDistanceFn } from "./grid_distance.js";
+
 
 // ----- NOTE: Foundry typedefs  ----- //
 
@@ -94,6 +98,9 @@ export class GridCoordinates extends PIXI.Point {
     return this.constructor.fromObject(canvas.grid.getCenterPoint({ x: this.x, y: this.y }));
   }
 
+  /**
+   * @returns {PIXI.Point}
+   */
   toPoint() { return PIXI.Point.fromObject(this); }
 
   /**
@@ -183,35 +190,39 @@ export class GridCoordinates extends PIXI.Point {
   static alternatingGridDistanceFn = alternatingGridDistance;
 
   /**
+   * Constructs a direct path grid, accounting for elevation and diagonal elevation.
+   * @param {Point} start
+   * @param {Point} end
+   * @returns {GridCoordinates[]}
+   */
+  static directPath(start, end) {
+    const path2d = canvas.grid.getDirectPath([start, end]);
+    return path2d.map(pt => this.fromObject(pt));
+  }
+
+  /**
    * Measure distance, offset, and cost for a given 2d segment a|b.
    * Uses `gridDistanceBetween`.
    * @param {Point} a                   Start of the segment
    * @param {Point} b                   End of the segment
    * @param {object} [opts]
    * @param {number} [opts.numPrevDiagonal=0]  Number of diagonals thus far
-   * @param {function} [opts.costFn]           Optional cost function; defaults to canvas.controls.ruler._getCostFunction
    * @param {GRID_DIAGONALS} [opts.diagonals]  Diagonal rule to use
    * @returns {object}
    *   - @prop {number} distance          gridDistanceBetween for a|b
    *   - @prop {number} offsetDistance    gridDistanceBetweenOffsets for a|b
-   *   - @prop {number} cost              Measured cost using the cost function
    *   - @prop {number} numDiagonal       Number of diagonals between the offsets if square or hex elevation
    */
-  static gridMeasurementForSegment(a, b, { numPrevDiagonal = 0, costFn, diagonals } = {}) {
-    costFn ??= canvas.controls.ruler._getCostFunction();
-    const lPrevStart = diagonals === CONST.GRID_DIAGONALS.ALTERNATING_2 ? 1 : 0;
-    const lPrev = isOdd(numPrevDiagonal) ? lPrevStart : Number(!lPrevStart);
-    const aOffset = this.fromObject(a);
-    const bOffset = this.fromObject(b);
-
-    const altGridDistFn1 = this.alternatingGridDistanceFn({ lPrev });
-    const altGridDistFn2 = this.alternatingGridDistanceFn({ lPrev });
-    const distance = this.gridDistanceBetween(a, b, { altGridDistFn: altGridDistFn1, diagonals });
-    const offsetDistance = this.gridDistanceBetweenOffsets(a, b, { altGridDistFn: altGridDistFn2, diagonals });
-    const cost = costFn ? costFn(a, b, offsetDistance) : offsetDistance;
-    const numDiagonal = this.numDiagonal(aOffset, bOffset);
-    return { distance, offsetDistance, cost, numDiagonal };
+  static gridMeasurementForSegment(a, b, opts) {
+    return CONFIG.GeometryLib.threeD.gridMeasurementForSegment(a, b, opts);
   }
+
+  /**
+   * Get the function to measure the offset distance for a given distance with given previous diagonals.
+   * @param {number} [diagonals=0]
+   * @returns {function}
+   */
+  static getOffsetDistanceFn = getOffsetDistanceFn;
 
   // Temporary instances for performance.
   static _tmp = new this();

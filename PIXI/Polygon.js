@@ -6,8 +6,6 @@ CONFIG
 */
 "use strict";
 
-import { cutawayBasicShape, cutawayBasicIntersections } from "../util.js";
-
 export const PATCHES = {};
 PATCHES.PIXI = {};
 
@@ -197,7 +195,7 @@ function* iterateEdges({close = true} = {}) {
  * @param {boolean} [options.close]   If close, include the first point again.
  * @returns {x, y} PIXI.Point
  */
-function* iteratePoints({close = true} = {}) {
+function* iteratePoints({ close = true } = {}) {
   const ln = this.points.length;
   if ( ln < 2 ) return;
 
@@ -234,11 +232,9 @@ function linesCross(lines) {
  *                                        return true.
  * @returns {boolean} True if intersects.
  */
-function lineSegmentIntersects(a, b, { edges, inside = false } = {}) {
+function lineSegmentIntersects(a, b, { inside = false } = {}) {
   if (this.contains(a.x, a.y) && this.contains(b.x, b.y) ) return inside;
-
-  edges ??= this.iterateEdges({ close: true });
-  for ( const edge of edges ) {
+  for ( const edge of this.pixiEdges()  ) {
     if ( foundry.utils.lineSegmentIntersects(a, b, edge.A, edge.B) ) return true;
   }
 
@@ -256,8 +252,8 @@ function lineSegmentIntersects(a, b, { edges, inside = false } = {}) {
  * @returns {Point[]} Array of intersections or empty.
  *   If intersections returned, the t of each intersection is the distance along the a|b segment.
  */
-function segmentIntersections(a, b, { edges, indices = false } = {}) {
-  edges ??= [...this.iterateEdges({ close: true })];
+function segmentIntersections(a, b, { indices = false } = {}) {
+  const edges = this.pixiEdges();
   const ixIndices = [];
   edges.forEach((e, i) => {
     if ( foundry.utils.lineSegmentIntersects(a, b, e.A, e.B) ) ixIndices.push(i);
@@ -279,9 +275,9 @@ function segmentIntersections(a, b, { edges, indices = false } = {}) {
  * @param {object[]} [options.edges]  Array of edges for this polygon, from this.iterateEdges.
  * @return { Point[]}
  */
-function pointsBetween(a, b, { edges } = {}) {
-  edges ??= [...this.iterateEdges({ close: true })];
-  const ixIndices = this.segmentIntersections(a, b, { edges, indices: true });
+function pointsBetween(a, b) {
+  const edges = this.pixiEdges();
+  const ixIndices = this.segmentIntersections(a, b, { indices: true });
 
   // A is the closest ix
   // B is the further ix
@@ -835,15 +831,79 @@ function equals(other) {
  * @param {Point3d} [opts.end]                Ending endpoint for the segment
  * @param {number} [opts.top=1e06]        Top (elevation in pixel units) of the polygon
  * @param {number} [opts.bottom=-1e06]    Bottom (elevation in pixel units) of the polygon
- * @returns {PIXI.Polygon[]}
+ * @returns {CutawayPolygon[]}
  */
 function cutaway(a, b, opts = {}) {
-  return cutawayBasicShape(this, a, b, { isHole: !this.isPositive, ...opts }); // Avoid setting the isHole parameter in opts; will get overriden if set in opts.
+  return CONFIG.GeometryLib.CutawayPolygon.cutawayBasicShape(this, a, b, { isHole: !this.isPositive, ...opts }); // Avoid setting the isHole parameter in opts; will get overriden if set in opts.
 }
 
-function cutawayIntersections(a, b, opts = {}) {
-  opts.isHole ??= !this.isPositive;
-  return cutawayBasicIntersections(this, a, b, { isHole: !this.isPositive, ...opts }); // Avoid setting the isHole parameter in opts; will get overriden if set in opts.
+/**
+ * Get the points of this polygon.
+ * Use a proxy to monitor changes to the points array.
+ * Note this does not include the first point.
+ * @param {boolean} [options.close]   If close, include the first point again.
+ * @returns {PIXI.Point[]}
+ */
+function pixiPoints({ close = true } = {}) {
+  if ( !this._pixiPoints ) {
+    if ( !this._pixiPointsProxy ) {
+      // See https://stackoverflow.com/questions/5100376/how-to-watch-for-array-changes
+      // We cannot access the constructor, so do it the hard way.
+      this._pixiPointsProxy = true;
+      const selfPoly = this;
+      this.points = new Proxy(this.points, {
+        deleteProperty: (target, property) => {
+          delete target[property];
+          selfPoly._pixiPoints = undefined;
+          selfPoly._pixiEdges = undefined;
+          return true;
+        },
+        set: (target, property, value, receiver) => {
+          target[property] = value;
+          selfPoly._pixiPoints = undefined;
+          selfPoly._pixiEdges = undefined;
+          return true;
+        }
+      });
+    }
+    this._pixiPoints = [...this.iteratePoints({ close: true })];
+  }
+  return close ? this._pixiPoints : this._pixiPoints.slice(0, -1);
+}
+
+/**
+ * Get the edges of this polygon.
+ * Use a proxy to monitor changes to the points array.
+ * Includes the closing edge.
+ * @returns {object[{A, B}]}
+ *   - @prop {PIXI.Point} A
+ *   - @prop {PIXI.Point} B
+ */
+function pixiEdges({ close = true } = {}) {
+  if ( !this._pixiEdges ) {
+    if ( !this._pixiPointsProxy ) {
+      // See https://stackoverflow.com/questions/5100376/how-to-watch-for-array-changes
+      // We cannot access the constructor, so do it the hard way.
+      this._pixiPointsProxy = true;
+      const selfPoly = this;
+      this.points = new Proxy(this.points, {
+        deleteProperty: (target, property) => {
+          delete target[property];
+          selfPoly._pixiPoints = undefined;
+          selfPoly._pixiEdges = undefined;
+          return true;
+        },
+        set: (target, property, value, receiver) => {
+          target[property] = value;
+          selfPoly._pixiPoints = undefined;
+          selfPoly._pixiEdges = undefined;
+          return true;
+        }
+      });
+    }
+    this._pixiEdges = [...this.iterateEdges({ close: true })];
+  }
+  return close ? this._pixiEdges : this._pixiEdges.slice(0, -1);
 }
 
 
@@ -858,6 +918,10 @@ PATCHES.PIXI.METHODS = {
   // Iterators
   iterateEdges,
   iteratePoints,
+
+  // Cached
+  pixiPoints,
+  pixiEdges,
 
   // Other methods
   toPolygon: function() { return this; },
@@ -886,7 +950,6 @@ PATCHES.PIXI.METHODS = {
 
   // 2d cutaway
   cutaway,
-  cutawayIntersections,
 
   // Helper/internal methods
   scaledArea

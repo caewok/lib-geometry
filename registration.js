@@ -4,7 +4,7 @@ foundry
 */
 "use strict";
 
-const VERSION = "0.3.13";
+const VERSION = "0.3.14";
 
 // Foundry utils
 import { GEOMETRY_CONFIG } from "./const.js";
@@ -73,6 +73,9 @@ import "./GridCoordinates.js";
 import "./3d/GridCoordinates3d.js";
 import "./3d/RegionMovementWaypoint3d.js";
 import "./3d/HexGridCoordinates3d.js";
+
+// Cutaway
+import "./CutawayPolygon.js";
 
 const PATCHES = {
   "PIXI.Circle": PATCHES_Circle,
