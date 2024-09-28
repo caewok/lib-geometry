@@ -35,6 +35,11 @@ export const MODULE_KEYS = {
     ID: "levelsautocover",
     DUCKING: "ducking",
     ACTIVE: false
+  },
+
+  TERRAIN_MAPPER: {
+    ID: "terrainmapper",
+    ACTIVE: false,
   }
 };
 
@@ -52,8 +57,5 @@ MODULE_KEYS.WH.FLAG_WALL_BOTTOM = `flags.${MOD.ID}.${MOD.WALL.BOTTOM}`;
 
 // Hook init b/c game.modules is not initialized at start.
 Hooks.once("init", function() {
-  MODULE_KEYS.LEVELS.ACTIVE = game.modules.get(MODULE_KEYS.LEVELS.ID)?.active;
-  MODULE_KEYS.EV.ACTIVE = game.modules.get(MODULE_KEYS.EV.ID)?.active;
-  MODULE_KEYS.WH.ACTIVE = game.modules.get(MODULE_KEYS.WH.ID)?.active;
-  MODULE_KEYS.LEVELSAUTOCOVER.ACTIVE = game.modules.get(MODULE_KEYS.LEVELSAUTOCOVER.ID)?.active;
+  for ( const obj of Object.values(OTHER_MODULES) ) obj.ACTIVE = game.modules.get(obj.ID)?.active
 });

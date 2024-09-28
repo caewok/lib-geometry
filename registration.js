@@ -126,6 +126,7 @@ export function registerGeometryLibPatches() {
   CONFIG.GeometryLib.PATCHER.addPatchesFromRegistrationObject(PATCHES);
   CONFIG.GeometryLib.PATCHER.registerGroup("PIXI");
   CONFIG.GeometryLib.PATCHER.registerGroup("CONSTRAINED_TOKEN_BORDER");
+  CONFIG.GeometryLib.PATCHER.registerGroup("CANVAS_EDGES");
   CONFIG.GeometryLib.PATCHER.registerGroup("PIXEL_CACHE");
   CONFIG.GeometryLib.PATCHER.registerGroup("ELEVATION");
 }
@@ -135,4 +136,6 @@ function deRegister() {
   CONFIG.GeometryLib.PATCHER.deregisterGroup("ELEVATION");
   CONFIG.GeometryLib.PATCHER.deregisterGroup("PIXI");
   CONFIG.GeometryLib.PATCHER.deregisterGroup("PIXEL_CACHE");
+  CONFIG.GeometryLib.PATCHER.deregisterGroup("CANVAS_EDGES");
+  CONFIG.GeometryLib.PATCHER.deregisterGroup("CONSTRAINED_TOKEN_BORDER");
 }
