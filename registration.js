@@ -60,9 +60,11 @@ import { PATCHES as PATCHES_Rectangle } from "./PIXI/Rectangle.js";
 // Elevation
 import { PATCHES as PATCHES_ELEVATION } from "./elevation.js";
 
-// Constrained Token Border
+// Constrained Token Border and Edges
 import { PATCHES as PATCHES_Token } from "./Token.js";
 import { PATCHES as PATCHES_CanvasEdges } from "./CanvasEdges.js";
+import { PATCHES as PATCHES_ConstrainedTokenBorder } from "./ConstrainedTokenBorder.js";
+import { PATCHES as PATCHES_Edge } from "./Edge.js";
 
 // PixelCache
 import "./PixelCache.js";
@@ -94,7 +96,9 @@ const PATCHES = {
 
   // Elevation and Constrained Token patches
   "Token": foundry.utils.mergeObject(PATCHES_ELEVATION.Token, PATCHES_Token),
-  "foundry.canvas.edges.CanvasEdges": PATCHES_CanvasEdges
+  "foundry.canvas.edges.CanvasEdges": PATCHES_CanvasEdges,
+  "foundry.canvas.edges.Edge": PATCHES_Edge,
+  "ConstrainedTokenBorder": PATCHES_ConstrainedTokenBorder
 }
 
 export function registerGeometry() {

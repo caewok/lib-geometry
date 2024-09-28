@@ -6,6 +6,15 @@ PIXI
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
+export const PATCHES = {};
+PATCHES.CONSTRAINED_TOKEN_BORDER = {};
+
+// ----- NOTE: Hooks ----- //
+
+function canvasInit() { ConstrainedTokenBorder._wallsID++; }
+
+PATCHES.CONSTRAINED_TOKEN_BORDER.HOOKS = { canvasInit };
+
 /**
  * Generate a polygon of the token bounds with portions intersected by walls stripped out.
  * Use line-of-sight from the center point to determine the resulting token shape.
