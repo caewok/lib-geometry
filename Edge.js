@@ -64,13 +64,13 @@ function _wallElevation(wall) {
  * @returns {EdgeElevation}
  */
 function _regionElevation(region, edge) {
-  const TM = MODULE_KEYS.TERRAINMAPPER;
-  let top = region.elevation.top;
+  const TM = MODULE_KEYS.TERRAIN_MAPPER;
+  let top = region.document.elevation.top;
   if ( TM.ACTIVE && region[TM.ID].isElevated ) {
     if ( region[TM.ID].isRamp ) return _rampElevation(region, edge);
     top = region[TM.ID].plateauElevation;
   }
-  const bottom = region.elevation.bottom;
+  const bottom = region.document.elevation.bottom;
   return {
     a: { top, bottom },
     b: { top, bottom }
@@ -85,8 +85,8 @@ function _regionElevation(region, edge) {
  */
 function _rampElevation(region, edge) {
   // Assumes TM is active.
-  const TM = MODULE_KEYS.TERRAINMAPPER;
-  const bottom = region.elevation.bottom;
+  const TM = MODULE_KEYS.TERRAIN_MAPPER;
+  const bottom = region.document.elevation.bottom;
   return {
     a: { top: region[TM.ID].elevationUponEntry(edge.a), bottom },
     b: { top: region[TM.ID].elevationUponEntry(edge.b), bottom }
