@@ -12,6 +12,7 @@ import { MODULE_KEYS } from "./const.js";
 // Patches for the CanvasEdges class.
 export const PATCHES = {};
 PATCHES.CONSTRAINED_TOKEN_BORDER = {};
+PATCHES.CANVAS_EDGES = {};
 
 // ----- NOTE: Hooks ----- //
 
