@@ -1,7 +1,8 @@
 /* globals
 PIXI,
 ClipperLib,
-canvas
+canvas,
+CONFIG
 */
 "use strict";
 
@@ -248,6 +249,8 @@ export class ClipperPaths {
     return solution;
   }
 
+
+
   /**
    * Intersect this set of paths with a polygon as subject.
    * @param {PIXI.Polygon}
@@ -393,6 +396,30 @@ export class ClipperPaths {
     const cPaths = this.joinPaths(pathsArr);
     if ( !cPaths ) return undefined;
     return cPaths.combine();
+  }
+
+  /**
+   * Execute a Clipper.clipType combination.
+   * @param {ClipperPaths} subject          Subject for the clip
+   * @param {ClipperPaths} clip             What to clip
+   * @param {ClipperLib.ClipType} clipType  ctIntersection: 0, ctUnion: 1, ctDifference: 2, ctXor: 3
+   * @param {object} [options]              Options passed to ClipperLib.Clipper().Execute
+   * @param {number} [subjFillType]         Fill type for the subject. Defaults to pftEvenOdd.
+   * @param {number} [clipFillType]         Fill type for the clip. Defaults to pftEvenOdd.
+   * @returns {ClipperPaths} New ClipperPaths object
+   */
+  static clip(subject, clip, {
+    clipType = ClipperLib.ClipType.ctUnion,
+    subjFillType = ClipperLib.PolyFillType.pftEvenOdd,
+    clipFillType = ClipperLib.PolyFillType.pftEvenOdd } = {}) {
+
+    const c = new ClipperLib.Clipper();
+    const solution = new this();
+    solution.scalingFactor = subject.scalingFactor;
+    c.AddPaths(subject.paths, ClipperLib.PolyType.ptSubject, true);
+    c.AddPaths(clip.paths, ClipperLib.PolyType.ptClip, true);
+    c.Execute(clipType, solution.paths, subjFillType, clipFillType);
+    return solution;
   }
 
   /**
