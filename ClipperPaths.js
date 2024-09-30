@@ -402,6 +402,10 @@ export class ClipperPaths {
     if ( !fill ) fill = color;
     const polys = this.toPolygons();
 
+    // Sort so holes are last.
+    polys.sort((a, b) => a.isHole - b.isHole);
+    if ( !polys.length || polys[0].isHole ) return; // All the polys are holes.
+
     canvas.controls.debug.beginFill(fill, fillAlpha);
     for ( const poly of polys ) {
       if ( poly.isHole ) canvas.controls.debug.beginHole();
