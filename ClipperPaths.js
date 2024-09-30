@@ -425,7 +425,7 @@ export class ClipperPaths {
   /**
    * Draw the clipper paths, to the extent possible
    */
-  draw({ color = CONFIG.GeometryLib.Draw.COLORS.black, width = 1, fill, fillAlpha = 1 } = {}) {
+  draw({ graphics = canvas.controls.debug, color = CONFIG.GeometryLib.Draw.COLORS.black, width = 1, fill, fillAlpha = 1 } = {}) {
     if ( !fill ) fill = color;
     const polys = this.toPolygons();
 
@@ -433,13 +433,13 @@ export class ClipperPaths {
     polys.sort((a, b) => a.isHole - b.isHole);
     if ( !polys.length || polys[0].isHole ) return; // All the polys are holes.
 
-    canvas.controls.debug.beginFill(fill, fillAlpha);
+    graphics.beginFill(fill, fillAlpha);
     for ( const poly of polys ) {
-      if ( poly.isHole ) canvas.controls.debug.beginHole();
-      canvas.controls.debug.lineStyle(width, color).drawShape(poly);
-      if ( poly.isHole ) canvas.controls.debug.endHole();
+      if ( poly.isHole ) graphics.beginHole();
+      graphics.lineStyle(width, color).drawShape(poly);
+      if ( poly.isHole ) graphics.endHole();
     }
-    canvas.controls.debug.endFill();
+    graphics.endFill();
   }
 }
 
