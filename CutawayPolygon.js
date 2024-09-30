@@ -118,7 +118,7 @@ class CutawayPolygon extends PIXI.Polygon {
     // Shoelace in case the polygon is not simple. Right now, only b/c of steps.
     let isInside = this.contains(a2d.x, a2d.y);
     for ( const ix of ixs ) {
-      ix.movingIn = !isInside;
+      ix.movingInto = !isInside;
       isInside = !isInside;
     }
     return ixs;
