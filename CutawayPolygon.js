@@ -114,14 +114,25 @@ class CutawayPolygon extends PIXI.Polygon {
     const a2d = this._to2d(a);
     const b2d = this._to2d(b);
     const ixs = this.segmentIntersections(a2d, b2d).map(ix => PIXI.Point.fromObject(ix));
+    if ( !ixs.length ) return ixs;
 
     // Shoelace in case the polygon is not simple. Right now, only b/c of steps.
-    let isInside = this.contains(a2d.x, a2d.y);
+    let isOutside = !this.contains(a2d.x, a2d.y);
     for ( const ix of ixs ) {
-      ix.movingInto = !isInside;
-      isInside = !isInside;
+      ix.movingInto = isOutside;
+      isOutside = !isOutside;
     }
     return ixs;
+  }
+
+  /**
+   * Does this cutaway contain the 3d point when converted to 2d?
+   * @param {Point3d} a       Point to test
+   * @returns {boolean}
+   */
+  contains3d(a) {
+    const a2d = this._to2d(a);
+    return this.contains(a2d.x, a2d.y);
   }
 
   /**
