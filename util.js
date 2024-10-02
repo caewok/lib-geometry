@@ -158,7 +158,8 @@ function from2dCutaway(cutawayPt, start, end, outPoint) {
  * @returns {PIXI.Point} The same point, modified in place.
  */
 function convertToDistanceCutaway(cutawayPt) {
-  cutawayPt.x = Math.sqrt(cutawayPt.x);
+  const sign = Math.sign(cutawayPt);
+  cutawayPt.x =  sign * Math.sqrt(Math.abs(cutawayPt.x));
   return cutawayPt;
 }
 
@@ -178,7 +179,8 @@ function convertToElevationCutaway(cutawayPt) {
  * @returns {PIXI.Point} The same point, modified in place.
  */
 function convertFromDistanceCutaway(cutawayPt) {
-  cutawayPt.x = Math.pow(cutawayPt.x, 2);
+  const sign = Math.sign(cutawayPt);
+  cutawayPt.x = sign * Math.pow(cutawayPt.x, 2);
   return cutawayPt;
 }
 
