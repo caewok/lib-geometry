@@ -129,10 +129,27 @@ export function elevationForUnit(k) { return roundNearWhole(k * canvas.scene.dim
  */
 function to2dCutaway(currPt, start, end, outPoint) {
   outPoint ??= new PIXI.Point();
-  const pt = outPoint.set(PIXI.Point.distanceSquaredBetween(start, currPt), currPt.z);
-  if ( end && PIXI.Point.distanceSquaredBetween(currPt, end) > PIXI.Point.distanceSquaredBetween(start, end) ) pt.x *= -1;
+  const distCS = PIXI.Point.distanceSquaredBetween(currPt, start);
+
+  const pt = outPoint.set(distCS, currPt.z);
+  if ( end ) {
+    const distCE = PIXI.Point.distanceSquaredBetween(currPt, end);
+    const distSE = PIXI.Point.distanceSquaredBetween(start, end);
+    if ( distCS < distCE && distCE > distSE ) pt.x *= -1;
+  }
   return pt;
 }
+
+/* Identifying locations on the 1d line.
+currPt ---> start ---> end
+dist(currPt, start) < dist(currPt, end) && dist(currPt, end) > dist(start, end)
+
+start ---> currPt ---> end
+dist(start, end) > dist(start, currPt) && dist(start, end) > dist(end, currPt)
+
+start ---> end ---> currPt
+dist(end, currPt) < dist(start, currPt) && dist(currPt, start) > dist(start, end)
+*/
 
 /**
  * Convert a cutaway point to its respective position on the line start|end.
@@ -158,7 +175,8 @@ function from2dCutaway(cutawayPt, start, end, outPoint) {
  * @returns {PIXI.Point} The same point, modified in place.
  */
 function convertToDistanceCutaway(cutawayPt) {
-  cutawayPt.x = Math.sqrt(cutawayPt.x);
+  const sign = Math.sign(cutawayPt.x);
+  cutawayPt.x =  sign * Math.sqrt(Math.abs(cutawayPt.x));
   return cutawayPt;
 }
 
@@ -178,7 +196,8 @@ function convertToElevationCutaway(cutawayPt) {
  * @returns {PIXI.Point} The same point, modified in place.
  */
 function convertFromDistanceCutaway(cutawayPt) {
-  cutawayPt.x = Math.pow(cutawayPt.x, 2);
+  const sign = Math.sign(cutawayPt.x);
+  cutawayPt.x = sign * Math.pow(cutawayPt.x, 2);
   return cutawayPt;
 }
 
