@@ -344,13 +344,14 @@ function towardsPoint(other, distance, outPoint) {
 /**
  * Project a certain squared-distance toward a known point.
  * @param {PIXI.Point} other    The point toward which to project
- * @param {number} distance2     The distance-squared to move from this toward other.
+ * @param {number} distance2     The distance-squared to move from this toward other; can be negative
  * @returns {Point3d|PIXI.Point}
  */
 function towardsPointSquared(other, distance2, outPoint) {
   outPoint ??= new this.constructor();
   const delta = other.subtract(this, outPoint);
-  const t = Math.sqrt(distance2 / delta.magnitudeSquared());
+  const sign = Math.sign(distance2);
+  const t = sign * Math.sqrt(Math.abs(distance2) / delta.magnitudeSquared());
   this.add(delta.multiplyScalar(t, outPoint), outPoint);
   return outPoint;
 }
