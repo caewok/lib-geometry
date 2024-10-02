@@ -193,9 +193,10 @@ class CutawayPolygon extends PIXI.Polygon {
     if ( ixs[0].t0.almostEqual(0) ) ixs.shift();
 
     // Shoelace: move in and out of the polygon, constructing a quad for every "in"
+    // Go from a --> ix --> ... --> ix --> b unless last ix is at b.
     const quads = [];
-    let prevIx = opts.start;
-    let isInside = shape.contains(a.x, a.y);
+    let prevIx = a;
+    let isInside = shape.contains(prevIx.x, prevIx.y);
     for ( const ix of ixs ) {
       if ( isInside ) quads.push(this.quadCutaway(prevIx, ix, opts));
       isInside = !isInside;
