@@ -25,7 +25,7 @@ function initialize(wrapped) {
  */
 function edgesSet(wrapped, key, value) {
   const res = wrapped(key, value);
-  this.quadtree.update({ r: value.bounds, t: value });
+  this.quadtree?.update?.({ r: value.bounds, t: value });
   return res;
 }
 
@@ -34,7 +34,7 @@ function edgesSet(wrapped, key, value) {
  */
 function edgesDelete(wrapped, key) {
   const edge = this.get(key);
-  if ( edge ) this.quadtree.remove(edge);
+  if ( edge ) this.quadtree?.remove?.(edge);
   return wrapped(key);
 }
 
@@ -42,7 +42,7 @@ function edgesDelete(wrapped, key) {
  * Wrap CanvasEdges.clear to clear the quadtree.
  */
 function clear(wrapped) {
-  this.quadtree?.clear();
+  this.quadtree?.clear?.();
   return wrapped();
 }
 

@@ -406,7 +406,7 @@ export class RegularPolygon extends PIXI.Polygon {
     clipType ??= WeilerAthertonClipper.CLIP_TYPES.INTERSECT;
 
     // Use Weiler-Atherton for efficient intersection or union.
-    if ( weilerAtherton ) {
+    if ( weilerAtherton && polygon._isPositive ) {
       const res = WeilerAthertonClipper.combine(polygon, this, { clipType, density, ...options });
       if ( !res.length ) return new PIXI.Polygon([]);
       return res[0];
