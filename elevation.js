@@ -243,36 +243,39 @@ function preUpdateTokenHook(tokenD, data, _options, _userId) {
 /**
  * Monitor wall updates for updated top and bottom elevation and update the cached data property.
  * Sync Wall Height and Elevated Vision flags. Prefer EV
- * @param {Document} document                       The existing Document which was updated
- * @param {object} change                           Differential data that was used to update the document
- * @param {DocumentModificationContext} options     Additional options which modified the update request
- * @param {string} userId                           The ID of the User who triggered the update workflow
+ * @param {Document} document                       The Document instance being updated
+ * @param {object} changed                          Differential data that will be used to update the document
+ * @param {Partial<DatabaseUpdateOperation>} options Additional options which modify the update request
+ * @param {string} userId                           The ID of the requesting user, always game.user.id
+ * @returns {boolean|void}                          Explicitly return false to prevent update of this Document
  */
-function preUpdateWallHook(wallD, data, _options, _userId) {
-  const flatData = foundry.utils.flattenObject(data);
-  const changes = new Set(Object.keys(flatData));
-  const evTopFlag = MODULE_KEYS.EV.FLAG_WALL_TOP;
-  const evBottomFlag = MODULE_KEYS.EV.FLAG_WALL_BOTTOM;
-  const whTopFlag = MODULE_KEYS.WH.FLAG_WALL_TOP;
-  const whBottomFlag = MODULE_KEYS.WH.FLAG_WALL_BOTTOM;
+function preUpdateWallHook(wallD, changed, _options, _userId) {
+  const flatData = foundry.utils.flattenObject(changed);
+  const flatChanges = new Set(Object.keys(flatData));
   const updates = {};
-  if ( changes.has(evTopFlag) ) {
-    const e = flatData[evTopFlag];
-    updates[whTopFlag] = e;
-  } else if ( changes.has(whTopFlag) ) {
-    const e = flatData[whTopFlag];
-    updates[evTopFlag] = e;
-  }
+  for ( const pos of ["FLAG_WALL_TOP", "FLAG_WALL_BOTTOM"] ) {
+    const evFlag = MODULE_KEYS.EV[pos];
+    const whFlag = MODULE_KEYS.EV[pos];
+    let useEV;
+    if ( flatChanges.has(evFlag) && flatChanges.has(whFlag) ) {
+      // Use whichever was changed or default to EV.
+      const docEVValue = foundry.utils.getProperty(wallD, evFlag);
+      const docWHValue = foundry.utils.getProperty(wallD, whFlag);
+      useEV = docEVValue !== foundry.utils.getProperty(flatData, evFlag)
+        || docWHValue === foundry.utils.getProperty(flatData, whFlag);
+    } else if ( flatChanges.has(evFlag) ) useEV = true;
+    else if ( flatChanges.has(whFlag) ) useEV = false;
+    else continue; // No update.
 
-  if ( changes.has(evBottomFlag) ) {
-    const e = flatData[evBottomFlag];
-    updates[whBottomFlag] = e;
-  } else if ( changes.has(whBottomFlag) ) {
-    const e = flatData[whBottomFlag];
-    updates[evBottomFlag] = e;
+    if ( useEV ) {
+      const e = flatData[evFlag];
+      updates[whFlag] = e;
+    } else {
+      const e = flatData[whFlag];
+      updates[evFlag] = e;
+    }
   }
-
-  foundry.utils.mergeObject(data, updates);
+  foundry.utils.mergeObject(changed, updates);
 }
 
 
