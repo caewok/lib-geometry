@@ -255,7 +255,7 @@ function preUpdateWallHook(wallD, changed, _options, _userId) {
   const updates = {};
   for ( const pos of ["FLAG_WALL_TOP", "FLAG_WALL_BOTTOM"] ) {
     const evFlag = MODULE_KEYS.EV[pos];
-    const whFlag = MODULE_KEYS.EV[pos];
+    const whFlag = MODULE_KEYS.WH[pos];
     let useEV;
     if ( flatChanges.has(evFlag) && flatChanges.has(whFlag) ) {
       // Use whichever was changed or default to EV.
