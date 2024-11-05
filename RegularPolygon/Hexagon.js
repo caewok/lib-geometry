@@ -83,8 +83,8 @@ export class Hexagon extends GEOMETRY_CONFIG.RegularPolygons.RegularPolygon {
    */
   static fromTopLeft(point, ...args) {
       // Offset from top left to center
-    const hx = Math.ceil(canvas.grid.w / 2);
-    const hy = Math.ceil(canvas.grid.h / 2);
+    const hx = Math.ceil(canvas.grid.sizeX / 2);
+    const hy = Math.ceil(canvas.grid.sizeY / 2);
     return new Hexagon({x: point.x + hx, y: point.y + hy}, ...args);
   }
 
