@@ -4,8 +4,10 @@ PIXI
 */
 "use strict";
 
-import { Point3d } from "./Point3d.js";
-import { Matrix } from "../Matrix.js";
+import "./Point3d.js";
+import "../Matrix.js";
+import { GEOMETRY_CONFIG } from "../const.js";
+
 
 // Class to represent a plane
 export class Plane {
@@ -14,7 +16,7 @@ export class Plane {
    * @param {Point3d} normal    Normal vector to the plane
    * @param {Point3d} point     Point on the plane
    */
-  constructor(point = new Point3d(0, 0, 0), normal = new Point3d(0, 0, 1)) {
+  constructor(point = new CONFIG.GeometryLib.threeD.Point3d(0, 0, 0), normal = new CONFIG.GeometryLib.threeD.Point3d(0, 0, 1)) {
     this.normal = normal.normalize();
     this.point = point.clone();
   }
@@ -46,7 +48,7 @@ export class Plane {
    * @returns {Plane}
    */
   static fromWall(wall) {
-    const pts = Point3d.fromWall(wall, { finite: true }); // Need finite so Normal can be calculated
+    const pts = CONFIG.GeometryLib.threeD.Point3d.fromWall(wall, { finite: true }); // Need finite so Normal can be calculated
 
     // To keep the points simple, use different Z values
     const A = pts.A.top;
@@ -397,7 +399,7 @@ export class Plane {
     const b = this.point.add(vs.v);
     const c = this.point.add(vs.u);
 
-    const m = new Matrix([
+    const m = new CONFIG.GeometryLib.Matrix([
       [a.x, b.x, c.x, p.x],
       [a.y, b.y, c.y, p.y],
       [a.z, b.z, c.z, p.z],
@@ -416,11 +418,11 @@ export class Plane {
     // https://math.stackexchange.com/questions/64430/find-extra-arbitrary-two-points-for-a-plane-given-the-normal-and-a-point-that-l
     // Find the minimum index
     const n = this.normal;
-    const w = (n.x < n.y && n.x < n.z) ? new Point3d(1, 0, 0)
-      : n.y < n.z ? new Point3d(0, 1, 0) : new Point3d(0, 0, 1);
+    const w = (n.x < n.y && n.x < n.z) ? new CONFIG.GeometryLib.threeD.Point3d(1, 0, 0)
+      : n.y < n.z ? new Point3d(0, 1, 0) : new CONFIG.GeometryLib.threeD.Point3d(0, 0, 1);
 
-    const u = new Point3d();
-    const v = new Point3d();
+    const u = new CONFIG.GeometryLib.threeD.Point3d();
+    const v = new CONFIG.GeometryLib.threeD.Point3d();
     w.cross(n, u).normalize(u);
     n.cross(u, v).normalize(v);
 
@@ -448,7 +450,7 @@ export class Plane {
     const { u, v } = this.axisVectors;
     const point = this.point;
 
-    return new Point3d(
+    return new CONFIG.GeometryLib.threeD.Point3d(
       point.x + (pt.x * u.x) + (pt.y * v.x),
       point.y + (pt.x * u.y) + (pt.y * v.y),
       point.z + (pt.x * u.z) + (pt.y * v.z)
@@ -490,14 +492,14 @@ export class Plane {
 
     // Adjust for row-major matrix and left-hand coordinate system
 
-    const S = new Matrix([
+    const S = new CONFIG.GeometryLib.Matrix([
       [A.x, A.y, A.z, 1],
       [u.x, u.y, u.z, 1],
       [v.x, v.y, v.z, 1],
       [n.x, n.y, n.z, 1]
     ]);
 
-    const D = new Matrix([
+    const D = new CONFIG.GeometryLib.Matrix([
       [0, 0, 0, 1],
       [1, 0, 0, 1],
       [0, 1, 0, 1],
@@ -528,7 +530,7 @@ export class Plane {
 
     const d = N.dot(P);
 
-    const outPoint = new Point3d();
+    const outPoint = new CONFIG.GeometryLib.threeD.Point3d();
 
     v.multiplyScalar(dotNL + d, outPoint);
     const b = l.multiplyScalar(dotNV + d);
@@ -655,3 +657,5 @@ function numerator2dv3(pt) {
     numV: ((pt.z - point.z) * u.y) - ((pt.y - point.y) * u.z)
   };
 }
+
+GEOMETRY_CONFIG.threeD.Plane = Plane;

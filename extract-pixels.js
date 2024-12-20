@@ -1,3 +1,7 @@
+/* globals
+PIXI
+*/
+
 // Shamelessly borrowed from https://github.com/dev7355608/perfect-vision/blob/main/scripts/utils/extract-pixels.js
 
 /**

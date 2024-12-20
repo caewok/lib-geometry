@@ -1,11 +1,13 @@
 /* globals
 PIXI,
 ClipperLib,
-canvas
+canvas,
+CONFIG
 */
 "use strict";
 
-import { Draw } from "./Draw.js";
+import { GEOMETRY_CONFIG } from "./const.js";
+import "./Draw.js";
 
 /**
  * Class to manage ClipperPaths for multiple polygons.
@@ -67,8 +69,8 @@ export class ClipperPaths {
    */
   static polygonToRectangle(polygon) {
     const pts = polygon.points;
-    if ( !(polygon.isClosed && pts.length === 10)
-      || !(!polygon.isClosed && pts.length === 8) ) return polygon;
+    if ( (polygon.isClosed && pts.length !== 10)
+      || (!polygon.isClosed && pts.length !== 8) ) return polygon;
 
     // Layout must be clockwise.
     // Layout options:
@@ -247,6 +249,8 @@ export class ClipperPaths {
     return solution;
   }
 
+
+
   /**
    * Intersect this set of paths with a polygon as subject.
    * @param {PIXI.Polygon}
@@ -319,6 +323,24 @@ export class ClipperPaths {
   }
 
   /**
+   * Union the paths.
+   * @returns {ClipperPaths}
+   */
+  union() {
+    if ( this.paths.length === 1 ) return this;
+    const c = new ClipperLib.Clipper();
+    const union = new ClipperPaths();
+    union.scalingFactor = this.scalingFactor;
+    c.AddPaths(this.paths, ClipperLib.PolyType.ptSubject, true);
+    c.Execute(ClipperLib.ClipType.ctUnion,
+      union.paths,
+      ClipperLib.PolyFillType.pftNonZero,
+      ClipperLib.PolyFillType.pftNonZero
+      );
+    return union;
+  }
+
+  /**
    * Union the paths, using a positive fill.
    * This version uses a positive fill type so any overlap is filled.
    * @returns {ClipperPaths}
@@ -342,11 +364,11 @@ export class ClipperPaths {
   }
 
   /**
-   * Combine 2+ ClipperPaths objects using a union with a positive fill.
+   * Join paths into a single ClipperPaths object
    * @param {ClipperPaths[]} pathsArr
    * @returns {ClipperPaths}
    */
-  static combinePaths(pathsArr) {
+  static joinPaths(pathsArr) {
     const ln = pathsArr.length;
     if ( !ln ) return undefined;
 
@@ -362,23 +384,63 @@ export class ClipperPaths {
 
       cPaths.paths.push(...obj.paths);
     }
+    return cPaths;
+  }
 
+  /**
+   * Combine 2+ ClipperPaths objects using a union with a positive fill.
+   * @param {ClipperPaths[]} pathsArr
+   * @returns {ClipperPaths}
+   */
+  static combinePaths(pathsArr) {
+    const cPaths = this.joinPaths(pathsArr);
+    if ( !cPaths ) return undefined;
     return cPaths.combine();
+  }
+
+  /**
+   * Execute a Clipper.clipType combination.
+   * @param {ClipperPaths} subject          Subject for the clip
+   * @param {ClipperPaths} clip             What to clip
+   * @param {ClipperLib.ClipType} clipType  ctIntersection: 0, ctUnion: 1, ctDifference: 2, ctXor: 3
+   * @param {object} [options]              Options passed to ClipperLib.Clipper().Execute
+   * @param {number} [subjFillType]         Fill type for the subject. Defaults to pftEvenOdd.
+   * @param {number} [clipFillType]         Fill type for the clip. Defaults to pftEvenOdd.
+   * @returns {ClipperPaths} New ClipperPaths object
+   */
+  static clip(subject, clip, {
+    clipType = ClipperLib.ClipType.ctUnion,
+    subjFillType = ClipperLib.PolyFillType.pftEvenOdd,
+    clipFillType = ClipperLib.PolyFillType.pftEvenOdd } = {}) {
+
+    const c = new ClipperLib.Clipper();
+    const solution = new this();
+    solution.scalingFactor = subject.scalingFactor;
+    c.AddPaths(subject.paths, ClipperLib.PolyType.ptSubject, true);
+    c.AddPaths(clip.paths, ClipperLib.PolyType.ptClip, true);
+    c.Execute(clipType, solution.paths, subjFillType, clipFillType);
+    return solution;
   }
 
   /**
    * Draw the clipper paths, to the extent possible
    */
-  draw({ color = Draw.COLORS.black, width = 1, fill, fillAlpha = 1 } = {}) {
+  draw({ graphics = canvas.controls.debug, color = CONFIG.GeometryLib.Draw.COLORS.black, width = 1, fill, fillAlpha = 1 } = {}) {
     if ( !fill ) fill = color;
     const polys = this.toPolygons();
 
-    canvas.controls.debug.beginFill(fill, fillAlpha);
+    // Sort so holes are last.
+    polys.sort((a, b) => a.isHole - b.isHole);
+    if ( !polys.length || polys[0].isHole ) return; // All the polys are holes.
+
+    graphics.beginFill(fill, fillAlpha);
     for ( const poly of polys ) {
-      if ( poly.isHole ) canvas.controls.debug.beginHole();
-      canvas.controls.debug.lineStyle(width, color).drawShape(poly);
-      if ( poly.isHole ) canvas.controls.debug.endHole();
+      if ( poly.isHole ) graphics.beginHole();
+      graphics.lineStyle(width, color).drawShape(poly);
+      if ( poly.isHole ) graphics.endHole();
     }
-    canvas.controls.debug.endFill();
+    graphics.endFill();
   }
 }
+
+GEOMETRY_CONFIG.ClipperPaths ??= ClipperPaths;

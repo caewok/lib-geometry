@@ -1,12 +1,11 @@
 /* globals
-canvas,
-PIXI
+CONFIG
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 
 // Update tile pixel cache and add getter.
 // Pixel cache stored at _evPixelCache; getter uses evPixelCache
-import { TilePixelCache } from "./PixelCache.js";
+import "./PixelCache.js";
 
 export const PATCHES = {};
 PATCHES.PIXEL_CACHE = {};
@@ -56,7 +55,8 @@ PATCHES.PIXEL_CACHE.HOOKS = { updateTile };
  * Getter for Tile.mesh._evPixelCache
  */
 function evPixelCache() {
-  return this._evPixelCache || (this._evPixelCache = TilePixelCache.fromOverheadTileAlpha(this));
+  return this._evPixelCache
+    || (this._evPixelCache = CONFIG.GeometryLib.TilePixelCache.fromOverheadTileAlpha(this, CONFIG.GeometryLib.pixelCacheResolution ?? 1)); // 1/4 resolution.
 }
 
 PATCHES.PIXEL_CACHE.GETTERS = { evPixelCache };

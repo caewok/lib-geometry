@@ -1,23 +1,24 @@
 /* globals
 CONFIG,
-CONST,
 canvas,
 foundry,
+Drawing,
 PIXI
 */
 "use strict";
 
-import { CenteredRectangle } from "./CenteredPolygon/CenteredRectangle.js";
-import { CenteredPolygon } from "./CenteredPolygon/CenteredPolygon.js";
-import { Ellipse } from "./Ellipse.js";
+import "./CenteredPolygon/CenteredRectangle.js";
+import "./CenteredPolygon/CenteredPolygon.js";
+import "./Ellipse.js";
+import "./3d/Point3d.js";
+import { GEOMETRY_CONFIG } from "./const.js";
 
 // Functions that would go in foundry.utils if that object were extensible
 export function registerFoundryUtilsMethods() {
-  CONFIG.GeometryLib ??= {};
-  CONFIG.GeometryLib.registered ??= new Set();
-  if ( CONFIG.GeometryLib.registered.has("utils") ) return;
+  GEOMETRY_CONFIG.registered ??= new Set();
+  if ( GEOMETRY_CONFIG.registered.has("utils") ) return;
 
-  CONFIG.GeometryLib.utils = {
+  GEOMETRY_CONFIG.utils = {
     orient3dFast,
     quadraticIntersection,
     lineCircleIntersection,
@@ -33,6 +34,9 @@ export function registerFoundryUtilsMethods() {
     lineLineIntersection,
     bresenhamLine,
     bresenhamLineIterator,
+    bresenhamLine3d,
+    bresenhamLine3dIterator,
+    bresenhamLine4d,
     trimLineSegmentToPixelRectangle,
     doSegmentsOverlap,
     findOverlappingPoints,
@@ -41,7 +45,15 @@ export function registerFoundryUtilsMethods() {
     endpointIntersection,
     segmentIntersection,
     segmentOverlap,
-    roundDecimals
+    roundDecimals,
+    cutaway: {
+      to2d: to2dCutaway,
+      from2d: from2dCutaway,
+      convertToDistance: convertToDistanceCutaway,
+      convertToElevation: convertToElevationCutaway,
+      convertFromDistance: convertFromDistanceCutaway,
+      convertFromElevation: convertFromElevationCutaway
+    }
   };
 
 
@@ -54,6 +66,149 @@ export function registerFoundryUtilsMethods() {
     }, { min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY});
   };
   CONFIG.GeometryLib.registered.add("utils");
+}
+
+/**
+ * Round numbers that are close to 0 or 1.
+ * @param {number} n            Number to round
+ * @param {number} [epsilon]    Passed to almostEqual
+ */
+export function roundNearWhole(n, epsilon) {
+  const roundedN = Math.round(n);
+  if ( n.almostEqual(roundedN, epsilon) ) return roundedN;
+  return n;
+}
+
+/**
+ * Is this number even?
+ * @param {number} n
+ * @returns {boolean}
+ */
+export function isEven(n) { return  ~n & 1; }
+
+/**
+ * Is this number odd?
+ * @param {number} n
+ * @returns {boolean}
+ */
+export function isOdd(n) { return n & 1; }
+
+/**
+ * Calculate the unit elevation for a given set of coordinates.
+ * @param {number} elevation    Elevation in grid units
+ * @returns {number} Elevation in number of grid steps.
+ */
+export function unitElevation(elevation) { return Math.round(elevation / canvas.scene.dimensions.distance); }
+
+/**
+ * Calculate the grid unit elevation from unit elevation.
+ * Inverse of `unitElevation`.
+ * @param {number} k            Unit elevation
+ * @returns {number} Elevation in grid units
+ */
+export function elevationForUnit(k) { return roundNearWhole(k * canvas.scene.dimensions.distance); }
+
+/**
+ * @typedef {PIXI.Point} CutawayPoint
+ * A point in cutaway space.
+ * @param {number} x      Distance-squared from start point
+ * @param {number} y      Elevation in pixel units
+ */
+
+/**
+ * Convert a point on a line to a coordinate representing the line direction in the x direction
+ * and the elevation in the y direction.
+ *
+ * @param {RegionMovementWaypoint3d} currPt      A point on the line start|end
+ * @param {RegionMovementWaypoint3d} start       Beginning endpoint of the line segment
+ * @param {RegionMovementWaypoint3d} [end]       End of the line segment; required only if the current point is before start
+ * @param {PIXI.Point} [outPoint]
+ * @returns {CutawayPoint} X value is 0 at start, negative if further from end than start.
+ *  - x: Distance-squared from start, in direction of end.
+ *  - y: Elevation in pixel units
+ */
+function to2dCutaway(currPt, start, end, outPoint) {
+  outPoint ??= new PIXI.Point();
+  const distCS = PIXI.Point.distanceSquaredBetween(currPt, start);
+
+  const pt = outPoint.set(distCS, currPt.z);
+  if ( end ) {
+    const distCE = PIXI.Point.distanceSquaredBetween(currPt, end);
+    const distSE = PIXI.Point.distanceSquaredBetween(start, end);
+    if ( distCS < distCE && distCE > distSE ) pt.x *= -1;
+  }
+  return pt;
+}
+
+/* Identifying locations on the 1d line.
+currPt ---> start ---> end
+dist(currPt, start) < dist(currPt, end) && dist(currPt, end) > dist(start, end)
+
+start ---> currPt ---> end
+dist(start, end) > dist(start, currPt) && dist(start, end) > dist(end, currPt)
+
+start ---> end ---> currPt
+dist(end, currPt) < dist(start, currPt) && dist(currPt, start) > dist(start, end)
+*/
+
+/**
+ * Convert a cutaway point to its respective position on the line start|end.
+ * @param {CutawayPoint} cutawayPt      2d cutaway point created from _to2dCutaway
+ * @param {RegionMovementWaypoint3d} start             Beginning endpoint of the line segment
+ * @param {RegionMovementWaypoint3d} end               End of the line segment
+ * @param {RegionMovementWaypoint3d} [outPoint]
+ * @returns {RegionMovementWaypoint3d}
+ */
+function from2dCutaway(cutawayPt, start, end, outPoint) {
+  outPoint ??= new CONFIG.GeometryLib.threeD.RegionMovementWaypoint3d();
+  // b/c outPoint is 3d, makes sure to get the 2d values.
+  const xy = start.to2d().towardsPointSquared(end, cutawayPt.x, PIXI.Point._tmp);
+  outPoint.x = xy.x;
+  outPoint.y = xy.y;
+  outPoint.z = cutawayPt.y;
+  return outPoint;
+}
+
+/**
+ * Convert a cutaway point to use distance instead of distance squared.
+ * @param {CutawayPoint} cutawayPt
+ * @returns {PIXI.Point} The same point, modified in place.
+ */
+function convertToDistanceCutaway(cutawayPt) {
+  const sign = Math.sign(cutawayPt.x);
+  cutawayPt.x =  sign * Math.sqrt(Math.abs(cutawayPt.x));
+  return cutawayPt;
+}
+
+/**
+ * Convert a cutaway point to use grid elevation instead of pixel units for y.
+ * @param {CutawayPoint} cutawayPt
+ * @returns {PIXI.Point} The same point, modified in place.
+ */
+function convertToElevationCutaway(cutawayPt) {
+  cutawayPt.y = pixelsToGridUnits(cutawayPt.y);
+  return cutawayPt;
+}
+
+/**
+ * Convert a cutaway point to use distance-squared instead of distance.
+ * @param {CutawayPoint} cutawayPt
+ * @returns {PIXI.Point} The same point, modified in place.
+ */
+function convertFromDistanceCutaway(cutawayPt) {
+  const sign = Math.sign(cutawayPt.x);
+  cutawayPt.x = sign * Math.pow(cutawayPt.x, 2);
+  return cutawayPt;
+}
+
+/**
+ * Convert a cutaway point to use pixel units instead of grid units for y.
+ * @param {CutawayPoint} cutawayPt
+ * @returns {PIXI.Point} The same point, modified in place.
+ */
+function convertFromElevationCutaway(cutawayPt) {
+  cutawayPt.y = gridUnitsToPixels(cutawayPt.y);
+  return cutawayPt;
 }
 
 /**
@@ -239,11 +394,15 @@ Math.PI_1_2 = Math.PI * 0.5;
 function centeredPolygonFromDrawing(drawing) {
   switch ( drawing.document.shape.type ) {
     case Drawing.SHAPE_TYPES.RECTANGLE:
-      return CenteredRectangle.fromDrawing(drawing);
+      return CONFIG.GeometryLib.CenteredPolygons.CenteredRectangle.fromDrawing(drawing);
     case Drawing.SHAPE_TYPES.ELLIPSE:
-      return Ellipse.fromDrawing(drawing);
+      return CONFIG.GeometryLib.Ellipse.fromDrawing(drawing);
     case Drawing.SHAPE_TYPES.POLYGON:
-      return CenteredPolygon.fromDrawing(drawing);
+      return CONFIG.GeometryLib.CenteredPolygons.CenteredPolygon.fromDrawing(drawing);
+    case Drawing.SHAPE_TYPES.CIRCLE: {
+      const width = drawing.document.shape.width;
+      return PIXI.Circle(drawing.document.x + width * 0.5, drawing.document.y + width * 0.5, width);
+    }
     default:
       console.error("fromDrawing shape type not supported");
   }
@@ -546,31 +705,364 @@ export function bresenhamLine(x0, y0, x1, y1) {
   return pixels;
 }
 
-export function* bresenhamLineIterator(x0, y0, x1, y1) {
-  x0 = Math.floor(x0);
-  y0 = Math.floor(y0);
-  x1 = Math.floor(x1);
-  y1 = Math.floor(y1);
+/**
+ * Bresenham line algorithm to generate pixel coordinates for a line between two points.
+ * All coordinates must be positive or zero.
+ * @param {Point} a   Start position of the segment
+ * @param {Point} b   End position of the segment
+ * @returns {Iterator<PIXI.Point>}
+ */
+export function* bresenhamLineIterator(a, b) {
+  a = PIXI.Point._tmp.set(Math.floor(a.x), Math.floor(a.y));
+  b = PIXI.Point._tmp2.set(Math.floor(b.x), Math.floor(b.y));
+
+  const delta = b.subtract(a, PIXI.Point._tmp3);
+  delta.x = Math.abs(delta.x);
+  delta.y = Math.abs(delta.y);
+
+  const sx = (a.x < b.x) ? 1 : -1;
+  const sy = (a.y < b.y) ? 1 : -1;
+  let err = delta.x - delta.y;
+  yield a.clone();
+  while ( a.x !== b.x || a.y !== b.y ) {
+    const e2 = err * 2;
+    if ( e2 > -delta.y ) {
+      err -= delta.y;
+      a.x += sx;
+    }
+    if ( e2 < delta.x ) {
+      err += delta.x;
+      a.y += sy;
+    }
+    yield a.clone();
+  }
+}
+
+/**
+ * Bresenham line algorithm to generate pixel coordinates for a line between two 3d points.
+ * https://www.geeksforgeeks.org/bresenhams-algorithm-for-3-d-line-drawing/
+ * All coordinates must be positive or zero.
+ * @param {number} x0   First coordinate x value
+ * @param {number} y0   First coordinate y value
+ * @param {number} z0   First coordinate y value
+ * @param {number} x1   Second coordinate x value
+ * @param {number} y1   Second coordinate y value
+ * @param {number} z1   Second coordinate z value
+ * @testing
+Draw = CONFIG.GeometryLib.Draw
+let [t0, t1] = canvas.tokens.controlled
+pixels = bresenhamLine(t0.center.x, t0.center.y, t1.center.x, t1.center.y)
+for ( let i = 0; i < pixels.length; i += 2 ) {
+  Draw.point({ x: pixels[i], y: pixels[i + 1]}, { radius: 1 });
+}
+ */
+export function bresenhamLine3d(x0, y0, z0, x1, y1, z1) {
+  x0 = Math.round(x0);
+  y0 = Math.round(y0);
+  z0 = Math.round(z0);
+  x1 = Math.round(x1);
+  y1 = Math.round(y1);
+  z1 = Math.round(z1);
+  const pixels = [x0, y0, z0];
 
   const dx = Math.abs(x1 - x0);
   const dy = Math.abs(y1 - y0);
-  const sx = (x0 < x1) ? 1 : -1;
-  const sy = (y0 < y1) ? 1 : -1;
-  let err = dx - dy;
-  yield { x: x0, y: y0 };
-  while ( x0 !== x1 || y0 !== y1 ) {
-    const e2 = err * 2;
-    if ( e2 > -dy ) {
-      err -= dy;
+  const dz = Math.abs(z1 - z0);
+
+  const dx2 = dx * 2;
+  const dy2 = dy * 2;
+  const dz2 = dz * 2;
+
+  const sx = (x1 > x0) ? 1 : -1;
+  const sy = (y1 > y0) ? 1 : -1;
+  const sz = (z1 > z0) ? 1 : -1;
+
+  // Driving axis is X-axis
+  if ( dx >= dy && dx >= dz ) {
+    let p0 = dy2 - dx;
+    let p1 = dz2 - dx;
+    while ( x0 !== x1 ) {
       x0 += sx;
-    }
-    if ( e2 < dx ) {
-      err += dx;
-      y0 += sy;
+      if ( p0 >= 0 ) {
+        y0 += sy;
+        p0 -= dx2;
+      }
+      if ( p1 >= 0 ) {
+        z0 += sz;
+        p1 -= dx2;
+      }
+      p0 += dy2;
+      p1 += dz2;
+      pixels.push(x0, y0, z0);
     }
 
-    yield { x: x0, y: y0 };
+  // Driving axis is Y-axis
+  } else if ( dy >= dx && dy >= dz ) {
+    let p0 = dx2 - dy;
+    let p1 = dz2 - dy;
+    while ( y0 !== y1 ) {
+      y0 += sy;
+      if ( p0 >= 0 ) {
+        x0 += sx;
+        p0 -= dy2;
+      }
+      if ( p1 >= 0 ) {
+        z0 += sz;
+        p1 -= dy2;
+      }
+      p0 += dx2;
+      p1 += dz2;
+      pixels.push(x0, y0, z0);
+    }
+
+  // Driving axis is z-axis
+  } else {
+    let p0 = dy2 - dz;
+    let p1 = dx2 - dz;
+    while ( z0 != z1 ) {
+      z0 += sz;
+      if ( p0 >= 0 ) {
+        y0 += sy;
+        p0 -= dz2;
+      }
+      if ( p1 >= 0 ) {
+        x0 += sx;
+        p1 -= dz2;
+      }
+      p0 += dy2;
+      p1 += dx2;
+      pixels.push(x0, y0, z0);
+    }
   }
+  return pixels;
+}
+
+/**
+ * Bresenham line algorithm to generate pixel coordinates for a line between two 3d points.
+ * https://www.geeksforgeeks.org/bresenhams-algorithm-for-3-d-line-drawing/
+ * All coordinates must be positive or zero.
+ * @param {Point3d} a   Start position of the segment
+ * @param {Point3d} b   End position of the segment
+ * @returns {Iterator<Point3d>}
+ * @testing
+ */
+export function* bresenhamLine3dIterator(a, b) {
+  const Point3d = CONFIG.GeometryLib.threeD.Point3d;
+  a = Point3d._tmp.copyFrom(a);
+  b = Point3d._tmp2.copyFrom(b);
+  a.roundDecimals();
+  b.roundDecimals();
+  yield a.clone();
+
+  const delta = b.subtract(a, Point3d._tmp3);
+  delta.x = Math.abs(delta.x);
+  delta.y = Math.abs(delta.y);
+  delta.z = Math.abs(delta.z);
+  const delta2 = delta.multiplyScalar(2);
+
+  const sx = (b.x > a.x) ? 1 : -1;
+  const sy = (b.y > a.y) ? 1 : -1;
+  const sz = (b.z > a.z) ? 1 : -1;
+
+  // Driving axis is X-axis
+  if ( delta.x >= delta.y && delta.x >= delta.z ) {
+    let p0 = delta2.y - delta.x;
+    let p1 = delta2.z - delta.x;
+    while ( a.x !== b.x ) {
+      a.x += sx;
+      if ( p0 >= 0 ) {
+        a.y += sy;
+        p0 -= delta2.x;
+      }
+      if ( p1 >= 0 ) {
+        a.z += sz;
+        p1 -= delta2.x;
+      }
+      p0 += delta2.y;
+      p1 += delta2.z;
+      yield a.clone();
+    }
+
+  // Driving axis is Y-axis
+  } else if ( delta.y >= delta.x && delta.y >= delta.z ) {
+    let p0 = delta2.x - delta.y;
+    let p1 = delta2.z - delta.y;
+    while ( a.y !== b.y ) {
+      a.y += sy;
+      if ( p0 >= 0 ) {
+        a.x += sx;
+        p0 -= delta2.y;
+      }
+      if ( p1 >= 0 ) {
+        a.z += sz;
+        p1 -= delta2.y;
+      }
+      p0 += delta2.x;
+      p1 += delta2.z;
+      yield a.clone();
+    }
+
+  // Driving axis is z-axis
+  } else {
+    let p0 = delta2.y - delta.z;
+    let p1 = delta2.x - delta.z;
+    while ( a.z !== b.z ) {
+      a.z += sz;
+      if ( p0 >= 0 ) {
+        a.y += sy;
+        p0 -= delta2.z;
+      }
+      if ( p1 >= 0 ) {
+        a.x += sx;
+        p1 -= delta2.z;
+      }
+      p0 += delta2.y;
+      p1 += delta2.x;
+      a.clone();
+    }
+  }
+}
+
+/**
+ * Bresenham line algorithm to generate pixel coordinates for a line between two 4d points.
+ * https://www.geeksforgeeks.org/bresenhams-algorithm-for-3-d-line-drawing/
+ * All coordinates must be positive or zero.
+ * @param {number} x0   First coordinate x value
+ * @param {number} y0   First coordinate y value
+ * @param {number} z0   First coordinate z value
+ * @param {number} k0   First coordinate k value
+ * @param {number} x1   Second coordinate x value
+ * @param {number} y1   Second coordinate y value
+ * @param {number} z1   Second coordinate z value
+ * @param {number} k1   Second coordinate k value
+ */
+export function bresenhamLine4d(x0, y0, z0, k0, x1, y1, z1, k1) {
+  x0 = Math.round(x0);
+  y0 = Math.round(y0);
+  z0 = Math.round(z0);
+  k0 = Math.round(k0);
+  x1 = Math.round(x1);
+  y1 = Math.round(y1);
+  z1 = Math.round(z1);
+  k1 = Math.round(k1);
+  const pixels = [x0, y0, z0, k0];
+
+  const dx = Math.abs(x1 - x0);
+  const dy = Math.abs(y1 - y0);
+  const dz = Math.abs(z1 - z0);
+  const dk = Math.abs(k1 - k0);
+
+  const dx2 = dx * 2;
+  const dy2 = dy * 2;
+  const dz2 = dz * 2;
+  const dk2 = dk * 2;
+
+  const sx = (x1 > x0) ? 1 : -1;
+  const sy = (y1 > y0) ? 1 : -1;
+  const sz = (z1 > z0) ? 1 : -1;
+  const sk = (k1 > k0) ? 1 : -1;
+
+  // Driving axis is X-axis
+  if ( dx >= dy && dx >= dz && dx >= dk ) {
+    let p0 = dy2 - dx;
+    let p1 = dz2 - dx;
+    let p2 = dk2 - dx;
+    while ( x0 !== x1 ) {
+      x0 += sx;
+      if ( p0 >= 0 ) {
+        y0 += sy;
+        p0 -= dx2;
+      }
+      if ( p1 >= 0 ) {
+        z0 += sz;
+        p1 -= dx2;
+      }
+      if ( p2 >= 0 ) {
+        k0 += sk;
+        p2 -= dx2;
+      }
+      p0 += dy2;
+      p1 += dz2;
+      p2 += dk2;
+      pixels.push(x0, y0, z0, k0);
+    }
+
+  // Driving axis is Y-axis
+  } else if ( dy >= dx && dy >= dz && dy >= dk ) {
+    let p0 = dx2 - dy;
+    let p1 = dz2 - dy;
+    let p2 = dk2 - dy;
+    while ( y0 !== y1 ) {
+      y0 += sy;
+      if ( p0 >= 0 ) {
+        x0 += sx;
+        p0 -= dy2;
+      }
+      if ( p1 >= 0 ) {
+        z0 += sz;
+        p1 -= dy2;
+      }
+      if ( p2 >= 0 ) {
+        k0 += sk;
+        p2 -= dy2;
+      }
+      p0 += dx2;
+      p1 += dz2;
+      p2 += dk2;
+      pixels.push(x0, y0, z0, k0);
+    }
+
+  // Driving axis is z-axis
+  } else if ( dz >= dx && dz >= dy && dz >= dk ) {
+    let p0 = dy2 - dz;
+    let p1 = dx2 - dz;
+    let p2 = dk2 - dz;
+    while ( z0 !== z1 ) {
+      z0 += sz;
+      if ( p0 >= 0 ) {
+        y0 += sy;
+        p0 -= dz2;
+      }
+      if ( p1 >= 0 ) {
+        x0 += sx;
+        p1 -= dz2;
+      }
+      if ( p2 >= 0 ) {
+        k0 += sk;
+        p2 -= dz2;
+      }
+      p0 += dy2;
+      p1 += dx2;
+      p2 += dk2;
+      pixels.push(x0, y0, z0, k0);
+    }
+
+  // Driving axis is k-axis
+  } else {
+    let p0 = dx2 - dk;
+    let p1 = dy2 - dk;
+    let p2 = dz2 - dk;
+    while ( k0 !== k1 ) {
+      k0 += sk;
+      if ( p0 >= 0 ) {
+        x0 += sx;
+        p0 -= dk2;
+      }
+      if ( p1 >= 0 ) {
+        y0 += sx;
+        p1 -= dz2;
+      }
+      if ( p2 >= 0 ) {
+        z0 += sz;
+        p2 -= dk2;
+      }
+      p0 += dx2;
+      p1 += dy2;
+      p2 += dz2;
+      pixels.push(x0, y0, z0, k0);
+    }
+  }
+  return pixels;
 }
 
 /**
@@ -658,7 +1150,7 @@ export function findOverlappingPoints(a, b, c, d) {
   );
 
   const xEqual = p0.x.almostEqual(p1.x);
-  const yEqual = p1.y.almostEqual(p1.y);
+  const yEqual = p0.y.almostEqual(p1.y);
   if ( xEqual && yEqual ) return [p0];
   if ( xEqual ^ yEqual
   || (p0.x < p1.x && p0.y < p1.y)) return [p0, p1];

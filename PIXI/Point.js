@@ -4,10 +4,15 @@ foundry
 */
 "use strict";
 
-import { Point3d } from "../3d/Point3d.js";
+import "../3d/Point3d.js";
 
 export const PATCHES = {};
 PATCHES.PIXI = {};
+
+// Temporary points that can be passed to PIXI.Point methods
+PIXI.Point._tmp = new PIXI.Point();
+PIXI.Point._tmp2 = new PIXI.Point();
+PIXI.Point._tmp3 = new PIXI.Point();
 
 /**
  * Invert a wall key to get the coordinates.
@@ -15,10 +20,15 @@ PATCHES.PIXI = {};
  * @param {number} key      Integer key
  * @returns {PIXI.Point} coordinates
  */
-function invertKey(key) {
+function invertKey(key, outPoint) {
+  outPoint ??= new this();
+  return outPoint.copyFrom(this._invertKey(key));
+}
+
+function _invertKey(key) {
   const x = Math.floor(key * MAX_TEXTURE_SIZE_INV);
   const y = key - (MAX_TEXTURE_SIZE * x);
-  return new PIXI.Point(x, y);
+  return { x, y };
 }
 
 /**
@@ -190,7 +200,7 @@ function to3d({ x = "x", y = "y", z} = {}) {
   const x3d = x ? this[x] : 0;
   const y3d = y ? this[y] : 0;
   const z3d = z ? this[z] : 0;
-  return new Point3d(x3d, y3d, z3d);
+  return new CONFIG.GeometryLib.Point3d(x3d, y3d, z3d);
 }
 
 /**
@@ -334,13 +344,14 @@ function towardsPoint(other, distance, outPoint) {
 /**
  * Project a certain squared-distance toward a known point.
  * @param {PIXI.Point} other    The point toward which to project
- * @param {number} distance2     The distance-squared to move from this toward other.
+ * @param {number} distance2     The distance-squared to move from this toward other; can be negative
  * @returns {Point3d|PIXI.Point}
  */
 function towardsPointSquared(other, distance2, outPoint) {
   outPoint ??= new this.constructor();
   const delta = other.subtract(this, outPoint);
-  const t = Math.sqrt(distance2 / delta.magnitudeSquared());
+  const sign = Math.sign(distance2);
+  const t = sign * Math.sqrt(Math.abs(distance2) / delta.magnitudeSquared());
   this.add(delta.multiplyScalar(t, outPoint), outPoint);
   return outPoint;
 }
@@ -426,7 +437,8 @@ PATCHES.PIXI.STATIC_METHODS = {
   angleBetween,
   flatMapPoints,
   fromObject,
-  invertKey
+  invertKey,
+  _invertKey
 };
 
 PATCHES.PIXI.METHODS = {

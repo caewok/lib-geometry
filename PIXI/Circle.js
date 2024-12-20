@@ -158,6 +158,19 @@ function lineSegmentIntersects(a, b, { inside = false } = {}) {
   return aContained || bContained;
 }
 
+/**
+ * Cutaway a line segment start|end that moves through this circle.
+ * Assumes a cylinder, not a sphere.
+ * @param {Point3d} start     Starting endpoint for the segment
+ * @param {Point3d} end       Ending endpoint for the segment
+ * @param {object} [opts]
+ * @param {number} [opts.top=1e06]        Top (elevation in pixel units) of the polygon
+ * @param {number} [opts.bottom=-1e06]    Bottom (elevation in pixel units) of the polygon
+ * @param {number} [opts.isHole=false]    Treat this shape as a hole; reverse the points of the returned polygon
+ * @returns {CutawayPolygon[]}
+ */
+function cutaway(a, b, opts) { return CONFIG.GeometryLib.CutawayPolygon.cutawayBasicShape(this, a, b, opts); }
+
 PATCHES.PIXI.GETTERS = { area };
 
 PATCHES.PIXI.METHODS = {
@@ -174,5 +187,7 @@ PATCHES.PIXI.METHODS = {
   envelops,
   _envelopsCircle,
   _envelopsRectangle,
-  _envelopsPolygon
+  _envelopsPolygon,
+
+  cutaway
 };

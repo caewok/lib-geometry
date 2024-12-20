@@ -4,6 +4,8 @@ WeilerAthertonClipper
 */
 "use strict";
 
+import { GEOMETRY_CONFIG } from "./const.js";
+
 /* Testing
 api = game.modules.get('tokenvisibility').api;
 drawing = api.drawing
@@ -284,8 +286,13 @@ export class Ellipse extends PIXI.Ellipse {
     b = this.toCircleCoords(this.fromCartesianCoords(b));
 
     // Get the intersection points and convert back to cartesian coords.
-    const ixs = cir.segmentIntersections(a, b);
-    return ixs.map(ix => this.toCartesianCoords(this.fromCircleCoords(ix)));
+    // Add t0 to indicate distance from a, to match other segmentIntersection functions.
+    const dist2 = PIXI.Point.distanceSquaredBetween(a, b);
+    return cir.segmentIntersections(a, b).map(ix => {
+      const newIx = this.toCartesianCoords(this.fromCircleCoords(ix));
+      newIx.t0 =  Math.sqrt(PIXI.Point.distanceSquaredBetween(a, ix) / dist2);
+      return newIx;
+    });
   }
 
   /**
@@ -347,7 +354,7 @@ export class Ellipse extends PIXI.Ellipse {
     clipType ??= WeilerAthertonClipper.CLIP_TYPES.INTERSECT;
 
     // Use Weiler-Atherton for efficient intersection or union.
-    if ( weilerAtherton ) {
+    if ( weilerAtherton && polygon._isPositive ) {
       const res = WeilerAthertonClipper.combine(polygon, this, { clipType, density, ...options });
       if ( !res.length ) return new PIXI.Polygon([]);
       return res[0];
@@ -357,4 +364,21 @@ export class Ellipse extends PIXI.Ellipse {
     const approx = this.toPolygon({ density });
     return polygon.intersectPolygon(approx, options);
   }
+
+  /**
+   * Return a quadrangle cutaway for this ellipse
+   * @param {Point3d} a       Starting endpoint for the segment
+   * @param {Point3d} b       Ending endpoint for the segment
+   * @param {object} [opts]
+   * @param {Point3d} [opts.start]              Starting endpoint for the segment
+   * @param {Point3d} [opts.end]                Ending endpoint for the segment
+   * @param {function} [opts.topElevationFn]    Function to calculate the top elevation for a position
+   * @param {function} [opts.bottomElevationFn] Function to calculate the bottom elevation for a position
+   * @param {function} [opts.cutPointsFn]       Function that returns the steps along the a|b segment top
+   * @param {number} [opts.isHole=false]        Treat this shape as a hole; reverse the points of the returned polygon
+   * @returns {PIXI.Polygon[]}
+   */
+  cutaway(a, b, opts) { return CONFIG.GeometryLib.CutawayPolygon.cutawayBasicShape(this, a, b, opts); }
 }
+
+GEOMETRY_CONFIG.Ellipse ??= Ellipse;

@@ -2,11 +2,14 @@
 
 /* globals
 canvas,
+foundry,
 PIXI,
 CONFIG
 */
 
 "use strict";
+
+import { GEOMETRY_CONFIG } from "./const.js";
 
 // Draw class for drawing shapes; primarily for debugging
 
@@ -116,9 +119,12 @@ export class Draw {
    * @param {Number}  width   Width of the line in pixels.
    */
   segment(s, { color = Draw.COLORS.blue, alpha = 1, width = 1 } = {}) {
+    // Handle Wall, Edge, other
+    const A = s.edge?.a ?? s.a ?? s.A;
+    const B = s.edge?.b ?? s.b ?? s.B;
     this.g.lineStyle(width, color, alpha)
-      .moveTo(s.A.x, s.A.y)
-      .lineTo(s.B.x, s.B.y);
+      .moveTo(A.x, A.y)
+      .lineTo(B.x, B.y);
   }
 
   /**
@@ -201,3 +207,6 @@ export class Draw {
     this.g.clear();
   }
 }
+
+GEOMETRY_CONFIG.Draw ??= Draw;
+

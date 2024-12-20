@@ -1,228 +1,45 @@
 /* globals
 PIXI,
 canvas,
+foundry,
+TextureLoader,
 Ray
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-/* Pixel Cache
- "Matrix" constructed as array used to store integer pixel values between 0 and 255.
- Represents a rectangle on the canvas, but need not be 1:1 and could be rotated, etc.
-
- Base class: Represent any set of pixels extracted from a texture.
-   - Matrix starts at 0,0. Defined number of rows and columns.
-   - Convert to/from canvas coordinates.
-   - Extends PIXI.Rectangle.
- Elevation: Adds
-
-*/
-
 import { extractPixels } from "./extract-pixels.js";
-import { Draw } from "./Draw.js";
 import { roundFastPositive, bresenhamLine, bresenhamLineIterator, trimLineSegmentToPixelRectangle } from "./util.js";
-import { Matrix } from "./Matrix.js";
-
-/* Testing
-api = game.modules.get("elevatedvision").api
-Draw = CONFIG.GeometryLib.Draw
-draw = new Draw
-extractPixels = api.extract.extractPixels
-PixelCache = api.PixelCache
-TilePixelCache = api.TilePixelCache
-gridSize = canvas.dimensions.size
-gridPrecision = gridSize >= 128 ? 16 : 8;
-Matrix = CONFIG.GeometryLib.Matrix
-
-cache = canvas.elevation.elevationPixelCache
-
-cache.drawLocal({ gammaCorrect: true })
-cache.draw({ gammaCorrect: true })
+import "./Draw.js";
+import "./Matrix.js";
+import { GEOMETRY_CONFIG } from "./const.js";
 
 
-dims = canvas.dimensions
-opts = {
-      resolution: 0.5, // TODO: Remove these defaults
-      width: dims.sceneWidth,
-      height: dims.sceneHeight,
-      mipmap: PIXI.MIPMAP_MODES.OFF,
-      scaleMode: PIXI.SCALE_MODES.NEAREST,
-      multisample: PIXI.MSAA_QUALITY.NONE,
-      format: PIXI.FORMATS.RED
-      // Cannot be extracted ( GL_INVALID_OPERATION: Invalid format and type combination)
-      // format: PIXI.FORMATS.RED_INTEGER,
-      // type: PIXI.TYPES.INT
-    }
+/* Pixel Cache
+  Rectangle in local pixel coordinates that contains an array of values ("pixels").
+  PixelCache: 1:1 relationship between the local rectangle and the represented shape, except that
+    the pixels may be some different resolution. And canvas object may be at any {x,y} position.
 
-tex = PIXI.RenderTexture.create(opts);
-cache = PixelCache.fromTexture(tex, { x: dims.sceneX, y: dims.sceneY })
+  TrimmedPixelCache: 1:1 relationship between the local rectangle and represented shape, except that
+    the pixels stored do not include edge pixels with 0 value.
 
+  TilePixelCache: Local rectangle tied to some canvas object (tile) shape. Translations performed
+    to move to/from the canvas coordinates and the local.
 
-// For the moment, evTexture is
-evTexture = canvas.elevation._elevationTexture
-cache = PixelCache.fromTexture(evTexture, { frame: canvas.dimensions.sceneRect })
-
-// Average pixel value
-let sum = 0;
-sumFn = px => {
-  sum += px;
-}
-cache.applyFunction(sumFn, { frame: _token.bounds })
-cache.pixels.reduce((acc, curr) => acc + curr)
-
-
-// Too big to actually reliably draw.
-// cache.draw()
-
-// Instead pull a token-sized amount and draw it
-evTexture = canvas.elevation._elevationTexture
-cache = PixelCache.fromTexture(evTexture, { frame: _token.bounds })
-cache.draw({ alphaAdder: .2})
-
-// Take a texture at resolution 1 and shrink it.
-
-
-cache = PixelCache.fromTexture(evTexture, { frame: canvas.dimensions.sceneRect, resolution: 1/gridPrecision })
-cache.pixels.reduce((acc, curr) => acc + curr)
-cache.draw({ alphaAdder: .2})
-
-evTexture = canvas.elevation._elevationTexture
-cacheOrig = PixelCache.fromTexture(evTexture, { frame: _token.bounds })
-cacheSmall = PixelCache.fromTexture(evTexture, { frame: _token.bounds, resolution: gridPrecision / gridSize })
-cacheOrig.draw({ alphaAdder: .2})
-cacheSmall.draw({ color: Draw.COLORS.red })
-
-cacheOrig2 = PixelCache.fromTexture(evTexture, { frame: _token.bounds, scalingMethod: PixelCache.boxDownscaling })
-cacheSmall2 = PixelCache.fromTexture(evTexture, {
-  frame: _token.bounds,
-  resolution: gridPrecision / gridSize,
-  scalingMethod: PixelCache.boxDownscaling })
-
-
-colors = {}
-colors["0"] = Draw.COLORS.gray
-colors["5"] = Draw.COLORS.lightred,
-colors["10"] = Draw.COLORS.lightblue,
-colors["15"] = Draw.COLORS.lightgreen,
-colors["20"] = Draw.COLORS.red,
-colors["25"] = Draw.COLORS.blue,
-colors["30"] = Draw.COLORS.green
-
-cacheSmall.drawColors({ defaultColor: Draw.COLORS.yellow, colors})
-cacheOrig.drawColors({ defaultColor: Draw.COLORS.yellow, colors})
-
-cacheSmall.pixels.reduce((acc, curr) => Math.min(acc, curr))
-cacheSmall.pixels.reduce((acc, curr) => Math.max(acc, curr))
-
-
-[tile] = canvas.tiles.placeables
-cacheTile1 = TilePixelCache.fromTileAlpha(tile);
-cacheTile1sm = TilePixelCache.fromTileAlpha(tile, { resolution: 0.25 });
-cacheTile2 = TilePixelCache.fromOverheadTileAlpha(tile);
-
-cacheTile1.draw({local: true})
-cacheTile1sm.draw({local: true})
-cacheTile2.draw({local: true})
-
-cacheTile1.draw()
-cacheTile1sm.draw()
-cacheTile2.draw()
-
-cacheTile1.drawLocal()
-cacheTile1sm.drawLocal()
-cacheTile2.drawLocal()
-
-function testCoordinateTransform(pixelCache) {
-  const { left, right, top, bottom } = pixelCache;
-  for ( let x = left; x <= right; x += 1 ) {
-    for ( let y = top; y <= bottom; y += 1 ) {
-      const local = pixelCache._fromCanvasCoordinates(x, y);
-      const canvas = pixelCache._toCanvasCoordinates(local.x, local.y);
-      if ( !canvas.almostEqual({x, y}) ) {
-        console.log(`${x},${y} not equal.`);
-        return false;
-      }
-    }
-  }
-  return true;
-}
-
-testCoordinateTransform(cacheTile1)
-testCoordinateTransform(cacheTile1sm)
-
-fn = function() {
-  return PixelCache.fromTexture(canvas.elevation._elevationTexture);
-}
-
-fn2 = function() {
-  const { pixels } = extractPixels(canvas.app.renderer, canvas.elevation._elevationTexture);
-  return pixels;
-}
-
-async function fn3() {
-  const pixels = await canvas.app.renderer.plugins.extractAsync.pixels(canvas.elevation._elevationTexture)
-  return pixels
-}
-
-async function fn4() {
-  return canvas.app.renderer.plugins.extractAsync.pixels(canvas.elevation._elevationTexture)
-}
-
-await foundry.utils.benchmark(fn, 100)
-await foundry.utils.benchmark(fn2, 100)
-await foundry.utils.benchmark(fn3, 100)
-
-
+  Methods to store and retrieve the border for a given alpha threshold.
+  Methods to traverse the pixel cache.
 */
 
-/* Resolution math
-
-Assume 4000 x 3000 texture.
-
-If resolution is 0.5 --> 2000 x 1500.
-
-If texture resolution is 0.5 --> 2000 x 1500.
-
-Combined ---> 1000 x 750. Which is 0.5 * 0.5 = 0.25.
-*/
-
-
-// Original function:
-// function fastFixed(num, n) {
-//   const pow10 = Math.pow(10,n);
-//   return Math.round(num*pow10)/pow10; // roundFastPositive fails for very large numbers
-// }
-
 /**
- * Fix a number to 8 decimal places
- * @param {number} x    Number to fix
- * @returns {number}
- */
-const POW10_8 = Math.pow(10, 8);
-function fastFixed(x) {
-  return Math.round(x * POW10_8) / POW10_8;
-}
-
-
-/**
- * Class representing a rectangular array of pixels, typically pulled from a texture.
- * The underlying rectangle is in canvas coordinates.
+ * Represent a rectangular array of local pixels.
+ * The underlying rectangle is in local coordinates.
  */
 export class PixelCache extends PIXI.Rectangle {
   /** @type {Uint8ClampedArray} */
   pixels = new Uint8ClampedArray(0);
 
   /** @type {number} */
-  #localWidth = 0;
-
-  /** @type {number} */
-  #localHeight = 0;
-
-  /** @type {PIXI.Rectangle} */
-  localFrame = new PIXI.Rectangle();
-
-  /** @type {number} */
-  #maximumPixelValue = 255;
+  maximumPixelValue = 255;
 
   /** @type {Map<number,PIXI.Rectangle>} */
   #thresholdLocalBoundingBoxes = new Map();
@@ -231,126 +48,54 @@ export class PixelCache extends PIXI.Rectangle {
   #thresholdCanvasBoundingBoxes = new Map();
 
   /**
-   * @type {object}
+   * @typedef {object} PixelCacheScale
+   * Properties that relate the local rectangle to the canvas shape.
    * @property {number} x           Translation in x direction
    * @property {number} y           Translation in y direction
    * @property {number} resolution  Ratio of pixels to canvas values.
    */
   scale = {
-    resolution: 1
+    resolution: 1,
+    x: 0,
+    y: 0
   };
+
+
+  /**
+   * Construct the local rectangle based on a provided pixel array.
+   * @param {number[]} pixels     Array of pixel values
+   * @param {number} pixelWidth   The width of the local rectangle
+   * @param {object} [opts]
+   * @param {PixelCacheScale} [opts.scale] Values to relate the canvas shape
+   */
+  constructor(pixels, pixelWidth, opts = {}) {
+    const nPixels = pixels.length;
+    pixelWidth = roundFastPositive(pixelWidth);
+    const pixelHeight = Math.ceil(nPixels / pixelWidth);
+
+    // Define this local rectangle.
+    super(0, 0, pixelWidth, pixelHeight);
+    this.pixels = pixels;
+    if ( opts.scale ) foundry.utils.mergeObject(this.scale, opts.scale);
+  }
+
+  // ----- NOTE: Getters and setters ----- //
 
   /** @type {Matrix} */
   #toLocalTransform;
 
-  /** @type {Matrix} */
-  #toCanvasTransform;
-
-  /**
-   * @param {number[]} pixels     Array of integer values.
-   * @param {number} pixelWidth   The width of the pixel rectangle.
-   * @param {object} [opts]       Optional translation
-   * @param {number} [opts.x]           Starting left canvas coordinate
-   * @param {number} [opts.y]           Starting top canvas coordinate
-   * @param {number} [opts.resolution]  Ratio between pixel width and canvas width:
-   *   pixel width * resolution = canvas width.
-   */
-  constructor(pixels, pixelWidth, { x = 0, y = 0, pixelHeight, resolution = 1 } = {}) {
-    // Clean up pixel width and define pixel height if not already.
-    const nPixels = pixels.length;
-    pixelWidth = roundFastPositive(pixelWidth);
-    pixelHeight ??= nPixels / pixelWidth;
-    if ( !Number.isInteger(pixelHeight) ) {
-      console.warn(`PixelCache pixelHeight is non-integer: ${pixelHeight}`);
-      pixelHeight = Math.ceil(pixelHeight);
-    }
-
-    // Define the canvas rectangle.
-    const invResolution = 1 / resolution;
-    const canvasWidth = Math.ceil(pixelWidth * invResolution);
-    const canvasHeight = Math.ceil(pixelHeight * invResolution);
-    super(x, y, canvasWidth, canvasHeight);
-
-    // Store values needed to translate between local and canvas coordinates.
-    this.pixels = pixels;
-    this.scale.resolution = resolution;
-    this.scale.invResolution = invResolution;
-    this.#localWidth = pixelWidth;
-    this.#localHeight = pixelHeight;
-    this.localFrame.width = this.#localWidth;
-    this.localFrame.height = this.#localHeight;
-  }
-
-
-  /**
-   * Refresh this pixel cache from a texture.
-   * Just like PixelCache.texture except that it overwrites this texture.
-   * Does not overwrite other texture parameters.
-   * @param {PIXI.Texture} texture      Texture from which to pull pixel data
-   * @param {object} [options]          Options affecting which pixel data is used
-   * @param {PIXI.Rectangle} [options.frame]    Optional rectangle to trim the extraction
-   * @param {number} [options.resolution=1]     At what resolution to pull the pixels
-   * @param {number} [options.x=0]              Move the texture in the x direction by this value
-   * @param {number} [options.y=0]              Move the texture in the y direction by this value
-   * @param {number} [options.channel=0]        Which RGBA channel, where R = 0, A = 3.
-   * @param {function} [options.scalingMethod=PixelCache.nearestNeighborScaling]
-   * @param {function} [options.combineFn]      Function to combine multiple channels of pixel data.
-   *   Will be passed the r, g, b, and a channels.
-   * @param {TypedArray} [options.arr]
-   * @returns {PixelCache}
-   */
-  updateFromTexture(texture, opts = {}) {
-    const { pixels, width, height } = extractPixels(canvas.app.renderer, texture, opts.frame);
-    const combinedPixels = opts.combineFn
-      ? this.constructor.combinePixels(pixels, opts.combineFn, opts.arrayClass) : pixels;
-
-    opts.x ??= 0;
-    opts.y ??= 0;
-    opts.resolution ??= 1;
-    opts.channel ??= 0;
-    opts.scalingMethod ??= this.constructor.nearestNeighborScaling;
-    opts.scalingMethod(combinedPixels, width, height, opts.resolution, {
-      channel: opts.channel,
-      skip: opts.combineFn ? 1 : 4,
-      arrayClass: opts.arrayClass,
-      arr: this.pixels });
-
-    // Clear cached parameters.
-    this.clearTransforms();
-    this._clearLocalThresholdBoundingBoxes();
-    return this;
-  }
-
-  /**
-   * Test whether the pixel cache contains a specific canvas point.
-   * See Tile.prototype.containsPixel
-   * @param {number} x    Canvas x-coordinate
-   * @param {number} y    Canvas y-coordinate
-   * @param {number} [alphaThreshold=0.75]  Value required for the pixel to "count."
-   * @returns {boolean}
-   */
-  containsPixel(x, y, alphaThreshold = 0.75) {
-    // First test against the bounding box
-    const bounds = this.getThresholdCanvasBoundingBox(alphaThreshold);
-    if ( !bounds.contains(x, y) ) return false;
-
-    // Next test a specific pixel
-    const value = this.pixelAtCanvas(x, y);
-    return value > (alphaThreshold * this.#maximumPixelValue);
-  }
-
-  /** @type {Matrix} */
   get toLocalTransform() {
     return this.#toLocalTransform ?? (this.#toLocalTransform = this._calculateToLocalTransform());
   }
 
   /** @type {Matrix} */
+  #toCanvasTransform;
+
   get toCanvasTransform() {
     return this.#toCanvasTransform ?? (this.#toCanvasTransform = this.toLocalTransform.invert());
   }
 
-  /** @type {number} */
-  get maximumPixelValue() { return this.#maximumPixelValue; }
+  // ----- NOTE: Transforms ----- //
 
   /**
    * Reset transforms. Typically used when size or resolution has changed.
@@ -377,20 +122,18 @@ export class PixelCache extends PIXI.Rectangle {
    * @returns {Matrix}
    */
   _calculateToLocalTransform() {
-    // Translate so top corner is at 0, 0
-    const { x, y, scale } = this;
-    const mTranslate = Matrix.translation(-x, -y);
+    const mTranslate = CONFIG.GeometryLib.Matrix.translation(-this.scale.x, -this.scale.y)
 
     // Scale based on resolution.
-    const resolution = scale.resolution;
-    const mRes = Matrix.scale(resolution, resolution);
-
-    // Combine the matrices
+    const resolution = this.scale.resolution;
+    const mRes = CONFIG.GeometryLib.Matrix.scale(resolution, resolution);
     return mTranslate.multiply3x3(mRes);
   }
 
+  // ----- NOTE: Bounding boxes ----- //
+
   /**
-   * Get a canvas bounding box based on a specific threshold.
+   * Get a local bounding box based on a specific threshold
    * @param {number} [threshold=0.75]   Values lower than this will be ignored around the edges.
    * @returns {PIXI.Rectangle} Rectangle based on local coordinates.
    */
@@ -444,10 +187,10 @@ export class PixelCache extends PIXI.Rectangle {
    */
   #calculateLocalBoundingBox(threshold=0.75) {
     // (Faster or equal to the old method that used one double non-breaking loop.)
-    threshold = threshold * this.#maximumPixelValue;
+    threshold = threshold * this.maximumPixelValue;
 
     // By definition, the local frame uses 0 or positive integers. So we can use -1 as a placeholder value.
-    const { left, right, top, bottom } = this.localFrame;
+    const { left, right, top, bottom } = this;
     let minLeft = -1;
     let maxRight = -1;
     let minTop = -1;
@@ -503,17 +246,80 @@ export class PixelCache extends PIXI.Rectangle {
     }
 
     // Pad right/bottom by 1 b/c otherwise they would be inset.
-    // Pad all by 1 to ensure that any pixel on the thresholdBounds is under the threshold.
-    minLeft -= 1;
-    minTop -= 1;
-    maxRight += 2;
-    maxBottom += 2;
+    // Don't Pad all by 1 to ensure that any pixel on the thresholdBounds is under the threshold.
+    // minLeft -= 1;
+    // minTop -= 1;
+    maxRight += 1;
+    maxBottom += 1;
     return (new PIXI.Rectangle(minLeft, minTop, maxRight - minLeft, maxBottom - minTop));
   }
 
   _calculateCanvasBoundingBox(threshold=0.75) {
     return this.#calculateCanvasBoundingBox(threshold);
   }
+
+  // ----- NOTE: Neighbor indexing ----- //
+
+  /**
+   * For this rectangular frame of local pixels, step backward or forward in the x and y directions
+   * from a current index. Presumes index is row-based, such that:
+   * 0 1 2 3
+   * 4 5 6 7...
+   * @param {number} currIdx
+   * @param {number} [xStep = 0]
+   * @param {number} [yStep = 0]
+   * @returns {number} The new index position
+   */
+  localPixelStep(currIdx, xStep = 0, yStep = 0) {
+    return currIdx + (yStep * this.width) + xStep;
+  }
+
+  /**
+   * Indices of the 8 neighbors to this local pixel index. Does not
+   * @param {number} currIdx
+   * @returns {number[]}
+   */
+  localNeighborIndices(currIdx, trimBorder = true) {
+    const arr = [];
+    const maxIdx = this.pixels.length - 1;
+    for ( let xi = -1; xi < 2; xi += 1 ) {
+      for ( let yi = -1; yi < 2; yi += 1 ) {
+        if ( !(xi || yi) ) continue;
+        const neighborIdx = this.localPixelStep(currIdx, xi, yi);
+        if ( trimBorder && !neighborIdx.between(0, maxIdx) ) continue;
+        arr.push(neighborIdx);
+      }
+    }
+    return arr;
+  }
+
+  /**
+   * Retrieve the 8 neighbors to a given index on the local cache.
+   * @param {number} currIdx
+   * @param {boolean} [trimBorder=true]    If true, exclude the border values
+   * @returns {number[]} The values, in column order, skipping the middle value.
+   */
+  localNeighbors(currIdx, trimBorder = true) {
+    return this.localNeighborIndices(currIdx, trimBorder).map(idx => this.pixels[idx]);
+  }
+
+  // ----- NOTE: Indexing ----- //
+
+  /**
+   * Get a pixel value given local coordinates.
+   * @param {number} x    Local x coordinate
+   * @param {number} y    Local y coordinate
+   * @returns {number|null}  Return null otherwise. Sort will put nulls between -1 and 0.
+   */
+  _pixelAtLocal(x, y) { return this.pixels[this._indexAtLocal(x, y)] ?? null; }
+
+  /**
+   * Get a pixel value given canvas coordinates.
+   * @param {number} x    Canvas x coordinate
+   * @param {number} y    Canvas y coordinate
+   * @returns {number}
+   */
+  pixelAtCanvas(x, y) { return this.pixels[this._indexAtCanvas(x, y)] ?? null; }
 
   /**
    * Pixel index for a specific texture location
@@ -522,34 +328,39 @@ export class PixelCache extends PIXI.Rectangle {
    * @returns {number}
    */
   _indexAtLocal(x, y) {
-    if ( x < 0 || y < 0 || x >= this.#localWidth || y >= this.#localHeight ) return -1;
+    const { width, height } = this;
+    if ( x < 0 || y < 0 || x >= width || y >= height ) return -1;
 
     // Use floor to ensure consistency when converting to/from coordinates <--> index.
-    return ((~~y) * this.#localWidth) + (~~x);
-    // Equivalent: return (roundFastPositive(y) * this.#localWidth) + roundFastPositive(x);
+    return ((~~y) * width) + (~~x);
+    // Equivalent: return (roundFastPositive(y) * this.localFrame.width) + roundFastPositive(x);
   }
 
   /**
    * Calculate local coordinates given a pixel index.
    * Inverse of _indexAtLocal
-   * @param {number} i    The index, corresponding to a pixel in the array.
-   * @returns {PIXI.Point}
+   * @param {number} i              The index, corresponding to a pixel in the array.
+   * @param {PIXI.Point} outPoint   Point to use to store the coordinate
+   * @returns {PIXI.Point} The outPoint, for convenience
    */
-  _localAtIndex(i) {
-    const width = this.#localWidth;
+  _localAtIndex(i, outPoint) {
+    outPoint ??= new PIXI.Point();
+    const width = this.width;
     const col = i % width;
     const row = ~~(i / width); // Floor the row.
-    return new PIXI.Point(col, row);
+    return outPoint.set(col, row);
   }
 
   /**
    * Calculate the canvas coordinates for a specific pixel index
    * @param {number} i    The index, corresponding to a pixel in the array.
-   * @returns {PIXI.Point}
+   * @param {PIXI.Point} outPoint   Point to use to store the coordinate
+   * @returns {PIXI.Point} The outPoint, for convenience
    */
-  _canvasAtIndex(i) {
-    const local = this._localAtIndex(i);
-    return this._toCanvasCoordinates(local.x, local.y);
+  _canvasAtIndex(i, outPoint) {
+    outPoint ??= new PIXI.Point();
+    const local = this._localAtIndex(i, PIXI.Point._tmp);
+    return this._toCanvasCoordinates(local.x, local.y, outPoint);
   }
 
   /**
@@ -559,7 +370,7 @@ export class PixelCache extends PIXI.Rectangle {
    * @returns {number}
    */
   _indexAtCanvas(x, y) {
-    const local = this._fromCanvasCoordinates(x, y);
+    const local = this._fromCanvasCoordinates(x, y, PIXI.Point_tmp);
     return this._indexAtLocal(local.x, local.y);
   }
 
@@ -567,11 +378,13 @@ export class PixelCache extends PIXI.Rectangle {
    * Transform canvas coordinates into the local pixel rectangle coordinates.
    * @param {number} x    Canvas x coordinate
    * @param {number} y    Canvas y coordinate
-   * @returns {PIXI.Point}
+   * @param {PIXI.Point} outPoint   Point to use to store the coordinate
+   * @returns {PIXI.Point} The outPoint, for convenience
    */
-  _fromCanvasCoordinates(x, y) {
-    const pt = new PIXI.Point(x, y);
-    const local = this.toLocalTransform.multiplyPoint2d(pt, pt);
+  _fromCanvasCoordinates(x, y, outPoint) {
+    outPoint ??= new PIXI.Point();
+    outPoint.set(x, y);
+    const local = this.toLocalTransform.multiplyPoint2d(outPoint, outPoint);
 
     // Avoid common rounding errors, like 19.999999999998.
     local.x = fastFixed(local.x);
@@ -584,17 +397,40 @@ export class PixelCache extends PIXI.Rectangle {
    * Inverse of _fromCanvasCoordinates
    * @param {number} x    Local x coordinate
    * @param {number} y    Local y coordinate
-   * @returns {PIXI.Point}
+   * @param {PIXI.Point} outPoint   Point to use to store the coordinate
+   * @returns {PIXI.Point} The outPoint, for convenience
    */
-  _toCanvasCoordinates(x, y) {
-    const pt = new PIXI.Point(x, y);
-    const canvas = this.toCanvasTransform.multiplyPoint2d(pt, pt);
+  _toCanvasCoordinates(x, y, outPoint) {
+    outPoint ??= new PIXI.Point();
+    outPoint.set(x, y);
+    const canvas = this.toCanvasTransform.multiplyPoint2d(outPoint, outPoint);
 
     // Avoid common rounding errors, like 19.999999999998.
     canvas.x = fastFixed(canvas.x);
     canvas.y = fastFixed(canvas.y);
     return canvas;
   }
+
+ /**
+   * Test whether the pixel cache contains a specific canvas point.
+   * See Tile.prototype.containsPixel
+   * @param {number} x    Canvas x-coordinate
+   * @param {number} y    Canvas y-coordinate
+   * @param {number} [alphaThreshold=0.75]  Value required for the pixel to "count."
+   * @returns {boolean}
+   */
+  containsPixel(x, y, alphaThreshold = 0.75) {
+    // First test against the bounding box
+    const bounds = this.getThresholdCanvasBoundingBox(alphaThreshold);
+    if ( !bounds.contains(x, y) ) return false;
+
+    // Next test a specific pixel
+    const value = this.pixelAtCanvas(x, y);
+    return value > (alphaThreshold * this.maximumPixelValue);
+  }
+
+
+  // ----- NOTE: Shape conversions to local coordinates
 
   /**
    * Convert a ray to local texture coordinates
@@ -616,8 +452,8 @@ export class PixelCache extends PIXI.Rectangle {
     const origin = this._fromCanvasCoordinates(circle.x, circle.y);
 
     // For radius, use two points of equivalent distance to compare.
-    const radius = this._fromCanvasCoordinates(circle.radius, 0).x
-      - this._fromCanvasCoordinates(0, 0).x;
+    const radius = this._fromCanvasCoordinates(circle.radius, 0, PIXI.Point._tmp2).x
+      - this._fromCanvasCoordinates(0, 0, PIXI.Point._tmp3).x;
     return new PIXI.Circle(origin.x, origin.y, radius);
   }
 
@@ -627,13 +463,13 @@ export class PixelCache extends PIXI.Rectangle {
    * @returns {PIXI.Ellipse}
    */
   _ellipseToLocalCoordinates(ellipse) {
-    const origin = this._fromCanvasCoordinates(ellipse.x, ellipse.y);
+    const origin = this._fromCanvasCoordinates(ellipse.x, ellipse.y, PIXI.Point._tmp);
 
     // For halfWidth and halfHeight, use two points of equivalent distance to compare.
-    const halfWidth = this._fromCanvasCoordinates(ellipse.halfWidth, 0).x
-      - this._fromCanvasCoordinates(0, 0).x;
-    const halfHeight = this._fromCanvasCoordinates(ellipse.halfHeight, 0).x
-      - this._fromCanvasCoordinates(0, 0).x;
+    const halfWidth = this._fromCanvasCoordinates(ellipse.halfWidth, 0, PIXI.Point._tmp2).x
+      - this._fromCanvasCoordinates(0, 0, PIXI.Point._tmp3).x;
+    const halfHeight = this._fromCanvasCoordinates(ellipse.halfHeight, 0, PIXI.Point._tmp2).x
+      - this._fromCanvasCoordinates(0, 0, PIXI.Point._tmp3).x;
     return new PIXI.Ellipse(origin.x, origin.y, halfWidth, halfHeight);
   }
 
@@ -643,8 +479,8 @@ export class PixelCache extends PIXI.Rectangle {
    * @returns {PIXI.Rectangle}
    */
   _rectangleToLocalCoordinates(rect) {
-    const TL = this._fromCanvasCoordinates(rect.left, rect.top);
-    const BR = this._fromCanvasCoordinates(rect.right, rect.bottom);
+    const TL = this._fromCanvasCoordinates(rect.left, rect.top, PIXI.Point._tmp2);
+    const BR = this._fromCanvasCoordinates(rect.right, rect.bottom, PIXI.Point._tmp3);
     return new PIXI.Rectangle(TL.x, TL.y, BR.x - TL.x, BR.y - TL.y);
   }
 
@@ -660,7 +496,7 @@ export class PixelCache extends PIXI.Rectangle {
     for ( let i = 0; i < ln; i += 2 ) {
       const x = points[i];
       const y = points[i + 1];
-      const local = this._fromCanvasCoordinates(x, y);
+      const local = this._fromCanvasCoordinates(x, y, PIXI.Point._tmp);
       newPoints[i] = local.x;
       newPoints[i + 1] = local.y;
     }
@@ -680,22 +516,7 @@ export class PixelCache extends PIXI.Rectangle {
     else console.error("applyFunctionToShape: shape not recognized.");
   }
 
-  /**
-   * Get a pixel value given local coordinates.
-   * @param {number} x    Local x coordinate
-   * @param {number} y    Local y coordinate
-   * @returns {number|null}  Return null otherwise. Sort will put nulls between -1 and 0.
-   */
-  _pixelAtLocal(x, y) { return this.pixels[this._indexAtLocal(x, y)] ?? null; }
-
-  /**
-   * Get a pixel value given canvas coordinates.
-   * @param {number} x    Canvas x coordinate
-   * @param {number} y    Canvas y coordinate
-   * @returns {number}
-   */
-  pixelAtCanvas(x, y) { return this.pixels[this._indexAtCanvas(x, y)] ?? null; }
-
+  // ----- NOTE: Segment pixel extraction ----- //
   /**
    * Trim a line segment to only the portion that intersects this cache bounds.
    * @param {Point} a     Starting location, in canvas coordinates
@@ -717,17 +538,10 @@ export class PixelCache extends PIXI.Rectangle {
    * @returns {Point[2]|null}  Points, in local coordinates
    */
   _trimLocalRayToLocalBounds(a, b, alphaThreshold) {
-    const bounds = alphaThreshold ? this.getThresholdLocalBoundingBox(alphaThreshold) : this.localFrame;
+    const bounds = alphaThreshold ? this.getThresholdLocalBoundingBox(alphaThreshold) : this;
     return trimLineSegmentToPixelRectangle(bounds, a, b);
   }
 
-  // Convert a local point to canvas point, overwriting the local point.
-  #localToCanvasInline(pt) {
-    const canvasPt = this._toCanvasCoordinates(pt.x, pt.y);
-    pt.x = canvasPt.x;
-    pt.y = canvasPt.y;
-    return pt;
-  }
 
   // TODO: Combine the extraction functions so there is less repetition of code.
 
@@ -747,7 +561,7 @@ export class PixelCache extends PIXI.Rectangle {
 
     const pixels = this._extractAllPixelValuesAlongLocalRay(
       localBoundsIx[0], localBoundsIx[1], localOffsets, reducerFn);
-    pixels.forEach(pt => this.#localToCanvasInline(pt));
+    pixels.forEach(pt => this._toCanvasCoordinates(pt.x, pt.y, pt)); // Inline replacement
     return pixels;
   }
 
@@ -768,11 +582,11 @@ export class PixelCache extends PIXI.Rectangle {
     const nPts = bresPts.length;
     const pixels = Array(nPts * 0.5);
     for ( let i = 0, j = 0; i < nPts; i += 2, j += 1 ) {
-      const x = bresPts[i];
-      const y = bresPts[i + 1];
-      const pixelsAtPoint = this._pixelsForRelativePointsFromLocal(x, y, localOffsets);
+      const pt = new PIXI.Point(bresPts[i], bresPts[i + 1]);
+      const pixelsAtPoint = this._pixelsForRelativePointsFromLocal(pt.x, pt.y, localOffsets);
       const currPixel = reducerFn(pixelsAtPoint);
-      pixels[j] = { x, y, currPixel };
+      pt.currPixel = currPixel
+      pixels[j] = pt;
     }
     return pixels;
   }
@@ -801,7 +615,7 @@ export class PixelCache extends PIXI.Rectangle {
 
     const pixels = this._extractAllMarkedPixelValuesAlongLocalRay(
       localBoundsIx[0], localBoundsIx[1], markPixelFn, skipFirst, forceLast, localOffsets, reducerFn);
-    pixels.forEach(pt => this.#localToCanvasInline(pt));
+    pixels.forEach(pt => this._toCanvasCoordinates(pt.x, pt.y, pt)); // inline replacement
     return pixels;
   }
 
@@ -814,7 +628,7 @@ export class PixelCache extends PIXI.Rectangle {
    * @param {boolean} forceLast        Include the last pixel (at b) even if unmarked
    * @param {number[]} [localOffsets]  Numbers to add to the local x,y position when pulling the pixel(s)
    * @param {function} [reducerFn]     Function that takes pixel array and reduces to a value or object to return
-   * @returns {object[]} Array of objects, each of which have:
+   * @returns {PIXI.Point[]} Array of objects, each of which have:
    *   - {number} x           Local coordinates
    *   - {number} y           Local coordinates
    *   - {number} currPixel
@@ -839,19 +653,23 @@ export class PixelCache extends PIXI.Rectangle {
 
     const nPts = bresPts.length;
     for ( let i = 0; i < nPts; i += 2 ) {
-      const x = bresPts[i];
-      const y = bresPts[i + 1];
-      const pixelsAtPoint = this._pixelsForRelativePointsFromLocal(x, y, localOffsets);
+      const pt = new PIXI.Point(bresPts[i], bresPts[i + 1]);
+      const pixelsAtPoint = this._pixelsForRelativePointsFromLocal(pt.x, pt.y, localOffsets);
       const currPixel = reducerFn(pixelsAtPoint);
-      if ( markPixelFn(currPixel, prevPixel) ) pixels.push({ currPixel, prevPixel, x, y });
+      if ( markPixelFn(currPixel, prevPixel) ) {
+        pt.currPixel = currPixel;
+        pt.prevPixel = prevPixel;
+        pixels.push(pt);
+      }
       prevPixel = currPixel;
     }
 
     if ( forceLast ) {
-      const x = bresPts.at(-2);
-      const y = bresPts.at(-1);
+      const pt = new PIXI.Point(bresPts.at(-2), bresPts.at(-1));
+      pt.currPixel = prevPixel;
+      pt.forceLast = forceLast;
       // Add the last pixel regardless.
-      pixels.push({ currPixel: prevPixel, x, y, forceLast });
+      pixels.push(pt);
     }
 
     return pixels;
@@ -879,7 +697,7 @@ export class PixelCache extends PIXI.Rectangle {
     const pixel = this._extractNextMarkedPixelValueAlongLocalRay(
       localBoundsIx[0], localBoundsIx[1], markPixelFn, skipFirst, forceLast, localOffsets, reducerFn);
     if ( !pixel ) return pixel;
-    this.#localToCanvasInline(pixel);
+    this._toCanvasCoordinates(pixel.x, pixel.y, pixel); // inline replacement
     return pixel;
   }
 
@@ -889,7 +707,7 @@ export class PixelCache extends PIXI.Rectangle {
    * @param {Point} b   Ending location, in local coordinates
    * @param {function} markPixelFn    Function to test pixels.
    *   Function takes current pixel, previous pixel
-   * @returns {object|null} If pixel found, returns:
+   * @returns {PIXI.Point|null} If pixel found, returns:
    *   - {number} x         Local coordinate
    *   - {number} y         Local coordinate
    *   - {number} currPixel
@@ -901,7 +719,7 @@ export class PixelCache extends PIXI.Rectangle {
     localOffsets ??= [0, 0];
     reducerFn ??= this.constructor.pixelAggregator("first");
 
-    const bresIter = bresenhamLineIterator(a.x, a.y, b.x, b.y);
+    const bresIter = bresenhamLineIterator(a, b);
     let prevPixel;
     let pt; // Needed to recall the last point for forceLast.
     if ( skipFirst ) {
@@ -915,13 +733,22 @@ export class PixelCache extends PIXI.Rectangle {
     for ( pt of bresIter ) {
       const pixelsAtPoint = this._pixelsForRelativePointsFromLocal(pt.x, pt.y, localOffsets);
       const currPixel = reducerFn(pixelsAtPoint);
-      if ( markPixelFn(currPixel, prevPixel) ) return { currPixel, prevPixel, x: pt.x, y: pt.y };
+      if ( markPixelFn(currPixel, prevPixel) ) {
+        pt.currPixel = currPixel;
+        pt.prevPixel = prevPixel;
+        return pt;
+      }
       prevPixel = currPixel;
     }
 
     // Might be a repeat but more consistent to always pass a forceLast object when requested.
     // Faster than checking for last in the for loop.
-    if ( forceLast ) return { currPixel: prevPixel, x: b.x, y: b.y, forceLast };
+    if ( forceLast ) {
+      const out = PIXI.Point.fromObject(b);
+      out.currPixel = prevPixel;
+      out.forceLast = forceLast;
+      return out;
+    }
     return null;
   }
 
@@ -954,13 +781,12 @@ export class PixelCache extends PIXI.Rectangle {
    */
   pixelsForRelativePointsFromCanvas(x, y, canvasOffsets, localOffsets) {
     localOffsets ??= this.convertCanvasOffsetGridToLocal(canvasOffsets);
-    const pt = this._fromCanvasCoordinates(x, y);
+    const pt = this._fromCanvasCoordinates(x, y, PIXI.Point._tmp);
     return this._pixelsForRelativePointsFromLocal(pt.x, pt.y, localOffsets);
   }
 
-  // Function to aggregate pixels. Must handle undefined pixels.
-
-  /**
+  // ----- NOTE: Aggregators ----- //
+    /**
    * Utility method to construct a function that can aggregate pixel array generated from offsets
    * @param {string} type     Type of aggregation to perform
    *   - first: take the first value, which in the case of offsets will be [0,0]
@@ -1112,6 +938,13 @@ export class PixelCache extends PIXI.Rectangle {
     return acc;
   }
 
+  // ----- NOTE: Offset shapes ----- //
+
+  /**
+   * Construct a set of offsets from a shape center. An offset is an x,y combination
+   * that says how far to move from a given pixel.
+   * Used to walk a line and aggregate pixels that are covered by that shape.
+   */
   static pixelOffsetGrid(shape, skip = 0) {
     if ( shape instanceof PIXI.Rectangle ) return this.rectanglePixelOffsetGrid(shape, skip);
     if ( shape instanceof PIXI.Polygon ) return this.polygonPixelOffsetGrid(shape, skip);
@@ -1267,28 +1100,6 @@ export class PixelCache extends PIXI.Rectangle {
   }
 
   /**
-   * For an arbitrary shape with contains and bounds methods,
-   * construct a grid of pixels from the bounds center that are within the shape.
-   * @param {object} shape      Shape to test
-   * @param {number} [skip=0]   How many pixels to skip when constructing the grid
-   * @returns {number[]}
-   */
-  static shapePixelOffsetGrid(shape, skip = 0) {
-    const bounds = shape.getBounds();
-    const { x, y } = bounds.center;
-    const offsets = this.rectanglePixelOffsetGrid(bounds, skip);
-    const nOffsets = offsets.length;
-    const shapeOffsets = []; // Unclear how many pixels until we test containment.
-    shapeOffsets._centerPoint = offsets._centerPoint;
-    for ( let i = 0; i < nOffsets; i += 2 ) {
-      const xOffset = offsets[i];
-      const yOffset = offsets[i + 1];
-      if ( shape.contains(x + xOffset, y + yOffset) ) shapeOffsets.push(xOffset, yOffset);
-    }
-    return shapeOffsets;
-  }
-
-  /**
    * Run contains test on a polygon for multiple points.
    * @param {PIXI.Polygon} poly
    * @param {number[]} testPoints     Array of [x0, y0, x1, y1,...] coordinates
@@ -1309,10 +1120,32 @@ export class PixelCache extends PIXI.Rectangle {
       for ( let i = 0, j = 0; i < nPoints; i += 2, j += 1 ) {
         const x = testPoints[i];
         const y = testPoints[i + 1];
-        ((h > y) != (c > y)) && (x < (((l - a) * ((y - h)) / (c - h)) + a)) && (res[j] = !res[j]); // eslint-disable-line no-unused-expressions, eqeqeq
+        ((h > y) != (c > y)) && (x < (((l - a) * ((y - h)) / (c - h)) + a)) && (res[j] = !res[j]);
       }
     }
     return res;
+  }
+
+  /**
+   * For an arbitrary shape with contains and bounds methods,
+   * construct a grid of pixels from the bounds center that are within the shape.
+   * @param {object} shape      Shape to test
+   * @param {number} [skip=0]   How many pixels to skip when constructing the grid
+   * @returns {number[]}
+   */
+  static shapePixelOffsetGrid(shape, skip = 0) {
+    const bounds = shape.getBounds();
+    const { x, y } = bounds.center;
+    const offsets = this.rectanglePixelOffsetGrid(bounds, skip);
+    const nOffsets = offsets.length;
+    const shapeOffsets = []; // Unclear how many pixels until we test containment.
+    shapeOffsets._centerPoint = offsets._centerPoint;
+    for ( let i = 0; i < nOffsets; i += 2 ) {
+      const xOffset = offsets[i];
+      const yOffset = offsets[i + 1];
+      if ( shape.contains(x + xOffset, y + yOffset) ) shapeOffsets.push(xOffset, yOffset);
+    }
+    return shapeOffsets;
   }
 
   /**
@@ -1340,147 +1173,8 @@ export class PixelCache extends PIXI.Rectangle {
     return localOffsets;
   }
 
-  /**
-   * Extract pixel values for a line by transforming to a Bresenham line.
-   * The line will be intersected with the pixel cache bounds.
-   * Points outside the bounds will be given null values.
-   * @param {Point} a                       Starting coordinate
-   * @param {Point} b                       Ending coordinate
-   * @param {object} [opts]                 Optional parameters
-   * @param {number} [opts.alphaThreshold]  Percent between 0 and 1.
-   *   If defined, a and b will be intersected at the alpha boundary.
-   * @param {number} [opts.skip]            How many pixels to skip along the walk
-   * @param {function} [opts.markPixelFn]   Function to mark pixels along the walk.
-   *   Function takes prev, curr, idx, and maxIdx; returns boolean. True if pixel should be marked.
-   * @returns {object|null}  If the a --> b never overlaps the rectangle, then null.
-   *   Otherwise, object with:
-   *   - {number[]} coords: bresenham path coordinates between the boundsIx. These are in local coordinates.
-   *   - {number[]} pixels: pixels corresponding to the path
-   *   - {Point[]}  boundsIx: the intersection points with this frame
-   *   - {object[]} markers: If markPixelFn, the marked pixel information.
-   *      Object has x, y, currPixel, prevPixel, tLocal (% of total)
-   */
-  pixelValuesForLine(a, b, { alphaThreshold, skip = 0, markPixelFn } = {}) {
-    const aLocal = this._fromCanvasCoordinates(a.x, a.y);
-    const bLocal = this._fromCanvasCoordinates(b.x, b.y);
-
-    // Find the points within the bounds (or alpha bounds) of this cache.
-    const bounds = alphaThreshold ? this.getThresholdLocalBoundingBox(alphaThreshold) : this.localFrame;
-    const localBoundsIx = trimLineSegmentToPixelRectangle(bounds, aLocal, bLocal);
-    if ( !localBoundsIx ) return null; // Segment never intersects the cache bounds.
-
-    const out = this._pixelValuesForLocalLine(localBoundsIx[0], localBoundsIx[1], markPixelFn, skip);
-    out.localBoundsIx = localBoundsIx;
-    out.canvasBoundsIx = localBoundsIx.map(pt => this._toCanvasCoordinates(pt.x, pt.y)); // Used by TravelElevationRay
-    out.skip = skip; // All coords are returned but only some pixels if skip ≠ 0.
-    return out;
-  }
-
-  /**
-   * Retrieve the pixel values (along the local bresenham line) between two points.
-   * @param {Point} a           Start point, in canvas coordinates
-   * @param {Point} b           End point, in canvas coordinates
-   * @param {number} [skip=0]   How many pixels to skip along the walk
-   * @returns {object}
-   *  - {number[]} coords     Local pixel coordinates, in [x0, y0, x1, y1]
-   *  - {number[]} pixels     Pixel value at each coordinate
-   *  - {object[]} markers    Pixels that meet the markPixelFn, if any
-   */
-  _pixelValuesForLocalLine(a, b, markPixelFn, skip = 0) {
-    const coords = bresenhamLine(a.x, a.y, b.x, b.y);
-    const jIncr = skip + 1;
-    return markPixelFn
-      ? this.#markPixelsForLocalCoords(coords, jIncr, markPixelFn, a, b)
-      : this.#pixelValuesForLocalCoords(coords, jIncr);
-  }
-
-  /**
-   * Retrieve pixel values for coordinate set at provided intervals.
-   * @param {number[]} coords   Coordinate array, in [x0, y0, x1, y1, ...] for which to pull pixels.
-   * @param {number} jIncr      How to increment the walk over the pixels (i.e., skip?)
-   * @returns {object}
-   *  - {number[]} coords     Local pixel coordinates, in [x0, y0, x1, y1]
-   *  - {number[]} pixels     Pixel value at each coordinate
-   */
-  #pixelValuesForLocalCoords(coords, jIncr) {
-    const nCoords = coords.length;
-    const iIncr = jIncr * 2;
-    const pixels = new this.pixels.constructor(nCoords * 0.5 * (1 / jIncr));
-    for ( let i = 0, j = 0; i < nCoords; i += iIncr, j += jIncr ) {
-      pixels[j] = this.pixelsAtLocal(coords[i], coords[i + 1]);
-    }
-    return { coords, pixels };
-  }
-
-  /**
-   * Retrieve pixel values for coordinate set at provided intervals.
-   * Also mark pixel values along the walk, based on some test function.
-   * @param {number[]} coords       Coordinate array, in [x0, y0, x1, y1, ...] for which to pull pixels.
-   * @param {number} jIncr          How to increment the walk over the pixels (i.e., skip?)
-   * @param {function} markPixelFn  Function to mark pixels along the walk.
-   * @returns {object}
-   *  - {number[]} coords     Local pixel coordinates, in [x0, y0, x1, y1]
-   *  - {object[]} markers    Pixels that meet the markPixelFn
-   */
-  #markPixelsForLocalCoords(coords, jIncr, markPixelFn, start, end) {
-    const nCoords = coords.length;
-    const nCoordsInv = 1 / (nCoords - 2);
-    const markers = [];
-    const markerOpts = PixelMarker.calculateOptsFn(this, coords);
-    const startingMarker = new PixelMarker(0, start, end, markerOpts(0));
-    markers.push(startingMarker);
-
-    // Cycle over the coordinates, adding new markers whenever the markPixelFn test is met.
-    let prevMarker = startingMarker;
-    let prevPixel = startingMarker.options.currPixel;
-    const iIncr = jIncr * 2;
-    for ( let i = iIncr; i < nCoords; i += iIncr) {
-      const opts = markerOpts(i);
-      if ( markPixelFn(prevPixel, opts.currPixel, i, nCoords) ) {
-        const t = i * nCoordsInv;
-        opts.prevPixel = prevPixel;
-        prevMarker = prevMarker._addSubsequentMarkerFast(t, opts);
-        markers.push(prevMarker);
-      }
-      prevPixel = opts.currPixel;
-    }
-
-    // Add an end marker if not already done.
-    if ( prevMarker.t !== 1 ) {
-      const opts = markerOpts(nCoords - 2);
-      opts.prevPixel = prevPixel;
-      const endingMarker = prevMarker._addSubsequentMarkerFast(1, opts);
-      markers.push(endingMarker);
-    }
-
-    return { coords, markers };
-  }
-
-  // Use the new pixel offsets to calculate average, percent, total.
-  _aggregation(shape, reducerFn, skip, localOffsets) {
-    let canvasOffsets;
-    if ( !localOffsets ) canvasOffsets = this.constructor.pixelOffsetGrid(shape, skip);
-    const { x, y } = shape.getBounds().center;
-    const pixels = this.pixelsForRelativePointsFromCanvas(x, y, canvasOffsets, localOffsets);
-    return reducerFn(pixels);
-  }
-
-  total(shape, { skip, localOffsets } = {}) {
-    const reducerFn = this.constructor.pixelAggregator("sum");
-    return this._aggregation(shape, reducerFn, skip, localOffsets);
-  }
-
-  average(shape, { skip, localOffsets } = {}) {
-    const reducerFn = this.constructor.pixelAggregator("average");
-    return this._aggregation(shape, reducerFn, skip, localOffsets);
-  }
-
-  count(shape, threshold, { skip, localOffsets } = {}) {
-    const reducerFn = this.constructor.pixelAggregator("count_gt_threshold", threshold);
-    return this._aggregation(shape, reducerFn, skip, localOffsets);
-  }
-
-  /**
+  // ----- NOTE: Static constructors ----- //
+    /**
    * Construct a pixel cache from a texture.
    * Will automatically adjust the resolution of the pixel cache based on the texture resolution.
    * @param {PIXI.Texture} texture      Texture from which to pull pixel data
@@ -1504,29 +1198,21 @@ export class PixelCache extends PIXI.Rectangle {
   }
 
   /**
-   * Construct a pixel cache from a display object.
-   * @param {PIXI.Container|PIXI.Mesh|PIXI.Graphics} displayObject      Object from which to pull pixel data
-   * @param {object} [opts]          Options affecting which pixel data is used
-   * @param {PIXI.Rectangle} [opts.frame]
-   * @param {number} [opts.resolution=1]     At what resolution to pull the pixels
-   * @param {number} [opts.channel=0]        Which RGBA channel, where R = 0, A = 3.
-   * @param {function} [opts.scalingMethod=PixelCache.nearestNeighborScaling]
-   * @param {function} [opts.combineFn]      Function to combine multiple channels of pixel data.
-   *   Will be passed the r, g, b, and a channels.
-   * @param {TypedArray} [opts.arrayClass]        What array class to use to store the resulting pixel values
+   * Build pixel cache from an array of pixels, with specific manipulations.
+   * Use scaling to shrink pixels.
+   * See PixelCache.fromTexture
+   * @param {TypedArray} pixels         Pixels to manipulate
+   * @param {PIXI.Rectangle} frame      Frame for which to extract the pixels
+   * @param {object} [opts]             See PixelCache.fromTexture
+   * @returns {PixelCache}
    */
-  static fromDisplayObject(displayObject, opts = {}) {
-    const frame = opts.frame ??  new PIXI.Rectangle(displayObject.x, displayObject.y, displayObject.width, displayObject.height);
-    const pixels = canvas.app.renderer.extract.pixels(displayObject, { frame });
-    return this._fromPixels(pixels, frame, opts);
-  }
-
   static _fromPixels(pixels, frame, opts) {
     const combinedPixels = opts.combineFn ? this.combinePixels(pixels, opts.combineFn, opts.arrayClass) : pixels;
 
     opts.x ??= 0;
     opts.y ??= 0;
     opts.resolution ??= 1;
+    opts.textureResolution ??= 1;
     opts.channel ??= 0;
     opts.scalingMethod ??= this.nearestNeighborScaling;
     const arr = opts.scalingMethod(combinedPixels, frame.width, frame.height, opts.resolution, {
@@ -1534,26 +1220,11 @@ export class PixelCache extends PIXI.Rectangle {
       skip: opts.combineFn ? 1 : 4,
       arrayClass: opts.arrayClass });
 
-    opts.x += frame.x;
-    opts.y += frame.y;
-    opts.pixelHeight = frame.height;
-
-    opts.resolution *= opts.textureResolution ?? 1;
+    opts.scale ??= {};
+    opts.scale.x = opts.x + frame.x;
+    opts.scale.y = opts.y + frame.y;
+    opts.scale.resolution = (opts.resolution * opts.textureResolution);
     return new this(arr, frame.width, opts);
-  }
-
-  _printPixels(threshold = 0) {
-    let str = "";
-    const nrows = this.#localHeight;
-    const ncols = this.#localHeight;
-    for ( let r = 0; r < nrows; r += 1 ) {
-      for ( let c = 0; c < ncols; c += 1 ) {
-        const pix = this._pixelAtLocal(c, r);
-        str += pix > threshold ? "•" : " ";
-      }
-      str += "\n";
-    }
-    return str;
   }
 
   /**
@@ -1685,90 +1356,190 @@ export class PixelCache extends PIXI.Rectangle {
   /**
    * Draw a representation of this pixel cache on the canvas, where alpha channel is used
    * to represent values. For debugging.
-   * @param {Hex} [color]   Color to use for the fill
    */
-  draw({color = Draw.COLORS.blue, gammaCorrect = false, local = false } = {}) {
+  draw({color = CONFIG.GeometryLib.Draw.COLORS.blue, gammaCorrect = false, local = false, skip = 10, radius = 1 } = {}) {
     const ln = this.pixels.length;
     const coordFn = local ? this._localAtIndex : this._canvasAtIndex;
     const gammaExp = gammaCorrect ? 1 / 2.2 : 1;
-
-    for ( let i = 0; i < ln; i += 1 ) {
+    skip += 1; // For incrementing i.
+    for ( let i = 0; i < ln; i += skip ) {
       const value = this.pixels[i];
       if ( !value ) continue;
-      const alpha = Math.pow(value / this.#maximumPixelValue, gammaExp);
-      const pt = coordFn.call(this, i);
-      Draw.point(pt, { color, alpha, radius: 1 });
+      const alpha = Math.pow(value / this.maximumPixelValue, gammaExp);
+      const pt = coordFn.call(this, i, PIXI.Point._tmp);
+      CONFIG.GeometryLib.Draw.point(pt, { color, alpha, radius });
     }
   }
 
   /**
-   * Draw a representation of this pixel cache on the canvas, where alpha channel is used
-   * to represent values. For debugging.
-   * @param {Hex} [color]   Color to use for the fill
+   * For debugging, to test coordinate conversion.
+   * Use `pixelAtLocal` or `pixelAtCanvas` to get the value. Unlike `draw`, which iterates from the pixel indices directly.
    */
-  drawLocal({color = Draw.COLORS.blue, gammaCorrect = false } = {}) {
-    const ln = this.pixels.length;
-    const gammaExp = gammaCorrect ? 1 / 2.2 : 1;
-    for ( let i = 0; i < ln; i += 1 ) {
-      const value = this.pixels[i];
-      if ( !value ) continue;
-      const alpha = Math.pow(value / this.#maximumPixelValue, gammaExp);
-      const pt = this._canvasAtIndex(i);
-      const local = this._fromCanvasCoordinates(pt.x, pt.y);
-      Draw.point(local, { color, alpha, radius: 1 });
-    }
-  }
-
-  /**
-   * Draw a representation of this pixel cache on the canvas, where alpha channel is used
-   * to represent values. For debugging.
-   * @param {Hex} [color]   Color to use for the fill
-   */
-  drawColors({defaultColor = Draw.COLORS.blue, colors = {}, local = false } = {}) {
-    const ln = this.pixels.length;
-    const coordFn = local ? this._localAtIndex : this._canvasAtIndex;
-    for ( let i = 0; i < ln; i += 1 ) {
-      const pt = coordFn.call(this, i);
-      const value = this.pixels[i];
-      const color = colors[value] ?? defaultColor;
-      Draw.point(pt, { color, alpha: .9, radius: 1 });
-    }
-  }
-
-  drawCanvasCoords({color = Draw.COLORS.blue, gammaCorrect = false, skip = 10, radius = 1 } = {}) {
+  drawFromCoords({color = CONFIG.GeometryLib.Draw.COLORS.blue, gammaCorrect = false, skip = 10, radius = 1, local = false } = {}) {
     const gammaExp = gammaCorrect ? 1 / 2.2 : 1;
     const { right, left, top, bottom } = this;
-    skip *= Math.round(1 / this.scale.resolution);
-    for ( let x = left; x <= right; x += skip ) {
-      for ( let y = top; y <= bottom; y += skip ) {
-        const value = this.pixelAtCanvas(x, y);
+    let coordFn;
+    let valueFn;
+    if ( local ) {
+      coordFn = (localX, localY) => PIXI.Point._tmp.set(localX, localY);
+      valueFn = this._pixelAtLocal;
+    } else {
+      coordFn = (localX, localY) => this._toCanvasCoordinates(localX, localY, PIXI.Point._tmp);
+      valueFn = (localX, localY) => {
+        const canvasPt = this._toCanvasCoordinates(localX, localY, PIXI.Point._tmp);
+        return this.pixelAtCanvas(canvasPt.x, canvasPt.y);
+      }
+    }
+
+    skip += 1; // For incrementing.
+    for ( let localX = left; localX <= right; localX += skip ) {
+      for ( let localY = top; localY <= bottom; localY += skip ) {
+        const value = valueFn.call(this, localX, localY);
         if ( !value ) continue;
         const alpha = Math.pow(value / 255, gammaExp);
-        Draw.point({x, y}, { color, alpha, radius });
+        const pt = coordFn.call(this, localX, localY);
+        CONFIG.GeometryLib.Draw.point(pt, { color, alpha, radius });
       }
     }
   }
+}
 
-  drawLocalCoords({color = Draw.COLORS.blue, gammaCorrect = false, skip = 10, radius = 2 } = {}) {
-    const gammaExp = gammaCorrect ? 1 / 2.2 : 1;
-    const { right, left, top, bottom } = this.localFrame;
-    for ( let x = left; x <= right; x += skip ) {
-      for ( let y = top; y <= bottom; y += skip ) {
-        const value = this._pixelAtLocal(x, y);
-        if ( !value ) continue;
-        const alpha = Math.pow(value / 255, gammaExp);
-        Draw.point({x, y}, { color, alpha, radius });
+/**
+ * Pixel cache that has pixel values === 0 trimmed around the border.
+ * See Foundry's TextureLoader.getTextureAlphaData
+ * Used to ignore 0-alpha pixels around the border.
+ */
+export class TrimmedPixelCache extends PixelCache {
+  /** @type {PIXI.Rectangle} */
+  #fullLocalBounds = new PIXI.Rectangle();
+
+  /**
+   * @param {number[]} pixels     Array of integer values, trimmed.
+   * @param {number} pixelWidth   The width of the trimmed pixel rectangle.
+   * @param {object} [opts]
+   * @param
+   * @param {number} [opts.opts]   Other options passed to PixelCache constructor
+   *   pixel width * resolution = canvas width.
+   */
+  constructor(pixels, pixelWidth, { minX, maxX, minY, maxY, ...opts } = {}) {
+    super(pixels, pixelWidth, opts);
+    this.#fullLocalBounds.x = -minX;
+    this.#fullLocalBounds.y = -minY;
+    this.#fullLocalBounds.width = this.width + maxX;
+    this.#fullLocalBounds.height = this.height + maxY;
+  }
+
+
+  // ----- NOTE: Static factory method ----- //
+
+  /**
+   * From a non-trimmed pixel array, trim the pixels and create a new pixel cache.
+   * @param {TypedArray} pixels
+   * @param {number} pixelWidth     The width of the pixel rectangle
+   * @param {object} [opts]         Options passed to the constructor
+   * @returns {TrimmedPixelCache}
+   */
+  static fromNonTrimmedPixels(pixels, untrimmedLocalWidth, untrimmedLocalHeight, opts = {}) {
+    const nPixels = pixels.length;
+    untrimmedLocalWidth = roundFastPositive(untrimmedLocalWidth);
+    untrimmedLocalHeight ??= nPixels / untrimmedLocalHeight;
+    if ( !Number.isInteger(opts.pixelHeight) ) {
+      console.warn(`PixelCache untrimmedLocalHeight is non-integer: ${untrimmedLocalHeight}`);
+      untrimmedLocalHeight = Math.ceil(untrimmedLocalHeight);
+    }
+    const { minX, minY, maxX, maxY } = this.minMaxNonZeroPixels(pixels, untrimmedLocalWidth, untrimmedLocalHeight);
+
+    // Create new trimmed buffer
+    const trimmedWidth = maxX - minX;
+    const trimmedHeight = maxY - minY;
+    const trimmedPixels = new pixels.constructor(trimmedWidth * trimmedHeight);
+    for ( let i = 0, y = minY; y < maxY; y++ ) {
+      for ( let x = minX; x < maxX; x++, i++ ) {
+        trimmedPixels[i] = pixels[((untrimmedLocalWidth * y) + x)];
       }
     }
+    return new this(trimmedPixels, trimmedWidth, { minX, maxX, minY, maxY, ...opts });
+  }
+
+  /**
+   * Determine the min/max pixel coordinates for an array of pixels.
+   * Meaning, the first and last coordinates of non-zero pixels.
+   * See Foundry's TextureLoader.getTextureAlphaData.
+   * @param {TypedArray} pixels     Array of pixels to trim
+   * @param {number} width          Width of the pixel rectangle
+   * @param {number} height         Heigh of the pixel rectangle
+   * @returns { minX, minY, maxX, maxY }
+   */
+  static minMaxNonZeroPixels(pixels, width, height) {
+    let minX = width;
+    let minY = height;
+    let maxX = 0;
+    let maxY = 0;
+    for ( let i = 3, y = 0; y < height; y++ ) {
+      for ( let x = 0; x < width; x++, i += 4 ) {
+        const alpha = pixels[i];
+        if ( alpha === 0 ) continue;
+        if ( x < minX ) minX = x;
+        if ( x >= maxX ) maxX = x + 1;
+        if ( y < minY ) minY = y;
+        if ( y >= maxY ) maxY = y + 1;
+      }
+    }
+
+    // Special case when the whole texture is alpha 0
+    if ( minX > maxX ) minX = minY = maxX = maxY = 0;
+    return { minX, minY, maxX, maxY };
+  }
+
+  // ----- NOTE: Transformations ----- //
+
+  /**
+   * Matrix that takes a canvas point and transforms to a local point.
+   * @returns {Matrix}
+   */
+  _calculateToLocalTransform() {
+    // Translate to account for the trimmed border.
+    const mTranslate = CONFIG.GeometryLib.Matrix.translation(this.#fullLocalBounds.x, this.#fullLocalBounds.y);
+    return super._calculateToLocalTransform().multiply3x3(mTranslate);
+
+    //const mTranslate = CONFIG.GeometryLib.Matrix.translation(this.#fullLocalBounds.x, this.#fullLocalBounds.y);
+    //return mTranslate.multiply3x3(super._calculateToLocalTransform());
+  }
+
+  /**
+   * Get a pixel value given local coordinates.
+   * @param {number} x    Local x coordinate
+   * @param {number} y    Local y coordinate
+   * @returns {number|null}  Return null otherwise. Sort will put nulls between -1 and 0.
+   *   If the {x,y} falls within the trimmed border, returns 0.
+   */
+  _pixelAtLocal(x, y) {
+    if ( this.#fullLocalBounds.contains(x, y) && !this.contains(x, y) ) return 0;
+    return super._pixelAtLocal(x, y);
+  }
+
+  /**
+   * Get a pixel value given canvas coordinates.
+   * @param {number} x    Canvas x coordinate
+   * @param {number} y    Canvas y coordinate
+   * @returns {number|null}
+   */
+  pixelAtCanvas(x, y) {
+    const idx = this._indexAtCanvas(x, y);
+    if ( idx ) return this.pixels[idx];
+
+    const localPt = this._fromCanvasCoordinates(x, y, PIXI.Point._tmp);
+    if ( this.#fullLocalBounds.contains(localPt.x, localPt.y) ) return 0;
+    return null;
   }
 }
 
 
 /**
  * Pixel cache specific to a tile texture.
- * Adds additional handling for tile rotation, scaling.
+ * Adds additional handling for tile rotation, scaling, converting from a tile cache.
  */
-export class TilePixelCache extends PixelCache {
+export class TilePixelCache extends TrimmedPixelCache {
   /** @type {Tile} */
   tile;
 
@@ -1780,8 +1551,9 @@ export class TilePixelCache extends PixelCache {
   constructor(pixels, width, opts = {}) {
     super(pixels, width, opts);
     this.tile = opts.tile;
-    this._resize();
   }
+
+  // ----- NOTE: Tile data getters ----- //
 
   /** @type {numeric} */
   get scaleX() { return this.tile.document.texture.scaleX; }
@@ -1820,25 +1592,9 @@ export class TilePixelCache extends PixelCache {
   get tileHeight() { return this.tile.document.height; }
 
   /**
-   * Resize canvas dimensions for the tile.
-   * Account for rotation and scale by converting from local frame.
+   * For backwards compatibility only.
    */
-  _resize() {
-    const { width, height } = this.localFrame;
-    const TL = this._toCanvasCoordinates(0, 0);
-    const TR = this._toCanvasCoordinates(width, 0);
-    const BL = this._toCanvasCoordinates(0, height);
-    const BR = this._toCanvasCoordinates(width, height);
-
-    const xMinMax = Math.minMax(TL.x, TR.x, BL.x, BR.x);
-    const yMinMax = Math.minMax(TL.y, TR.y, BL.y, BR.y);
-    this.x = xMinMax.min;
-    this.y = yMinMax.min;
-    this.width = xMinMax.max - xMinMax.min;
-    this.height = yMinMax.max - yMinMax.min;
-
-    this.clearTransforms();
-  }
+  _resize() { this.clearTransforms(); }
 
   /**
    * Transform canvas coordinates into the local pixel rectangle coordinates.
@@ -1848,32 +1604,31 @@ export class TilePixelCache extends PixelCache {
     // 1. Clear the rotation
     // Translate so the center is 0,0
     const { x, y, width, height } = this.tile.document;
-    const mCenterTranslate = Matrix.translation(-(width * 0.5) - x, -(height * 0.5) - y);
+    const mCenterTranslate = CONFIG.GeometryLib.Matrix.translation(-(width * 0.5) - x, -(height * 0.5) - y);
 
     // Rotate around the Z axis
     // (The center must be 0,0 for this to work properly.)
     const rotation = -this.rotation;
-    const mRot = Matrix.rotationZ(rotation, false);
+    const mRot = CONFIG.GeometryLib.Matrix.rotationZ(rotation, false);
 
     // 2. Clear the scale
     // (The center must be 0,0 for this to work properly.)
     const { scaleX, scaleY } = this;
-    const mScale = Matrix.scale(1 / scaleX, 1 / scaleY);
+    const mScale = CONFIG.GeometryLib.Matrix.scale(1 / scaleX, 1 / scaleY);
 
     // 3. Clear the width/height
     // Translate so top corner is 0,0
     const { textureWidth, textureHeight, proportionalWidth, proportionalHeight } = this;
     const currWidth = textureWidth * proportionalWidth;
     const currHeight = textureHeight * proportionalHeight;
-    const mCornerTranslate = Matrix.translation(currWidth * 0.5, currHeight * 0.5);
+    const mCornerTranslate = CONFIG.GeometryLib.Matrix.translation(currWidth * 0.5, currHeight * 0.5);
 
     // Scale the canvas width/height back to texture width/height, if not 1:1.
     // (Must have top left corner at 0,0 for this to work properly.)
-    const mProportion = Matrix.scale(1 / proportionalWidth, 1 / proportionalHeight);
+    const mProportion = CONFIG.GeometryLib.Matrix.scale(1 / proportionalWidth, 1 / proportionalHeight);
 
     // 4. Scale based on resolution of the underlying pixel data
-    const resolution = this.scale.resolution;
-    const mRes = Matrix.scale(resolution, resolution);
+    const mRes = super._calculateToLocalTransform();
 
     // Combine the matrices.
     return mCenterTranslate
@@ -1906,17 +1661,12 @@ export class TilePixelCache extends PixelCache {
    * @param {object} opts   Options passed to `fromTexture` method
    * @returns {TilePixelCache}
    */
-  static fromOverheadTileAlpha(tile) {
-    if ( !tile.document.overhead ) return this.fromTileAlpha(tile);
-    if ( !tile.mesh._textureData ) tile.mesh.updateTextureData();
-
-    // Resolution consistent with `_createTextureData` which divides by 4.
-    const pixelWidth = tile.mesh._textureData.aw;
-    const texWidth = tile.mesh.texture.baseTexture.realWidth;
-    const pixelHeight = tile.mesh._textureData.ah;
-    const resolution = pixelWidth / texWidth;
-
-    return new this(tile.mesh._textureData.pixels, pixelWidth, { pixelHeight, tile, resolution });
+  static fromOverheadTileAlpha(tile, resolution = 1) {
+    // See TextureLoader.getTextureAlphaData.
+    const textureData = TextureLoader.getTextureAlphaData(tile.texture, resolution);
+    const { minX, maxX, minY, maxY, data } = textureData;
+    const pixelWidth = maxX - minX;
+    return new this(data, pixelWidth, { tile, minX, maxX, minY, maxY, scale: { resolution } });
   }
 
   /**
@@ -1935,6 +1685,7 @@ export class TilePixelCache extends PixelCache {
     console.error("_circleToLocalCoordinates: Not yet implemented for tiles.");
   }
 
+
   /**
    * Convert a rectangle to local texture coordinates, taking into account scaling.
    * @returns {PIXI.Rectangle|PIXI.Polygon}
@@ -1949,9 +1700,9 @@ export class TilePixelCache extends PixelCache {
       case 270: {
         // Rotation will change the TL and BR points; adjust accordingly.
         const { left, right, top, bottom } = rect;
-        const TL = this._fromCanvasCoordinates(left, top);
-        const TR = this._fromCanvasCoordinates(right, top);
-        const BR = this._fromCanvasCoordinates(right, bottom);
+        const TL = this._fromCanvasCoordinates(left, top, PIXI.Point._tmp);
+        const TR = this._fromCanvasCoordinates(right, top, PIXI.Point._tmp2);
+        const BR = this._fromCanvasCoordinates(right, bottom, PIXI.Point._tmp3);
         const BL = this._fromCanvasCoordinates(left, bottom);
         const localX = Math.minMax(TL.x, TR.x, BR.x, BL.x);
         const localY = Math.minMax(TL.y, TR.y, BR.y, BL.y);
@@ -1966,8 +1717,6 @@ export class TilePixelCache extends PixelCache {
     }
   }
 }
-
-// ----- Marker class ----- //
 
 /**
  * Store a point, a t value, and the underlying coordinate system
@@ -2059,4 +1808,21 @@ export class PixelMarker extends Marker {
     };
   }
 }
+
+// ----- NOTE: Helper functions ----- //
+
+/**
+ * Fix a number to 8 decimal places
+ * @param {number} x    Number to fix
+ * @returns {number}
+ */
+const POW10_8 = Math.pow(10, 8);
+function fastFixed(x) { return Math.round(x * POW10_8) / POW10_8; }
+
+
+GEOMETRY_CONFIG.PixelCache ??= PixelCache;
+GEOMETRY_CONFIG.TrimmedPixelCache ??= TrimmedPixelCache;
+GEOMETRY_CONFIG.TilePixelCache ??= TilePixelCache;
+GEOMETRY_CONFIG.Marker ??= Marker;
+GEOMETRY_CONFIG.PixelMarker ??= PixelMarker;
 

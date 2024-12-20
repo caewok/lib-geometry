@@ -1,3 +1,45 @@
+## 0.3.9
+Move `Point3d._tmp` to a static object and add `_tmp` for subclasses.
+Add `RegionWaypoint3d`, `GridCoordinates`, and `GridCoordinates3d` classes.
+
+## 0.3.8
+Fix `findOverlappingPoints` when one segment is completely encompassed by a longer segment. (Was returning 1 endpoint when should be returning 2 endpoints.)
+
+## 0.3.7
+Add `cutaway` methods to construct a vertical 2d slice of a 3d shape.
+Add `rotateAroundCenter` method to `PIXI.Rectangle`.
+
+## 0.3.6
+Fix for tile pixel cache in v12.
+Add `localNeighbors` and `localPixelStep` methods to PixelCache.
+
+## 0.3.5
+Use PIXI.Points for `_fixedPoints` in CenteredPolygon so that the points can be rotated. Closes issue #108 in Elevation Ruler.
+Add `ClipperPaths#joinPaths` method.
+Passthrough pregenerated edges for `Polygon#lineSegmentIntersects` to avoid rebuilding the edges if not necessary.
+
+## 0.3.4
+Handle Wall, Edge classes in Draw.segment.
+Add an internal PIXI.Point.invert that returns object, for non-keys.
+Fix for test if can convert polygon to rectangle.
+Add `ClipperPaths#union` method that unions polygons without filling.
+
+## 0.3.3
+Switch to using TextureLoader.getTextureAlphaData.
+Fix the `fromOverheadTileAlpha` method given changes to `TextureLoader.getTextureAlphaData`.
+Use `wall.edge.a`.
+Change Tile overhead test.
+
+## 0.3.2
+Use `token#getShape()` instead of `token#shape` in `token#tokenBorder` so it works even if the token shape is not yet defined.
+Use `wall.edge.a` instead of `wall.A`.
+
+## 0.3.1
+Add temporary static points to `PIXI.Point` and `Point3d`.
+Redo constrained token border to use CanvasEdges in v12.
+Change `Math.clamped` to `Math.clamp`.
+Deprecate `Token#tokenShape`.
+
 ## 0.3.0
 Foundry v12 compatibility. No tested backwards compatibility.
 Removed `Math.SQRT3` which is now set in base Foundry.

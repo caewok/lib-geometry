@@ -4,6 +4,9 @@ PIXI
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
+import "./ClipperPaths.js";
+import { GEOMETRY_CONFIG } from "./const.js";
+
 /**
  * Class that holds an array of PIXI shapes (PIXI.Polygon, PIXI.Circle, etc.)
  * If the shape is a hole, it has the "isHole" property added.
@@ -119,7 +122,7 @@ export class ShapeHoled {
     });
 
     const polygons = [...this.shapes, ...this.holes].map(s => s.toPolygon())
-    return ClipperPaths.fromPolygons(polygons);
+    return CONFIG.GeometryLib.ClipperPaths.fromPolygons(polygons);
   }
 
   /**
@@ -206,3 +209,6 @@ export class ShapeHoled {
     return !this.holes.some(h => h.overlaps(other));
   }
 }
+
+GEOMETRY_CONFIG.ShapeHoled ??= ShapeHoled;
+

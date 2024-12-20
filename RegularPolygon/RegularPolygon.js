@@ -6,6 +6,8 @@ WeilerAthertonClipper
 */
 "use strict";
 
+import { GEOMETRY_CONFIG } from "../const.js";
+
 /* Define a set of Regular Polygon shapes
 Each should extend PIXI.Polygon like LimitedAnglePolygon does.
 Each is non-changeable; modifications result in new object.
@@ -198,8 +200,7 @@ export class RegularPolygon extends PIXI.Polygon {
   fromCartesianCoords(a, outPoint) {
     const { x, y } = this.origin;
     outPoint ??= new PIXI.Point;
-    a = PIXI.Point.fromObject(a);
-
+    a = PIXI.Point._tmp.copyFrom(a);
     a.translate(-x, -y, outPoint).rotate(-this.radians, outPoint);
     return outPoint;
   }
@@ -213,8 +214,7 @@ export class RegularPolygon extends PIXI.Polygon {
   toCartesianCoords(a, outPoint) {
     const { x, y } = this.origin;
     outPoint ??= new PIXI.Point;
-    a = PIXI.Point.fromObject(a);
-
+    a = PIXI.Point._tmp.copyFrom(a);
     a.rotate(this.radians, outPoint).translate(x, y, outPoint);
     return outPoint;
   }
@@ -406,7 +406,7 @@ export class RegularPolygon extends PIXI.Polygon {
     clipType ??= WeilerAthertonClipper.CLIP_TYPES.INTERSECT;
 
     // Use Weiler-Atherton for efficient intersection or union.
-    if ( weilerAtherton ) {
+    if ( weilerAtherton && polygon._isPositive ) {
       const res = WeilerAthertonClipper.combine(polygon, this, { clipType, density, ...options });
       if ( !res.length ) return new PIXI.Polygon([]);
       return res[0];
@@ -446,3 +446,5 @@ export class RegularPolygon extends PIXI.Polygon {
   }
 
 }
+
+GEOMETRY_CONFIG.RegularPolygons.RegularPolygon ??= RegularPolygon;
