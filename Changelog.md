@@ -1,3 +1,38 @@
+## 0.3.19
+Fix for Elevation Ruler #227: diagonals not measured properly. Correct how `_singleOffsetDistanceFn` tallies grid offsets.
+
+## 0.3.18
+Deprecation: Use `canvas.grid.sizeX` and `sizeY`.
+
+## 0.3.17
+Use simpler drawing cutoffs for y elevation.
+Fix Wall Height module not changing when editing multiple walls.
+
+## 0.3.16
+Fix undefined quadtree in `CanvasEdges`.
+Catch when a polygon, ellipse is not positive and don't use WeilerAtherton.
+
+## 0.3.15
+Add quadtree to `CanvasEdges`.
+Split out `Edge` vs `CanvasEdge` patches.
+Fix handling of negative values in `convertToDistanceCutaway`.
+
+## 0.3.14
+Move `CutawayPolygon` and related cutaway methods to libGeometry.
+
+## 0.3.13
+More fixes for the `alternatingGridDistance` test.
+
+## 0.3.12
+Fix alternating test in `alternatingGridDistance` so it does 5/10/5, not 10/5/10.
+
+## 0.3.11
+Add `HexGridCoordinates3d` class.
+Add `roundNearWhole` utility.
+
+## 0.3.10
+Set diagonals to the game setting for hex grids.
+
 ## 0.3.9
 Move `Point3d._tmp` to a static object and add `_tmp` for subclasses.
 Add `RegionWaypoint3d`, `GridCoordinates`, and `GridCoordinates3d` classes.
