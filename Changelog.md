@@ -1,6 +1,7 @@
 ## 0.3.19
 Fix for Elevation Ruler #227: diagonals not measured properly. Correct how `_singleOffsetDistanceFn` tallies grid offsets.
 
+
 ## 0.3.18
 Deprecation: Use `canvas.grid.sizeX` and `sizeY`.
 
