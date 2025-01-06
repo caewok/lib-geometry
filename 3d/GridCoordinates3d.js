@@ -352,8 +352,8 @@ export class GridCoordinates3d extends GEOMETRY_CONFIG.threeD.RegionMovementWayp
         const isElevationMove = prevOffset.k !== currOffset.k;
         const isStraight2dMove = (prevOffset.i === currOffset.i) ^ (prevOffset.j === currOffset.j);
         const isDiagonal2dMove = (prevOffset.i !== currOffset.i) && (prevOffset.j !== currOffset.j);
-        const s = isStraight2dMove || (!isDiagonal2dMove && isElevationMove);
-        const d1 = isDiagonal2dMove && !isElevationMove;
+        const s = isStraight2dMove ^ isElevationMove;
+        const d1 = (isDiagonal2dMove && !isElevationMove) || (isStraight2dMove && isElevationMove);
         const d2 = isDiagonal2dMove && isElevationMove;
         if ( d1 || d2 ) nDiag++;
         const k = kFn();
@@ -369,11 +369,14 @@ export class GridCoordinates3d extends GEOMETRY_CONFIG.threeD.RegionMovementWayp
         case D.RECTILINEAR: k = 2; k2 = 3; break;
       }
       fn = (prevOffset, currOffset) => {
+        // Straight if moving horizontal, vertical, or elevation. (straight or elevation)
+        // Diagonal if moving *only* H + V, H + E, or V + E. (straight + elevation or diagonal2d)
+        // Diagonal2 if moving H, V, and E. (diagonal2d + elevation)
         const isElevationMove = prevOffset.k !== currOffset.k;
         const isStraight2dMove = (prevOffset.i === currOffset.i) ^ (prevOffset.j === currOffset.j);
         const isDiagonal2dMove = (prevOffset.i !== currOffset.i) && (prevOffset.j !== currOffset.j);
-        const s = isStraight2dMove || (!isDiagonal2dMove && isElevationMove);
-        const d1 = isDiagonal2dMove && !isElevationMove;
+        const s = isStraight2dMove ^ isElevationMove;
+        const d1 = (isDiagonal2dMove && !isElevationMove) || (isStraight2dMove && isElevationMove);
         const d2 = isDiagonal2dMove && isElevationMove;
         return (s + (k * d1) + (k2 * d2)) * canvas.grid.distance;
       };
