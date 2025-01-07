@@ -427,12 +427,12 @@ function sortKey() {
 /**
  * Iterator: x then y.
  */
-function iteratorFn() {
+PIXI.Point.prototype[Symbol.iterator] = function() {
   const keys = ["x", "y"];
   let index = 0;
   return {
     next() {
-      if ( index < 2 )return {
+      if ( index < 2 ) return {
         value: [keys[index], this[keys[index++]]],
         done: false };
       else return { done: true };
@@ -458,7 +458,6 @@ PATCHES.PIXI.STATIC_METHODS = {
 };
 
 PATCHES.PIXI.METHODS = {
-  [Symbol.iterator]: iteratorFn,
   add,
   subtract,
   multiply,

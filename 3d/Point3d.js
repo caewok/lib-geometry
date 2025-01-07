@@ -51,6 +51,21 @@ export class Point3d extends PIXI.Point {
   }
 
   /**
+   * Iterator: x then y.
+   */
+   [Symbol.iterator]() {
+    const keys = ["x", "y", "z"];
+    let index = 0;
+    return {
+      next() {
+        if ( index < 2 ) return {
+          value: [keys[index], this[keys[index++]]],
+          done: false };
+        else return { done: true };
+      }
+    };
+  }
+  /**
    * Construct a Point3d from any object that has x and y and z properties.
    * Recognizes elevationZ and elevation as potential z properties.
    * @param {object} obj
