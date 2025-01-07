@@ -434,7 +434,7 @@ function iteratorFn() {
     next() {
       if ( index < 2 ) return {
         value: [keys[index], this[keys[index++]]],
-        done: false;
+        done: false };
       } else return { done: true };
     }
   };
