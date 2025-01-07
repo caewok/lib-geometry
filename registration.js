@@ -4,7 +4,7 @@ foundry
 */
 "use strict";
 
-const VERSION = "0.3.19";
+const VERSION = "0.3.20";
 
 // Foundry utils
 import { GEOMETRY_CONFIG } from "./const.js";
