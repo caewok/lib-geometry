@@ -430,10 +430,11 @@ function sortKey() {
 PIXI.Point.prototype[Symbol.iterator] = function() {
   const keys = ["x", "y"];
   let index = 0;
+  const data = this;
   return {
     next() {
       if ( index < 2 ) return {
-        value: [keys[index], this[keys[index++]]],
+        value: data[keys[index++]],
         done: false };
       else return { done: true };
     }

@@ -55,11 +55,12 @@ export class Point3d extends PIXI.Point {
    */
    [Symbol.iterator]() {
     const keys = ["x", "y", "z"];
+    const data = this;
     let index = 0;
     return {
       next() {
         if ( index < 2 ) return {
-          value: [keys[index], this[keys[index++]]],
+          value: data[keys[index++]],
           done: false };
         else return { done: true };
       }
