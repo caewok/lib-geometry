@@ -53,13 +53,13 @@ export class Point3d extends PIXI.Point {
   /**
    * Iterator: x then y.
    */
-   [Symbol.iterator]() {
+  [Symbol.iterator]() {
     const keys = ["x", "y", "z"];
     const data = this;
     let index = 0;
     return {
       next() {
-        if ( index < 2 ) return {
+        if ( index < 3 ) return {
           value: data[keys[index++]],
           done: false };
         else return { done: true };
