@@ -432,10 +432,10 @@ function iteratorFn() {
   let index = 0;
   return {
     next() {
-      if ( index < 2 ) return {
+      if ( index < 2 )return {
         value: [keys[index], this[keys[index++]]],
         done: false };
-      } else return { done: true };
+      else return { done: true };
     }
   };
 }
