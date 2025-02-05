@@ -5,6 +5,70 @@ Float16Array,
 PIXI
 */
 
+/**
+ * Custom PIXI BufferResource for data textures. 
+ * See https://github.com/pixijs/pixijs/issues/6436
+ * @param {Float32Array|Uint8Array|Uint32Array} source - Source buffer
+ * @param {object} options - Options
+ * @param {number} options.width - Width of the texture
+ * @param {number} options.height - Height of the texture
+ * @param {string} [opts.internalFormat] WebGL enum format
+ * @param {string} [opts.format] 				WebGL enum format
+ * @param {string} [opts.type]						WebGL enum type
+ */
+class CustomBufferResource extends PIXI.BufferResource {
+  constructor(source, options) {
+    const { width, height, internalFormat, format, type } = options || {};
+    super(source, options);
+    internalFormat ??= PIXI.GL_FORMATS.RGBA;
+    format ??= PIXI.GL_FORMATS.RGBA;
+    type ??= PIXI.GL_TYPES.UNSIGNED_BYTE;
+    if ( !PIXI.GL_FORMATS[internalFormat] ) throw new Error("CustomResourceBuffer internal format not recognized.");
+    if ( !PIXI.GL_FORMATS[format] ) throw new Error("CustomResourceBuffer format not recognized.");
+    if ( !PIXI.GL_TYPES[type] ) throw new Error("CustomResourceBuffer type not recognized.");
+
+    this.data = source;
+    this.internalFormat = internalFormat;
+    this.format = format;
+    this.type = type;
+  }
+    
+  upload(renderer, baseTexture, glTexture) {
+    const gl = renderer.gl;
+
+    gl.pixelStorei(
+      gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,
+      baseTexture.alphaMode === 1 // PIXI.ALPHA_MODES.UNPACK but `PIXI.ALPHA_MODES` are not exported
+    );
+
+    glTexture.width = baseTexture.width;
+    glTexture.height = baseTexture.height;
+
+    gl.texImage2D(
+      baseTexture.target,
+      0,
+      gl[this.internalFormat],
+      baseTexture.width,
+      baseTexture.height,
+      0,
+      gl[this.format],
+      gl[this.type],
+      this.data
+    );
+
+    return true;
+  }
+}
+
+const resource = new CustomBufferResource(dataArray, {
+  width: 3,
+  height: 3,
+  internalFormat: 'R32F',
+  format: 'RED',
+  type: 'FLOAT'
+});
+
+
 // Shamelessly borrowed from https://github.com/dev7355608/perfect-vision/blob/main/scripts/utils/extract-pixels.js
 
 /**
