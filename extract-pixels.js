@@ -4,7 +4,7 @@ PIXI
 */
 
 /**
- * Custom PIXI BufferResource for data textures. 
+ * Custom PIXI BufferResource for data textures.
  * See https://github.com/pixijs/pixijs/issues/6436
  * @param {Float32Array|Uint8Array|Uint32Array} source - Source buffer
  * @param {object} options - Options
@@ -15,8 +15,8 @@ PIXI
  * @param {string} [opts.type]						WebGL enum type
  */
 class CustomBufferResource extends PIXI.BufferResource {
-  constructor(source, options) {
-    const { width, height, internalFormat, format, type } = options || {};
+  constructor(source, options = {}) {
+    let { internalFormat, format, type } = options;
     super(source, options);
     internalFormat ??= PIXI.GL_FORMATS.RGBA;
     format ??= PIXI.GL_FORMATS.RGBA;
@@ -30,7 +30,7 @@ class CustomBufferResource extends PIXI.BufferResource {
     this.format = format;
     this.type = type;
   }
-    
+
   upload(renderer, baseTexture, glTexture) {
     const gl = renderer.gl;
 
@@ -58,6 +58,7 @@ class CustomBufferResource extends PIXI.BufferResource {
   }
 }
 
+/*
 const resource = new CustomBufferResource(dataArray, {
   width: 3,
   height: 3,
@@ -65,6 +66,7 @@ const resource = new CustomBufferResource(dataArray, {
   format: 'RED',
   type: 'FLOAT'
 });
+*/
 
 
 // Shamelessly borrowed from https://github.com/dev7355608/perfect-vision/blob/main/scripts/utils/extract-pixels.js
