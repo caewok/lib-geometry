@@ -1,6 +1,4 @@
 /* globals
-document,
-FileReader,
 Float16Array,
 PIXI
 */
