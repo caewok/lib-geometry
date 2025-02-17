@@ -288,8 +288,8 @@ function divide(other, outPoint) {
  */
 function min(other, outPoint) {
   outPoint ??= new this.constructor();
-  outPoint.x = Math.min(a.x, b.x);
-  outPoint.y = Math.min(a.y, b.y);
+  outPoint.x = Math.min(this.x, other.x);
+  outPoint.y = Math.min(this.y, other.y);
   return outPoint;
 }
 
