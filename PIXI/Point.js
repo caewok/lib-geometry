@@ -507,6 +507,8 @@ PATCHES.PIXI.METHODS = {
   multiply,
   multiplyScalar,
   divide,
+  min,
+  max,
   copyPartial,
   dot,
   magnitude,
