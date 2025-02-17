@@ -511,7 +511,7 @@ export class Point3d extends PIXI.Point {
   min(other, outPoint) {
     outPoint ??= new this.constructor();
     super.min(other, outPoint);
-    outPoint.z = Math.min(a.z, b.z);
+    outPoint.z = Math.min(this.z, other.z);
     return outPoint;
   }
 
@@ -525,7 +525,7 @@ export class Point3d extends PIXI.Point {
   max(other, outPoint) {
     outPoint ??= new this.constructor();
     super.max(other, outPoint);
-    outPoint.z = Math.max(a.z, b.z);
+    outPoint.z = Math.max(this.z, other.z);
     return outPoint;
   }
 

@@ -302,8 +302,8 @@ function min(other, outPoint) {
  */
 function max(other, outPoint) {
   outPoint ??= new this.constructor();
-  outPoint.x = Math.max(a.x, b.x);
-  outPoint.y = Math.max(a.y, b.y);
+  outPoint.x = Math.max(this.x, other.x);
+  outPoint.y = Math.max(this.y, other.y);
   return outPoint;
 }
 
