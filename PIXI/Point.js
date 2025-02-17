@@ -265,6 +265,22 @@ function multiplyScalar(scalar, outPoint) {
 }
 
 /**
+ * Divide `this` point by another.
+ * Based on https://api.pixijs.io/@pixi/math-extras/src/pointExtras.ts.html
+ * @param {Point3d|PIXI.Point} other    The point to subtract from `this`.
+ * @param {Point3d} [outPoint]    A point-like object in which to store the value.
+ *   (Will create new point if none provided.)
+ * @returns {Point3d}
+ */
+function divide(other, outPoint) {
+  outPoint ??= new this.constructor();
+  outPoint.x = this.x / other.x;
+  outPoint.y = this.y / other.y;
+  return outPoint;
+}
+
+
+/**
  * Dot product of this point with another.
  * (Sum of the products of the components)
  * @param {PIXI.Point} other
@@ -463,6 +479,7 @@ PATCHES.PIXI.METHODS = {
   subtract,
   multiply,
   multiplyScalar,
+  divide,
   copyPartial,
   dot,
   magnitude,
