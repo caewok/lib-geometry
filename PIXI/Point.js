@@ -267,10 +267,10 @@ function multiplyScalar(scalar, outPoint) {
 /**
  * Divide `this` point by another.
  * Based on https://api.pixijs.io/@pixi/math-extras/src/pointExtras.ts.html
- * @param {Point3d|PIXI.Point} other    The point to subtract from `this`.
- * @param {Point3d} [outPoint]    A point-like object in which to store the value.
+ * @param {PIXI.Point} other    The point to subtract from `this`.
+ * @param {PIXI.Point} [outPoint]    A point-like object in which to store the value.
  *   (Will create new point if none provided.)
- * @returns {Point3d}
+ * @returns {PIXI.Point}
  */
 function divide(other, outPoint) {
   outPoint ??= new this.constructor();
@@ -279,6 +279,33 @@ function divide(other, outPoint) {
   return outPoint;
 }
 
+/**
+ * Get the minimum of x and y values, respectively, between two points.
+ * @param {PIXI.Point} other    The point to compare to `this`.
+ * @param {PIXI.Point} [outPoint]    A point-like object in which to store the value.
+ *   (Will create new point if none provided.)
+ * @returns {PIXI.Point}
+ */
+function min(other, outPoint) {
+  outPoint ??= new this.constructor();
+  outPoint.x = Math.min(a.x, b.x);
+  outPoint.y = Math.min(a.y, b.y);
+  return outPoint;
+}
+
+/**
+ * Get the maximum of x and y values, respectively, between two points.
+ * @param {PIXI.Point} other    The point to compare to `this`.
+ * @param {PIXI.Point} [outPoint]    A point-like object in which to store the value.
+ *   (Will create new point if none provided.)
+ * @returns {PIXI.Point}
+ */
+function max(other, outPoint) {
+  outPoint ??= new this.constructor();
+  outPoint.x = Math.max(a.x, b.x);
+  outPoint.y = Math.max(a.y, b.y);
+  return outPoint;
+}
 
 /**
  * Dot product of this point with another.

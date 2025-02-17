@@ -502,6 +502,34 @@ export class Point3d extends PIXI.Point {
   }
 
   /**
+   * Get the minimum of x and y values, respectively, between two points.
+   * @param {Point3d} other    The point to compare to `this`.
+   * @param {Point3d} [outPoint]    A point-like object in which to store the value.
+   *   (Will create new point if none provided.)
+   * @returns {Point3d}
+   */
+  min(other, outPoint) {
+    outPoint ??= new this.constructor();
+    super.min(other, outPoint);
+    outPoint.z = Math.min(a.z, b.z);
+    return outPoint;
+  }
+
+  /**
+   * Get the maximum of x and y values, respectively, between two points.
+   * @param {Point3d} other    The point to compare to `this`.
+   * @param {Point3d} [outPoint]    A point-like object in which to store the value.
+   *   (Will create new point if none provided.)
+   * @returns {Point3d}
+   */
+  max(other, outPoint) {
+    outPoint ??= new this.constructor();
+    super.max(other, outPoint);
+    outPoint.z = Math.max(a.z, b.z);
+    return outPoint;
+  }
+
+  /**
    * Dot product of this point with another.
    * (Sum of the products of the components)
    * @param {Point3d} other
