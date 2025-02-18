@@ -120,14 +120,15 @@ async function setPlaceableObjectElevationE(value) {
 
 // NOTE: Wall Elevation
 function wallTopE() {
-  return foundry.utils.getProperty(this.document, MODULE_KEYS.EV.FLAG_WALL_TOP)
-    ?? foundry.utils.getProperty(this.document, MODULE_KEYS.WH.FLAG_WALL_TOP)
+  // Previously used foundry.utils.getProperty but it is slow.
+  return this.document.flags?.[MODULE_KEYS.EV.ID]?.[MDOULE_KEYS.EV.FLAG_WALL_TOP]
+    ?? this.document.flags?.[MODULE_KEYS.WH.ID]?.[MDOULE_KEYS.WH.FLAG_WALL_TOP]
     ?? Number.POSITIVE_INFINITY;
 }
 
 function wallBottomE() {
-  return foundry.utils.getProperty(this.document, MODULE_KEYS.EV.FLAG_WALL_BOTTOM)
-    ?? foundry.utils.getProperty(this.document, MODULE_KEYS.WH.FLAG_WALL_BOTTOM)
+  return this.document.flags?.[MODULE_KEYS.EV.ID]?.[MDOULE_KEYS.EV.FLAG_WALL_BOTTOM]
+    ?? this.document.flags?.[MODULE_KEYS.WH.ID]?.[MDOULE_KEYS.WH.FLAG_WALL_BOTTOM]
     ?? Number.NEGATIVE_INFINITY;
 }
 
@@ -187,8 +188,9 @@ function getIsProne() {
 
 function getTokenHeight(token) {
   // Use || to ignore 0 height values.
-  return foundry.utils.getProperty(token.document, MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT)
-    || foundry.utils.getProperty(token.document, MODULE_KEYS.WH.FLAG_TOKEN_HEIGHT)
+  // Previously used foundry.utils.getProperty but it is slow.
+  return token.document.flags?.[MODULE_KEYS.EV.ID][MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT]
+    || token.document.flags?.[MODULE_KEYS.WH.ID][MODULE_KEYS.WH.FLAG_TOKEN_HEIGHT]
     || calculateTokenHeightFromTokenShape(token);
 }
 
