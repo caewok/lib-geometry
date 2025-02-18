@@ -31,15 +31,9 @@ PATCHES.CANVAS_EDGES = {};
  * @returns {EdgeElevation}
  */
 function getElevation() {
-  let e = this._elevation ??= { a: { top: null, bottom: null }, b: { top: null, bottom: null }};
-  if ( this.object instanceof Wall ) e = _wallElevation(this.object);
-  if ( this.object instanceof Region ) e = _regionElevation(this.object, this);
-
-  // Ensure that positive and negative infinities are null.
-  if ( !isFinite(e.a.top) ) e.a.top = null;
-  if ( !isFinite(e.a.bottom) ) e.a.bottom = null;
-  if ( !isFinite(e.b.top) ) e.b.top = null;
-  if ( !isFinite(e.b.bottom) ) e.b.bottom = null;
+  const e = this._elevation ??= { a: { top: null, bottom: null }, b: { top: null, bottom: null }};
+  if ( this.object instanceof Wall ) _setWallElevation(this.object);
+  else if ( this.object instanceof Region ) _setRegionElevation(this.object, this);
   return e;
 }
 
@@ -48,49 +42,52 @@ function getElevation() {
  * @param {Wall} wall
  * @returns {EdgeElevation}
  */
-function _wallElevation(wall) {
-  const top = wall.topE;
-  const bottom = wall.bottomE;
-  return {
-    a: { top, bottom },
-    b: { top, bottom }
-  };
+function _setWallElevation(wall) {
+  let top = wall.topE;
+  let bottom = wall.bottomE;
+  if ( !isFinite(top) ) top = null;
+  if ( !isFinite(bottom) ) bottom = null;
+  const { a, b } = this._elevation;
+  a.top = top;
+  a.bottom = bottom;
+  b.top = top;
+  b.bottom = bottom;
 }
 
 /**
  * Elevation for a region
  * @param {Region} region
  * @param {Edge} edge       Edge for which the elevation is applied; needed for ramps
- * @returns {EdgeElevation}
  */
-function _regionElevation(region, edge) {
+function _setRegionElevation(region, edge) {
   const TM = MODULE_KEYS.TERRAIN_MAPPER;
   let top = region.document.elevation.top;
   if ( TM.ACTIVE && region[TM.ID].isElevated ) {
-    if ( region[TM.ID].isRamp ) return _rampElevation(region, edge);
+    if ( region[TM.ID].isRamp ) return _setRampElevation(region, edge);
     top = region[TM.ID].plateauElevation;
   }
   const bottom = region.document.elevation.bottom;
-  return {
-    a: { top, bottom },
-    b: { top, bottom }
-  };
+  const { a, b } = this._elevation;
+  a.top = top;
+  a.bottom = bottom;
+  b.top = top;
+  b.bottom = bottom;
 }
 
 /**
  * Elevation for a ramp
  * @param {Region} region
  * @param {Edge} edge      One edge of the region's polygon(s)
- * @returns {EdgeElevation}
  */
-function _rampElevation(region, edge) {
+function _setRampElevation(region, edge) {
   // Assumes TM is active.
   const TM = MODULE_KEYS.TERRAIN_MAPPER;
   const bottom = region.document.elevation.bottom;
-  return {
-    a: { top: region[TM.ID].elevationUponEntry(edge.a), bottom },
-    b: { top: region[TM.ID].elevationUponEntry(edge.b), bottom }
-  };
+  const { a, b } = this._elevation;
+  a.top = region[TM.ID].elevationUponEntry(edge.a);
+  a.bottom = bottom;
+  b.top = region[TM.ID].elevationUponEntry(edge.b);
+  b.bottom = bottom;
 }
 
 PATCHES.CANVAS_EDGES.GETTERS = { elevationLibGeometry: getElevation };
