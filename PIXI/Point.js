@@ -11,6 +11,7 @@ PATCHES.PIXI = {};
 
 // Temporary points that can be passed to PIXI.Point methods
 PIXI.Point._tmp = new PIXI.Point();
+PIXI.Point._tmp1 = new PIXI.Point();
 PIXI.Point._tmp2 = new PIXI.Point();
 PIXI.Point._tmp3 = new PIXI.Point();
 

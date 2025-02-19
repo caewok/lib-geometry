@@ -616,6 +616,7 @@ export class Point3d extends PIXI.Point {
 
   // Temporary points that can be passed to PIXI.Point methods
   static _tmp = new this();
+  static _tmp1 = new this();
   static _tmp2 = new this();
   static _tmp3 = new this();
 }
