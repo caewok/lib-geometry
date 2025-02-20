@@ -49,6 +49,9 @@ import "./ClipperPaths.js";
 // Graph
 import "./Graph.js";
 
+// Benchmark
+import "./Benchmark.js";
+
 // Patcher
 import { Patcher } from "../Patcher.js";
 
