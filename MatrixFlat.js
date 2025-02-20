@@ -173,7 +173,7 @@ export class MatrixFlat {
       console.error("Rows or columns incorrectly specified.");
       return undefined;
     }
-    return new this(this.arrayIsTyped ? new this.arrayClass(arr) : arr, 4, 4);
+    return new this(this.arrayIsTyped ? new this.arrayClass(arr) : arr, rows, cols);
   }
 
   static fromColumnMajorArray(arr, rows, cols) {
@@ -1256,6 +1256,16 @@ MatrixFlat.prototype.copyTo = MatrixFlat.prototype.clone;
 GEOMETRY_CONFIG.MatrixFlat ??= MatrixFlat;
 
 
+// Example typed class
+/*
+class MatrixTyped extends MatrixFlat {
+  static arrayClass = Float32Array;
+
+  static arrayIsTyped = true;
+
+}
+*/
+
 /* Tests
 MatrixFlat.zeroes(4, 10).arr.every(elem => elem === 0);
 resIdentity = [
@@ -1300,8 +1310,33 @@ m = new MatrixFlat(invertibleArr, 3, 3);
 m.invert().arr.every((elem, idx) => elem === resInv[idx])
 
 
+m = new MatrixFlat(arr, 4, 4)
+m2 = Matrix.fromFlatArray(arr, 4, 4)
+m3 = MatrixTyped.fromRowMajorArray(arr, 4, 4)
 
+N = 10000
+await foundry.utils.benchmark(m.multiply.bind(m), N, m, undefined)
+await foundry.utils.benchmark(m2.multiply.bind(m2), N, m2, undefined)
 
+await foundry.utils.benchmark(m.multiply.bind(m), N, m, undefined)
+await foundry.utils.benchmark(m2.multiply.bind(m2), N, m2, undefined)
 
+await foundry.utils.benchmark(m3.multiply.bind(m3), N, m3, undefined)
+await foundry.utils.benchmark(m3.multiply.bind(m3), N, m3, undefined)
+
+await foundry.utils.benchmark(m.multiply4x4.bind(m), N, m, undefined)
+await foundry.utils.benchmark(m2.multiply4x4.bind(m2), N, m2, undefined)
+await foundry.utils.benchmark(m3.multiply4x4.bind(m3), N, m3, undefined)
+
+await foundry.utils.benchmark(m.add.bind(m), N, m, undefined)
+await foundry.utils.benchmark(m2.add.bind(m2), N, m2, undefined)
+await foundry.utils.benchmark(m3.add.bind(m3), N, m3, undefined)
+
+m = new MatrixFlat(invertibleArr, 3, 3)
+m2 = Matrix.fromFlatArray(invertibleArr, 3, 3)
+m3 = MatrixTyped.fromRowMajorArray(invertibleArr, 3, 3)
+await foundry.utils.benchmark(m.invert.bind(m), N, undefined)
+await foundry.utils.benchmark(m2.invert.bind(m2), N, undefined)
+await foundry.utils.benchmark(m3.invert.bind(m3), N, undefined)
 
 */
