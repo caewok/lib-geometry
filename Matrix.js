@@ -1,4 +1,5 @@
 /* globals
+CONFIG,
 PIXI
 */
 "use strict";
@@ -16,6 +17,10 @@ export class Matrix {
     this.arr = arr;
   }
 
+  get nrow() { return this.arr.length; }
+
+  get ncol() { return this.arr[0].length; }
+
   /**
    * First dimension length of the array
    * @type {number}
@@ -30,6 +35,72 @@ export class Matrix {
    */
   get dim2() {
     return this.arr[0].length;
+  }
+
+  /**
+   * Get an element of the matrix.
+   * @param {number} row
+   * @param {number} col
+   * @returns {number}
+   */
+  getIndex(row, col) { return this.arr[row][col]; }
+
+  /**
+   * Set an element of the matrix
+   * @param {number} row
+   * @param {number} col
+   * @param {number} value
+   */
+  setIndex(row, col, value) { this.arr[row][col] = value; }
+
+  /**
+   * Iterate over each element of the matrix.
+   * Iterate by row, then column.
+   */
+  [Symbol.iterator]() {
+    let r = 0;
+    let c = 0;
+    const { nrow, ncol } = this;
+    const ln = nrow * ncol;
+    return {
+      next() {
+        if ( (r * c) < ln ) {
+          const value = this.arr[r++][c];
+          if ( r >= nrow ) {
+            r = 0;
+            c += 1;
+          }
+          return { value, done: false };
+        } else return { done: true };
+      }
+    };
+  }
+
+  /**
+   * For each element in the matrix, apply the callback.
+   * To modify the element, call setIndex in the callback.
+   * @param {function} callback     Function that can take:
+   *   - @param {number} element
+   *   - @param {number} row
+   *   - @param {number} col
+   *   - @param {Matrix} this
+   */
+  forEach(callback) {
+    const { nrow, ncol } = this;
+    for ( let r = 0; r < nrow; r += 1 ) {
+      const rArr = this.arr[r];
+      for ( let c = 0; c < ncol; c += 1 ) callback(rArr[c], r, c, this);
+    }
+  }
+
+  /**
+   * Set each element of the matrix in turn to the value returned by the callback.
+   * For convenience; can accomplish the same thing using forEach directly.
+   * @param {function} callback       See forEach.
+   */
+  setElements(callback) {
+    const setter = (elem, r, c) => this[r][c] = callback(elem, r, c, this);
+    this.forEach(setter);
   }
 
   /**
@@ -68,7 +139,7 @@ export class Matrix {
         arrR[c] = arr[i + c];
       }
     }
-    return new Matrix(out);
+    return new this(out);
   }
 
   toRowMajorArray() { return this.arr.flat(); }
@@ -93,19 +164,67 @@ export class Matrix {
     return this.toRowMajorArray();
   }
 
+  /**
+   * Create an empty matrix.
+   * @param {number} rows
+   * @param {number} cols
+   * @returns {Matrix}
+   */
   static empty(rows, cols) {
-    return Matrix.fromFlatArray(new Array(rows * cols), rows, cols);
+    const out = new Array(rows);
+    for ( let r = 0; r < rows; r += 1 ) out[r] = new Array(cols);
+    return new this(out);
   }
 
+  /**
+   * Create a matrix filled with zeroes.
+   * @param {number} rows
+   * @param {number} cols
+   * @returns {Matrix}
+   */
   static zeroes(rows, cols) {
-    return Matrix.fromFlatArray(new Array(rows * cols).fill(0), rows, cols);
+    const out = new Array(rows);
+    for ( let r = 0; r < rows; r += 1 ) out[r] = (new Array(cols)).fill(0);
+    return new this(out);
   }
 
+  /**
+   * Fill this matrix with zeroes.
+   * @returns {this}
+   */
+  zero() { this.setElements(() => 0); return this; }
+
+  /**
+   * Create an identity matrix
+   * @param {number} rows
+   * @param {number} cols
+   * @returns {Matrix}
+   */
   static identity(rows, cols) {
     const mat = Matrix.zeroes(rows, cols);
     const iMax = Math.min(rows, cols);
     for ( let i = 0; i < iMax; i += 1 ) {
       mat.arr[i][i] = 1;
+    }
+    return mat;
+  }
+
+  /**
+   * Reset this matrix to an identity matrix
+   * @returns {this}
+   */
+  identity() { this.setElements((elem, r, c) => r === c ? 1 : 0); return this; }
+
+  /**
+   * Create a matrix filled with random numbers between 0 and 1.
+   * @param {number} rows
+   * @param {number} cols
+   * @returns {Matrix}
+   */
+  static random(rows, cols) {
+    const mat = this.empty(rows, cols);
+    for ( let r = 0; r < rows; r += 1 ) {
+      for ( let c = 0; c < cols; c += 1 ) mat.arr[r][c] = Math.random();
     }
     return mat;
   }
@@ -834,8 +953,11 @@ export class Matrix {
     const m6 = (a10 - a00) * (b00 + b01);
     const m7 = (a01 - a11) * (b10 + b11);
 
+    // Row 0
     outMatrix.arr[0][0] = m1 + m4 - m5 + m7;
     outMatrix.arr[0][1] = m3 + m5;
+
+    // Row 1
     outMatrix.arr[1][0] = m2 + m4;
     outMatrix.arr[1][1] = m1 - m2 + m3 + m6;
 
@@ -904,14 +1026,17 @@ export class Matrix {
     const m22 = a20 * b01;
     const m23 = a22 * b22;
 
+    // Row 0
     outMatrix.arr[0][0] = m6 + m14 + m19;
     outMatrix.arr[0][1] = m1 + m4 + m5 + m6 + m12 + m14 + m15;
     outMatrix.arr[0][2] = m6 + m7 + m9 + m10 + m14 + m16 + m18;
 
+    // Row 1
     outMatrix.arr[1][0] = m2 + m3 + m4 + m6 + m14 + m16 + m17;
     outMatrix.arr[1][1] = m2 + m4 + m5 + m6 + m20;
     outMatrix.arr[1][2] = m14 + m16 + m17 + m18 + m21;
 
+    // Row 2
     outMatrix.arr[2][0] = m6 + m7 + m8 + m11 + m12 + m13 + m14;
     outMatrix.arr[2][1] = m12 + m13 + m14 + m15 + m22;
     outMatrix.arr[2][2] = m6 + m7 + m8 + m9 + m23;
@@ -973,21 +1098,25 @@ export class Matrix {
     const b32 = b3[2];
     const b33 = b3[3];
 
+    // Row 0
     outMatrix.arr[0][0] = (a00 * b00) + (a01 * b10) + (a02 * b20) + (a03 * b30);
     outMatrix.arr[0][1] = (a00 * b01) + (a01 * b11) + (a02 * b21) + (a03 * b31);
     outMatrix.arr[0][2] = (a00 * b02) + (a01 * b12) + (a02 * b22) + (a03 * b32);
     outMatrix.arr[0][3] = (a00 * b03) + (a01 * b13) + (a02 * b23) + (a03 * b33);
 
+    // Row 1
     outMatrix.arr[1][0] = (a10 * b00) + (a11 * b10) + (a12 * b20) + (a13 * b30);
     outMatrix.arr[1][1] = (a10 * b01) + (a11 * b11) + (a12 * b21) + (a13 * b31);
     outMatrix.arr[1][2] = (a10 * b02) + (a11 * b12) + (a12 * b22) + (a13 * b32);
     outMatrix.arr[1][3] = (a10 * b03) + (a11 * b13) + (a12 * b23) + (a13 * b33);
 
+    // Row 2
     outMatrix.arr[2][0] = (a20 * b00) + (a21 * b10) + (a22 * b20) + (a23 * b30);
     outMatrix.arr[2][1] = (a20 * b01) + (a21 * b11) + (a22 * b21) + (a23 * b31);
     outMatrix.arr[2][2] = (a20 * b02) + (a21 * b12) + (a22 * b22) + (a23 * b32);
     outMatrix.arr[2][3] = (a20 * b03) + (a21 * b13) + (a22 * b23) + (a23 * b33);
 
+    // Row 3
     outMatrix.arr[3][0] = (a30 * b00) + (a31 * b10) + (a32 * b20) + (a33 * b30);
     outMatrix.arr[3][1] = (a30 * b01) + (a31 * b11) + (a32 * b21) + (a33 * b31);
     outMatrix.arr[3][2] = (a30 * b02) + (a31 * b12) + (a32 * b22) + (a33 * b32);
@@ -1099,6 +1228,11 @@ export class Matrix {
     }
     return k[mk];
   }
+
+  /**
+   * Print this matrix to the console.
+   */
+  print() { console.table(this.arr); }
 }
 
 GEOMETRY_CONFIG.Matrix ??= Matrix;

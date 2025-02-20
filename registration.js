@@ -38,6 +38,7 @@ import "./Ellipse.js";
 
 // Matrix
 import "./Matrix.js";
+import "./MatrixFlat.js";
 
 // Shadow
 import "./Shadow.js";
