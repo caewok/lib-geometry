@@ -218,6 +218,7 @@ export class MatrixFlat {
    * @returns {Matrix}
    */
   static identity(rows, cols, outMatrix) {
+    cols ??= rows;
     const mat = this.zeroes(rows, cols, outMatrix);
     mat.setDiagonal(() => 1);
     return mat;
@@ -729,11 +730,13 @@ export class MatrixFlat {
    * @returns {Matrix}
    */
   multiply(other, outMatrix) {
-    // A is this matrix; B is other matrix
-    const rowsA = this.nrow;
-    const colsA = this.ncol;
-    const rowsB = other.nrow;
-    const colsB = other.ncol;
+    let A = this;
+    let B = other;
+
+    const rowsA = A.nrow;
+    const colsA = A.ncol;
+    const rowsB = B.nrow;
+    const colsB = B.ncol;
 
     outMatrix = this.constructor.zeroes(rowsA, colsB, outMatrix)
 
@@ -741,6 +744,10 @@ export class MatrixFlat {
       console.error("Matrices cannot be multiplied.");
       return undefined;
     }
+
+    // Cannot have the outMatrix reference A or B, because the outMatrix values get modified in the loop.
+    if ( A === outMatrix ) A = A.clone();
+    if ( B === outMatrix ) B = B.clone();
 
     for ( let x = 0; x < rowsA; x += 1 ) {
       for ( let y = 0; y < colsB; y += 1 ) {
@@ -1267,6 +1274,11 @@ class MatrixTyped extends MatrixFlat {
 */
 
 /* Tests
+Matrix = CONFIG.GeometryLib.Matrix
+MatrixFlat = CONFIG.GeometryLib.MatrixFlat
+QBenchmarkLoop = CONFIG.GeometryLib.bench.QBenchmarkLoop
+
+
 MatrixFlat.zeroes(4, 10).arr.every(elem => elem === 0);
 resIdentity = [
   1, 0, 0, 0,
@@ -1310,31 +1322,35 @@ m = new MatrixFlat(invertibleArr, 3, 3);
 m.invert().arr.every((elem, idx) => elem === resInv[idx])
 
 
-m = new MatrixFlat(arr, 4, 4)
-m2 = Matrix.fromFlatArray(arr, 4, 4)
+m = Matrix.fromFlatArray(arr, 4, 4)
+m2 = new MatrixFlat(arr, 4, 4)
 m3 = MatrixTyped.fromRowMajorArray(arr, 4, 4)
 
+
+
 N = 10000
-await foundry.utils.benchmark(m.multiply.bind(m), N, m, undefined)
-await foundry.utils.benchmark(m2.multiply.bind(m2), N, m2, undefined)
+await QBenchmarkLoop(N, m, "multiply", m)
+await QBenchmarkLoop(N, m2, "multiply", m2)
+await QBenchmarkLoop(N, m3, "multiply", m3)
 
-await foundry.utils.benchmark(m.multiply.bind(m), N, m, undefined)
-await foundry.utils.benchmark(m2.multiply.bind(m2), N, m2, undefined)
+await QBenchmarkLoop(N, m, "multiply4x4", m)
+await QBenchmarkLoop(N, m2, "multiply4x4", m2)
+await QBenchmarkLoop(N, m3, "multiply4x4", m3)
 
-await foundry.utils.benchmark(m3.multiply.bind(m3), N, m3, undefined)
-await foundry.utils.benchmark(m3.multiply.bind(m3), N, m3, undefined)
+await QBenchmarkLoop(N, m, "add", m)
+await QBenchmarkLoop(N, m2, "add", m2)
+await QBenchmarkLoop(N, m3, "add", m3)
 
-await foundry.utils.benchmark(m.multiply4x4.bind(m), N, m, undefined)
-await foundry.utils.benchmark(m2.multiply4x4.bind(m2), N, m2, undefined)
-await foundry.utils.benchmark(m3.multiply4x4.bind(m3), N, m3, undefined)
 
-await foundry.utils.benchmark(m.add.bind(m), N, m, undefined)
-await foundry.utils.benchmark(m2.add.bind(m2), N, m2, undefined)
-await foundry.utils.benchmark(m3.add.bind(m3), N, m3, undefined)
-
-m = new MatrixFlat(invertibleArr, 3, 3)
-m2 = Matrix.fromFlatArray(invertibleArr, 3, 3)
+N = 10000
+m = Matrix.fromFlatArray(invertibleArr, 3, 3)
+m2 = new MatrixFlat(invertibleArr, 3, 3)
 m3 = MatrixTyped.fromRowMajorArray(invertibleArr, 3, 3)
+await QBenchmarkLoop(N, m, "invert")
+await QBenchmarkLoop(N, m2, "invert")
+await QBenchmarkLoop(N, m3, "invert")
+
+
 await foundry.utils.benchmark(m.invert.bind(m), N, undefined)
 await foundry.utils.benchmark(m2.invert.bind(m2), N, undefined)
 await foundry.utils.benchmark(m3.invert.bind(m3), N, undefined)
