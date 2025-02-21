@@ -75,7 +75,7 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
    * If true, no walls constrain token.
    * @type {boolean}
    */
-  _unrestricted;
+  _unrestricted = true;
 
   /** @type {boolean} */
   #dirty = true;
@@ -124,7 +124,9 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
 
   /** @override */
   compute() {
-    if ( this.#dirty ) {
+    // Avoid caching values until edges loaded.
+    // Falls back on _unrestricted = true.
+    if ( this.#dirty && canvas.edges.size ) {
       this.#dirty = false;
       super.compute();
     }
