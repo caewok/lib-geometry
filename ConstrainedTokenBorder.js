@@ -34,8 +34,8 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
    */
   static get(token) {
     let polygon = this._cache.get(token);
-    if ( !polygon ) this._cache.set(token, polygon = new this(token));
-    polygon.initialize();
+    if ( !polygon ) this._cache.set(token, polygon = new this());
+    polygon.initialize(token);
     polygon.compute();
     return polygon;
   }
@@ -80,14 +80,10 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
   /** @type {boolean} */
   #dirty = true;
 
-  constructor(token) {
-    super();
-    this._token = token;
-  }
-
   /** @override */
-  initialize() {
-    const { _token, _tokenProperties, _tokenDocumentProperties } = this;
+  initialize(token) {
+    this._token = token;
+    const { _tokenProperties, _tokenDocumentProperties } = this;
 
     // Determine if the token has changed.
     // Could use getProperty/setProperty, but may be a bit slow and unnecessary, given
@@ -221,11 +217,12 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
   }
 
   /**
-   * Return either this polygon or the underlying token border if possible.
-   * @returns {ConstrainedTokenShape|PIXI.Rectangle}
+   * Return either a polygon or the underlying token border if possible.
+   * Does not return this b/c we don't want this modified unexpectedly.
+   * @returns {PIXI.Polygon|PIXI.Rectangle}
    */
   constrainedBorder() {
-    return this._unrestricted ? this._token.tokenBorder : this;
+    return this._unrestricted ? this._token.tokenBorder : new PIXI.Polygon(this.points);
   }
 }
 
