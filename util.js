@@ -1049,7 +1049,7 @@ export function bresenhamLine4d(x0, y0, z0, k0, x1, y1, z1, k1) {
         p0 -= dk2;
       }
       if ( p1 >= 0 ) {
-        y0 += sx;
+        y0 += sy;
         p1 -= dz2;
       }
       if ( p2 >= 0 ) {
