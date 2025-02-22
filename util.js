@@ -1089,6 +1089,8 @@ export function bresenhamLine4dHexCube(start, end) {
   canvas.grid.cubeToPoint(canvas.grid.offsetToCube(start.offset))
   let { q: q0, r: r0, s: s0 } = canvas.grid.offsetToCube(start.offset);
   const { q: q1, r: r1, s: s1 } = canvas.grid.offsetToCube(end.offset);
+  let z0 = Math.round(start.z)
+  const z1 = Math.round(end.z);
   const pixels = [q0, r0, s0, z0];
 
   const dq = Math.abs(q1 - q0);
