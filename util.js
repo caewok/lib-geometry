@@ -1071,6 +1071,8 @@ export function bresenhamLine4d(x0, y0, z0, k0, x1, y1, z1, k1) {
  * https://www.geeksforgeeks.org/bresenhams-algorithm-for-3-d-line-drawing/
  * All coordinates must be positive or zero.
  * Restricts the cube coordinates such that q + r + s = 0.
+ * @param {HexGridCoordinates3d} start
+ * @param {HexGridCoordinates3d} end
  * @param {number} q0   First Hex cube coordinate q value
  * @param {number} r0   First Hex cube coordinate r value
  * @param {number} s0   First Hex cube coordinate s value
@@ -1080,15 +1082,13 @@ export function bresenhamLine4d(x0, y0, z0, k0, x1, y1, z1, k1) {
  * @param {number} s1   Second Hex cube coordinate s value
  * @param {number} z1   Second Hex cube coordinate z value (elevation)
  */
-export function bresenhamLine4dHexCube(q0, r0, s0, z0, q1, r1, s1, z1) {
-  q0 = Math.round(q0);
-  r0 = Math.round(r0);
-  s0 = Math.round(s0);
-  z0 = Math.round(z0);
-  q1 = Math.round(q1);
-  r1 = Math.round(r1);
-  s1 = Math.round(s1);
-  z1 = Math.round(z1);
+export function bresenhamLine4dHexCube(start, end) {
+  // Instead of rounding directly, convert to offsets so the correct hex center can be found.
+  // This avoids rounding causing q + r + s ≠ 0.
+  // Could use start.centerToHexCube but that will modify start and is slow.
+  canvas.grid.cubeToPoint(canvas.grid.offsetToCube(start.offset))
+  let { q: q0, r: r0, s: s0 } = canvas.grid.offsetToCube(start.offset);
+  const { q: q1, r: r1, s: s1 } = canvas.grid.offsetToCube(end.offset);
   const pixels = [q0, r0, s0, z0];
 
   const dq = Math.abs(q1 - q0);
@@ -1265,7 +1265,10 @@ export function bresenhamLine4dHexCube(q0, r0, s0, z0, q1, r1, s1, z1) {
 
   // Because of aligning q + r + s = 0, it is possible to be one off the hex end point.
   // If the last pixel does not equal q1, s1, or r1, add the end point.
-  if ( pixels.at(-4) !== q1 || pixels.at(-3) !== s1 || pixels.at(-2) !== r1 ) pixels.push(q1, s1, r1, z1);
+  if ( pixels.at(-4) !== q1 || pixels.at(-3) !== s1 || pixels.at(-2) !== r1 ) {
+    console.log(`bresenhamLine4dHexCube|Added extra end point. ${q0},${r0},${s0} --> ${q1},${r1},${s1}`);
+    pixels.push(q1, r1, s1, z1);
+  }
   return pixels;
 }
 
