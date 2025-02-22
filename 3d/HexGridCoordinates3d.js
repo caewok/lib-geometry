@@ -203,12 +203,13 @@ function directPath3dHex(start, end) {
     end.q, end.r, end.s, end.k);
   const path3d = [start];
   // Convert points to GridCoordinates3d. Start and end repeat; skip.
-  for ( let i = 4, n = points.length - 4; i < n; i += 4 ) path3d.push(HexGridCoordinates3d.fromHexCube({
+  for ( let i = 4, n = points.length; i < n; i += 4 ) path3d.push(HexGridCoordinates3d.fromHexCube({
     q: points[i],
     r: points[i + 1],
     s: points[i + 2],
     k: points[i + 3] }));
-  path3d.push(end);
+
+  if ( !path3d.at(-1).almostEqual(end.center) ) path3d.push(end);
   return path3d;
 }
 
