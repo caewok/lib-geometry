@@ -37,6 +37,7 @@ export function registerFoundryUtilsMethods() {
     bresenhamLine3d,
     bresenhamLine3dIterator,
     bresenhamLine4d,
+    bresenhamLine4dHexCube,
     trimLineSegmentToPixelRectangle,
     doSegmentsOverlap,
     findOverlappingPoints,
