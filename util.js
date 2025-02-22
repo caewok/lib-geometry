@@ -1142,6 +1142,12 @@ export function bresenhamLine4dHexCube(q0, r0, s0, z0, q1, r1, s1, z1) {
         p1 += (dq2 * incr);
 
       }
+      // Ensure Hex Grid constraint: q + r + s = 0.
+      const incr = q0 + r0 + s0;
+      s0 -= incr;
+      p1 += (dq2 * incr);
+
+
       p0 += dr2;
       p1 += ds2;
       p2 += dz2;
@@ -1161,8 +1167,8 @@ export function bresenhamLine4dHexCube(q0, r0, s0, z0, q1, r1, s1, z1) {
 
         // Ensure Hex Grid constraint: q + r + s = 0.
         const incr = q0 + r0 + s0;
-        p1 -= dr2 * incr;
-        s0 += incr;
+        s0 -= incr;
+        p1 += dr2 * incr;
       }
       if ( p1 >= 0 ) {
         s0 += ss;
@@ -1170,8 +1176,8 @@ export function bresenhamLine4dHexCube(q0, r0, s0, z0, q1, r1, s1, z1) {
 
         // Ensure Hex Grid constraint: q + r + s = 0.
         const incr = q0 + r0 + s0;
-        p0 -= dr2 * incr;
-        q0 += incr;
+        q0 -= incr;
+        p0 += dr2 * incr;
       }
       if ( p2 >= 0 ) {
         z0 += sz;
@@ -1179,8 +1185,8 @@ export function bresenhamLine4dHexCube(q0, r0, s0, z0, q1, r1, s1, z1) {
 
         // Ensure Hex Grid constraint: q + r + s = 0.
         const incr = q0 + r0 + s0;
-        p1 -= dr2 * incr;
-        s0 += incr;
+        s0 -= incr;
+        p1 += dr2 * incr;
       }
       p0 += dq2;
       p1 += ds2;
