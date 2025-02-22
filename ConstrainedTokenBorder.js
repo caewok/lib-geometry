@@ -90,11 +90,11 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
     // that all properties are either on the token or the document.
     let tokenMoved = false;
     for ( const key of Object.keys(_tokenProperties) ) {
-      const value = _token[key];
+      const value = token[key];
       tokenMoved ||= _tokenProperties[key] !== value;
       _tokenProperties[key] = value;
     }
-    const doc = _token.document;
+    const doc = token.document;
     for ( const key of Object.keys(_tokenDocumentProperties) ) {
       const value = doc[key];
       tokenMoved ||= _tokenDocumentProperties[key] !== value;
@@ -105,11 +105,11 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
       this.#wallsID = ConstrainedTokenBorder._wallsID;
       this.#dirty = true;
       const config = {
-        source: _token.vision,
+        source: token.vision,
         type: "move",
-        boundaryShapes: [_token.tokenBorder] // [_token.tokenBorder.toPolygon()] }; // Avoid WeilerAtherton.
+        boundaryShapes: [token.tokenBorder] // [_token.tokenBorder.toPolygon()] }; // Avoid WeilerAtherton.
       };
-      super.initialize(_token.center, config);
+      super.initialize(token.center, config);
     }
   }
 
