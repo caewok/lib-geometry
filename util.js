@@ -1262,6 +1262,10 @@ export function bresenhamLine4dHexCube(q0, r0, s0, z0, q1, r1, s1, z1) {
       pixels.push(q0, r0, s0, z0);
     }
   }
+
+  // Because of aligning q + r + s = 0, it is possible to be one off the hex end point.
+  // If the last pixel does not equal q1, s1, or r1, add the end point.
+  if ( pixels.at(-4) !== q1 || pixels.at(-3) !== s1 || pixels.at(-2) !== r1 ) pixels.push(q1, s1, r1, z1);
   return pixels;
 }
 
