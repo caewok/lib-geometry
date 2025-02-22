@@ -1267,10 +1267,9 @@ export function bresenhamLine4dHexCube(start, end) {
 
   // Because of aligning q + r + s = 0, it is possible to be one off the hex end point.
   // If the last pixel does not equal q1, s1, or r1, add the end point.
-  if ( pixels.at(-4) !== q1 || pixels.at(-3) !== s1 || pixels.at(-2) !== r1 ) {
-    console.log(`bresenhamLine4dHexCube|Added extra end point.`, start, end);
-    pixels.push(q1, r1, s1, z1);
-  }
+  if ( pixels.at(-4) !== q1
+    || pixels.at(-3) !== s1
+    || pixels.at(-2) !== r1 ) pixels.push(q1, r1, s1, z1);
   return pixels;
 }
 
