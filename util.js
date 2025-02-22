@@ -1066,6 +1066,199 @@ export function bresenhamLine4d(x0, y0, z0, k0, x1, y1, z1, k1) {
 }
 
 /**
+ * Bresenham line algorithm to generate pixel coordinates for a line between two 4d points.
+ * https://www.geeksforgeeks.org/bresenhams-algorithm-for-3-d-line-drawing/
+ * All coordinates must be positive or zero.
+ * Restricts the cube coordinates such that q + r + s = 0.
+ * @param {number} q0   First Hex cube coordinate q value
+ * @param {number} r0   First Hex cube coordinate r value
+ * @param {number} s0   First Hex cube coordinate s value
+ * @param {number} z0   First Hex cube coordinate z value (elevation)
+ * @param {number} q1   Second Hex cube coordinate q value
+ * @param {number} r1   Second Hex cube coordinate r value
+ * @param {number} s1   Second Hex cube coordinate s value
+ * @param {number} z1   Second Hex cube coordinate z value (elevation)
+ */
+export function bresenhamLine4dHexCube(q0, r0, s0, z0, q1, r1, s1, z1) {
+  q0 = Math.round(q0);
+  r0 = Math.round(r0);
+  s0 = Math.round(s0);
+  z0 = Math.round(z0);
+  q1 = Math.round(q1);
+  r1 = Math.round(r1);
+  s1 = Math.round(s1);
+  z1 = Math.round(z1);
+  const pixels = [q0, r0, s0, z0];
+
+  const dq = Math.abs(q1 - q0);
+  const dr = Math.abs(r1 - r0);
+  const ds = Math.abs(s1 - s0);
+  const dz = Math.abs(z1 - z0);
+
+  const dq2 = dq * 2;
+  const dr2 = dr * 2;
+  const ds2 = ds * 2;
+  const dz2 = dz * 2;
+
+  const sq = (q1 > q0) ? 1 : -1;
+  const sr = (r1 > r0) ? 1 : -1;
+  const ss = (s1 > s0) ? 1 : -1;
+  const sz = (z1 > z0) ? 1 : -1;
+
+  // Driving axis is q-axis
+  if ( dq >= dr && dq >= ds && dq >= dz ) {
+    let p0 = dr2 - dq;
+    let p1 = ds2 - dq;
+    let p2 = dz2 - dq;
+    while ( q0 !== q1 ) {
+      q0 += sq;
+      if ( p0 >= 0 ) {
+        r0 += sr;
+        p0 -= dq2;
+
+        // Ensure Hex Grid constraint: q + r + s = 0.
+        const incr = q0 + r0 + s0;
+        s0 -= incr;
+        p1 += (dq2 * incr);
+      }
+      if ( p1 >= 0 ) {
+        s0 += ss;
+        p1 -= dq2;
+
+        // Ensure Hex Grid constraint: q + r + s = 0.
+        const incr = q0 + r0 + s0;
+        r0 -= incr;
+        p0 += (dq2 * incr);
+
+      }
+      if ( p2 >= 0 ) {
+        z0 += sz;
+        p2 -= dq2;
+
+        // Ensure Hex Grid constraint: q + r + s = 0.
+        const incr = q0 + r0 + s0;
+        s0 -= incr;
+        p1 += (dq2 * incr);
+
+      }
+      p0 += dr2;
+      p1 += ds2;
+      p2 += dz2;
+      pixels.push(q0, r0, s0, z0);
+    }
+
+  // Driving axis is r-axis
+  } else if ( dr >= dq && dr >= ds && dr >= dz ) {
+    let p0 = dq2 - dr;
+    let p1 = ds2 - dr;
+    let p2 = dz2 - dr;
+    while ( r0 !== r1 ) {
+      r0 += sr;
+      if ( p0 >= 0 ) {
+        q0 += sq;
+        p0 -= dr2;
+
+        // Ensure Hex Grid constraint: q + r + s = 0.
+        const incr = q0 + r0 + s0;
+        p1 -= dr2 * incr;
+        s0 += incr;
+      }
+      if ( p1 >= 0 ) {
+        s0 += ss;
+        p1 -= dr2;
+
+        // Ensure Hex Grid constraint: q + r + s = 0.
+        const incr = q0 + r0 + s0;
+        p0 -= dr2 * incr;
+        q0 += incr;
+      }
+      if ( p2 >= 0 ) {
+        z0 += sz;
+        p2 -= dr2;
+
+        // Ensure Hex Grid constraint: q + r + s = 0.
+        const incr = q0 + r0 + s0;
+        p1 -= dr2 * incr;
+        s0 += incr;
+      }
+      p0 += dq2;
+      p1 += ds2;
+      p2 += dz2;
+      pixels.push(q0, r0, s0, z0);
+    }
+
+  // Driving axis is s-axis
+  } else if ( ds >= dq && ds >= dr && ds >= dz ) {
+    let p0 = dr2 - ds;
+    let p1 = dq2 - ds;
+    let p2 = dz2 - ds;
+    while ( s0 !== s1 ) {
+      s0 += ss;
+      if ( p0 >= 0 ) {
+        r0 += sr;
+        p0 -= ds2;
+
+        // Ensure Hex Grid constraint: q + r + s = 0.
+        const incr = q0 + r0 + s0;
+        q0 -= incr;
+        p1 += (ds2 * incr);
+      }
+      if ( p1 >= 0 ) {
+        q0 += sq;
+        p1 -= ds2;
+
+        // Ensure Hex Grid constraint: q + r + s = 0.
+        const incr = q0 + r0 + s0;
+        r0 -= incr;
+        p0 += (ds2 * incr);
+      }
+      if ( p2 >= 0 ) {
+        z0 += sz;
+        p2 -= ds2;
+
+        // Ensure Hex Grid constraint: q + r + s = 0.
+        const incr = q0 + r0 + s0;
+        r0 -= incr;
+        p0 += (ds2 * incr);
+      }
+      p0 += dr2;
+      p1 += dq2;
+      p2 += dz2;
+      pixels.push(q0, r0, s0, z0);
+    }
+
+  // Driving axis is z-axis
+  } else {
+    let p0 = dq2 - dz;
+    let p1 = dr2 - dz;
+    let p2 = ds2 - dz;
+    while ( z0 !== z1 ) {
+      z0 += sz;
+      if ( p0 >= 0 ) {
+        q0 += sq;
+        p0 -= dz2;
+        s0 = -(q0 + r0); // Because q0 + 1. TODO: Always pick s0?
+      }
+      if ( p1 >= 0 ) {
+        r0 += sr;
+        p1 -= ds2;
+        s0 = -(q0 + r0);
+      }
+      if ( p2 >= 0 ) {
+        s0 += ss;
+        p2 -= dz2;
+        r0 = -(q0 + s0);
+      }
+      p0 += dq2;
+      p1 += dr2;
+      p2 += ds2;
+      pixels.push(q0, r0, s0, z0);
+    }
+  }
+  return pixels;
+}
+
+/**
  * Trim line segment to its intersection points with a rectangle.
  * If the endpoint is inside the rectangle, keep it.
  * Note: points on the right or bottom border of the rectangle do not count b/c we want the pixel positions.
