@@ -198,6 +198,7 @@ export class HexGridCoordinates3d extends GEOMETRY_CONFIG.threeD.GridCoordinates
 function directPath3dHex(start, end) {
   start = HexGridCoordinates3d.fromObject(start);
   end = HexGridCoordinates3d.fromObject(end);
+  if ( start.offsetsEqual(end) ) return [start, end];
   const points = CONFIG.GeometryLib.utils.bresenhamLine4dHexCube(start, end);
   const path3d = [start];
   // Convert points to GridCoordinates3d. Start and end repeat; skip.
