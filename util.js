@@ -37,7 +37,8 @@ export function registerFoundryUtilsMethods() {
     bresenhamLine3d,
     bresenhamLine3dIterator,
     bresenhamLine4d,
-    bresenhamLine4dHexCube,
+    bresenhamHexLine,
+    bresenhamHexLine3d,
     trimLineSegmentToPixelRectangle,
     doSegmentsOverlap,
     findOverlappingPoints,
@@ -1066,6 +1067,131 @@ export function bresenhamLine4d(x0, y0, z0, k0, x1, y1, z1, k1) {
   return pixels;
 }
 
+
+/**
+ * Bresenham's line algorithm for hex cube coordinates.
+ * Returns an array of hex cube coordinates along the line between two points.
+ * Each point {q, r, s} satisfies the constraint q + r + s = 0.
+ *
+ * @param {HexGridCoordinates3d} start - Starting hex cube coordinate {q, r, s}; z ignored.
+ * @param {HexGridCoordinates3d} end - Ending hex cube coordinate {q, r, s}; z ignored.
+ * @returns {Array[number]} Array of hex cube coordinates along the line.
+ */
+function bresenhamHexLine(start, end) {
+  // Extract coordinates.
+  // Could use start.centerToHexCube but that will modify start and is slow.
+  let { q: q1, r: r1, s: s1 } = canvas.grid.offsetToCube(start.offset);
+  const { q: q2, r: r2, s: s2 } = canvas.grid.offsetToCube(end.offset);
+
+  // Calculate differences
+  const dq = q2 - q1;
+  const dr = r2 - r1;
+  const ds = s2 - s1;
+
+  // Determine the maximum absolute difference
+  const n = Math.max(Math.abs(dq), Math.abs(dr), Math.abs(ds));
+
+  // Initialize the result array with the starting point
+  const points = Array((n * 3) + 3);
+  points[0] = q1;
+  points[1] = r1;
+  points[2] = s1;
+
+  // Iterate through the line
+  for ( let i = 3, ln = points.length; i < ln; i += 3 ) {
+    // Calculate the next point
+    q1 += dq / n;
+    r1 += dr / n;
+    s1 += ds / n;
+
+    // Round to the nearest hex cube coordinate
+    let q = Math.round(q1);
+    let r = Math.round(r1);
+    let s = Math.round(s1);
+
+    // Adjust to ensure q + r + s = 0
+    const deltaQ = Math.abs(q - q1);
+    const deltaR = Math.abs(r - r1);
+    const deltaS = Math.abs(s - s1);
+
+    if ( deltaQ > deltaR && deltaQ > deltaS ) q = -r - s;
+    else if ( deltaR > deltaS ) r = -q - s;
+    else s = -q - r;
+
+    // Add the adjusted point to the result array
+    points[i] = q;
+    points[i + 1] = r;
+    points[i + 2] = s;
+  }
+  return points;
+}
+
+/**
+ * Bresenham's line algorithm for hex cube coordinates.
+ * Returns an array of hex cube coordinates along the line between two points.
+ * Each point {q, r, s} satisfies the constraint q + r + s = 0.
+ *
+ * @param {HexGridCoordinates3d} start - Starting hex cube coordinate {q, r, s} and elevation z.
+ * @param {HexGridCoordinates3d} end - Ending hex cube coordinate {q, r, s} and elevation z.
+ * @returns {Array[number]} Array of hex cube coordinates along the line.
+ */
+function bresenhamHexLine3d(start, end) {
+  // Extract coordinates.
+  // Could use start.centerToHexCube but that will modify start and is slow.
+  let { q: q1, r: r1, s: s1 } = canvas.grid.offsetToCube(start.offset);
+  const { q: q2, r: r2, s: s2 } = canvas.grid.offsetToCube(end.offset);
+  let z1 = Math.round(start.elevation);
+  const z2 = Math.round(end.elevation);
+
+  // Calculate differences
+  const dq = q2 - q1;
+  const dr = r2 - r1;
+  const ds = s2 - s1;
+  const dz = z2 - z1;
+
+  // Determine the maximum absolute difference
+  const n = Math.max(Math.abs(dq), Math.abs(dr), Math.abs(ds), Math.abs(dz));
+
+  // Initialize the result array with the starting point
+  const points = Array((n * 4) + 4);
+  points[0] = q1;
+  points[1] = r1;
+  points[2] = s1;
+  points[3] = z1;
+
+  // Iterate through the line
+  for ( let i = 4, ln = points.length; i < ln; i += 4 ) {
+    // Calculate the next point
+    q1 += dq / n;
+    r1 += dr / n;
+    s1 += ds / n;
+    z1 += dz / n;
+
+    // Round to the nearest hex cube coordinate
+    let q = Math.round(q1);
+    let r = Math.round(r1);
+    let s = Math.round(s1);
+    let z = Math.round(z1);
+
+    // Adjust to ensure q + r + s = 0
+    const deltaQ = Math.abs(q - q1);
+    const deltaR = Math.abs(r - r1);
+    const deltaS = Math.abs(s - s1);
+
+    if ( deltaQ > deltaR && deltaQ > deltaS ) q = -r - s;
+    else if ( deltaR > deltaS ) r = -q - s;
+    else s = -q - r;
+
+    // Add the adjusted point to the result array
+    points[i] = q;
+    points[i + 1] = r;
+    points[i + 2] = s;
+    points[i + 3] = z;
+  }
+  return points;
+}
+
+
 /**
  * Bresenham line algorithm to generate pixel coordinates for a line between two 4d points.
  * https://www.geeksforgeeks.org/bresenhams-algorithm-for-3-d-line-drawing/
@@ -1086,7 +1212,6 @@ export function bresenhamLine4dHexCube(start, end) {
   // Instead of rounding directly, convert to offsets so the correct hex center can be found.
   // This avoids rounding causing q + r + s ≠ 0.
   // Could use start.centerToHexCube but that will modify start and is slow.
-  canvas.grid.cubeToPoint(canvas.grid.offsetToCube(start.offset))
   let { q: q0, r: r0, s: s0 } = canvas.grid.offsetToCube(start.offset);
   const { q: q1, r: r1, s: s1 } = canvas.grid.offsetToCube(end.offset);
   let z0 = Math.round(start.z)
