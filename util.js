@@ -673,7 +673,7 @@ export function roundFastPositive(n) { return (n + 0.5) << 0; }
  * @param {number} y2   Second coordinate y value
  * @returns {number[]}
  */
-function bresenhamLine(x1, y1, x2, y2) {
+export function bresenhamLine(x1, y1, x2, y2) {
   x1 = Math.round(x1);
   y1 = Math.round(y1);
   x2 = Math.round(x2);
@@ -719,7 +719,7 @@ function bresenhamLine(x1, y1, x2, y2) {
  * @param {number} z2   Second coordinate z value
  * @returns {number[]}
  */
-function bresenhamLine3d(x1, y1, z1, x2, y2, z2) {
+export function bresenhamLine3d(x1, y1, z1, x2, y2, z2) {
   x1 = Math.round(x1);
   y1 = Math.round(y1);
   z1 = Math.round(z1);
@@ -928,7 +928,7 @@ export function bresenhamLine4d(x1, y1, z1, k1, x2, y2, z2, k2) {
  * @param {HexGridCoordinates3d} end - Ending hex cube coordinate {q, r, s}; z ignored.
  * @returns {Array[number]} Array of hex cube coordinates along the line.
  */
-function bresenhamHexLine(start, end) {
+export function bresenhamHexLine(start, end) {
   // Extract coordinates.
   // Could use start.centerToHexCube but that will modify start and is slow.
   let { q: q1, r: r1, s: s1 } = canvas.grid.offsetToCube(start.offset);
@@ -991,7 +991,7 @@ function bresenhamHexLine(start, end) {
  * @param {HexGridCoordinates3d} end - Ending hex cube coordinate {q, r, s} and elevation z.
  * @returns {Array[number]} Array of hex cube coordinates along the line.
  */
-function bresenhamHexLine3d(start, end) {
+export function bresenhamHexLine3d(start, end) {
   // Extract coordinates.
   // Could use start.centerToHexCube but that will modify start and is slow.
   let { q: q1, r: r1, s: s1 } = canvas.grid.offsetToCube(start.offset);
