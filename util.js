@@ -37,6 +37,7 @@ export function registerFoundryUtilsMethods() {
     bresenhamLine3d,
     bresenhamLine3dIterator,
     bresenhamLine4d,
+    bresenhamLine3d_old,
     bresenhamHexLine,
     bresenhamHexLine3d,
     trimLineSegmentToPixelRectangle,
@@ -719,7 +720,7 @@ export function bresenhamLine(x1, y1, x2, y2) {
  * @param {number} z2   Second coordinate z value
  * @returns {number[]}
  */
-export function bresenhamLine3d(x1, y1, z1, x2, y2, z2) {
+export function bresenhamLine3d_old(x1, y1, z1, x2, y2, z2) {
   x1 = Math.round(x1);
   y1 = Math.round(y1);
   z1 = Math.round(z1);
@@ -757,6 +758,86 @@ export function bresenhamLine3d(x1, y1, z1, x2, y2, z2) {
     points[i] = Math.round(x1);
     points[i + 1] = Math.round(y1);
     points[i + 2] = Math.round(z1);
+  }
+  return points;
+}
+
+/**
+ * Bresenham's line algorithm for 3D grid coordinates.
+ * Supports diagonal and double-diagonal moves.
+ * The points array length is defined in advance for efficiency.
+ *
+ * @param {object} start - Starting 3D coordinate {x, y, z}.
+ * @param {object} end - Ending 3D coordinate {x, y, z}.
+ * @returns {Array<{x: number, y: number, z: number}>} Array of 3D coordinates along the line.
+ */
+function bresenhamLine3d(x1, y1, z1, x2, y2, z2) {
+  x1 = Math.round(x1);
+  y1 = Math.round(y1);
+  z1 = Math.round(z1);
+  x2 = Math.round(x2);
+  y2 = Math.round(y2);
+  z2 = Math.round(z2);
+
+  // Calculate differences
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const dz = z2 - z1;
+
+  // Make x and y primary, so z moves can be vertical, diagonal, or double-diagonal.
+  // Determine the maximum absolute difference
+  const nXY = Math.max(Math.abs(dx), Math.abs(dy));
+  const n = Math.max(nXY, Math.abs(dz));
+
+  // Calculate increments.
+  let incX = dx / nXY;
+  let incY = dy / nXY;
+  let incZ = dz / n;
+
+  // Initialize the result array with the starting point
+  const points = Array((n * 3) + 3);
+  points[0] = x1;
+  points[1] = y1;
+  points[2] = z1;
+
+  if ( n > nXY ) {
+    // Z axis controls.
+    // Move at least one step along z each point. At intervals, increment x and y together.
+    // By tying x and y together, double-diagonal moves will be preferred.
+    const incXY = nXY / (n - 1);
+    let xy = 0;
+
+    // let totalXY = 0;
+    for ( let i = 3, ln = points.length; i < ln; i += 3 ) {
+      xy += incXY;
+      const step = xy >= 1;
+      xy -= 1 * step;
+      // totalXY += step;
+
+      // console.log(`i ${i}: xy ${xy} step ${step}`)
+    // }
+
+      x1 += incX * step;
+      y1 += incY * step;
+      z1 += incZ;
+      points[i] = Math.round(x1);
+      points[i + 1] = Math.round(y1);
+      points[i + 2] = Math.round(z1);
+    }
+
+  } else {
+    // Iterate through the line
+    for ( let i = 3, ln = points.length; i < ln; i += 3 ) {
+      // Calculate the next point
+      x1 += incX;
+      y1 += incY;
+      z1 += incZ;
+
+      // Add the adjusted point to the result array
+      points[i] = Math.round(x1);
+      points[i + 1] = Math.round(y1);
+      points[i + 2] = Math.round(z1);
+    }
   }
   return points;
 }
@@ -831,28 +912,44 @@ export function* bresenhamLine3dIterator(a, b) {
   const dz = z2 - z1;
 
   // Determine the maximum absolute difference
-  const n = Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz));
+  // Make x and y primary, so z moves can be vertical, diagonal, or double-diagonal.
+  const nXY = Math.max(Math.abs(dx), Math.abs(dy));
+  const n = Math.max(nXY, Math.abs(dz));
 
   // Calculate increments.
-  const incX = dx / n;
-  const incY = dy / n;
+  const incX = dx / nXY;
+  const incY = dy / nXY;
   const incZ = dz / n;
 
-  // Initialize the result array with the starting point
-  const points = Array((n * 3) + 3);
-  points[0] = x1;
-  points[1] = y1;
-  points[2] = z1;
+  if ( n > nXY ) {
+    // Z axis controls.
+    // Move at least one step along z each point. At intervals, increment x and y together.
+    // By tying x and y together, double-diagonal moves will be preferred.
+    const incXY = nXY / (n - 1);
+    let xy = 0;
+    for ( let i = 3, ln = (n * 3) + 3; i < ln; i += 3 ) {
+      xy += incXY;
+      const step = xy >= 1;
+      xy -= 1 * step;
 
-  // Iterate through the line
-  for ( let i = 3, ln = points.length; i < ln; i += 3 ) {
-    // Calculate the next point
-    x1 += incX;
-    y1 += incY;
-    z1 += incZ;
+      x1 += incX * step;
+      y1 += incY * step;
+      z1 += incZ;
 
-    // Return the point.
-    yield new Point3d(Math.round(x1), Math.round(y1), Math.round(z1));
+      // Return the point.
+      yield new Point3d(Math.round(x1), Math.round(y1), Math.round(z1));
+    }
+  } else {
+    // Iterate through the line
+    for ( let i = 3, ln = (n * 3) + 3; i < ln; i += 3 ) {
+      // Calculate the next point
+      x1 += incX;
+      y1 += incY;
+      z1 += incZ;
+
+      // Return the point.
+      yield new Point3d(Math.round(x1), Math.round(y1), Math.round(z1));
+    }
   }
 }
 
