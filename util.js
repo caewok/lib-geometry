@@ -685,12 +685,12 @@ function bresenhamLineV2(x1, y1, x2, y2) {
   const dx = x2 - x1;
   const dy = y2 - y1;
 
+  // Determine the maximum absolute difference
+  const n = Math.max(Math.abs(dx), Math.abs(dy));
+
   // Calculate increments.
   const incX = dx / n;
   const incY = dy / n;
-
-  // Determine the maximum absolute difference
-  const n = Math.max(Math.abs(dx), Math.abs(dy));
 
   // Initialize the result array with the starting point
   const points = Array((n * 2) + 2);
@@ -734,13 +734,13 @@ function bresenhamLine3dV2(x1, y1, z1, x2, y2, z2) {
   const dy = y2 - y1;
   const dz = z2 - z1;
 
+  // Determine the maximum absolute difference
+  const n = Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz));
+
   // Calculate increments.
   const incX = dx / n;
   const incY = dy / n;
   const incZ = dz / n;
-
-  // Determine the maximum absolute difference
-  const n = Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz));
 
   // Initialize the result array with the starting point
   const points = Array((n * 3) + 3);
@@ -1191,6 +1191,11 @@ function bresenhamHexLine(start, end) {
   // Determine the maximum absolute difference
   const n = Math.max(Math.abs(dq), Math.abs(dr), Math.abs(ds));
 
+  // Calculate increments.
+  const incQ = dq / n;
+  const incR = dr / n;
+  const incS = ds / n;
+
   // Initialize the result array with the starting point
   const points = Array((n * 3) + 3);
   points[0] = q1;
@@ -1200,9 +1205,9 @@ function bresenhamHexLine(start, end) {
   // Iterate through the line
   for ( let i = 3, ln = points.length; i < ln; i += 3 ) {
     // Calculate the next point
-    q1 += dq / n;
-    r1 += dr / n;
-    s1 += ds / n;
+    q1 += incQ;
+    r1 += incR;
+    s1 += incS;
 
     // Round to the nearest hex cube coordinate
     let q = Math.round(q1);
@@ -1252,6 +1257,12 @@ function bresenhamHexLine3d(start, end) {
   // Determine the maximum absolute difference
   const n = Math.max(Math.abs(dq), Math.abs(dr), Math.abs(ds), Math.abs(dz));
 
+  // Calculate increments.
+  const incQ = dq / n;
+  const incR = dr / n;
+  const incS = ds / n;
+  const incZ = dz / n;
+
   // Initialize the result array with the starting point
   const points = Array((n * 4) + 4);
   points[0] = q1;
@@ -1262,10 +1273,10 @@ function bresenhamHexLine3d(start, end) {
   // Iterate through the line
   for ( let i = 4, ln = points.length; i < ln; i += 4 ) {
     // Calculate the next point
-    q1 += dq / n;
-    r1 += dr / n;
-    s1 += ds / n;
-    z1 += dz / n;
+    q1 += incQ;
+    r1 += incR;
+    s1 += incS;
+    z1 += incZ;
 
     // Round to the nearest hex cube coordinate
     let q = Math.round(q1);
