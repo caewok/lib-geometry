@@ -39,8 +39,6 @@ export function registerFoundryUtilsMethods() {
     bresenhamLine4d,
     bresenhamHexLine,
     bresenhamHexLine3d,
-    bresenhamLine3dV2,
-    bresenhamLineV2,
     trimLineSegmentToPixelRectangle,
     doSegmentsOverlap,
     findOverlappingPoints,
@@ -675,7 +673,7 @@ export function roundFastPositive(n) { return (n + 0.5) << 0; }
  * @param {number} y2   Second coordinate y value
  * @returns {number[]}
  */
-function bresenhamLineV2(x1, y1, x2, y2) {
+function bresenhamLine(x1, y1, x2, y2) {
   x1 = Math.round(x1);
   y1 = Math.round(y1);
   x2 = Math.round(x2);
@@ -721,7 +719,7 @@ function bresenhamLineV2(x1, y1, x2, y2) {
  * @param {number} z2   Second coordinate z value
  * @returns {number[]}
  */
-function bresenhamLine3dV2(x1, y1, z1, x2, y2, z2) {
+function bresenhamLine3d(x1, y1, z1, x2, y2, z2) {
   x1 = Math.round(x1);
   y1 = Math.round(y1);
   z1 = Math.round(z1);
@@ -763,49 +761,6 @@ function bresenhamLine3dV2(x1, y1, z1, x2, y2, z2) {
   return points;
 }
 
-/**
- * Bresenham line algorithm to generate pixel coordinates for a line between two points.
- * All coordinates must be positive or zero.
- * @param {number} x0   First coordinate x value
- * @param {number} y0   First coordinate y value
- * @param {number} x1   Second coordinate x value
- * @param {number} y1   Second coordinate y value
- * @testing
-Draw = CONFIG.GeometryLib.Draw
-let [t0, t1] = canvas.tokens.controlled
-pixels = bresenhamLine(t0.center.x, t0.center.y, t1.center.x, t1.center.y)
-for ( let i = 0; i < pixels.length; i += 2 ) {
-  Draw.point({ x: pixels[i], y: pixels[i + 1]}, { radius: 1 });
-}
- */
-export function bresenhamLine(x0, y0, x1, y1) {
-  x0 = Math.round(x0);
-  y0 = Math.round(y0);
-  x1 = Math.round(x1);
-  y1 = Math.round(y1);
-
-  const dx = Math.abs(x1 - x0);
-  const dy = Math.abs(y1 - y0);
-  const sx = (x0 < x1) ? 1 : -1;
-  const sy = (y0 < y1) ? 1 : -1;
-  let err = dx - dy;
-
-  const pixels = [x0, y0];
-  while ( x0 !== x1 || y0 !== y1 ) {
-    const e2 = err * 2;
-    if ( e2 > -dy ) {
-      err -= dy;
-      x0 += sx;
-    }
-    if ( e2 < dx ) {
-      err += dx;
-      y0 += sy;
-    }
-
-    pixels.push(x0, y0);
-  }
-  return pixels;
-}
 
 /**
  * Bresenham line algorithm to generate pixel coordinates for a line between two points.
@@ -815,129 +770,40 @@ export function bresenhamLine(x0, y0, x1, y1) {
  * @returns {Iterator<PIXI.Point>}
  */
 export function* bresenhamLineIterator(a, b) {
-  a = PIXI.Point._tmp.set(Math.floor(a.x), Math.floor(a.y));
-  b = PIXI.Point._tmp2.set(Math.floor(b.x), Math.floor(b.y));
-
-  const delta = b.subtract(a, PIXI.Point._tmp3);
-  delta.x = Math.abs(delta.x);
-  delta.y = Math.abs(delta.y);
-
-  const sx = (a.x < b.x) ? 1 : -1;
-  const sy = (a.y < b.y) ? 1 : -1;
-  let err = delta.x - delta.y;
   yield a.clone();
-  while ( a.x !== b.x || a.y !== b.y ) {
-    const e2 = err * 2;
-    if ( e2 > -delta.y ) {
-      err -= delta.y;
-      a.x += sx;
-    }
-    if ( e2 < delta.x ) {
-      err += delta.x;
-      a.y += sy;
-    }
-    yield a.clone();
+
+  let x1 = Math.round(a.x);
+  let y1 = Math.round(a.y);
+  let x2 = Math.round(b.x);
+  let y2 = Math.round(b.y);
+
+  // Calculate differences
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+
+  // Determine the maximum absolute difference
+  const n = Math.max(Math.abs(dx), Math.abs(dy));
+
+  // Calculate increments.
+  const incX = dx / n;
+  const incY = dy / n;
+
+  // Initialize the result array with the starting point
+  const points = Array((n * 2) + 2);
+  points[0] = x1;
+  points[1] = y1;
+
+  // Iterate through the line
+  for ( let i = 2, ln = (n * 2) + 2; i < ln; i += 2 ) {
+    // Calculate the next point
+    x1 += incX;
+    y1 += incY;
+
+    // Return the point.
+    yield new PIXI.Point(Math.round(x1), Math.round(y1));
   }
 }
 
-/**
- * Bresenham line algorithm to generate pixel coordinates for a line between two 3d points.
- * https://www.geeksforgeeks.org/bresenhams-algorithm-for-3-d-line-drawing/
- * All coordinates must be positive or zero.
- * @param {number} x0   First coordinate x value
- * @param {number} y0   First coordinate y value
- * @param {number} z0   First coordinate y value
- * @param {number} x1   Second coordinate x value
- * @param {number} y1   Second coordinate y value
- * @param {number} z1   Second coordinate z value
- * @testing
-Draw = CONFIG.GeometryLib.Draw
-let [t0, t1] = canvas.tokens.controlled
-pixels = bresenhamLine(t0.center.x, t0.center.y, t1.center.x, t1.center.y)
-for ( let i = 0; i < pixels.length; i += 2 ) {
-  Draw.point({ x: pixels[i], y: pixels[i + 1]}, { radius: 1 });
-}
- */
-export function bresenhamLine3d(x0, y0, z0, x1, y1, z1) {
-  x0 = Math.round(x0);
-  y0 = Math.round(y0);
-  z0 = Math.round(z0);
-  x1 = Math.round(x1);
-  y1 = Math.round(y1);
-  z1 = Math.round(z1);
-  const pixels = [x0, y0, z0];
-
-  const dx = Math.abs(x1 - x0);
-  const dy = Math.abs(y1 - y0);
-  const dz = Math.abs(z1 - z0);
-
-  const dx2 = dx * 2;
-  const dy2 = dy * 2;
-  const dz2 = dz * 2;
-
-  const sx = (x1 > x0) ? 1 : -1;
-  const sy = (y1 > y0) ? 1 : -1;
-  const sz = (z1 > z0) ? 1 : -1;
-
-  // Driving axis is X-axis
-  if ( dx >= dy && dx >= dz ) {
-    let p0 = dy2 - dx;
-    let p1 = dz2 - dx;
-    while ( x0 !== x1 ) {
-      x0 += sx;
-      if ( p0 >= 0 ) {
-        y0 += sy;
-        p0 -= dx2;
-      }
-      if ( p1 >= 0 ) {
-        z0 += sz;
-        p1 -= dx2;
-      }
-      p0 += dy2;
-      p1 += dz2;
-      pixels.push(x0, y0, z0);
-    }
-
-  // Driving axis is Y-axis
-  } else if ( dy >= dx && dy >= dz ) {
-    let p0 = dx2 - dy;
-    let p1 = dz2 - dy;
-    while ( y0 !== y1 ) {
-      y0 += sy;
-      if ( p0 >= 0 ) {
-        x0 += sx;
-        p0 -= dy2;
-      }
-      if ( p1 >= 0 ) {
-        z0 += sz;
-        p1 -= dy2;
-      }
-      p0 += dx2;
-      p1 += dz2;
-      pixels.push(x0, y0, z0);
-    }
-
-  // Driving axis is z-axis
-  } else {
-    let p0 = dy2 - dz;
-    let p1 = dx2 - dz;
-    while ( z0 != z1 ) {
-      z0 += sz;
-      if ( p0 >= 0 ) {
-        y0 += sy;
-        p0 -= dz2;
-      }
-      if ( p1 >= 0 ) {
-        x0 += sx;
-        p1 -= dz2;
-      }
-      p0 += dy2;
-      p1 += dx2;
-      pixels.push(x0, y0, z0);
-    }
-  }
-  return pixels;
-}
 
 /**
  * Bresenham line algorithm to generate pixel coordinates for a line between two 3d points.
@@ -949,79 +815,44 @@ export function bresenhamLine3d(x0, y0, z0, x1, y1, z1) {
  * @testing
  */
 export function* bresenhamLine3dIterator(a, b) {
-  const Point3d = CONFIG.GeometryLib.threeD.Point3d;
-  a = Point3d._tmp.copyFrom(a);
-  b = Point3d._tmp2.copyFrom(b);
-  a.roundDecimals();
-  b.roundDecimals();
   yield a.clone();
 
-  const delta = b.subtract(a, Point3d._tmp3);
-  delta.x = Math.abs(delta.x);
-  delta.y = Math.abs(delta.y);
-  delta.z = Math.abs(delta.z);
-  const delta2 = delta.multiplyScalar(2);
+  const Point3d = CONFIG.GeometryLib.threeD.Point3d;
+  let x1 = Math.round(a.x);
+  let y1 = Math.round(a.y);
+  let z1 = Math.round(a.z);
+  let x2 = Math.round(b.x);
+  let y2 = Math.round(b.y);
+  let z2 = Math.round(b.z);
 
-  const sx = (b.x > a.x) ? 1 : -1;
-  const sy = (b.y > a.y) ? 1 : -1;
-  const sz = (b.z > a.z) ? 1 : -1;
+  // Calculate differences
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const dz = z2 - z1;
 
-  // Driving axis is X-axis
-  if ( delta.x >= delta.y && delta.x >= delta.z ) {
-    let p0 = delta2.y - delta.x;
-    let p1 = delta2.z - delta.x;
-    while ( a.x !== b.x ) {
-      a.x += sx;
-      if ( p0 >= 0 ) {
-        a.y += sy;
-        p0 -= delta2.x;
-      }
-      if ( p1 >= 0 ) {
-        a.z += sz;
-        p1 -= delta2.x;
-      }
-      p0 += delta2.y;
-      p1 += delta2.z;
-      yield a.clone();
-    }
+  // Determine the maximum absolute difference
+  const n = Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz));
 
-  // Driving axis is Y-axis
-  } else if ( delta.y >= delta.x && delta.y >= delta.z ) {
-    let p0 = delta2.x - delta.y;
-    let p1 = delta2.z - delta.y;
-    while ( a.y !== b.y ) {
-      a.y += sy;
-      if ( p0 >= 0 ) {
-        a.x += sx;
-        p0 -= delta2.y;
-      }
-      if ( p1 >= 0 ) {
-        a.z += sz;
-        p1 -= delta2.y;
-      }
-      p0 += delta2.x;
-      p1 += delta2.z;
-      yield a.clone();
-    }
+  // Calculate increments.
+  const incX = dx / n;
+  const incY = dy / n;
+  const incZ = dz / n;
 
-  // Driving axis is z-axis
-  } else {
-    let p0 = delta2.y - delta.z;
-    let p1 = delta2.x - delta.z;
-    while ( a.z !== b.z ) {
-      a.z += sz;
-      if ( p0 >= 0 ) {
-        a.y += sy;
-        p0 -= delta2.z;
-      }
-      if ( p1 >= 0 ) {
-        a.x += sx;
-        p1 -= delta2.z;
-      }
-      p0 += delta2.y;
-      p1 += delta2.x;
-      a.clone();
-    }
+  // Initialize the result array with the starting point
+  const points = Array((n * 3) + 3);
+  points[0] = x1;
+  points[1] = y1;
+  points[2] = z1;
+
+  // Iterate through the line
+  for ( let i = 3, ln = points.length; i < ln; i += 3 ) {
+    // Calculate the next point
+    x1 += incX;
+    y1 += incY;
+    z1 += incZ;
+
+    // Return the point.
+    yield new Point3d(Math.round(x1), Math.round(y1), Math.round(z1));
   }
 }
 
@@ -1029,142 +860,62 @@ export function* bresenhamLine3dIterator(a, b) {
  * Bresenham line algorithm to generate pixel coordinates for a line between two 4d points.
  * https://www.geeksforgeeks.org/bresenhams-algorithm-for-3-d-line-drawing/
  * All coordinates must be positive or zero.
- * @param {number} x0   First coordinate x value
- * @param {number} y0   First coordinate y value
- * @param {number} z0   First coordinate z value
- * @param {number} k0   First coordinate k value
- * @param {number} x1   Second coordinate x value
- * @param {number} y1   Second coordinate y value
- * @param {number} z1   Second coordinate z value
- * @param {number} k1   Second coordinate k value
+ * @param {number} x1   First coordinate x value
+ * @param {number} y1   First coordinate y value
+ * @param {number} z1   First coordinate z value
+ * @param {number} k1   First coordinate k value
+ * @param {number} x2   Second coordinate x value
+ * @param {number} y2   Second coordinate y value
+ * @param {number} z2   Second coordinate z value
+ * @param {number} k2   Second coordinate k value
  */
-export function bresenhamLine4d(x0, y0, z0, k0, x1, y1, z1, k1) {
-  x0 = Math.round(x0);
-  y0 = Math.round(y0);
-  z0 = Math.round(z0);
-  k0 = Math.round(k0);
+export function bresenhamLine4d(x1, y1, z1, k1, x2, y2, z2, k2) {
   x1 = Math.round(x1);
   y1 = Math.round(y1);
   z1 = Math.round(z1);
   k1 = Math.round(k1);
-  const pixels = [x0, y0, z0, k0];
+  x2 = Math.round(x2);
+  y2 = Math.round(y2);
+  z2 = Math.round(z2);
+  k2 = Math.round(k2);
 
-  const dx = Math.abs(x1 - x0);
-  const dy = Math.abs(y1 - y0);
-  const dz = Math.abs(z1 - z0);
-  const dk = Math.abs(k1 - k0);
+  // Calculate differences
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const dz = z2 - z1;
+  const dk = k2 - k1;
 
-  const dx2 = dx * 2;
-  const dy2 = dy * 2;
-  const dz2 = dz * 2;
-  const dk2 = dk * 2;
+  // Determine the maximum absolute difference
+  const n = Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz), Math.abs(dk));
 
-  const sx = (x1 > x0) ? 1 : -1;
-  const sy = (y1 > y0) ? 1 : -1;
-  const sz = (z1 > z0) ? 1 : -1;
-  const sk = (k1 > k0) ? 1 : -1;
+  // Calculate increments.
+  const incX = dx / n;
+  const incY = dy / n;
+  const incZ = dz / n;
+  const incK = dk / n;
 
-  // Driving axis is X-axis
-  if ( dx >= dy && dx >= dz && dx >= dk ) {
-    let p0 = dy2 - dx;
-    let p1 = dz2 - dx;
-    let p2 = dk2 - dx;
-    while ( x0 !== x1 ) {
-      x0 += sx;
-      if ( p0 >= 0 ) {
-        y0 += sy;
-        p0 -= dx2;
-      }
-      if ( p1 >= 0 ) {
-        z0 += sz;
-        p1 -= dx2;
-      }
-      if ( p2 >= 0 ) {
-        k0 += sk;
-        p2 -= dx2;
-      }
-      p0 += dy2;
-      p1 += dz2;
-      p2 += dk2;
-      pixels.push(x0, y0, z0, k0);
-    }
+  // Initialize the result array with the starting point
+  const points = Array((n * 4) + 4);
+  points[0] = x1;
+  points[1] = y1;
+  points[2] = z1;
+  points[3] = k1;
 
-  // Driving axis is Y-axis
-  } else if ( dy >= dx && dy >= dz && dy >= dk ) {
-    let p0 = dx2 - dy;
-    let p1 = dz2 - dy;
-    let p2 = dk2 - dy;
-    while ( y0 !== y1 ) {
-      y0 += sy;
-      if ( p0 >= 0 ) {
-        x0 += sx;
-        p0 -= dy2;
-      }
-      if ( p1 >= 0 ) {
-        z0 += sz;
-        p1 -= dy2;
-      }
-      if ( p2 >= 0 ) {
-        k0 += sk;
-        p2 -= dy2;
-      }
-      p0 += dx2;
-      p1 += dz2;
-      p2 += dk2;
-      pixels.push(x0, y0, z0, k0);
-    }
+  // Iterate through the line
+  for ( let i = 4, ln = points.length; i < ln; i += 4 ) {
+    // Calculate the next point
+    x1 += incX;
+    y1 += incY;
+    z1 += incZ;
+    k1 += incK;
 
-  // Driving axis is z-axis
-  } else if ( dz >= dx && dz >= dy && dz >= dk ) {
-    let p0 = dy2 - dz;
-    let p1 = dx2 - dz;
-    let p2 = dk2 - dz;
-    while ( z0 !== z1 ) {
-      z0 += sz;
-      if ( p0 >= 0 ) {
-        y0 += sy;
-        p0 -= dz2;
-      }
-      if ( p1 >= 0 ) {
-        x0 += sx;
-        p1 -= dz2;
-      }
-      if ( p2 >= 0 ) {
-        k0 += sk;
-        p2 -= dz2;
-      }
-      p0 += dy2;
-      p1 += dx2;
-      p2 += dk2;
-      pixels.push(x0, y0, z0, k0);
-    }
-
-  // Driving axis is k-axis
-  } else {
-    let p0 = dx2 - dk;
-    let p1 = dy2 - dk;
-    let p2 = dz2 - dk;
-    while ( k0 !== k1 ) {
-      k0 += sk;
-      if ( p0 >= 0 ) {
-        x0 += sx;
-        p0 -= dk2;
-      }
-      if ( p1 >= 0 ) {
-        y0 += sy;
-        p1 -= dz2;
-      }
-      if ( p2 >= 0 ) {
-        z0 += sz;
-        p2 -= dk2;
-      }
-      p0 += dx2;
-      p1 += dy2;
-      p2 += dz2;
-      pixels.push(x0, y0, z0, k0);
-    }
+    // Add the adjusted point to the result array
+    points[i] = Math.round(x1);
+    points[i + 1] = Math.round(y1);
+    points[i + 2] = Math.round(z1);
+    points[i + 3] = Math.round(k1);
   }
-  return pixels;
+  return points;
 }
 
 
