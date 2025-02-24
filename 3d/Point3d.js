@@ -51,6 +51,22 @@ export class Point3d extends PIXI.Point {
   }
 
   /**
+   * Iterator: x then y.
+   */
+  [Symbol.iterator]() {
+    const keys = ["x", "y", "z"];
+    const data = this;
+    let index = 0;
+    return {
+      next() {
+        if ( index < 3 ) return {
+          value: data[keys[index++]],
+          done: false };
+        else return { done: true };
+      }
+    };
+  }
+  /**
    * Construct a Point3d from any object that has x and y and z properties.
    * Recognizes elevationZ and elevation as potential z properties.
    * @param {object} obj
@@ -486,6 +502,34 @@ export class Point3d extends PIXI.Point {
   }
 
   /**
+   * Get the minimum of x and y values, respectively, between two points.
+   * @param {Point3d} other    The point to compare to `this`.
+   * @param {Point3d} [outPoint]    A point-like object in which to store the value.
+   *   (Will create new point if none provided.)
+   * @returns {Point3d}
+   */
+  min(other, outPoint) {
+    outPoint ??= new this.constructor();
+    super.min(other, outPoint);
+    outPoint.z = Math.min(this.z, other.z);
+    return outPoint;
+  }
+
+  /**
+   * Get the maximum of x and y values, respectively, between two points.
+   * @param {Point3d} other    The point to compare to `this`.
+   * @param {Point3d} [outPoint]    A point-like object in which to store the value.
+   *   (Will create new point if none provided.)
+   * @returns {Point3d}
+   */
+  max(other, outPoint) {
+    outPoint ??= new this.constructor();
+    super.max(other, outPoint);
+    outPoint.z = Math.max(this.z, other.z);
+    return outPoint;
+  }
+
+  /**
    * Dot product of this point with another.
    * (Sum of the products of the components)
    * @param {Point3d} other
@@ -572,6 +616,7 @@ export class Point3d extends PIXI.Point {
 
   // Temporary points that can be passed to PIXI.Point methods
   static _tmp = new this();
+  static _tmp1 = new this();
   static _tmp2 = new this();
   static _tmp3 = new this();
 }

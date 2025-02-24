@@ -417,15 +417,20 @@ export class Plane {
   _calculateAxisVectors() {
     // https://math.stackexchange.com/questions/64430/find-extra-arbitrary-two-points-for-a-plane-given-the-normal-and-a-point-that-l
     // Find the minimum index
+    const Point3d = CONFIG.GeometryLib.threeD.Point3d;
     const n = this.normal;
-    const w = (n.x < n.y && n.x < n.z) ? new CONFIG.GeometryLib.threeD.Point3d(1, 0, 0)
-      : n.y < n.z ? new Point3d(0, 1, 0) : new CONFIG.GeometryLib.threeD.Point3d(0, 0, 1);
+    const w = Point3d._tmp3;
+    n.x === 0 ? w.set(1, 0, 0)
+      : n.y === 0 ? w.set(0, 1, 0)
+        : n.z === 0 ? w.set(0, 0, 1)
+          : (n.x < n.y && n.x < n.z) ? w.set(1, 0, 0)
+            : n.y < n.z ? w.set(0, 1, 0)
+              : w.set(0, 0, 1);
 
-    const u = new CONFIG.GeometryLib.threeD.Point3d();
-    const v = new CONFIG.GeometryLib.threeD.Point3d();
+    const u = new Point3d();
+    const v = new Point3d();
     w.cross(n, u).normalize(u);
     n.cross(u, v).normalize(v);
-
     return { u, v };
   }
 

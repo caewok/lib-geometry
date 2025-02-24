@@ -34,8 +34,8 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
    */
   static get(token) {
     let polygon = this._cache.get(token);
-    if ( !polygon ) this._cache.set(token, polygon = new this(token));
-    polygon.initialize();
+    if ( !polygon ) this._cache.set(token, polygon = new this());
+    polygon.initialize(token);
     polygon.compute();
     return polygon;
   }
@@ -75,30 +75,26 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
    * If true, no walls constrain token.
    * @type {boolean}
    */
-  _unrestricted;
+  _unrestricted = true;
 
   /** @type {boolean} */
   #dirty = true;
 
-  constructor(token) {
-    super();
-    this._token = token;
-  }
-
   /** @override */
-  initialize() {
-    const { _token, _tokenProperties, _tokenDocumentProperties } = this;
+  initialize(token) {
+    this._token = token;
+    const { _tokenProperties, _tokenDocumentProperties } = this;
 
     // Determine if the token has changed.
     // Could use getProperty/setProperty, but may be a bit slow and unnecessary, given
     // that all properties are either on the token or the document.
     let tokenMoved = false;
     for ( const key of Object.keys(_tokenProperties) ) {
-      const value = _token[key];
+      const value = token[key];
       tokenMoved ||= _tokenProperties[key] !== value;
       _tokenProperties[key] = value;
     }
-    const doc = _token.document;
+    const doc = token.document;
     for ( const key of Object.keys(_tokenDocumentProperties) ) {
       const value = doc[key];
       tokenMoved ||= _tokenDocumentProperties[key] !== value;
@@ -109,11 +105,11 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
       this.#wallsID = ConstrainedTokenBorder._wallsID;
       this.#dirty = true;
       const config = {
-        source: _token.vision,
+        source: token.vision,
         type: "move",
-        boundaryShapes: [_token.tokenBorder] // [_token.tokenBorder.toPolygon()] }; // Avoid WeilerAtherton.
+        boundaryShapes: [token.tokenBorder] // [_token.tokenBorder.toPolygon()] }; // Avoid WeilerAtherton.
       };
-      super.initialize(_token.center, config);
+      super.initialize(token.center, config);
     }
   }
 
@@ -124,7 +120,9 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
 
   /** @override */
   compute() {
-    if ( this.#dirty ) {
+    // Avoid caching values until edges loaded.
+    // Falls back on _unrestricted = true.
+    if ( this.#dirty && canvas.edges.size ) {
       this.#dirty = false;
       super.compute();
     }
@@ -219,11 +217,12 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
   }
 
   /**
-   * Return either this polygon or the underlying token border if possible.
-   * @returns {ConstrainedTokenShape|PIXI.Rectangle}
+   * Return either a polygon or the underlying token border if possible.
+   * Does not return this b/c we don't want this modified unexpectedly.
+   * @returns {PIXI.Polygon|PIXI.Rectangle}
    */
   constrainedBorder() {
-    return this._unrestricted ? this._token.tokenBorder : this;
+    return this._unrestricted ? this._token.tokenBorder : new PIXI.Polygon(this.points);
   }
 }
 

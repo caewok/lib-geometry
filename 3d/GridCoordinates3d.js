@@ -422,6 +422,7 @@ function directPathGridless(start, end) {
 function directPath3dSquare(start, end) {
   start = GridCoordinates3d.fromObject(start);
   end = GridCoordinates3d.fromObject(end);
+  if ( start.offsetsEqual(end) ) return [start, end];
   const points = CONFIG.GeometryLib.utils.bresenhamLine3d(start.i, start.j, start.k, end.i, end.j, end.k);
   const path3d = [start];
   // Convert points to GridCoordinates3d. Start and end repeat; skip.
