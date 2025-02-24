@@ -795,6 +795,8 @@ function bresenhamLine3d(x1, y1, z1, x2, y2, z2) {
   let incZ = dz / n;
 
   // Initialize the result array with the starting point
+  if ( n < 0 || n == null ) { console.error("bresenhamLine3d n is incorrect", x1, y1, z1, x2, y2, z2); }
+
   const points = Array((n * 3) + 3);
   points[0] = x1;
   points[1] = y1;
