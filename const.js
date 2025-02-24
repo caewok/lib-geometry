@@ -13,17 +13,20 @@ GEOMETRY_CONFIG.threeD = {};
 export const MODULE_KEYS = {
   EV: {
     ID: "elevatedvision",
-    TOKEN_HEIGHT: "tokenHeight",
-    WALL: { TOP: "top", BOTTOM: "bottom" },
-    ELEVATION: "elevation",
-    ACTIVE: false
+    ACTIVE: false,
+    FLAGS: {
+      TOKEN_HEIGHT: "tokenHeight",
+      ELEVATION: "elevation",
+    }
   },
 
   WH: {
     ID: "wall-height",
-    TOKEN_HEIGHT: "tokenHeight",
-    WALL: { TOP: "top", BOTTOM: "bottom" },
-    ACTIVE: false
+    ACTIVE: false,
+    FLAGS: {
+      TOKEN_HEIGHT: "tokenHeight",
+      ELEVATION: "wall-height"
+    }
   },
 
   LEVELS: {
@@ -33,8 +36,10 @@ export const MODULE_KEYS = {
 
   LEVELSAUTOCOVER: {
     ID: "levelsautocover",
-    DUCKING: "ducking",
-    ACTIVE: false
+    ACTIVE: false,
+    FLAGS: {
+      DUCKING: "ducking"
+    }
   },
 
   TERRAIN_MAPPER: {
@@ -42,17 +47,6 @@ export const MODULE_KEYS = {
     ACTIVE: false,
   }
 };
-
-let MOD = MODULE_KEYS.EV;
-MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT = `flags.${MOD.ID}.${MOD.TOKEN_HEIGHT}`;
-MODULE_KEYS.EV.FLAG_WALL_TOP = `flags.${MOD.ID}.${MOD.ELEVATION}.${MOD.WALL.TOP}`;
-MODULE_KEYS.EV.FLAG_WALL_BOTTOM = `flags.${MOD.ID}.${MOD.ELEVATION}.${MOD.WALL.BOTTOM}`;
-MODULE_KEYS.EV.FLAG_PLACEABLE_ELEVATION = `flags.${MOD.ID}.${MOD.ELEVATION}`;
-
-MOD = MODULE_KEYS.WH;
-MODULE_KEYS.WH.FLAG_TOKEN_HEIGHT = `flags.${MOD.ID}.${MOD.TOKEN_HEIGHT}`;
-MODULE_KEYS.WH.FLAG_WALL_TOP = `flags.${MOD.ID}.${MOD.WALL.TOP}`;
-MODULE_KEYS.WH.FLAG_WALL_BOTTOM = `flags.${MOD.ID}.${MOD.WALL.BOTTOM}`;
 
 
 // Hook init b/c game.modules is not initialized at start.

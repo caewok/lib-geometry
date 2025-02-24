@@ -120,15 +120,18 @@ async function setPlaceableObjectElevationE(value) {
 
 // NOTE: Wall Elevation
 function wallTopE() {
+  const { EV, WH } = MODULE_KEYS;
+
   // Previously used foundry.utils.getProperty but it is slow.
-  return this.document.flags[MODULE_KEYS.EV.ID]?.[MODULE_KEYS.EV.FLAG_WALL_TOP]
-    ?? this.document.flags[MODULE_KEYS.WH.ID]?.[MODULE_KEYS.WH.FLAG_WALL_TOP]
+  return this.document.flags[EV.ID]?.[EV.FLAGS.ELEVATION]?.top
+    ?? this.document.flags[WH.ID]?.[WH.FLAGS.ELEVATION]?.top
     ?? Number.POSITIVE_INFINITY;
 }
 
 function wallBottomE() {
-  return this.document.flags[MODULE_KEYS.EV.ID]?.[MODULE_KEYS.EV.FLAG_WALL_BOTTOM]
-    ?? this.document.flags[MODULE_KEYS.WH.ID]?.[MODULE_KEYS.WH.FLAG_WALL_BOTTOM]
+  const { EV, WH } = MODULE_KEYS;
+  return this.document.flags[EV.ID]?.[EV.FLAGS.ELEVATION]?.bottom
+    ?? this.document.flags[WH.ID]?.[WH.FLAGS.ELEVATION]?.bottom
     ?? Number.NEGATIVE_INFINITY;
 }
 
@@ -137,7 +140,8 @@ async function setWallTopE(value) {
     console.err("setWallTopE value must be a number.");
     return;
   }
-  return this.document.update({ [MODULE_KEYS.EV.FLAG_WALL_TOP]: value });
+  const { ID, FLAGS } = MODULE_KEYS.EV;
+  return this.document.update({ [`flags.${ID}.${FLAGS.ELEVATION}.top`]: value });
 }
 
 async function setWallBottomE(value) {
@@ -145,7 +149,8 @@ async function setWallBottomE(value) {
     console.err("setWallTopE value must be a number.");
     return;
   }
-  return this.document.update({ [MODULE_KEYS.EV.FLAG_WALL_BOTTOM]: value });
+  const { ID, FLAGS } = MODULE_KEYS.EV;
+  return this.document.update({ [`flags.${ID}.${FLAGS.ELEVATION}.bottom`]: value });
 }
 
 /**
@@ -183,14 +188,15 @@ function getIsProne() {
   const proneStatusId = CONFIG.GeometryLib.proneStatusId;
   return Boolean((proneStatusId !== "" && this.actor && this.actor.statuses?.has(proneStatusId))
     || (MODULE_KEYS.LEVELSAUTOCOVER.ACTIVE
-    && this.document.flags?.[MODULE_KEYS.LEVELSAUTOCOVER.ID]?.[MODULE_KEYS.LEVELSAUTOCOVER]?.DUCKING));
+    && this.document.flags?.[MODULE_KEYS.LEVELSAUTOCOVER.ID]?.[MODULE_KEYS.LEVELSAUTOCOVER.FLAGS.DUCKING]));
 }
 
 function getTokenHeight(token) {
   // Use || to ignore 0 height values.
   // Previously used foundry.utils.getProperty but it is slow.
-  return token.document.flags[MODULE_KEYS.EV.ID]?.[MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT]
-    || token.document.flags[MODULE_KEYS.WH.ID]?.[MODULE_KEYS.WH.FLAG_TOKEN_HEIGHT]
+  const { EV, WH } = MODULE_KEYS;
+  return token.document.flags[EV.ID]?.[EV.FLAGS.TOKEN_HEIGHT]
+    || token.document.flags[WH.ID]?.[WH.FLAGS.TOKEN_HEIGHT]
     || calculateTokenHeightFromTokenShape(token);
 }
 
@@ -212,7 +218,8 @@ async function setTokenVerticalHeight(value) {
     console.err("token vertical height must be 0 or greater.");
     return;
   }
-  return this.document.update({ [MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT]: value });
+  const { ID, FLAGS } = MODULE_KEYS.EV;
+  return this.document.update({ [`flags.${ID}.${FLAGS.TOKEN_HEIGHT}`]: value });
 }
 
 // NOTE: Hooks
@@ -228,8 +235,9 @@ async function setTokenVerticalHeight(value) {
 function preUpdateTokenHook(tokenD, data, _options, _userId) {
   const flatData = foundry.utils.flattenObject(data);
   const changes = new Set(Object.keys(flatData));
-  const evFlag = MODULE_KEYS.EV.FLAG_TOKEN_HEIGHT;
-  const whFlag = MODULE_KEYS.WH.FLAG_TOKEN_HEIGHT;
+  const { EV, WH } = MODULE_KEYS;
+  const evFlag = `flags.${EV.ID}.${EV.FLAGS.TOKEN_HEIGHT}`;
+  const whFlag = `flags.${WH.ID}.${WH.FLAGS.TOKEN_HEIGHT}`;
   const updates = {};
   if ( changes.has(evFlag) ) {
     const e = flatData[evFlag];
@@ -238,8 +246,7 @@ function preUpdateTokenHook(tokenD, data, _options, _userId) {
     const e = flatData[whFlag];
     updates[evFlag] = e;
   }
-  foundry.utils.mergeObject(data, updates);
-
+  if ( !foundry.utils.isEmpty(updates) ) foundry.utils.mergeObject(data, updates);
 }
 
 /**
@@ -254,10 +261,11 @@ function preUpdateTokenHook(tokenD, data, _options, _userId) {
 function preUpdateWallHook(wallD, changed, _options, _userId) {
   const flatData = foundry.utils.flattenObject(changed);
   const flatChanges = new Set(Object.keys(flatData));
+  const { EV, WH } = MODULE_KEYS;
   const updates = {};
-  for ( const pos of ["FLAG_WALL_TOP", "FLAG_WALL_BOTTOM"] ) {
-    const evFlag = MODULE_KEYS.EV[pos];
-    const whFlag = MODULE_KEYS.WH[pos];
+  for ( const pos of ["top", "bottom"] ) {
+    const evFlag = `flags.${EV.ID}.${EV.FLAGS.ELEVATION}.${pos}`;
+    const whFlag = `flags.${WH.ID}.${WH.FLAGS.ELEVATION}.${pos}`;
     let useEV;
     if ( flatChanges.has(evFlag) && flatChanges.has(whFlag) ) {
       // Use whichever was changed or default to EV.
@@ -277,7 +285,7 @@ function preUpdateWallHook(wallD, changed, _options, _userId) {
       updates[evFlag] = e;
     }
   }
-  foundry.utils.mergeObject(changed, updates);
+  if ( !foundry.utils.isEmpty(updates) ) foundry.utils.mergeObject(changed, updates);
 }
 
 
