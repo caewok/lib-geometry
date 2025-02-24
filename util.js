@@ -784,7 +784,7 @@ function bresenhamLine3d(x1, y1, z1, x2, y2, z2) {
   const dy = y2 - y1;
   const dz = z2 - z1;
 
-  // Make x and y primary, so z moves can be vertical, diagonal, or double-diagonal.
+  // Make z primary, so z moves can be vertical, diagonal, or double-diagonal.
   // Determine the maximum absolute difference
   const nXY = Math.max(Math.abs(dx), Math.abs(dy));
   const n = Math.max(nXY, Math.abs(dz));
@@ -795,13 +795,7 @@ function bresenhamLine3d(x1, y1, z1, x2, y2, z2) {
   let incZ = dz / n;
 
   // Initialize the result array with the starting point
-  let points;
-  try {
-    points = Array((n * 3) + 3);
-  } catch (err) {
-    console.error("bresenhamLine3d n is incorrect", err, { x1, y1, z1, x2, y2, z2 });
-  }
-
+  const points = Array((n * 3) + 3);
   points[0] = x1;
   points[1] = y1;
   points[2] = z1;
@@ -817,14 +811,14 @@ function bresenhamLine3d(x1, y1, z1, x2, y2, z2) {
     for ( let i = 3, ln = points.length; i < ln; i += 3 ) {
       xy += incXY;
       const step = xy >= 1;
-      xy -= 1 * step;
+      xy -= (1 * step);
       // totalXY += step;
 
       // console.log(`i ${i}: xy ${xy} step ${step}`)
     // }
 
-      x1 += incX * step;
-      y1 += incY * step;
+      x1 += (incX * step);
+      y1 += (incY * step);
       z1 += incZ;
       points[i] = Math.round(x1);
       points[i + 1] = Math.round(y1);
@@ -1108,13 +1102,15 @@ export function bresenhamHexLine3d(start, end) {
   const ds = s2 - s1;
   const dz = z2 - z1;
 
+  // Make z primary, so z moves can be vertical, diagonal, or double-diagonal.
   // Determine the maximum absolute difference
-  const n = Math.max(Math.abs(dq), Math.abs(dr), Math.abs(ds), Math.abs(dz));
+  const nQRS = Math.max(Math.abs(dq), Math.abs(dr), Math.abs(ds));
+  const n = Math.max(nQRS, Math.abs(dz));
 
   // Calculate increments.
-  const incQ = dq / n;
-  const incR = dr / n;
-  const incS = ds / n;
+  const incQ = dq / (nQRS || n); // In case nQRS equals 0.
+  const incR = dr / (nQRS || n);
+  const incS = ds / (nQRS || n);
   const incZ = dz / n;
 
   // Initialize the result array with the starting point
@@ -1124,34 +1120,74 @@ export function bresenhamHexLine3d(start, end) {
   points[2] = s1;
   points[3] = z1;
 
-  // Iterate through the line
-  for ( let i = 4, ln = points.length; i < ln; i += 4 ) {
-    // Calculate the next point
-    q1 += incQ;
-    r1 += incR;
-    s1 += incS;
-    z1 += incZ;
+  if ( nQRS && n > nQRS ) {
+    // Z axis controls.
+    // Move at least one step along z each point. At intervals, increment q,r,s together.
+    // By tying q,r,s together, double-diagonal moves will be preferred.
+    const incQRS = nQRS / (n - 1);
+    let qrs = 0;
+    for ( let i = 4, ln = points.length; i < ln; i += 4 ) {
+      qrs += incQRS;
+      const step = qrs >= 1;
+      qrs -= (1 * step);
 
-    // Round to the nearest hex cube coordinate
-    let q = Math.round(q1);
-    let r = Math.round(r1);
-    let s = Math.round(s1);
-    let z = Math.round(z1);
+      // Calculate the next point
+      q1 += (incQ * step);
+      r1 += (incR * step);
+      s1 += (incS * step);
+      z1 += incZ;
 
-    // Adjust to ensure q + r + s = 0
-    const deltaQ = Math.abs(q - q1);
-    const deltaR = Math.abs(r - r1);
-    const deltaS = Math.abs(s - s1);
+      // Round to the nearest hex cube coordinate
+      let q = Math.round(q1);
+      let r = Math.round(r1);
+      let s = Math.round(s1);
+      let z = Math.round(z1);
 
-    if ( deltaQ > deltaR && deltaQ > deltaS ) q = -r - s;
-    else if ( deltaR > deltaS ) r = -q - s;
-    else s = -q - r;
+      // Adjust to ensure q + r + s = 0
+      const deltaQ = Math.abs(q - q1);
+      const deltaR = Math.abs(r - r1);
+      const deltaS = Math.abs(s - s1);
 
-    // Add the adjusted point to the result array
-    points[i] = q;
-    points[i + 1] = r;
-    points[i + 2] = s;
-    points[i + 3] = z;
+      if ( deltaQ > deltaR && deltaQ > deltaS ) q = -r - s;
+      else if ( deltaR > deltaS ) r = -q - s;
+      else s = -q - r;
+
+      // Add the adjusted point to the result array
+      points[i] = q;
+      points[i + 1] = r;
+      points[i + 2] = s;
+      points[i + 3] = z;
+    }
+  } else {
+    // Iterate through the line
+    for ( let i = 4, ln = points.length; i < ln; i += 4 ) {
+      // Calculate the next point
+      q1 += incQ;
+      r1 += incR;
+      s1 += incS;
+      z1 += incZ;
+
+      // Round to the nearest hex cube coordinate
+      let q = Math.round(q1);
+      let r = Math.round(r1);
+      let s = Math.round(s1);
+      let z = Math.round(z1);
+
+      // Adjust to ensure q + r + s = 0
+      const deltaQ = Math.abs(q - q1);
+      const deltaR = Math.abs(r - r1);
+      const deltaS = Math.abs(s - s1);
+
+      if ( deltaQ > deltaR && deltaQ > deltaS ) q = -r - s;
+      else if ( deltaR > deltaS ) r = -q - s;
+      else s = -q - r;
+
+      // Add the adjusted point to the result array
+      points[i] = q;
+      points[i + 1] = r;
+      points[i + 2] = s;
+      points[i + 3] = z;
+    }
   }
   return points;
 }
