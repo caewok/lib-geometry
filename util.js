@@ -790,8 +790,8 @@ function bresenhamLine3d(x1, y1, z1, x2, y2, z2) {
   const n = Math.max(nXY, Math.abs(dz));
 
   // Calculate increments.
-  let incX = dx / nXY;
-  let incY = dy / nXY;
+  let incX = dx / (nXY || n); // In case nXY equals 0.
+  let incY = dy / (nXY || n); // In case nXY equals 0.
   let incZ = dz / n;
 
   // Initialize the result array with the starting point
@@ -805,7 +805,7 @@ function bresenhamLine3d(x1, y1, z1, x2, y2, z2) {
   points[1] = y1;
   points[2] = z1;
 
-  if ( n > nXY ) {
+  if ( nXY && n > nXY ) {
     // Z axis controls.
     // Move at least one step along z each point. At intervals, increment x and y together.
     // By tying x and y together, double-diagonal moves will be preferred.
