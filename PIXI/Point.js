@@ -11,6 +11,7 @@ PATCHES.PIXI = {};
 
 // Temporary points that can be passed to PIXI.Point methods
 PIXI.Point._tmp = new PIXI.Point();
+PIXI.Point._tmp1 = new PIXI.Point();
 PIXI.Point._tmp2 = new PIXI.Point();
 PIXI.Point._tmp3 = new PIXI.Point();
 
@@ -265,6 +266,49 @@ function multiplyScalar(scalar, outPoint) {
 }
 
 /**
+ * Divide `this` point by another.
+ * Based on https://api.pixijs.io/@pixi/math-extras/src/pointExtras.ts.html
+ * @param {PIXI.Point} other    The point to subtract from `this`.
+ * @param {PIXI.Point} [outPoint]    A point-like object in which to store the value.
+ *   (Will create new point if none provided.)
+ * @returns {PIXI.Point}
+ */
+function divide(other, outPoint) {
+  outPoint ??= new this.constructor();
+  outPoint.x = this.x / other.x;
+  outPoint.y = this.y / other.y;
+  return outPoint;
+}
+
+/**
+ * Get the minimum of x and y values, respectively, between two points.
+ * @param {PIXI.Point} other    The point to compare to `this`.
+ * @param {PIXI.Point} [outPoint]    A point-like object in which to store the value.
+ *   (Will create new point if none provided.)
+ * @returns {PIXI.Point}
+ */
+function min(other, outPoint) {
+  outPoint ??= new this.constructor();
+  outPoint.x = Math.min(this.x, other.x);
+  outPoint.y = Math.min(this.y, other.y);
+  return outPoint;
+}
+
+/**
+ * Get the maximum of x and y values, respectively, between two points.
+ * @param {PIXI.Point} other    The point to compare to `this`.
+ * @param {PIXI.Point} [outPoint]    A point-like object in which to store the value.
+ *   (Will create new point if none provided.)
+ * @returns {PIXI.Point}
+ */
+function max(other, outPoint) {
+  outPoint ??= new this.constructor();
+  outPoint.x = Math.max(this.x, other.x);
+  outPoint.y = Math.max(this.y, other.y);
+  return outPoint;
+}
+
+/**
  * Dot product of this point with another.
  * (Sum of the products of the components)
  * @param {PIXI.Point} other
@@ -424,6 +468,23 @@ function sortKey() {
   return (MAX_TEXTURE_SIZE * x) + y;
 }
 
+/**
+ * Iterator: x then y.
+ */
+PIXI.Point.prototype[Symbol.iterator] = function() {
+  const keys = ["x", "y"];
+  let index = 0;
+  const data = this;
+  return {
+    next() {
+      if ( index < 2 ) return {
+        value: data[keys[index++]],
+        done: false };
+      else return { done: true };
+    }
+  };
+}
+
 PATCHES.PIXI.GETTERS = {
   key,
   sortKey
@@ -446,6 +507,9 @@ PATCHES.PIXI.METHODS = {
   subtract,
   multiply,
   multiplyScalar,
+  divide,
+  min,
+  max,
   copyPartial,
   dot,
   magnitude,

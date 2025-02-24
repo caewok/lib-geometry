@@ -4,7 +4,7 @@ foundry
 */
 "use strict";
 
-const VERSION = "0.3.19";
+const VERSION = "0.3.20";
 
 // Foundry utils
 import { GEOMETRY_CONFIG } from "./const.js";
@@ -38,6 +38,7 @@ import "./Ellipse.js";
 
 // Matrix
 import "./Matrix.js";
+import "./MatrixFlat.js";
 
 // Shadow
 import "./Shadow.js";
@@ -47,6 +48,9 @@ import "./ClipperPaths.js";
 
 // Graph
 import "./Graph.js";
+
+// Benchmark
+import "./Benchmark.js";
 
 // Patcher
 import { Patcher } from "../Patcher.js";
