@@ -12,6 +12,7 @@ import "./CenteredPolygon/CenteredPolygon.js";
 import "./Ellipse.js";
 import "./3d/Point3d.js";
 import { GEOMETRY_CONFIG } from "./const.js";
+import { extractPixels } from "./extract-pixels.js";
 
 // Functions that would go in foundry.utils if that object were extensible
 export function registerFoundryUtilsMethods() {
@@ -56,7 +57,8 @@ export function registerFoundryUtilsMethods() {
       convertToElevation: convertToElevationCutaway,
       convertFromDistance: convertFromDistanceCutaway,
       convertFromElevation: convertFromElevationCutaway
-    }
+    },
+    extractPixels
   };
 
 
