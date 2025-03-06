@@ -182,7 +182,7 @@ export class MatrixFlat {
       console.error("Rows or columns incorrectly specified.");
       return undefined;
     }
-    const mat = new this.empty(rows, cols);
+    const mat = this.empty(rows, cols);
     mat._setElements((elem, i) => arr[i]);
     return mat;
   }
@@ -1257,7 +1257,7 @@ export class MatrixFlat {
 }
 
 // For backwards compatibility.
-MatrixFlat.fromFlatArray = MatrixFlat.fromFlatArrayByColumns;
+MatrixFlat.fromFlatArray = MatrixFlat.fromRowMajorArray;
 MatrixFlat.prototype.copyTo = MatrixFlat.prototype.clone;
 
 GEOMETRY_CONFIG.MatrixFlat ??= MatrixFlat;
