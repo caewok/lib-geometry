@@ -264,6 +264,23 @@ export class MatrixFlat {
   }
 
  /**
+  * Set every element to 0.
+  * @returns {this} For convenience.
+  */
+ zero() { this.arr.fill(0); return this; }
+
+ /**
+  * Set diagonal to a constant.
+  * @param {number} [c=1]     Constant to use
+  * @returns {this} For convenience
+  */
+ setConstantDiagonal(c = 1) {
+   const ln = Math.min(this.nrow, this.ncol);
+   for ( let i = 0; i < ln; i += 1 ) this.setIndex(i, i, c);
+   return this;
+ }
+
+ /**
    * Convert matrix to a PIXI.Point.
    * Any index in the first row can be chosen for x and y.
    * If homogenous is true, the last column [0, col - 1] is assumed to be the divisor.
@@ -341,18 +358,29 @@ export class MatrixFlat {
    * @param {number} zFar     Distance from the viewer to the far clipping plane (always positive)
    * @returns {Matrix} 4x4 Matrix, in row-major format
    */
-  static perspective(fovRadians, aspect, zNear, zFar) {
+  static perspective(fovRadians, aspect, zNear, zFar, M) {
     const f = Math.tan((Math.PI * 0.5) - (0.5 * fovRadians));
     const rangeInv = 1.0 / (zNear - zFar);
     const DIAG0 = f / aspect;
     const DIAG2 = (zNear + zFar) * rangeInv;
     const A = zNear * zFar * rangeInv * 2;
-    return this.fromRowMajorArray([
+
+    if ( M ) M.zero();
+    else M = this.zeroes(4, 4);
+
+    M.setIndex(0, 0, DIAG0);
+    M.setIndex(1, 1, f);
+    M.setIndex(2, 2, DIAG2);
+    M.setIndex(2, 3, -1);
+    M.setIndex(3, 2, A);
+    return M;
+
+    /*
       DIAG0,   0,    0,      0,
       0,       f,    0,      0,
       0,       0,    DIAG2,  -1,
       0,       0,    A,      0
-    ], 4, 4);
+    */
   }
 
   static perspectiveDegrees(fovDegrees, aspect, zNear, zFar) {
@@ -370,20 +398,32 @@ export class MatrixFlat {
    * @param {number} top    Coordinate for the top horizontal clipping plane
    * @param {number} zNear    Distance from the viewer to the near clipping plane (always positive)
    * @param {number} zFar     Distance from the viewer to the far clipping plane (always positive)
-   * @returns {Matrix} 4x4 Matrix, in row-major format
+   * @param {FlatMatrix} M      Out matrix to use
+   * @returns {FlatMatrix} 4x4 Matrix, in row-major format
    */
-  static frustrum(left, right, bottom, top, zNear, zFar) {
+  static frustum(left, right, bottom, top, zNear, zFar, M) {
     const A = (right + left) / (right - left);
     const B = (top + bottom) / (top - bottom);
     const C = -((zFar + zNear) / (zFar - zNear));
     const D = -((2 * zFar * zNear) / (zFar - zNear));
 
-    return this.fromRowMajorArray([
+    if ( M ) M.zero();
+    else M = this.zeroes(4, 4);
+
+    M.setIndex(0, 0, (2 * zNear) / (right - left));
+    M.setIndex(1, 1, (2 * zNear) / (top - bottom));
+    M.setIndex(0, 2, A);
+    M.setIndex(1, 2, B);
+    M.setIndex(2, 2, C);
+    M.setIndex(3, 2, -1);
+    return M;
+
+    /*
       (2 * zNear) / (right - left),  0,                            A,  0,
       0,                             (2 * zNear) / (top - bottom), B,  0,
       0,                             0,                            C,  D,
       0,                             0,                            -1, 0
-    ], 4, 4);
+    */
   }
 
   /**
@@ -400,7 +440,7 @@ export class MatrixFlat {
    * @param {Point3d} up
    * @returns {Matrix} 4x4 matrix
    */
-  static lookAt(cameraPosition, targetPosition, up = new CONFIG.GeometryLib.threeD.Point3d(0, -1, 1)) {
+  static lookAt(cameraPosition, targetPosition, up = new CONFIG.GeometryLib.threeD.Point3d(0, -1, 1), M, Minv) {
     // NOTE: Foundry uses a left-hand coordinate system, with y reversed.
 
     const zAxis = cameraPosition.subtract(targetPosition); // ZAxis = forward
@@ -422,19 +462,57 @@ export class MatrixFlat {
 
     }
 
-    const M = this.fromRowMajorArray([
+    if ( M ) M.zero();
+    else M = this.zeroes(4, 4);
+    if ( Minv ) Minv.zero();
+    else Minv = this.zeroes(4, 4);
+
+    M.setIndex(0, 0, xAxis.x);
+    M.setIndex(0, 1, xAxis.y);
+    M.setIndex(0, 2, xAxis.z);
+
+    M.setIndex(1, 0, yAxis.x);
+    M.setIndex(1, 1, yAxis.y);
+    M.setIndex(1, 2, yAxis.z);
+
+    M.setIndex(2, 0, zAxis.x);
+    M.setIndex(2, 1, zAxis.y);
+    M.setIndex(2, 2, zAxis.z);
+
+    M.setIndex(3, 0, cameraPosition.x);
+    M.setIndex(3, 1, cameraPosition.y);
+    M.setIndex(3, 2, cameraPosition.z);
+    M.setIndex(3, 3, 1);
+
+    Minv.setIndex(0, 0, xAxis.x);
+    Minv.setIndex(0, 1, yAxis.x);
+    Minv.setIndex(0, 2, zAxis.x);
+
+    Minv.setIndex(1, 0, xAxis.y);
+    Minv.setIndex(1, 1, yAxis.y);
+    Minv.setIndex(1, 2, zAxis.y);
+
+    Minv.setIndex(2, 0, xAxis.z);
+    Minv.setIndex(2, 1, yAxis.z);
+    Minv.setIndex(2, 2, zAxis.z);
+
+    Minv.setIndex(3, 0, -(xAxis.dot(cameraPosition)));
+    Minv.setIndex(3, 1, -(yAxis.dot(cameraPosition)));
+    Minv.setIndex(3, 2, -(zAxis.dot(cameraPosition)));
+    Minv.setIndex(3, 3, 1);
+
+    /* M
       xAxis.x, xAxis.y, xAxis.z, 0,
       yAxis.x, yAxis.y, yAxis.z, 0,
       zAxis.x, zAxis.y, zAxis.z, 0,
       cameraPosition.x, cameraPosition.y, cameraPosition.z, 1
-    ], 4, 4);
-
-    const Minv = this.fromRowMajorArray([
+    */
+    /* Minv
       xAxis.x, yAxis.x, zAxis.x, 0,
       xAxis.y, yAxis.y, zAxis.y, 0,
       xAxis.z, yAxis.z, zAxis.z, 0,
       -(xAxis.dot(cameraPosition)), -(yAxis.dot(cameraPosition)), -(zAxis.dot(cameraPosition)), 1
-    ], 4, 4);
+    */
 
     return { M, Minv };
   }
