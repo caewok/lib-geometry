@@ -344,7 +344,7 @@ export class MatrixFlat {
 
 
   /**
-   * Specifies a viewing frustum in the world coordinate system.
+   * Specifies a viewing frustum (perspective projection matrix) in the world coordinate system.
    * See
    * https://registry.khronos.org/OpenGL-Refpages/gl2.1/xhtml/gluPerspective.xml
    * https://gamedev.stackexchange.com/questions/12726/understanding-the-perspective-projection-matrix-in-opengl
@@ -355,25 +355,61 @@ export class MatrixFlat {
    * @param {number} fovRadians     Field of view angle, in radians, in the y direction
    * @param {number} aspect   Aspect ratio that determines fov in the x direction. Ratio of x (width) to y (height).
    * @param {number} zNear    Distance from the viewer to the near clipping plane (always positive)
-   * @param {number} zFar     Distance from the viewer to the far clipping plane (always positive)
+   * @param {number|Infinity} zFar     Distance from the viewer to the far clipping plane (always positive)
    * @returns {Matrix} 4x4 Matrix, in row-major format
    */
   static perspective(fovRadians, aspect, zNear, zFar, M) {
     const f = Math.tan((Math.PI * 0.5) - (0.5 * fovRadians));
-    const rangeInv = 1.0 / (zNear - zFar);
-    const DIAG0 = f / aspect;
-    const DIAG2 = (zNear + zFar) * rangeInv;
-    const A = zNear * zFar * rangeInv * 2;
 
     if ( M ) M.zero();
     else M = this.zeroes(4, 4);
+    M.setIndex(0, 0, f / aspect); // DIAG1
+    M.setIndex(1, 1, f);          // f
+    M.setIndex(2, 3, -1);         // -1
 
-    M.setIndex(0, 0, DIAG0);
-    M.setIndex(1, 1, f);
-    M.setIndex(2, 2, DIAG2);
-    M.setIndex(2, 3, -1);
-    M.setIndex(3, 2, A);
-    return M;
+    if ( far !== Infinity ) {
+      const rangeInv = 1.0 / (zNear - zFar);
+      M.setIndex(2, 2, (zNear + zFar) * rangeInv);    // DIAG2
+      M.setIndex(3, 2, 2 * zNear * zFar * rangeInv);  // A
+    } else {
+      M.setIndex(2, 2, -1);         // DIAG2
+      M.setIndex(3, 2, -2 * zNear); // A
+    }
+
+    /*
+      DIAG0,   0,    0,      0,
+      0,       f,    0,      0,
+      0,       0,    DIAG2,  -1,
+      0,       0,    A,      0
+    */
+  }
+
+  /**
+   * Specifies a viewing frustum (perspective projection matrix) in the world coordinate system.
+   * Used for WebGPU, where near/far clip planes correspond to a normalized device coordinate Z range of [0, 1].
+   * @param {number} fovRadians     Field of view angle, in radians, in the y direction
+   * @param {number} aspect   Aspect ratio that determines fov in the x direction. Ratio of x (width) to y (height).
+   * @param {number} zNear    Distance from the viewer to the near clipping plane (always positive)
+   * @param {number|Infinity} zFar     Distance from the viewer to the far clipping plane (always positive); Pass Infinity for infinite projection matrix.
+   * @returns {Matrix} 4x4 Matrix, in row-major format
+   */
+  static perspectiveZO(fovRadians, aspect, zNear, zFar, M) {
+    const f = Math.tan((Math.PI * 0.5) - (0.5 * fovRadians));
+
+    if ( M ) M.zero();
+    else M = this.zeroes(4, 4);
+    M.setIndex(0, 0, f / aspect); // DIAG1
+    M.setIndex(1, 1, f);          // f
+    M.setIndex(2, 3, -1);         // -1
+
+    if ( far !== Infinity ) {
+      const rangeInv = 1.0 / (zNear - zFar);
+      M.setIndex(2, 2, zFar * rangeInv);              // DIAG2
+      M.setIndex(3, 2, zNear * zFar * rangeInv);      // A
+    } else {
+      M.setIndex(2, 2, -1);         // DIAG2
+      M.setIndex(3, 2, -zNear);     // A
+    }
 
     /*
       DIAG0,   0,    0,      0,
