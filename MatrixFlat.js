@@ -187,6 +187,18 @@ export class MatrixFlat {
     return mat;
   }
 
+  /**
+   * Copy the values of this array to a new array, in column-major format.
+   * @param {Array|TypedArray} arr
+   * @returns {Array|TypedArray} arr or a new array.
+   */
+  toColumnMajorArray(arr) {
+    arr ??= this.arrayIsTyped ? new this.arrayClass(arr) : [];
+    // Taken from transpose method.
+    this.forEach((elem, r, c) => arr[this._idx(r, c, elem)]);
+    return arr;
+  }
+
   // ----- NOTE: Simple matrix construction ----- //
 
   /**
@@ -367,7 +379,7 @@ export class MatrixFlat {
     M.setIndex(1, 1, f);          // f
     M.setIndex(2, 3, -1);         // -1
 
-    if ( far !== Infinity ) {
+    if ( zFar !== Infinity ) {
       const rangeInv = 1.0 / (zNear - zFar);
       M.setIndex(2, 2, (zNear + zFar) * rangeInv);    // DIAG2
       M.setIndex(3, 2, 2 * zNear * zFar * rangeInv);  // A
@@ -402,7 +414,7 @@ export class MatrixFlat {
     M.setIndex(1, 1, f);          // f
     M.setIndex(2, 3, -1);         // -1
 
-    if ( far !== Infinity ) {
+    if ( zFar !== Infinity ) {
       const rangeInv = 1.0 / (zNear - zFar);
       M.setIndex(2, 2, zFar * rangeInv);              // DIAG2
       M.setIndex(3, 2, zNear * zFar * rangeInv);      // A
@@ -452,6 +464,7 @@ export class MatrixFlat {
     M.setIndex(1, 2, B);
     M.setIndex(2, 2, C);
     M.setIndex(3, 2, -1);
+    M.setIndex(2, 3, D);
     return M;
 
     /*
@@ -808,10 +821,7 @@ export class MatrixFlat {
    */
   transpose(outMatrix) {
     outMatrix ??= this.constructor.empty(this.nrow, this.ncol);
-    this.forEach((elem, r, c) => {
-      if ( r === c ) outMatrix.setIndex(r, c, elem);
-      else outMatrix.setIndex(c, r, elem);
-    });
+    this.forEach((elem, r, c) => outMatrix.setIndex(c, r, elem));
     return outMatrix;
   }
 
@@ -1378,14 +1388,15 @@ GEOMETRY_CONFIG.MatrixFlat ??= MatrixFlat;
 
 
 // Example typed class
-/*
-class MatrixTyped extends MatrixFlat {
+
+export class MatrixFloat32 extends MatrixFlat {
   static arrayClass = Float32Array;
 
   static arrayIsTyped = true;
 
 }
-*/
+GEOMETRY_CONFIG.MatrixFloat32 ??= MatrixFloat32;
+
 
 /* Tests
 Matrix = CONFIG.GeometryLib.Matrix
