@@ -196,7 +196,7 @@ export class MatrixFlat {
     arr ??= this.constructor.arrayIsTyped
       ? new this.constructor.arrayClass(this.arr.length) : new Array(this.arr.length);
     // Taken from transpose method.
-    this.forEach((elem, r, c) => arr[this._idx(r, c, elem)]);
+    this.forEach((elem, r, c) => arr[this._idx(c, r)] = elem);
     return arr;
   }
 
