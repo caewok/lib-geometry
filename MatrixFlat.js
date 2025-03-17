@@ -1378,9 +1378,6 @@ export class MatrixFlat {
   }
 
   toString() { return `Matrix<${this.nrow},${this.ncol}>`}
-
-  // Temporary points that can be passed to PIXI.Point methods
-  static _tmp = this.empty();
 }
 
 // For backwards compatibility.
