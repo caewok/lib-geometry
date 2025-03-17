@@ -193,7 +193,7 @@ export class MatrixFlat {
    * @returns {Array|TypedArray} arr or a new array.
    */
   toColumnMajorArray(arr) {
-    arr ??= this.arrayIsTyped ? new this.arrayClass(arr) : [];
+    arr ??= this.constructor.arrayIsTyped ? new this.constructor.arrayClass(arr) : new Array(this.arr.length);
     // Taken from transpose method.
     this.forEach((elem, r, c) => arr[this._idx(r, c, elem)]);
     return arr;
