@@ -355,6 +355,60 @@ export class MatrixFlat {
 
   // ----- NOTE: Transformation ----- //
 
+  /**
+   * Specifies an orthogonal viewing matrix.
+   */
+  static orthogonal(left, right, bottom, top, near, far, M) {
+    const lr = 1 / (left - right);
+    const bt = 1 / (bottom - top);
+    const nf = 1 / (near - far);
+
+    if ( M ) M.zero();
+    else M = this.zeroes(4, 4);
+
+    const lr = 1 / (left - right);
+    const bt = 1 / (bottom - top);
+    const nf = 1 / (near - far);
+
+    // Diagonals.
+    M.setIndex(0, 0, -2 * lr;
+    M.setIndex(1, 1, -2 * bt;
+    M.setIndex(2, 2, 2 * nf;
+    M.setIndex(3, 3, 1);
+
+    // Bottom row.
+    M.setIndex(3, 0, (left + right) * lr);
+    M.setIndex(3, 1, (top + bottom) * bt);
+    M.setIndex(3, 2, (far + near) * nf);
+
+    /*
+    2/(r - l),    0,          0,    0,
+    0,    2/(t - b),          0,    0,
+    0,            0,  2/(n - f),    0,
+    (l + r)/(l - r), (b + t)/(b - t), (n + f)/(n - f), 1,
+    */
+  }
+
+ /**
+  * Specifies an orthogonal viewing matrix.
+  * Used for WebGPU, where near/far clip planes correspond to a normalized device coordinate Z range of [0, 1].
+  */
+  static orthogonalZO(left, right, bottom, top, near, far, M) {
+    M = this.orthogonal(left, right, bottom, top, near, far, M);
+
+    // Modify for ZO matrix.
+    const nf = 1 / (near - far);
+    M.setIndex(2, 2, nf);
+    M.setIndex(3, 2, near * nf)
+
+    /*
+    2/(r - l),    0,          0,    0,
+    0,    2/(t - b),          0,    0,
+    0,            0,  1/(n - f),    0,
+    (l + r)/(l - r), (b + t)/(b - t), n/(n - f), 1,
+    */
+
+  }
 
   /**
    * Specifies a viewing frustum (perspective projection matrix) in the world coordinate system.
