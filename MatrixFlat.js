@@ -358,7 +358,7 @@ export class MatrixFlat {
   /**
    * Specifies an orthogonal viewing matrix.
    */
-  static orthogonal(left, right, bottom, top, near, far, M) {
+  static orthogonal(left, right, top, bottom, near, far, M) {
     const lr = 1 / (left - right);
     const bt = 1 / (bottom - top);
     const nf = 1 / (near - far);
@@ -393,8 +393,8 @@ export class MatrixFlat {
   * Specifies an orthogonal viewing matrix.
   * Used for WebGPU, where near/far clip planes correspond to a normalized device coordinate Z range of [0, 1].
   */
-  static orthogonalZO(left, right, bottom, top, near, far, M) {
-    M = this.orthogonal(left, right, bottom, top, near, far, M);
+  static orthogonalZO(left, right, top, bottom, near, far, M) {
+    M = this.orthogonal(left, right, top, bottom, near, far, M);
 
     // Modify for ZO matrix.
     const nf = 1 / (near - far);
