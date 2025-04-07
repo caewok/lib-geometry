@@ -366,10 +366,6 @@ export class MatrixFlat {
     if ( M ) M.zero();
     else M = this.zeroes(4, 4);
 
-    const lr = 1 / (left - right);
-    const bt = 1 / (bottom - top);
-    const nf = 1 / (near - far);
-
     // Diagonals.
     M.setIndex(0, 0, -2 * lr;
     M.setIndex(1, 1, -2 * bt;
@@ -394,7 +390,7 @@ export class MatrixFlat {
   * Used for WebGPU, where near/far clip planes correspond to a normalized device coordinate Z range of [0, 1].
   */
   static orthogonalZO(left, right, top, bottom, near, far, M) {
-    M = this.orthogonal(left, right, top, bottom, near, far, M);
+    this.orthogonal(left, right, top, bottom, near, far, M);
 
     // Modify for ZO matrix.
     const nf = 1 / (near - far);
