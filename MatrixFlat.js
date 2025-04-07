@@ -367,9 +367,9 @@ export class MatrixFlat {
     else M = this.zeroes(4, 4);
 
     // Diagonals.
-    M.setIndex(0, 0, -2 * lr;
-    M.setIndex(1, 1, -2 * bt;
-    M.setIndex(2, 2, 2 * nf;
+    M.setIndex(0, 0, -2 * lr);
+    M.setIndex(1, 1, -2 * bt);
+    M.setIndex(2, 2, 2 * nf);
     M.setIndex(3, 3, 1);
 
     // Bottom row.
