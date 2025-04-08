@@ -156,7 +156,7 @@ export class MatrixFlat {
   static from2dArray(arr, outMatrix) {
     const nrow = arr.length;
     const ncol = arr[0].length;
-    outMatrix ??= new this.empty(nrow, ncol);
+    outMatrix ??= this.empty(nrow, ncol);
     outMatrix.setElements((elem, r, c) => arr[r][c]);
     return outMatrix;
   }
@@ -244,7 +244,7 @@ export class MatrixFlat {
    * @returns {Matrix}
    */
   static random(rows, cols) {
-    const mat = new this.empty(rows, cols);
+    const mat = this.empty(rows, cols);
     mat._setElements(() => Math.random());
     return mat;
   }
@@ -348,7 +348,7 @@ export class MatrixFlat {
    * @returns {Matrix}
    */
   clone(outMatrix) {
-    outMatrix ??= new this.constructor.empty(this.nrow, this.ncol);
+    outMatrix ??= this.constructor.empty(this.nrow, this.ncol);
     outMatrix._setElements((elem, i) => this.arr[i]);
     return outMatrix;
   }
