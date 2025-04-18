@@ -734,6 +734,7 @@ function clean({epsilon = 1e-8, epsilonCollinear = 1e-12} = {}) {
   const pts = this.iteratePoints({close: true});
   let prev = pts.next().value;
   let curr = pts.next().value;
+  if ( !prev || !curr ) return this;
   const cleanPoints = [prev.x, prev.y];
   for ( const next of pts ) {
     if ( curr.almostEqual(prev, epsilon) ) {
