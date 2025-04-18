@@ -353,6 +353,7 @@ function _overlapsPolygon(other) {
 
   const pts1 = this.iteratePoints({ close: true });
   let a = pts1.next().value;
+  if ( !a ) return false;
   if ( other.contains(a.x, a.y) ) return true;
 
   for ( const b of pts1 ) {
