@@ -319,6 +319,51 @@ export class Point3d extends PIXI.Point {
     return (BigInt(key2d) << 32n) ^ BigInt(z);
   }
 
+//   get key() {
+//
+//     (MAX_TEXTURE_SIZE2 * z) + (MAX_TEXTURE_SIZE * x) + y;
+//
+//   }
+//
+//   function key(pt) {
+//     const z = Math.round(pt.z)
+//     const key2d = pt.to2d().key
+//     return (BigInt(MAX_TEXTURE_SIZE2) * BigInt(pt.z)) + BigInt(key2d);
+//   }
+//   key = key(new Point3d(1, 2, 3))
+//
+//   function invertKey(pt) {
+//     const z = key / BigInt(MAX_TEXTURE_SIZE * MAX_TEXTURE_SIZE)
+//     const x = key - (BigInt(MAX_TEXTURE_SIZE * MAX_TEXTURE_SIZE) * z);
+//     const y = key - (BigInt(MAX_TEXTURE_SIZE * MAX_TEXTURE_SIZE) * z) - (BigInt(MAX_TEXTURE_SIZE) * x);
+//     return { x, y, z }
+//   }
+//   invertKey(key)
+//
+//   const MAX_TEXTURE_SIZE = Math.pow(2, 16);
+//   const MAX_TEXTURE_SIZE2 = MAX_TEXTURE_SIZE * MAX_TEXTURE_SIZE
+// const MAX_TEXTURE_SIZE_INV = 1 / MAX_TEXTURE_SIZE;
+// const MAX_TEXTURE_SIZE_INV2 = 1 / (MAX_TEXTURE_SIZE * MAX_TEXTURE_SIZE)
+//
+//
+//
+//   function _invertKey(key) {
+//   const z = Math.floor(key * MAX_TEXTURE_SIZE_INV2)
+//   const x = Math.floor(key - (MAX_TEXTURE_SIZE * MAX_TEXTURE_SIZE * z));
+//   const y = key - (MAX_TEXTURE_SIZE * MAX_TEXTURE_SIZE * z) - (MAX_TEXTURE_SIZE * x);
+//   return { x, y };
+// }
+//
+//   function _invertKey(key) {
+//     key ^
+//     key2d = a >> 32n;
+//
+//
+//     const x = Math.floor(key * MAX_TEXTURE_SIZE_INV);
+//     const y = key - (MAX_TEXTURE_SIZE * x);
+//     return { x, y };
+//   }
+
   /**
    * Sort key. If z values are equal, will arrange points from north-west to south-east along z plane.
    * @returns {number}
