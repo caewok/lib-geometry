@@ -124,6 +124,12 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
     // Falls back on _unrestricted = true.
     if ( this.#dirty && canvas.edges.size ) {
       this.#dirty = false;
+      const { x, y } = this._token.center;
+      if ( !canvas.dimensions.sceneRect.contains(x, y) ) {
+        // Clockwise sweep refuses to compute outside the scene border.
+        this._unrestricted = true;
+        return;
+      }
       super.compute();
     }
   }
