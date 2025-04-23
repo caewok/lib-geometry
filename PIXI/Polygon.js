@@ -899,7 +899,7 @@ function pixiPoints({ close = true } = {}) {
           selfPoly._pixiEdges = undefined;
           return true;
         },
-        set: (target, property, value, receiver) => {
+        set: (target, property, value, _receiver) => {
           target[property] = value;
           selfPoly._pixiPoints = undefined;
           selfPoly._pixiEdges = undefined;
@@ -934,7 +934,7 @@ function pixiEdges({ close = true } = {}) {
           selfPoly._pixiEdges = undefined;
           return true;
         },
-        set: (target, property, value, receiver) => {
+        set: (target, property, value, _receiver) => {
           target[property] = value;
           selfPoly._pixiPoints = undefined;
           selfPoly._pixiEdges = undefined;
@@ -976,6 +976,8 @@ PATCHES.PIXI.METHODS = {
   segmentIntersections,
   pointsBetween,
   translate,
+  scale,
+  translateScale,
   viewablePoints,
 
   // Overlap methods
