@@ -562,9 +562,48 @@ function translate(dx, dy) {
   const out = new this.constructor(pts);
   out._isPositive = this._isPositive;
   if ( this.bounds ) out.bounds = out.getBounds(); // Bounds will have changed due to translate
-
   return out;
 }
+
+/**
+ * Scale, resizing this polygon in the x and y axis.
+ * In most cases, you want to center the polygon at 0,0 first.
+ * @param {Number} dx  Change along the x axis
+ * @param {Number} dy  Change along the x axis
+ * @return {PIXI.Polygon} New PIXI.Polygon
+ */
+function scale(scaleX, scaleY) {
+  const pts = [];
+  const ln = this.points.length;
+  for (let i = 0; i < ln; i += 2) {
+    pts.push(this.points[i] * scaleX, this.points[i + 1] * scaleY);
+  }
+  const out = new this.constructor(pts);
+  out._isPositive = this._isPositive;
+  if ( this.bounds ) out.bounds = out.getBounds(); // Bounds will have changed due to scale
+  return out;
+}
+
+/**
+ * Translate and scale, shifting this polygon in the x and y direction and then
+ * resizing this polygon in the x and y axis.
+ * In most cases, you want to center the polygon at 0,0 first.
+ * @param {Number} dx  Change along the x axis
+ * @param {Number} dy  Change along the x axis
+ * @return {PIXI.Polygon} New PIXI.Polygon
+ */
+function translateScale({ dx = 0, dy = 0, scaleX = 1, scaleY = 1 } = {}) {
+  const pts = [];
+  const ln = this.points.length;
+  for (let i = 0; i < ln; i += 2) {
+    pts.push((this.points[i] + dx) * scaleX, (this.points[i + 1] + dy) * scaleY);
+  }
+  const out = new this.constructor(pts);
+  out._isPositive = this._isPositive;
+  if ( this.bounds ) out.bounds = out.getBounds(); // Bounds will have changed due to translate
+  return out;
+}
+
 
 /**
  * Helper for viewablePoints to slice an array in a circle if the end is before the start.
