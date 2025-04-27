@@ -199,7 +199,7 @@ export class ClipperPaths {
    */
   trimByArea(area = 1) {
     const scalingFactor = this.scalingFactor;
-    const trimmedPaths = this.paths.filter(path => ClipperLib.JS.AreaOfPolygon(path, scalingFactor) >= area);
+    const trimmedPaths = this.paths.filter(path => Math.abs(ClipperLib.JS.AreaOfPolygon(path, scalingFactor)) >= area);
     return new this.constructor(trimmedPaths, { scalingFactor });
   }
 
