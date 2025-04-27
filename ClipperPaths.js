@@ -197,7 +197,7 @@ export class ClipperPaths {
    * @param {number} area     Area in pixels^2.
    * @returns {ClipperPaths} New paths object
    */
-  removePathsLessThanArea(area = 1) {
+  trimByArea(area = 1) {
     const scalingFactor = this.scalingFactor;
     const trimmedPaths = this.paths.filter(path => ClipperLib.JS.AreaOfPolygon(path, scalingFactor) >= area);
     return new this.constructor(trimmedPaths, { scalingFactor });
