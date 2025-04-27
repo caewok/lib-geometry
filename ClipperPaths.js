@@ -225,7 +225,7 @@ export class ClipperPaths {
     const distance = cleanDelta * scalingFactor
     const cleanedPaths = [];
     for ( const path of this.paths ) {
-      const cleanedPath = ClipperLib.Clipper.CleanPolygons(this.paths, distance);
+      const cleanedPath = ClipperLib.Clipper.CleanPolygons(paths, distance);
       if ( cleanedPath.length > 1 ) cleanedPaths.push(cleanedPath)
     }
     return new this.constructor(cleanedPaths, { scalingFactor });
@@ -254,8 +254,6 @@ export class ClipperPaths {
 
     return solution;
   }
-
-
 
   /**
    * Intersect this set of paths with a polygon as subject.
