@@ -225,7 +225,7 @@ export class ClipperPaths {
     const distance = cleanDelta * scalingFactor
     const cleanedPaths = [];
     for ( const path of this.paths ) {
-      const cleanedPath = ClipperLib.Clipper.CleanPolygons(paths, distance);
+      const cleanedPath = ClipperLib.Clipper.CleanPolygons(path, distance);
       if ( cleanedPath.length > 1 ) cleanedPaths.push(cleanedPath)
     }
     return new this.constructor(cleanedPaths, { scalingFactor });
