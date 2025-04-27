@@ -173,12 +173,23 @@ export class ClipperPaths {
   }
 
   /**
+   * Remove paths that have a small area.
+   * @param {number} area     Area in pixels^2.
+   * @returns {ClipperPaths} New paths object
+   */
+  removePathsLessThanArea(area = 1) {
+    const scalingFactor = this.scalingFactor;
+    const trimmedPaths = this.paths.filter(path => ClipperLib.JS.AreaOfPolygon(path, scalingFactor) >= area);
+    return new this.constructor(trimmedPaths, { scalingFactor });
+  }
+
+  /**
    * Calculate the area for this set of paths.
    * Use getter to correspond with PIXI.Polygon.prototype.area and other polygon types.
    * @returns {number}
    */
   get area() {
-    return ClipperLib.JS.AreaOfPolygons(this.paths) / Math.pow(this.scalingFactor, 2);
+    return ClipperLib.JS.AreaOfPolygons(this.paths, this.scalingFactor);
   }
 
   /**
