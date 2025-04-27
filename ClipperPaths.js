@@ -13,15 +13,35 @@ import "./Draw.js";
  * Class to manage ClipperPaths for multiple polygons.
  */
 export class ClipperPaths {
-  scalingFactor = 1;
-
   /**
    * @param paths {ClipperLib.Path[]|Set<ClipperLib.Path>|Map<ClipperLib.Path>}
    * @returns {ClipperPaths}
    */
   constructor(paths = [], { scalingFactor = 1 } = {}) {
     this.paths = [...paths]; // Ensure these are arrays
-    this.scalingFactor = scalingFactor;
+    this.#scalingFactor = scalingFactor;
+  }
+
+  /** @type {number} */
+  #scalingFactor = 1;
+
+  get scalingFactor() { return this.#scalingFactor; }
+
+  /**
+   * Multiplies each value by the scaling factor, accounting for any previous scaling factor set.
+   * So if value is 5 and #scalingFactor is 1, each point is multiplied by 5.
+   * If value is 5 and #scalingFactor is 2, each points is divided by 2 and then multiplied by 5.
+   */
+  set scalingFactor(value) {
+    if ( !value || value < 0 ) throw("ClipperPaths|Scaling factor cannot be 0 or negative.");
+
+    const mult = value / this.#scalingFactor;
+    for ( const path of paths ) {
+      for ( const pt of path ) {
+        pt.X *= mult;
+        pt.Y *= mult;
+      }
+    }
   }
 
   /**
@@ -250,11 +270,11 @@ export class ClipperPaths {
     subjFillType = ClipperLib.PolyFillType.pftEvenOdd,
     clipFillType = ClipperLib.PolyFillType.pftEvenOdd } = {}) {
 
+    const scalingFactor = this.scalingFactor;
     const c = new ClipperLib.Clipper();
-    const solution = new ClipperPaths();
-    solution.scalingFactor = this.scalingFactor;
+    const solution = new ClipperPaths(undefined, { scalingFactor });
 
-    c.AddPath(polygon.toClipperPoints({ scalingFactor: this.scalingFactor }), ClipperLib.PolyType.ptSubject, true);
+    c.AddPath(polygon.toClipperPoints({ scalingFactor }), ClipperLib.PolyType.ptSubject, true);
     c.AddPaths(this.paths, ClipperLib.PolyType.ptClip, true);
     c.Execute(type, solution.paths, subjFillType, clipFillType);
 
@@ -291,9 +311,9 @@ export class ClipperPaths {
     const subjFillType = ClipperLib.PolyFillType.pftEvenOdd;
     const clipFillType = ClipperLib.PolyFillType.pftEvenOdd;
 
+    const scalingFactor = this.scalingFactor;
     const c = new ClipperLib.Clipper();
-    const solution = new ClipperPaths();
-    solution.scalingFactor = this.scalingFactor;
+    const solution = new ClipperPaths(undefined, { scalingFactor });
 
     c.AddPaths(other.paths, ClipperLib.PolyType.ptSubject, true);
     c.AddPaths(this.paths, ClipperLib.PolyType.ptClip, true);
@@ -312,9 +332,9 @@ export class ClipperPaths {
     const subjFillType = ClipperLib.PolyFillType.pftEvenOdd;
     const clipFillType = ClipperLib.PolyFillType.pftEvenOdd;
 
+    const scalingFactor = this.scalingFactor;
     const c = new ClipperLib.Clipper();
-    const solution = new ClipperPaths();
-    solution.scalingFactor = this.scalingFactor;
+    const solution = new ClipperPaths(undefined, { scalingFactor });
 
     c.AddPaths(other.paths, ClipperLib.PolyType.ptSubject, true);
     c.AddPaths(this.paths, ClipperLib.PolyType.ptClip, true);
@@ -339,8 +359,8 @@ export class ClipperPaths {
   union() {
     if ( this.paths.length === 1 ) return this;
     const c = new ClipperLib.Clipper();
-    const union = new ClipperPaths();
-    union.scalingFactor = this.scalingFactor;
+    const scalingFactor = this.scalingFactor;
+    const union = new ClipperPaths(undefined, { scalingFactor });
     c.AddPaths(this.paths, ClipperLib.PolyType.ptSubject, true);
     c.Execute(ClipperLib.ClipType.ctUnion,
       union.paths,
@@ -358,9 +378,9 @@ export class ClipperPaths {
   combine() {
     if ( this.paths.length === 1 ) return this;
 
+    const scalingFactor = this.scalingFactor;
     const c = new ClipperLib.Clipper();
-    const combined = new ClipperPaths();
-    combined.scalingFactor = this.scalingFactor;
+    const combined = new ClipperPaths(undefined, { scalingFactor });
 
     c.AddPaths(this.paths, ClipperLib.PolyType.ptSubject, true);
 
@@ -385,8 +405,8 @@ export class ClipperPaths {
     const firstPath = pathsArr[0];
     if ( ln === 1 ) return firstPath;
 
-    const cPaths = new ClipperPaths(firstPath.paths);
-    cPaths.scalingFactor = firstPath.scalingFactor;
+    const scalingFactor = firstPath.scalingFactor;
+    const cPaths = new ClipperPaths(firstPath.paths, { scalingFactor });
 
     for ( let i = 1; i < ln; i += 1 ) {
       const obj = pathsArr[i];
@@ -423,9 +443,9 @@ export class ClipperPaths {
     subjFillType = ClipperLib.PolyFillType.pftEvenOdd,
     clipFillType = ClipperLib.PolyFillType.pftEvenOdd } = {}) {
 
+    const scalingFactor = subject.scalingFactor;
     const c = new ClipperLib.Clipper();
-    const solution = new this();
-    solution.scalingFactor = subject.scalingFactor;
+    const solution = new this(undefined, { scalingFactor });
     c.AddPaths(subject.paths, ClipperLib.PolyType.ptSubject, true);
     c.AddPaths(clip.paths, ClipperLib.PolyType.ptClip, true);
     c.Execute(clipType, solution.paths, subjFillType, clipFillType);
