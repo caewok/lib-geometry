@@ -218,11 +218,17 @@ export class ClipperPaths {
   /**
    * Run CleanPolygons on the paths
    * @param {number} cleanDelta   Value, multiplied by scalingFactor, passed to CleanPolygons.
-   * @returns {ClipperPaths}  This object.
+   * @returns {ClipperPaths}  A new object.
    */
   clean(cleanDelta = 0.1) {
-    ClipperLib.Clipper.CleanPolygons(this.paths, cleanDelta * this.scalingFactor);
-    return this;
+    const scalingFactor = this.scalingFactor;
+    const distance = cleanDelta * scalingFactor
+    const cleanedPaths = [];
+    for ( const path of this.paths ) {
+      const cleanedPath = ClipperLib.Clipper.CleanPolygons(this.paths, distance);
+      if ( cleanedPath.length > 1 ) cleanedPaths.push(cleanedPath)
+    }
+    return new this.constructor(cleanedPaths, { scalingFactor });
   }
 
   /**
