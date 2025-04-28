@@ -1,6 +1,5 @@
 /* globals
 PIXI,
-ClipperLib,
 canvas,
 CONFIG
 */
@@ -9,16 +8,31 @@ CONFIG
 import { GEOMETRY_CONFIG } from "./const.js";
 import "./Draw.js";
 
+// See https://www.npmjs.com/package/clipper2-js
+import * as Clipper2 from "./clipper2_esm2020/clipper2-js.mjs";
+
 /**
- * Class to manage ClipperPaths for multiple polygons.
+ * Class to manage Clipper2Paths for multiple polygons.
+ * Unlike Clipper2Paths, the paths here are flat arrays (not point objects)
  */
-export class ClipperPaths {
+export class Clipper2Paths {
+  static ClipType = Clipper2.ClipType;
+
+  static PathType = Clipper2.JoinType;
+
+  static FillRule = Clipper2.FillRule;
+
+  static EndType = Clipper2.EndType;
+
+  static JoinType = Clipper2.JoinType;
+
   /**
-   * @param paths {ClipperLib.Path[]|Set<ClipperLib.Path>|Map<ClipperLib.Path>}
-   * @returns {ClipperPaths}
+   * @param paths {Clipper2.Path[]|Set<Clipper2.Path>|Map<Clipper2.Path>}
+   * @returns {Clipper2Paths}
    */
   constructor(paths = [], { scalingFactor = 1 } = {}) {
-    this.paths = [...paths]; // Ensure these are arrays
+    this.paths = new Clipper2.Paths64(1);
+    this.paths.push(...paths);
     this.#scalingFactor = scalingFactor;
   }
 
@@ -33,55 +47,42 @@ export class ClipperPaths {
    * If value is 5 and #scalingFactor is 2, each points is divided by 2 and then multiplied by 5.
    */
   set scalingFactor(value) {
-    if ( !value || value < 0 ) throw("ClipperPaths|Scaling factor cannot be 0 or negative.");
+    if ( !value || value < 0 ) throw("Clipper2Paths|Scaling factor cannot be 0 or negative.");
     if ( value === this.#scalingFactor ) return;
 
     const mult = value / this.#scalingFactor;
     for ( const path of this.paths ) {
-      for ( const pt of path ) {
-        pt.X *= mult;
-        pt.Y *= mult;
-      }
+      for ( let i = 0, iMax = path.length; i < iMax; i += 1 ) path[i] *= mult;
     }
     this.#scalingFactor = value;
   }
 
   /**
    * Determine the best way to represent Clipper paths.
-   * @param {ClipperLib.Paths}
-   * @returns {PIXI.Polygon|PIXI.Rectangle|ClipperPaths} Return a polygon, rectangle,
-   *   or ClipperPaths depending on paths.
+   * @param {Clipper2.Paths}
+   * @returns {PIXI.Polygon|PIXI.Rectangle|Clipper2Paths} Return a polygon, rectangle,
+   *   or Clipper2Paths depending on paths.
    */
   static processPaths(paths) {
-    if (paths.length > 1) return new this(paths);
+    if (paths.length > 1) return Clipper2Paths(paths);
 
-    return this.polygonToRectangle(paths[0]);
+    return Clipper2Paths.polygonToRectangle(paths[0]);
   }
 
   /**
-   * Convert an array of polygons to ClipperPaths
+   * Convert an array of polygons to Clipper2Paths
    * @param {PIXI.Polygon[]}
-   * @returns {ClipperPaths}
+   * @returns {Clipper2Paths}
    */
   static fromPolygons(polygons, { scalingFactor = 1 } = {}) {
-    const out = new this(polygons.map(p => p.toClipperPoints({scalingFactor})), { scalingFactor });
+    const out = new this(polygons.map(poly => poly.points));
+    out.scalingFactor = scalingFactor; // Force the points to be scaled.
     return out;
   }
 
-  /**
-   * Flatten a path of X, Y to an array
-   * @param {ClipperPoints[]} path
-   * @returns {number[]}
-   */
-  static flattenPath(path) {
-    const nPts = path.length;
-    const res = new Array(nPts * 2);
-    for ( let i = 0, j = 0; i < nPts; i += 1, j += 2 ) {
-      const pt = path[i];
-      res[j] = pt.X;
-      res[j + 1] = pt.Y;
-    }
-    return res;
+  static polygonToPath(polygon, { scalingFactor = 1 } = {}) {
+    if ( scalingFactor === 1 ) return polygon.points;
+    return polygon.points.map(elem => elem * scalingFactor);
   }
 
   /**
@@ -132,13 +133,13 @@ export class ClipperPaths {
     const nPaths = paths.length;
     if ( nPaths === 0 ) return out;
 
-    out.vertices = this.constructor.flattenPath(paths[0]);
+    out.vertices = paths[0];
     for ( let i = 1; i < nPaths; i += 1 ) {
       const path = paths[i];
-      const isHole = !ClipperLib.Clipper.Orientation(path);
+      const isHole = !Clipper2.Clipper.isPositive(path);
       if ( !isHole ) console.warn("Earcut may fail with multiple outer polygons.");
       const category = isHole ? out.holes : out.vertices;
-      category.push(this.constructor.flattenPath(path));
+      category.push(path);
     }
 
     // Concatenate holes and add indices
@@ -160,22 +161,22 @@ export class ClipperPaths {
   }
 
   /**
-   * Convert a flat array with indices of triangles, as in earcut, to ClipperPaths.
+   * Convert a flat array with indices of triangles, as in earcut, to Clipper2Paths.
    * Each 3 numbers in the indices array correspond to a triangle
    * @param {number[]} vertices
    * @param {number[]} indices
    * @param {number} dimensions     Number of dimensions for the vertices. Z, etc. will be ignored.
-   * @returns {ClipperPaths}
+   * @returns {Clipper2Paths}
    */
   static fromEarcutCoordinates(vertices, indices, dimensions = 2) {
     const cPaths = new this();
     const nIndices = indices.length;
     for ( let i = 0; i < nIndices; ) { // Increment i in the loop
-      const path = new Array(3);
-      for ( let j = 0; j < 3; j += 1 ) {
+      const path = new Array(6);
+      for ( let j = 0; j < 6; j += 2 ) {
         const idx = indices[i] * dimensions;
-        const v = { X: vertices[idx], Y: vertices[idx + 1] };
-        path[j] = v;
+        path[j] = vertices[idx];
+        path[j + 1] = vertices[idx + 1];
         i += 1;
       }
       cPaths.paths.push(path);
@@ -186,22 +187,22 @@ export class ClipperPaths {
   /**
    * Use earcut to triangulate these paths.
    * See https://github.com/mapbox/earcut.
-   * @returns {ClipperPaths} Paths constructed from the resulting triangles
+   * @returns {Clipper2Paths} Paths constructed from the resulting triangles
    */
   earcut() {
     const coords = this.toEarcutCoordinates();
     const res = PIXI.utils.earcut(coords.vertices, coords.holes, coords.dimensions);
-    return this.constructor.fromEarcutCoordinates(coords.vertices, res, coords.dimensions);
+    return Clipper2Paths.fromEarcutCoordinates(coords.vertices, res, coords.dimensions);
   }
 
   /**
    * Remove paths that have a small area.
    * @param {number} area     Area in pixels^2.
-   * @returns {ClipperPaths} New paths object
+   * @returns {Clipper2Paths} New paths object
    */
   trimByArea(area = 1) {
     const scalingFactor = this.scalingFactor;
-    const trimmedPaths = this.paths.filter(path => Math.abs(ClipperLib.JS.AreaOfPolygon(path, scalingFactor)) >= area);
+    const trimmedPaths = this.paths.filter(path => Math.abs(Clipper2.Clipper.area(path)) / Math.pow(scalingFactor, 2) >= area);
     return new this.constructor(trimmedPaths, { scalingFactor });
   }
 
@@ -211,24 +212,12 @@ export class ClipperPaths {
    * @returns {number}
    */
   get area() {
-    return ClipperLib.JS.AreaOfPolygons(this.paths, this.scalingFactor);
-  }
-
-  /**
-   * Area that matches clipper measurements, so it can be compared with Clipper Polygon versions.
-   * Used to match what Clipper would measure as area, by scaling the points.
-   * @param {object} [options]
-   * @param {number} [scalingFactor]  Scale like with PIXI.Polygon.prototype.toClipperPoints.
-   * @returns {number}  Positive if clockwise. (b/c y-axis is reversed in Foundry)
-   */
-  scaledArea({scalingFactor = 1} = {}) {
-    if ( scalingFactor !== this.scalingFactor ) console.warn("ClipperPaths|scaledArea requested scalingFactor does not match.");
-    return this.area;
+    return Clipper2.Clipper.areaPaths(this.paths) / Math.pow(this.scalingFactor, 2);
   }
 
   /**
    * If the path is single, convert to polygon (or rectangle if possible)
-   * @returns {PIXI.Polygon|PIXI.Rectangle|ClipperPaths}
+   * @returns {PIXI.Polygon|PIXI.Rectangle|Clipper2Paths}
    */
   simplify() {
     if ( this.paths.length > 1 ) return this;
@@ -241,9 +230,11 @@ export class ClipperPaths {
    * @returns {PIXI.Polygons[]}
    */
   toPolygons() {
+    const invScale = 1 / this.scalingFactor;
     return this.paths.map(pts => {
-      const poly = PIXI.Polygon.fromClipperPoints(pts, {scalingFactor: this.scalingFactor});
-      poly.isHole = !ClipperLib.Clipper.Orientation(pts);
+      if ( this.scalingFactor !== 1 ) pts = pts.map(elem => elem *= invScale);
+      const poly = new PIXI.Polygon(...pts);
+      poly.isHole = !Clipper2.Clipper.isPositive(pts);
       return poly;
     });
   }
@@ -251,51 +242,56 @@ export class ClipperPaths {
   /**
    * Run CleanPolygons on the paths
    * @param {number} cleanDelta   Value, multiplied by scalingFactor, passed to CleanPolygons.
-   * @returns {ClipperPaths}  A new object.
+   * @returns {Clipper2Paths}  A new object.
    */
   clean(cleanDelta = 0.1) {
     const scalingFactor = this.scalingFactor;
-    const cleanedPaths = ClipperLib.Clipper.CleanPolygons(this.paths, scalingFactor * cleanDelta);
+    const cleanedPaths = Clipper2.Clipper.simplifyPath(this.paths, scalingFactor * cleanDelta);
     return new this.constructor(cleanedPaths, { scalingFactor });
   }
 
   /**
    * Execute a Clipper.clipType combination using the polygon as the subject.
    * @param {PIXI.Polygon} polygon          Subject for the clip
-   * @param {ClipperLib.ClipType} clipType  ctIntersection: 0, ctUnion: 1, ctDifference: 2, ctXor: 3
-   * @param {object} [options]              Options passed to ClipperLib.Clipper().Execute
-   * @param {number} [subjFillType]         Fill type for the subject. Defaults to pftEvenOdd.
-   * @param {number} [clipFillType]         Fill type for the clip. Defaults to pftEvenOdd.
-   * @returns {ClipperPaths} New ClipperPaths object
+   * @param {Clipper2.ClipType} clipType    Intersection, union, difference, xor
+   * @param {object} [options]              Options passed to Clipper2.Clipper().Execute
+   * @param {number} [fillRule]             Fill rule. Defaults to EvenOdd.
+   * @returns {Clipper2Paths} New Clipper2Paths object
    */
-  _clipperClip(polygon, type, {
-    subjFillType = ClipperLib.PolyFillType.pftEvenOdd,
-    clipFillType = ClipperLib.PolyFillType.pftEvenOdd } = {}) {
+  _clipperClip(polygon, clipType, {
+    fillRule = Clipper2.FillRule.EvenOdd,
+
+    // Backward compatibility.
+    subjFillType,
+    clipFillType } = {}) {
+
+    // Backward compatibility.
+    if ( typeof subjFillType !== "undefined" ) fillRule = subjFillType;
+    else if ( typeof clipFillType !== "undefined" ) fillRule = clipFillType;
 
     const scalingFactor = this.scalingFactor;
-    const c = new ClipperLib.Clipper();
+    const c = new Clipper2.Clipper();
     const solution = new this.constructor(undefined, { scalingFactor });
-
-    c.AddPath(polygon.toClipperPoints({ scalingFactor }), ClipperLib.PolyType.ptSubject, true);
-    c.AddPaths(this.paths, ClipperLib.PolyType.ptClip, true);
-    c.Execute(type, solution.paths, subjFillType, clipFillType);
-
+    const isOpen = !polygon.isClosed;
+    c.addPath(this.constructor.polygonToPath(polygon, { scalingFactor }), Clipper2.PathType.Subject, isOpen);
+    c.addPaths(this.paths, Clipper2.PathType.Clip, false);
+    c.Execute(clipType, fillRule, solution.paths);
     return solution;
   }
 
   /**
    * Intersect this set of paths with a polygon as subject.
    * @param {PIXI.Polygon}
-   * @returns {ClipperPaths}
+   * @returns {Clipper2Paths}
    */
   intersectPolygon(polygon) {
-    return this._clipperClip(polygon, ClipperLib.ClipType.ctIntersection);
+    return this._clipperClip(polygon, Clipper2.ClipType.Intersection);
   }
 
   /**
    * Add a set of paths to this one
-   * @param {ClipperPaths} other
-   * @returns {ClipperPaths}
+   * @param {Clipper2Paths} other
+   * @returns {Clipper2Paths}
    */
   add(other) {
     if ( !other.paths.length ) return this;
@@ -305,100 +301,86 @@ export class ClipperPaths {
 
   /**
    * Intersect this set of paths against another, taking the other as subject.
-   * @param {ClipperPaths} other
-   * @returns {ClipperPaths}
+   * @param {Clipper2Paths} other
+   * @returns {Clipper2Paths}
    */
   intersectPaths(other) {
-    const type = ClipperLib.ClipType.ctIntersection;
-    const subjFillType = ClipperLib.PolyFillType.pftEvenOdd;
-    const clipFillType = ClipperLib.PolyFillType.pftEvenOdd;
+    const type = Clipper2.ClipType.Intersection;
+    const fillRule = Clipper2.FillRule.EvenOdd
 
     const scalingFactor = this.scalingFactor;
-    const c = new ClipperLib.Clipper();
+    const c = new Clipper2.Clipper64();
     const solution = new this.constructor(undefined, { scalingFactor });
 
-    c.AddPaths(other.paths, ClipperLib.PolyType.ptSubject, true);
-    c.AddPaths(this.paths, ClipperLib.PolyType.ptClip, true);
-    c.Execute(type, solution.paths, subjFillType, clipFillType);
-
+    c.AddPaths(other.paths, Clipper2.PathType.Subject, true);
+    c.AddPaths(this.paths, Clipper2.PathType.Clip, true);
+    c.Execute(type, fillRule, solution.paths);
     return solution;
   }
 
   /**
-   * Using other as a subject, take the difference of this ClipperPaths.
-   * @param {ClipperPaths} other
-   * @returns {ClipperPaths}
+   * Using other as a subject, take the difference of this Clipper2Paths.
+   * @param {Clipper2Paths} other
+   * @returns {Clipper2Paths}
    */
   diffPaths(other) {
-    const type = ClipperLib.ClipType.ctDifference;
-    const subjFillType = ClipperLib.PolyFillType.pftEvenOdd;
-    const clipFillType = ClipperLib.PolyFillType.pftEvenOdd;
-
+    const type = Clipper2.ClipType.Difference;
+    const fillRule = Clipper2.FillRule.EvenOdd
     const scalingFactor = this.scalingFactor;
-    const c = new ClipperLib.Clipper();
+    const c = new Clipper2.Clipper64();
     const solution = new this.constructor(undefined, { scalingFactor });
-
-    c.AddPaths(other.paths, ClipperLib.PolyType.ptSubject, true);
-    c.AddPaths(this.paths, ClipperLib.PolyType.ptClip, true);
-    c.Execute(type, solution.paths, subjFillType, clipFillType);
-
+    const isOpen = false;
+    c.AddPaths(other.paths, Clipper2.PathType.Subject, isOpen);
+    c.AddPaths(this.paths, Clipper2.PathType.Clip, isOpen);
+    c.Execute(type, fillRule, solution.paths);
     return solution;
   }
 
   /**
-   * Using a polygon as a subject, take the difference of this ClipperPaths.
+   * Using a polygon as a subject, take the difference of this Clipper2Paths.
    * @param {PIXI.Polygon} polygon
-   * @returns {ClipperPaths}
+   * @returns {Clipper2Paths}
    */
   diffPolygon(polygon) {
-    return this._clipperClip(polygon, ClipperLib.ClipType.ctDifference);
+    return this._clipperClip(polygon, Clipper2.ClipType.Difference);
   }
 
   /**
    * Union the paths.
-   * @returns {ClipperPaths}
+   * @returns {Clipper2Paths}
    */
   union() {
     if ( this.paths.length === 1 ) return this;
-    const c = new ClipperLib.Clipper();
+    const c = new Clipper2.Clipper64();
     const scalingFactor = this.scalingFactor;
     const union = new this.constructor(undefined, { scalingFactor });
-    c.AddPaths(this.paths, ClipperLib.PolyType.ptSubject, true);
-    c.Execute(ClipperLib.ClipType.ctUnion,
-      union.paths,
-      ClipperLib.PolyFillType.pftNonZero,
-      ClipperLib.PolyFillType.pftNonZero
-      );
+    c.AddPaths(this.paths, Clipper2.PathType.Subject, true);
+    c.Execute(Clipper2.ClipType.Union, Clipper2.FillRule.NonZero, union.paths);
     return union;
   }
 
   /**
    * Union the paths, using a positive fill.
    * This version uses a positive fill type so any overlap is filled.
-   * @returns {ClipperPaths}
+   * @returns {Clipper2Paths}
    */
   combine() {
     if ( this.paths.length === 1 ) return this;
 
     const scalingFactor = this.scalingFactor;
-    const c = new ClipperLib.Clipper();
+    const c = new Clipper2.Clipper64();
     const combined = new this.constructor(undefined, { scalingFactor });
-
-    c.AddPaths(this.paths, ClipperLib.PolyType.ptSubject, true);
+    c.AddPaths(this.paths, Clipper2.PathType.Subject, true);
 
     // To avoid the checkerboard issue, use a positive fill type so any overlap is filled.
-    c.Execute(ClipperLib.ClipType.ctUnion,
-      combined.paths,
-      ClipperLib.PolyFillType.pftPositive,
-      ClipperLib.PolyFillType.pftPositive);
-
+    c.Execute(Clipper2.ClipType.Union, Clipper2.FillRule.Positive, combined.paths);
     return combined;
   }
 
   /**
-   * Join paths into a single ClipperPaths object
-   * @param {ClipperPaths[]} pathsArr
-   * @returns {ClipperPaths}
+   * Join paths into a single Clipper2Paths object
+   * @param {Clipper2Paths[]} pathsArr
+   * @returns {Clipper2Paths}
    */
   static joinPaths(pathsArr) {
     const ln = pathsArr.length;
@@ -412,7 +394,7 @@ export class ClipperPaths {
 
     for ( let i = 1; i < ln; i += 1 ) {
       const obj = pathsArr[i];
-      if ( cPaths.scalingFactor !== obj.scalingFactor ) console.warn("ClipperPaths|combinePaths scalingFactor not equal.");
+      if ( cPaths.scalingFactor !== obj.scalingFactor ) console.warn("Clipper2Paths|combinePaths scalingFactor not equal.");
 
       cPaths.paths.push(...obj.paths);
     }
@@ -420,9 +402,9 @@ export class ClipperPaths {
   }
 
   /**
-   * Combine 2+ ClipperPaths objects using a union with a positive fill.
-   * @param {ClipperPaths[]} pathsArr
-   * @returns {ClipperPaths}
+   * Combine 2+ Clipper2Paths objects using a union with a positive fill.
+   * @param {Clipper2Paths[]} pathsArr
+   * @returns {Clipper2Paths}
    */
   static combinePaths(pathsArr) {
     const cPaths = this.joinPaths(pathsArr);
@@ -430,27 +412,36 @@ export class ClipperPaths {
     return cPaths.combine();
   }
 
+
+
   /**
    * Execute a Clipper.clipType combination.
-   * @param {ClipperPaths} subject          Subject for the clip
-   * @param {ClipperPaths} clip             What to clip
-   * @param {ClipperLib.ClipType} clipType  ctIntersection: 0, ctUnion: 1, ctDifference: 2, ctXor: 3
-   * @param {object} [options]              Options passed to ClipperLib.Clipper().Execute
-   * @param {number} [subjFillType]         Fill type for the subject. Defaults to pftEvenOdd.
-   * @param {number} [clipFillType]         Fill type for the clip. Defaults to pftEvenOdd.
-   * @returns {ClipperPaths} New ClipperPaths object
+   * @param {Clipper2Paths} subject          Subject for the clip
+   * @param {Clipper2Paths} clip             What to clip
+   * @param {Clipper2.ClipType} clipType    Intersection, union, difference, xor
+   * @param {object} [options]              Options passed to Clipper2.Clipper().Execute
+   * @param {number} [fillRule]             Fill rule. Defaults to pftEvenOdd.
+   * @returns {Clipper2Paths} New Clipper2Paths object
    */
   static clip(subject, clip, {
-    clipType = ClipperLib.ClipType.ctUnion,
-    subjFillType = ClipperLib.PolyFillType.pftEvenOdd,
-    clipFillType = ClipperLib.PolyFillType.pftEvenOdd } = {}) {
+    clipType = Clipper2.ClipType.Union,
+    fillRule = Clipper2.FillRule.EvenOdd,
+
+    // Backward compatibility.
+    subjFillType,
+    clipFillType } = {}) {
+
+    // Backward compatibility.
+    if ( typeof subjFillType !== "undefined" ) fillRule = subjFillType;
+    else if ( typeof clipFillType !== "undefined" ) fillRule = clipFillType;
 
     const scalingFactor = subject.scalingFactor;
-    const c = new ClipperLib.Clipper();
+    const c = new Clipper2.Clipper64();
     const solution = new this(undefined, { scalingFactor });
-    c.AddPaths(subject.paths, ClipperLib.PolyType.ptSubject, true);
-    c.AddPaths(clip.paths, ClipperLib.PolyType.ptClip, true);
-    c.Execute(clipType, solution.paths, subjFillType, clipFillType);
+    const isOpen = false;
+    c.addPaths(subject.paths, Clipper2.PathType.Subject, isOpen);
+    c.addPaths(clip.paths, Clipper2.PathType.Clip, isOpen);
+    c.Execute(clipType, fillRule, solution.paths);
     return solution;
   }
 
@@ -475,4 +466,4 @@ export class ClipperPaths {
   }
 }
 
-GEOMETRY_CONFIG.ClipperPaths ??= ClipperPaths;
+GEOMETRY_CONFIG.Clipper2Paths ??= Clipper2Paths;

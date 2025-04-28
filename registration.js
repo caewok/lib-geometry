@@ -45,6 +45,7 @@ import "./Shadow.js";
 
 // ClipperPaths
 import "./ClipperPaths.js";
+import "./Clipper2Paths.js";
 
 // Graph
 import "./Graph.js";
