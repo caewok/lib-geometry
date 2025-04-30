@@ -31,8 +31,9 @@ export class Clipper2Paths {
    * @returns {Clipper2Paths}
    */
   constructor(paths = [], { scalingFactor = 1 } = {}) {
-    this.paths = new Clipper2.Paths64(1);
-    this.paths.push(...paths);
+    const n = paths.length;
+    this.paths = new Clipper2.Paths64(n);
+    for ( let i = 0; i < n; i += 1 ) this.paths[i] = paths[i];
     this.#scalingFactor = scalingFactor;
   }
 
