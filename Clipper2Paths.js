@@ -255,7 +255,7 @@ export class Clipper2Paths {
    * Execute a Clipper.clipType combination using the polygon as the subject.
    * @param {PIXI.Polygon} polygon          Subject for the clip
    * @param {Clipper2.ClipType} clipType    Intersection, union, difference, xor
-   * @param {object} [options]              Options passed to Clipper2.Clipper().Execute
+   * @param {object} [options]              Options passed to Clipper2.Clipper().execute
    * @param {number} [fillRule]             Fill rule. Defaults to EvenOdd.
    * @returns {Clipper2Paths} New Clipper2Paths object
    */
@@ -276,7 +276,7 @@ export class Clipper2Paths {
     const isOpen = !polygon.isClosed;
     c.addPath(this.constructor.polygonToPath(polygon, { scalingFactor }), Clipper2.PathType.Subject, isOpen);
     c.addPaths(this.paths, Clipper2.PathType.Clip, false);
-    c.Execute(clipType, fillRule, solution.paths);
+    c.execute(clipType, fillRule, solution.paths);
     return solution;
   }
 
@@ -313,9 +313,9 @@ export class Clipper2Paths {
     const c = new Clipper2.Clipper64();
     const solution = new this.constructor(undefined, { scalingFactor });
 
-    c.AddPaths(other.paths, Clipper2.PathType.Subject, true);
-    c.AddPaths(this.paths, Clipper2.PathType.Clip, true);
-    c.Execute(type, fillRule, solution.paths);
+    c.addPaths(other.paths, Clipper2.PathType.Subject, true);
+    c.addPaths(this.paths, Clipper2.PathType.Clip, true);
+    c.execute(type, fillRule, solution.paths);
     return solution;
   }
 
@@ -331,9 +331,9 @@ export class Clipper2Paths {
     const c = new Clipper2.Clipper64();
     const solution = new this.constructor(undefined, { scalingFactor });
     const isOpen = false;
-    c.AddPaths(other.paths, Clipper2.PathType.Subject, isOpen);
-    c.AddPaths(this.paths, Clipper2.PathType.Clip, isOpen);
-    c.Execute(type, fillRule, solution.paths);
+    c.addPaths(other.paths, Clipper2.PathType.Subject, isOpen);
+    c.addPaths(this.paths, Clipper2.PathType.Clip, isOpen);
+    c.execute(type, fillRule, solution.paths);
     return solution;
   }
 
@@ -355,8 +355,8 @@ export class Clipper2Paths {
     const c = new Clipper2.Clipper64();
     const scalingFactor = this.scalingFactor;
     const union = new this.constructor(undefined, { scalingFactor });
-    c.AddPaths(this.paths, Clipper2.PathType.Subject, true);
-    c.Execute(Clipper2.ClipType.Union, Clipper2.FillRule.NonZero, union.paths);
+    c.addPaths(this.paths, Clipper2.PathType.Subject, true);
+    c.execute(Clipper2.ClipType.Union, Clipper2.FillRule.NonZero, union.paths);
     return union;
   }
 
@@ -371,10 +371,10 @@ export class Clipper2Paths {
     const scalingFactor = this.scalingFactor;
     const c = new Clipper2.Clipper64();
     const combined = new this.constructor(undefined, { scalingFactor });
-    c.AddPaths(this.paths, Clipper2.PathType.Subject, true);
+    c.addPaths(this.paths, Clipper2.PathType.Subject, true);
 
     // To avoid the checkerboard issue, use a positive fill type so any overlap is filled.
-    c.Execute(Clipper2.ClipType.Union, Clipper2.FillRule.Positive, combined.paths);
+    c.execute(Clipper2.ClipType.Union, Clipper2.FillRule.Positive, combined.paths);
     return combined;
   }
 
@@ -420,7 +420,7 @@ export class Clipper2Paths {
    * @param {Clipper2Paths} subject          Subject for the clip
    * @param {Clipper2Paths} clip             What to clip
    * @param {Clipper2.ClipType} clipType    Intersection, union, difference, xor
-   * @param {object} [options]              Options passed to Clipper2.Clipper().Execute
+   * @param {object} [options]              Options passed to Clipper2.Clipper().execute
    * @param {number} [fillRule]             Fill rule. Defaults to pftEvenOdd.
    * @returns {Clipper2Paths} New Clipper2Paths object
    */
@@ -442,7 +442,7 @@ export class Clipper2Paths {
     const isOpen = false;
     c.addPaths(subject.paths, Clipper2.PathType.Subject, isOpen);
     c.addPaths(clip.paths, Clipper2.PathType.Clip, isOpen);
-    c.Execute(clipType, fillRule, solution.paths);
+    c.execute(clipType, fillRule, solution.paths);
     return solution;
   }
 
