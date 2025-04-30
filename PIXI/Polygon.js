@@ -122,6 +122,22 @@ function convexHullCmpFn(a, b) {
 }
 
 /**
+ * Test the point against existing hull points.
+ * @parma {PIXI.Point[]} hull
+ * @param {PIXI.Point} point
+*/
+function testHullPoint(hull, p) {
+  while ( hull.length >= 2 ) {
+    const q = hull[hull.length - 1];
+    const r = hull[hull.length - 2];
+    // TO-DO: Isn't this a version of orient2d? Replace?
+    if ( (q.x - r.x) * (p.y - r.y) >= (q.y - r.y) * (p.x - r.x) ) hull.pop();
+    else break;
+  }
+  hull.push(p);
+}
+
+/**
  * Test whether the polygon is oriented clockwise.
  * Cached property.
  * In v11, this was renamed to isPositive; this provides backward-compatibility.
@@ -531,21 +547,7 @@ function signedArea({ scalingFactor } = {}) {
 }
 
 
-/**
- * Test the point against existing hull points.
- * @parma {PIXI.Point[]} hull
- * @param {PIXI.Point} point
-*/
-function testHullPoint(hull, p) {
-  while ( hull.length >= 2 ) {
-    const q = hull[hull.length - 1];
-    const r = hull[hull.length - 2];
-    // TO-DO: Isn't this a version of orient2d? Replace?
-    if ( (q.x - r.x) * (p.y - r.y) >= (q.y - r.y) * (p.x - r.x) ) hull.pop();
-    else break;
-  }
-  hull.push(p);
-}
+
 
 /**
  * Translate, shifting this polygon in the x and y direction.
