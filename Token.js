@@ -35,6 +35,13 @@ function isConstrainedTokenBorder() { return !ConstrainedTokenBorder.get(this)._
 function tokenBorder() { return this.getShape().translate(this.document.x, this.document.y); }
 
 /**
+ * New getter Token.prototype.litTargetShape
+ * Take the constrained target shape and intersect it with canvas lights.
+ * @returns {PIXI.Polygon|PIXI.Rectangle|ClipperPaths}
+ */
+function litTokenBorder() { return ConstrainedTokenBorder.get(this).litBorder;}
+
+/**
  * New getter: Token.prototype.tokenShape
  * Cache the token shape.
  * @type {PIXI.Polygon|PIXI.Rectangle}
@@ -50,5 +57,6 @@ PATCHES.CONSTRAINED_TOKEN_BORDER.GETTERS = {
   constrainedTokenBorder,
   tokenBorder,
   tokenShape,
-  isConstrainedTokenBorder
+  isConstrainedTokenBorder,
+  litTokenBorder,
 };

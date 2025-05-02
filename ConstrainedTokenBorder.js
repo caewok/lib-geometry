@@ -1,4 +1,5 @@
 /* globals
+canvas,
 ClockwiseSweepPolygon,
 foundry,
 PIXI
@@ -6,12 +7,17 @@ PIXI
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
+import { ClipperPaths } from "./ClipperPaths.js";
+import { Clipper2Paths } from "./Clipper2Paths.js";
+
 export const PATCHES = {};
 PATCHES.CONSTRAINED_TOKEN_BORDER = {};
 
 // ----- NOTE: Hooks ----- //
 
-function canvasInit() { ConstrainedTokenBorder._wallsID++; }
+function canvasInit() {
+  ConstrainedTokenBorder._wallsID++;
+}
 
 PATCHES.CONSTRAINED_TOKEN_BORDER.HOOKS = { canvasInit };
 
@@ -40,10 +46,17 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
     return polygon;
   }
 
-  /** Indicator of wall/edge changes
+  /**
+   * Indicator of wall/edge changes.
    * @type {number}
    */
   static _wallsID = 0;
+
+  /**
+   * Indicator of light changes.
+   * @type {number}
+   */
+  static _lightsID = 0;
 
   /**
    * Properties to test if relevant token characterics have changed.
@@ -71,6 +84,9 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
   /** @type {number} */
   #wallsID = -1;
 
+  /** @type {number} */
+  #lightsID = -1;
+
   /**
    * If true, no walls constrain token.
    * @type {boolean}
@@ -78,7 +94,7 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
   _unrestricted = true;
 
   /** @type {boolean} */
-  #dirty = true;
+  #dirtyWalls = true;
 
   /** @override */
   initialize(token) {
@@ -103,7 +119,7 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
 
     if ( tokenMoved ||  this.#wallsID !== ConstrainedTokenBorder._wallsID ) {
       this.#wallsID = ConstrainedTokenBorder._wallsID;
-      this.#dirty = true;
+      this.#dirtyWalls = true;
       const config = {
         source: token.vision,
         type: "move",
@@ -122,8 +138,8 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
   compute() {
     // Avoid caching values until edges loaded.
     // Falls back on _unrestricted = true.
-    if ( this.#dirty && canvas.edges.size ) {
-      this.#dirty = false;
+    if ( this.#dirtyWalls && canvas.edges.size ) {
+      this.#dirtyWalls = false;
       const { x, y } = this._token.center;
       if ( !canvas.dimensions.sceneRect.contains(x, y) ) {
         // Clockwise sweep refuses to compute outside the scene border.
@@ -230,5 +246,94 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
   constrainedBorder() {
     return this._unrestricted ? this._token.tokenBorder : new PIXI.Polygon(this.points);
   }
+
+  tokenMoved() {
+    const { _tokenProperties, _tokenDocumentProperties } = this;
+
+    // Determine if the token has changed.
+    // Could use getProperty/setProperty, but may be a bit slow and unnecessary, given
+    // that all properties are either on the token or the document.
+    for ( const key of Object.keys(_tokenProperties) ) {
+      const value = this._token[key];
+      if ( _tokenProperties[key] !== value ) return true;
+    }
+    const doc = this._token.document;
+    for ( const key of Object.keys(_tokenDocumentProperties) ) {
+      const value = doc[key];
+      if ( _tokenDocumentProperties[key] !== value ) return true;
+    }
+    return false;
+  }
+
+  #litShape;
+
+  /**
+   * Get the lit token shape.
+   */
+  litShape() {
+    if ( !this.#litShape || this.tokenMoved() || this.#lightsID !== ConstrainedTokenBorder._lightsID ) {
+      this.#litShape = this.constructor.constructLitTokenShape();
+      this.#lightsID = ConstrainedTokenBorder._lightsID;
+    }
+    return this.#litShape;
+  }
+
+  /**
+   * Use the lights that overlap the target shape to construct the shape.
+   * @param {Token} token
+   * @returns {PIXI.Polygon|PIXI.Rectangle}
+   *   If 2+ lights create holes or multiple polygons, the convex hull is returned.
+   *   (Because cannot currently handle 2+ distinct target shapes.)
+   */
+  static constructLitTokenShape(token) {
+    const shape = this.constrainTokenShapeWithLights(token);
+    if ( !(shape instanceof ClipperPaths
+        || shape instanceof Clipper2Paths) ) return shape;
+
+    // Multiple polygons present. Ignore holes. Return remaining polygon or
+    // construct one from convex hull of remaining polygons.
+    const polys = shape.toPolygons().filter(poly => !poly.isHole);
+    if ( polys.length === 0 ) return undefined;
+    if ( polys.length === 1 ) return polys[0];
+
+    // Construct convex hull.
+    const pts = [];
+    for ( const poly of polys ) pts.push(...poly.iteratePoints({ close: false }));
+    return PIXI.Polygon.convexHull(pts);
+  }
+
+  /**
+   * Take a token and intersects it with a set of lights.
+   * @param {Token} token
+   * @returns {PIXI.Polygon|PIXI.Rectangle|ClipperPaths|undefined}
+   */
+  static constrainTokenShapeWithLights(token) {
+    const tokenBorder = token.constrainedTokenBorder;
+
+    // If the global light source is present, then we can use the whole token.
+    if ( canvas.environment.globalLightSource.active ) return tokenBorder;
+
+    // Cannot really use quadtree b/c it doesn't contain all light sources.
+    const lightShapes = [];
+    for ( const light of canvas.effects.lightSources.values() ) {
+      const lightShape = light.shape;
+      if ( !light.active || lightShape.points < 6 ) continue; // Avoid disabled or broken lights.
+
+      // If a light envelops the token shape, then we can use the entire token shape.
+      if ( lightShape.envelops(tokenBorder) ) return tokenBorder;
+
+      // If the token overlaps the light, then we may need to intersect the shape.
+      if ( tokenBorder.overlaps(lightShape) ) lightShapes.push(lightShape);
+    }
+    if ( !lightShapes.length ) return undefined;
+
+    const combined = ClipperPaths.fromPolygons(lightShapes)
+      .combine()
+      .intersectPaths(ClipperPaths.fromPolygons([tokenBorder.toPolygon()]))
+      .clean()
+      .simplify();
+    return combined;
+  }
+
 }
 

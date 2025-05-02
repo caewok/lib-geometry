@@ -70,6 +70,7 @@ import { PATCHES as PATCHES_Token } from "./Token.js";
 import { PATCHES as PATCHES_CanvasEdges } from "./CanvasEdges.js";
 import { PATCHES as PATCHES_ConstrainedTokenBorder } from "./ConstrainedTokenBorder.js";
 import { PATCHES as PATCHES_Edge } from "./Edge.js";
+import { PATCHES as PATCHES_AmbientLight } from "./AmbientLight.js";
 
 // PixelCache
 import "./PixelCache.js";
@@ -103,7 +104,8 @@ const PATCHES = {
   "Token": foundry.utils.mergeObject(PATCHES_ELEVATION.Token, PATCHES_Token),
   "foundry.canvas.edges.CanvasEdges": PATCHES_CanvasEdges,
   "foundry.canvas.edges.Edge": PATCHES_Edge,
-  "ConstrainedTokenBorder": PATCHES_ConstrainedTokenBorder
+  "ConstrainedTokenBorder": PATCHES_ConstrainedTokenBorder,
+  "foundry.documents.BaseAmbientLight": PATCHES_AmbientLight,
 }
 
 export function registerGeometry() {
