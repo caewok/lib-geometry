@@ -39,11 +39,55 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
    * @param {string} type   Corresponds to wall restriction: sight, sound, light, move
    */
   static get(token) {
-    let polygon = this._cache.get(token);
-    if ( !polygon ) this._cache.set(token, polygon = new this());
-    polygon.initialize(token);
-    polygon.compute();
+    if ( !this._cache.has(token) ) {
+      const polygon = new this();
+      polygon._token = token;
+      this._cache.set(token, polygon);
+    }
+    const polygon = this._cache.get(token);
+
+    // Try to limit token movement test.
+    let tokenMoved;
+    polygon.dirtyConstrainedShape = polygon.wallsChanged || (tokenMoved = polygon.tokenMoved());
+    polygon.dirtyLitShape = polygon.wallsChanged || polygon.lightsChanged || (tokenMoved ??= polygon.tokenMoved());
     return polygon;
+  }
+
+  /**
+   * Return either a polygon or the underlying token border if possible.
+   * Does not return this b/c we don't want this modified unexpectedly.
+   * @returns {PIXI.Polygon|PIXI.Rectangle}
+   */
+  constrainedBorder() {
+    if ( this.#dirtyConstrainedShape ) {
+      this.initialize(this._token);
+      this.compute();
+      console.log(`Updating constrained border shape for ${this._token.name}`, this.points);
+      this.#clearUpdateFlags();
+    }
+    if ( !this._unrestricted && this.points.length >= 3 ) return new PIXI.Polygon(this.points);
+    return this._token.tokenBorder;
+  }
+
+  #litShape;
+
+  /**
+   * Get the lit token shape.
+   */
+  litShape() {
+    if ( this.#dirtyLitShape ) {
+      this.#litShape = this.constructor.constructLitTokenShape(this._token);
+
+      this.#clearUpdateFlags();
+    }
+
+    if ( this.#dirtyLitShape || !this.#litShape || this.tokenMoved() || this.#lightsID !== ConstrainedTokenBorder._lightsID ) {
+      this.#litShape = this.constructor.constructLitTokenShape(this._token);
+
+      this.#lightsID = ConstrainedTokenBorder._lightsID;
+      this.#dirtyLitShape = false;
+    }
+    return this.#litShape;
   }
 
   /**
@@ -84,8 +128,12 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
   /** @type {number} */
   #wallsID = -1;
 
+  get wallsChanged() { return this.#wallsID !== ConstrainedTokenBorder._wallsID; }
+
   /** @type {number} */
   #lightsID = -1;
+
+  get lightsChanged() { return this.#lightsID !== ConstrainedTokenBorder._lightsID; }
 
   /**
    * If true, no walls constrain token.
@@ -94,64 +142,44 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
   _unrestricted = true;
 
   /** @type {boolean} */
-  #dirtyWalls = true;
+  #dirtyConstrainedShape = true;
+
+  set dirtyConstrainedShape(value) { this.#dirtyConstrainedShape ||= value; }
 
   #dirtyLitShape = true;
 
+  set dirtyLitShape(value) { this.#dirtyLitShape ||= value; }
+
+  #clearUpdateFlags() {
+    if ( !canvas.edges.size ) return; // Avoid caching values until edges loaded.
+    this.#lightsID = ConstrainedTokenBorder._lightsID;
+    this.#wallsID = ConstrainedTokenBorder._wallsID;
+    this.#updateTokenMovementProperties();
+  }
+
   /** @override */
   initialize(token) {
-    this._token = token;
-    const { _tokenProperties, _tokenDocumentProperties } = this;
-
-    // Determine if the token has changed.
-    // Could use getProperty/setProperty, but may be a bit slow and unnecessary, given
-    // that all properties are either on the token or the document.
-    let tokenMoved = false;
-    for ( const key of Object.keys(_tokenProperties) ) {
-      const value = token[key];
-      tokenMoved ||= _tokenProperties[key] !== value;
-      _tokenProperties[key] = value;
-    }
-    const doc = token.document;
-    for ( const key of Object.keys(_tokenDocumentProperties) ) {
-      const value = doc[key];
-      tokenMoved ||= _tokenDocumentProperties[key] !== value;
-      _tokenDocumentProperties[key] = value;
-    }
-
-    if ( tokenMoved ||  this.#wallsID !== ConstrainedTokenBorder._wallsID ) {
-      this.#wallsID = ConstrainedTokenBorder._wallsID;
-      this.#dirtyWalls = true;
-      this.#dirtyLitShape = true;
-      const config = {
-        source: token.vision,
-        type: "move",
-        boundaryShapes: [token.tokenBorder] // [_token.tokenBorder.toPolygon()] }; // Avoid WeilerAtherton.
-      };
-      super.initialize(token.center, config);
-    }
+    const config = {
+      source: token.vision,
+      type: "move",
+      boundaryShapes: [token.tokenBorder] // [_token.tokenBorder.toPolygon()] }; // Avoid WeilerAtherton.
+    };
+    super.initialize(token.center, config);
   }
 
   /** @override */
-  getBounds() {
-    return this._token.bounds;
-  }
+  getBounds() { return this._token.bounds; }
 
   /** @override */
   compute() {
-    // Avoid caching values until edges loaded.
-    // Falls back on _unrestricted = true.
-    if ( this.#dirtyWalls && canvas.edges.size ) {
-      this.#dirtyWalls = false;
-      const { x, y } = this._token.center;
-      if ( !canvas.dimensions.sceneRect.contains(x, y) ) {
-        // Clockwise sweep refuses to compute outside the scene border.
-        this._unrestricted = true;
-        return;
-      }
-      super.compute();
-      console.log(`Updating constrained shape for ${this._token.name}`, this.points);
+    // Clockwise sweep refuses to compute outside the scene border.
+    const { x, y } = this._token.center;
+    if ( !canvas.dimensions.sceneRect.contains(x, y) ) {
+      this._unrestricted = true;
+      return;
     }
+    super.compute();
+
   }
 
   /** @override */
@@ -242,16 +270,6 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
     return PIXI.Polygon.prototype.contains.call(this, x, y);
   }
 
-  /**
-   * Return either a polygon or the underlying token border if possible.
-   * Does not return this b/c we don't want this modified unexpectedly.
-   * @returns {PIXI.Polygon|PIXI.Rectangle}
-   */
-  constrainedBorder() {
-    if ( !this._unrestricted && this.points.length >= 3 ) return new PIXI.Polygon(this.points);
-    return this._token.tokenBorder;
-  }
-
   tokenMoved() {
     const { _tokenProperties, _tokenDocumentProperties } = this;
 
@@ -270,19 +288,21 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
     return false;
   }
 
-  #litShape;
+  #updateTokenMovementProperties() {
+    const { _tokenProperties, _tokenDocumentProperties, _token } = this;
 
-  /**
-   * Get the lit token shape.
-   */
-  litShape() {
-    if ( this.#dirtyLitShape || !this.#litShape || this.tokenMoved() || this.#lightsID !== ConstrainedTokenBorder._lightsID ) {
-      this.#litShape = this.constructor.constructLitTokenShape(this._token);
-      console.log(`Updating lit shape for ${this._token.name}`, [...this.#litShape.iteratePoints({ closed: false })]);
-      this.#lightsID = ConstrainedTokenBorder._lightsID;
-      this.#dirtyLitShape = false;
+    // Determine if the token has changed.
+    // Could use getProperty/setProperty, but may be a bit slow and unnecessary, given
+    // that all properties are either on the token or the document.
+    for ( const key of Object.keys(_tokenProperties) ) {
+      const value = _token[key];
+      _tokenProperties[key] = value;
     }
-    return this.#litShape;
+    const doc = _token.document;
+    for ( const key of Object.keys(_tokenDocumentProperties) ) {
+      const value = doc[key];
+      _tokenDocumentProperties[key] = value;
+    }
   }
 
   /**
