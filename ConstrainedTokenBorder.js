@@ -64,6 +64,7 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
       this.compute();
       console.log(`Updating constrained border shape for ${this._token.name}`, this.points);
       this.#clearUpdateFlags();
+      this.#dirtyConstrainedShape = !canvas.ready; // Avoid caching values until edges loaded.
     }
     if ( !this._unrestricted && this.points.length >= 3 ) return new PIXI.Polygon(this.points);
     return this._token.tokenBorder;
@@ -77,15 +78,8 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
   litShape() {
     if ( this.#dirtyLitShape ) {
       this.#litShape = this.constructor.constructLitTokenShape(this._token);
-
       this.#clearUpdateFlags();
-    }
-
-    if ( this.#dirtyLitShape || !this.#litShape || this.tokenMoved() || this.#lightsID !== ConstrainedTokenBorder._lightsID ) {
-      this.#litShape = this.constructor.constructLitTokenShape(this._token);
-
-      this.#lightsID = ConstrainedTokenBorder._lightsID;
-      this.#dirtyLitShape = false;
+      this.#dirtyLitShape = !canvas.ready; // Avoid caching values until edges loaded.
     }
     return this.#litShape;
   }
@@ -151,7 +145,6 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
   set dirtyLitShape(value) { this.#dirtyLitShape ||= value; }
 
   #clearUpdateFlags() {
-    if ( !canvas.edges.size ) return; // Avoid caching values until edges loaded.
     this.#lightsID = ConstrainedTokenBorder._lightsID;
     this.#wallsID = ConstrainedTokenBorder._wallsID;
     this.#updateTokenMovementProperties();
