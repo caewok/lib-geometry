@@ -272,7 +272,7 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
    */
   litShape() {
     if ( !this.#litShape || this.tokenMoved() || this.#lightsID !== ConstrainedTokenBorder._lightsID ) {
-      this.#litShape = this.constructor.constructLitTokenShape();
+      this.#litShape = this.constructor.constructLitTokenShape(this._token);
       this.#lightsID = ConstrainedTokenBorder._lightsID;
     }
     return this.#litShape;

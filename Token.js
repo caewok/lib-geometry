@@ -39,7 +39,7 @@ function tokenBorder() { return this.getShape().translate(this.document.x, this.
  * Take the constrained target shape and intersect it with canvas lights.
  * @returns {PIXI.Polygon|PIXI.Rectangle|ClipperPaths}
  */
-function litTokenBorder() { return ConstrainedTokenBorder.get(this).litBorder;}
+function litTokenBorder() { return ConstrainedTokenBorder.get(this).litShape();}
 
 /**
  * New getter: Token.prototype.tokenShape
