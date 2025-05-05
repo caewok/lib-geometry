@@ -147,6 +147,7 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
         return;
       }
       super.compute();
+      console.log(`Updating constrained shape for ${this._token.name}`, this.points);
     }
   }
 
@@ -274,6 +275,7 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
   litShape() {
     if ( !this.#litShape || this.tokenMoved() || this.#lightsID !== ConstrainedTokenBorder._lightsID ) {
       this.#litShape = this.constructor.constructLitTokenShape(this._token);
+      console.log(`Updating lit shape for ${this._token.name}`, [...this.#litShape.iteratePoints({ closed: false })]);
       this.#lightsID = ConstrainedTokenBorder._lightsID;
     }
     return this.#litShape;
