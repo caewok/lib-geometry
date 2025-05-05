@@ -96,6 +96,8 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
   /** @type {boolean} */
   #dirtyWalls = true;
 
+  #dirtyLitShape = true;
+
   /** @override */
   initialize(token) {
     this._token = token;
@@ -120,6 +122,7 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
     if ( tokenMoved ||  this.#wallsID !== ConstrainedTokenBorder._wallsID ) {
       this.#wallsID = ConstrainedTokenBorder._wallsID;
       this.#dirtyWalls = true;
+      this.#dirtyLitShape = true;
       const config = {
         source: token.vision,
         type: "move",
@@ -273,10 +276,11 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
    * Get the lit token shape.
    */
   litShape() {
-    if ( !this.#litShape || this.tokenMoved() || this.#lightsID !== ConstrainedTokenBorder._lightsID ) {
+    if ( this.#dirtyLitShape || !this.#litShape || this.tokenMoved() || this.#lightsID !== ConstrainedTokenBorder._lightsID ) {
       this.#litShape = this.constructor.constructLitTokenShape(this._token);
       console.log(`Updating lit shape for ${this._token.name}`, [...this.#litShape.iteratePoints({ closed: false })]);
       this.#lightsID = ConstrainedTokenBorder._lightsID;
+      this.#dirtyLitShape = false;
     }
     return this.#litShape;
   }
