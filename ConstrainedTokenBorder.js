@@ -244,7 +244,8 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
    * @returns {PIXI.Polygon|PIXI.Rectangle}
    */
   constrainedBorder() {
-    return this._unrestricted ? this._token.tokenBorder : new PIXI.Polygon(this.points);
+    if ( !this._unrestricted && this.points.length >= 3 ) return new PIXI.Polygon(this.points);
+    return this._token.tokenBorder;
   }
 
   tokenMoved() {
@@ -280,6 +281,7 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
 
   /**
    * Use the lights that overlap the target shape to construct the shape.
+   * Falls back on constrained token border.
    * @param {Token} token
    * @returns {PIXI.Polygon|PIXI.Rectangle}
    *   If 2+ lights create holes or multiple polygons, the convex hull is returned.
@@ -287,6 +289,16 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
    */
   static constructLitTokenShape(token) {
     const shape = this.constrainTokenShapeWithLights(token);
+    const poly = this.clipperShapeToPolygon(shape);
+    if ( !poly || poly.points < 6 ) return token.constrainedTokenBorder;
+    return poly;
+  }
+
+  /**
+   * @param {ClipperPaths|Clipper2Paths} shape
+   * @returns {PIXI.Polygon|undefined}
+   */
+  static clipperShapeToPolygon(shape) {
     if ( !(shape instanceof ClipperPaths
         || shape instanceof Clipper2Paths) ) return shape;
 
