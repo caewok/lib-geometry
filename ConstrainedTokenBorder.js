@@ -78,6 +78,7 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
   litShape() {
     if ( this.#dirtyLitShape ) {
       this.#litShape = this.constructor.constructLitTokenShape(this._token);
+      console.log(`Updating lit border shape for ${this._token.name}`, [...this.#litShape.iteratePoints({closed: false})]);
       this.#clearUpdateFlags();
       this.#dirtyLitShape = !canvas.ready; // Avoid caching values until edges loaded.
     }
