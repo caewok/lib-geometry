@@ -1,5 +1,6 @@
 /* globals
-PIXI
+CONFIG,
+PIXI,
 */
 "use strict";
 
@@ -25,7 +26,7 @@ function equals(other) {
   if ( !(other instanceof PIXI.Rectangle) ) return false;
   return this.x === other.x
     && this.y === other.y
-    && this.width === other.width;
+    && this.width === other.width
     && this.height === other.height;
 }
 
@@ -39,7 +40,7 @@ function almostEqual(other, epsilon = 1e-08) {
   if ( !(other instanceof PIXI.Circle) ) return false;
   return this.x.almostEqual(other.x, epsilon)
     && this.y.almostEqual(other.y, epsilon)
-    && this.width.almostEqual(other.width, epsilon);
+    && this.width.almostEqual(other.width, epsilon)
     && this.height.almostEqual(other.height, epsilon);
 }
 

@@ -5,6 +5,7 @@ foundry,
 CONFIG
 */
 "use strict";
+/* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 
 export const PATCHES = {};
 PATCHES.PIXI = {};
