@@ -841,6 +841,7 @@ function key() {
  * @returns {boolean}
  */
 function equals(other) {
+  if ( !(other instanceof PIXI.Polygon) ) return false;
   if ( this.points.length !== other.points.length ) return false;
   if ( this.isClockwise ^ other.isClockwise ) return false;
 
@@ -863,6 +864,41 @@ function equals(other) {
 
   return true;
 }
+
+
+/**
+ * Does this polygon almost equal another in position and size?
+ * 1. Same points
+ * 2. In any order; orientation does not count.
+ * @param {PIXI.Polygon} other
+ * @param {number} [epsilon=1e-08]    Count as equal if at least this close
+ * @returns {boolean}
+ */
+function almostEqual(other, epsilon = 1e-08) {
+  if ( !(other instanceof PIXI.Polygon) ) return false;
+  if ( this.points.length !== other.points.length ) return false;
+
+  const thisPoints = this.iteratePoints({close: false});
+  const otherPoints = [...other.iteratePoints({close: false})];
+  if ( this.isClockwise ^ other.isClockwise ) otherPoints.reverse();
+
+  // Find the matching point
+  const startPoint = thisPoints.next().value;
+  const startIdx = otherPoints.findIndex(pt => pt.equals(startPoint));
+  if ( !~startIdx ) return false;
+
+  // Test each point sequentially from each array
+  let k = startIdx + 1; // +1 b/c already tested startPoint.
+  const nPoints = otherPoints.length;
+  for ( const thisPoint of thisPoints ) {
+    k = k % nPoints;
+    if ( !thisPoint.almostEqual(otherPoints[k], epsilon) ) return false;
+    k += 1;
+  }
+
+  return true;
+}
+
 
 /**
  * Cutaway a line segment start|end that moves through this polygon.
@@ -966,11 +1002,14 @@ PATCHES.PIXI.METHODS = {
   pixiPoints,
   pixiEdges,
 
+  // Equality
+  equals,
+  almostEqual,
+
   // Other methods
   toPolygon: function() { return this; },
   clean,
   clipperClip,
-  equals,
   isSegmentEnclosed,
   linesCross,
   lineSegmentIntersects,

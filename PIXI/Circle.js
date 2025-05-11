@@ -171,6 +171,32 @@ function lineSegmentIntersects(a, b, { inside = false } = {}) {
  */
 function cutaway(a, b, opts) { return CONFIG.GeometryLib.CutawayPolygon.cutawayBasicShape(this, a, b, opts); }
 
+/**
+ * Does this circle equal another in position and size?
+ * @param {PIXI.Circle} other
+ * @returns {boolean}
+ */
+function equals(other) {
+  if ( !(other instanceof PIXI.Circle) ) return false;
+  return this.x === other.x
+    && this.y === other.y
+    && this.radius === other.radius;
+}
+
+/**
+ * Does this circle almost equal another in position and size?
+ * @param {PIXI.Circle} other
+ * @param {number} [epsilon=1e-08]    Count as equal if at least this close
+ * @returns {boolean}
+ */
+function almostEqual(other, epsilon = 1e-08) {
+  if ( !(other instanceof PIXI.Circle) ) return false;
+  return this.x.almostEqual(other.x, epsilon)
+    && this.y.almostEqual(other.y, epsilon)
+    && this.radius.almostEqual(other.radius, epsilon);
+}
+
+
 PATCHES.PIXI.GETTERS = { area };
 
 PATCHES.PIXI.METHODS = {
@@ -178,6 +204,10 @@ PATCHES.PIXI.METHODS = {
   translate,
   scaledArea,
   lineSegmentIntersects,
+
+  // Equality
+  equals,
+  almostEqual,
 
   // Overlap methods
   overlaps,

@@ -17,6 +17,34 @@ function area() {
 }
 
 /**
+ * Does this rectangle equal another in position and size?
+ * @param {PIXI.Rectangle} other
+ * @returns {boolean}
+ */
+function equals(other) {
+  if ( !(other instanceof PIXI.Rectangle) ) return false;
+  return this.x === other.x
+    && this.y === other.y
+    && this.width === other.width;
+    && this.height === other.height;
+}
+
+/**
+ * Does this rectangle almost equal another in position and size?
+ * @param {PIXI.Rectangle} other
+ * @param {number} [epsilon=1e-08]    Count as equal if at least this close
+ * @returns {boolean}
+ */
+function almostEqual(other, epsilon = 1e-08) {
+  if ( !(other instanceof PIXI.Circle) ) return false;
+  return this.x.almostEqual(other.x, epsilon)
+    && this.y.almostEqual(other.y, epsilon)
+    && this.width.almostEqual(other.width, epsilon);
+    && this.height.almostEqual(other.height, epsilon);
+}
+
+
+/**
  * Iterate over the rectangles's {x, y} points in order.
  * @param {object} [options]
  * @param {boolean} [options.close]   If close, include the first point again.
@@ -457,6 +485,10 @@ PATCHES.PIXI.METHODS = {
   // Iterators
   iteratePoints,
   iterateEdges,
+
+  // Equality
+  equals,
+  almostEqual,
 
   // Other methods
   union,
