@@ -11,9 +11,13 @@ import "./Draw.js";
 // See https://www.npmjs.com/package/clipper2-js
 import * as Clipper2 from "./clipper2_esm2020/clipper2-js.mjs";
 
+const { Path64, Paths64, Point64 } = Clipper2;
+
 /**
  * Class to manage Clipper2Paths for multiple polygons.
- * Unlike Clipper2Paths, the paths here are flat arrays (not point objects)
+ * Unlike Clipper2Paths, the paths here use lower-case x, y.
+ * The points must be Point64.
+ * E.g. Clipper2.Clipper.makePath([ 100, 50, 10, 79, 65, 2, 65, 98, 10, 21 ])
  */
 export class Clipper2Paths {
   static Clipper2 = Clipper2;
@@ -29,15 +33,60 @@ export class Clipper2Paths {
   static JoinType = Clipper2.JoinType;
 
   /**
-   * @param paths {Clipper2.Path[]|Set<Clipper2.Path>|Map<Clipper2.Path>}
+   * Convert a flat array of x,y coordinates to a path.
+   * @param {number[]} arr
+   * @returns {Path64}
+   */
+  static pathFromArray(arr, scalingFactor = 1) {
+    const nPts = arr.length * 0.5;
+    const path = new Path64(nPts);
+    for ( let i = 0, j = 0; i < nPts; i += 1 ) {
+      path[i] = new Point64(arr[j++] * scalingFactor, arr[j++] * scalingFactor);
+    }
+    return path;
+  }
+
+  /**
+   * Convert an array of {x,y} objects to a path.
+   * @param {Point[]} pts
+   * @returns {Path64}
+   */
+  static pathFromPoint2d(pts, scalingFactor = 1) {
+    const nPts = pts.length;
+    const path = new Path64(nPts)
+    for ( let i = 0; i < nPts; i += 1 ) path[i] = new Point64(pts[i], scalingFactor);
+    return path;
+  }
+
+  static pathToPoints(path, scalingFactor = 1) {
+    const invScale = 1 / scalingFactor;
+    return path.map(pt64 => new PIXI.Point(pt64.x * invScale, pt64.y * invScale));
+  }
+
+  static pathToFlatArray(path, scalingFactor) {
+    const invScale = 1 / scalingFactor;
+    const nPts = path.length;
+    const arr = new Array(nPts * 2);
+    for ( let i = 0, j = 0; i < nPts; i += 1 ) {
+      const pt = path[i];
+      arr[j++] = pt.x * invScale;
+      arr[j++] = pt.y * invScale;
+    }
+    return arr;
+  }
+
+  /**
+   * @param paths {}
    * @returns {Clipper2Paths}
    */
   constructor(paths = [], { scalingFactor = 1 } = {}) {
-    const n = paths.length;
-    this.paths = new Clipper2.Paths64(n);
-    for ( let i = 0; i < n; i += 1 ) this.paths[i] = paths[i];
+    const nPaths = paths.length;
+    this.paths = new Paths64(nPaths);
+    for ( let i = 0; i < nPaths; i += 1 ) this.paths[i] = new Path64(...paths[i]);
     this.#scalingFactor = scalingFactor;
   }
+
+  applyToEachPoint(callback) { this.paths.forEach(path => path.forEach(pt => callback(pt))); }
 
   /** @type {number} */
   #scalingFactor = 1;
@@ -54,9 +103,10 @@ export class Clipper2Paths {
     if ( value === this.#scalingFactor ) return;
 
     const mult = value / this.#scalingFactor;
-    for ( const path of this.paths ) {
-      for ( let i = 0, iMax = path.length; i < iMax; i += 1 ) path[i] *= mult;
-    }
+    this.applyToEachPoint(pt => {
+      pt.x *= mult;
+      pt.y *= mult;
+    });
     this.#scalingFactor = value;
   }
 
@@ -68,7 +118,6 @@ export class Clipper2Paths {
    */
   static processPaths(paths) {
     if (paths.length > 1) return Clipper2Paths(paths);
-
     return Clipper2Paths.polygonToRectangle(paths[0]);
   }
 
@@ -78,14 +127,13 @@ export class Clipper2Paths {
    * @returns {Clipper2Paths}
    */
   static fromPolygons(polygons, { scalingFactor = 1 } = {}) {
-    const out = new this(polygons.map(poly => poly.points));
+    const out = new this(polygons.map(poly => this.pathFromArray(poly.points)));
     out.scalingFactor = scalingFactor; // Force the points to be scaled.
     return out;
   }
 
   static polygonToPath(polygon, { scalingFactor = 1 } = {}) {
-    if ( scalingFactor === 1 ) return polygon.points;
-    return polygon.points.map(elem => elem * scalingFactor);
+    return this.pathFromArray(polygon.points, scalingFactor);
   }
 
   /**
@@ -121,6 +169,19 @@ export class Clipper2Paths {
   }
 
   /**
+   * Convert this to an array of PIXI.Polygons.
+   * @returns {PIXI.Polygons[]}
+   */
+  toPolygons() {
+    return this.paths.map(path => {
+      const pts = this.constructor.pathToFlatArray(path, this.scalingFactor);
+      const poly = new PIXI.Polygon(...pts);
+      poly.isHole = !Clipper2.Clipper.isPositive(path);
+      return poly;
+    });
+  }
+
+  /**
    * Convert paths to earcut coordinates.
    * See https://github.com/mapbox/earcut
    * @returns {object} Object with vertices, holes, dimensions = 2.
@@ -136,13 +197,14 @@ export class Clipper2Paths {
     const nPaths = paths.length;
     if ( nPaths === 0 ) return out;
 
-    out.vertices = paths[0];
+    // Note: No scaling applied.
+    out.vertices = this.constructor.pathToFlatArray(paths[0]);
     for ( let i = 1; i < nPaths; i += 1 ) {
       const path = paths[i];
       const isHole = !Clipper2.Clipper.isPositive(path);
       if ( !isHole ) console.warn("Earcut may fail with multiple outer polygons.");
       const category = isHole ? out.holes : out.vertices;
-      category.push(path);
+      category.push(this.constructor.pathToFlatArray(path));
     }
 
     // Concatenate holes and add indices
@@ -175,11 +237,10 @@ export class Clipper2Paths {
     const cPaths = new this();
     const nIndices = indices.length;
     for ( let i = 0; i < nIndices; ) { // Increment i in the loop
-      const path = new Array(6);
-      for ( let j = 0; j < 6; j += 2 ) {
+      const path = new Path64(3);
+      for ( let j = 0; j < 3; j += 1 ) {
         const idx = indices[i] * dimensions;
-        path[j] = vertices[idx];
-        path[j + 1] = vertices[idx + 1];
+        path[j] = new Point64(vertices[idx], vertices[idx + 1]);
         i += 1;
       }
       cPaths.paths.push(path);
@@ -226,20 +287,6 @@ export class Clipper2Paths {
     if ( this.paths.length > 1 ) return this;
     if ( this.paths.length === 0 ) return new PIXI.Polygon();
     return this.constructor.polygonToRectangle(this.toPolygons()[0]);
-  }
-
-  /**
-   * Convert this to an array of PIXI.Polygons.
-   * @returns {PIXI.Polygons[]}
-   */
-  toPolygons() {
-    const invScale = 1 / this.scalingFactor;
-    return this.paths.map(pts => {
-      if ( this.scalingFactor !== 1 ) pts = pts.map(elem => elem *= invScale);
-      const poly = new PIXI.Polygon(...pts);
-      poly.isHole = !Clipper2.Clipper.isPositive(pts);
-      return poly;
-    });
   }
 
   /**
