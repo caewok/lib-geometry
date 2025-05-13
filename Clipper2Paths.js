@@ -16,6 +16,8 @@ import * as Clipper2 from "./clipper2_esm2020/clipper2-js.mjs";
  * Unlike Clipper2Paths, the paths here are flat arrays (not point objects)
  */
 export class Clipper2Paths {
+  static Clipper2 = Clipper2;
+
   static ClipType = Clipper2.ClipType;
 
   static PathType = Clipper2.JoinType;
