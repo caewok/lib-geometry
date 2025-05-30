@@ -11,6 +11,13 @@ import { GEOMETRY_CONFIG } from "../const.js";
 
 // Class to represent a plane
 export class Plane {
+
+  /** @type {Point3d} */
+  normal = new CONFIG.GeometryLib.threeD.Point3d(0, 0, 1);
+
+
+
+
   /**
    * Default construction is the XY canvas plane
    * @param {Point3d} normal    Normal vector to the plane
@@ -19,6 +26,16 @@ export class Plane {
   constructor(point = new CONFIG.GeometryLib.threeD.Point3d(0, 0, 0), normal = new CONFIG.GeometryLib.threeD.Point3d(0, 0, 1)) {
     this.normal = normal.normalize();
     this.point = point.clone();
+  }
+
+  /**
+   * Normalize the plane.
+   * See https://web.archive.org/web/20120531231005/http://crazyjoke.free.fr/doc/3D/plane%20extraction.pdf
+   */
+  normalizedPlaneEquation() {
+    // const mag = this.normal.magnitude(); // Typically 1 b/c plane normal is normalized in constructor.
+    // Divide all four equation points by magnitude.
+    return Object.values(this.equation)
   }
 
   /**
