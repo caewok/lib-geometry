@@ -320,7 +320,7 @@ export class Clipper2Paths {
     else if ( typeof clipFillType !== "undefined" ) fillRule = clipFillType;
 
     const scalingFactor = this.scalingFactor;
-    const c = new Clipper2.Clipper();
+    const c = new Clipper2.Clipper64();
     const solution = new this.constructor(undefined, { scalingFactor });
     const isOpen = !polygon.isClosed;
     c.addPath(this.constructor.polygonToPath(polygon, { scalingFactor }), Clipper2.PathType.Subject, isOpen);
