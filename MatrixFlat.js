@@ -1322,8 +1322,9 @@ export class MatrixFlat {
      i.almostEqual(Matrix.identity(m.dim1,m.dim2))
    *
    */
-  invert(outMatrix) {
-    outMatrix ??= this.constructor.empty(this.nrow, this.ncol);
+  invert() {
+    // Cannot use this matrix as the outMatrix b/c the double for loop needs a separate out matrix.
+    const outMatrix = this.constructor.empty(this.nrow, this.ncol);
 
     if ( this.nrow < 2 || this.nrow !== this.ncol ) {
       console.error("Cannot use invert on a non-square matrix.");
@@ -1351,7 +1352,7 @@ export class MatrixFlat {
           const plus = (ix + iy) % 2 === 0 ? 1 : -1;
           const xf = x.filter(e => e !== ix);
           const yf = y.filter(e => e !== iy);
-          const der = this.optimizedNDet(n - 1, this, yf, xf, k);
+          const der = this.constructor.optimizedNDet(n - 1, this, yf, xf, k);
           outMatrix.setIndex(iy, ix, det * plus * der);
         }
       }
@@ -1372,7 +1373,7 @@ export class MatrixFlat {
     const x = Array.fromRange(n);
     const y = Array.fromRange(n);
     const k = {};
-    return this.optimizedNDet(n, this, x, y, k);
+    return this.constructor.optimizedNDet(n, this, x, y, k);
   }
 
   /**
@@ -1384,7 +1385,7 @@ export class MatrixFlat {
    * @param {{string: number}} k
    * @returns {number}
    */
-  optimizedNDet(n, m, x, y, k) {
+  static optimizedNDet(n, m, x, y, k) {
     const mk = x.join("") + y.join("");
     if ( !k[mk] ) {
       if ( n > 2 ) {
@@ -1395,7 +1396,7 @@ export class MatrixFlat {
           const iy = y[0];
           const xf = x.filter(e => e !== ix);
           const yf = y.filter(e => e !== iy);
-          const der = this.optimizedNDet(n - 1, m, xf, yf, k);
+          const der = this.constructor.optimizedNDet(n - 1, m, xf, yf, k);
           d += m.getIndex(iy, ix) * plus * der;
           plus *= -1;
         }
@@ -1414,13 +1415,18 @@ export class MatrixFlat {
 
   // ----- NOTE: Debugging ----- //
 
-  print() {
+  print({ startR, startC, endR, endC } = {}) {
+    startR ??= 0;
+    startC ??= 0;
+    endR ??= mat.nrow;
+    endC ??= mat.ncol;
+
     // console.table prints arrays of arrays nicely.
-    const out = new Array(this.nrow);
-    for ( let r = 0; r < this.nrow; r += 1 ) out[r] = new Array(this.ncol);
-    for ( let r = 0; r < this.nrow; r += 1 ) {
+    const out = new Array(endR - startR);
+    for ( let r = startR; r < endR; r += 1 ) out[r] = new Array(endC - startC);
+    for ( let r = startR; r < endR; r += 1 ) {
       const arrR = out[r];
-      for ( let c = 0; c < this.ncol; c += 1 ) arrR[c] = this.getIndex(r, c);
+      for ( let c = startC; c < endC; c += 1 ) arrR[c] = this.getIndex(r, c);
     }
     console.table(out);
   }
