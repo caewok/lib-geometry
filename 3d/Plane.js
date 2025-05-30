@@ -15,8 +15,8 @@ export class Plane {
   /** @type {Point3d} */
   normal = new CONFIG.GeometryLib.threeD.Point3d(0, 0, 1);
 
-
-
+  /** @type {Point3d} */
+  point = new CONFIG.GeometryLib.threeD.Point3d();
 
   /**
    * Default construction is the XY canvas plane
@@ -24,8 +24,8 @@ export class Plane {
    * @param {Point3d} point     Point on the plane
    */
   constructor(point = new CONFIG.GeometryLib.threeD.Point3d(0, 0, 0), normal = new CONFIG.GeometryLib.threeD.Point3d(0, 0, 1)) {
-    this.normal = normal.normalize();
-    this.point = point.clone();
+    this.normal.set(normal.normalize());
+    this.point.set(point);
   }
 
   /**
