@@ -24,8 +24,8 @@ export class Plane {
    * @param {Point3d} point     Point on the plane
    */
   constructor(point = new CONFIG.GeometryLib.threeD.Point3d(0, 0, 0), normal = new CONFIG.GeometryLib.threeD.Point3d(0, 0, 1)) {
-    this.normal.set(normal.normalize());
-    this.point.set(point);
+    this.normal.copyFrom(normal.normalize());
+    this.point.copyFrom(point);
   }
 
   /**
