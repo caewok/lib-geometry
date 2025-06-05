@@ -100,11 +100,12 @@ export class Point3d extends PIXI.Point {
    *   negative: CW (right-handed system, incl. Foundry)
    */
   static orient(a, b, c) {
-    const dBA = b.subtract(a);
-    const dCB = c.subtract(b);
-    const crossProduct = dBA.cross(dCB);
-
-    return -crossProduct.z;
+    // Calculate cross product components directly without creating temporary vectors
+    const bax = b.x - a.x;
+    const bay = b.y - a.y;
+    const cbx = c.x - b.x;
+    const cby = c.y - b.y;
+    return (bax * cby) - (bay * cbx);
   }
 
   /**
@@ -145,7 +146,7 @@ export class Point3d extends PIXI.Point {
     const dx = (b.x - a.x) || 0; // In case x is undefined.
     const dy = (b.y - a.y) || 0;
     const dz = (b.z - a.z) || 0;
-    return Math.hypot(dx, dy, dz);
+    return Math.sqrt(dx * dx + dy * dy + dz * dz);
   }
 
   /**
@@ -158,7 +159,7 @@ export class Point3d extends PIXI.Point {
     const dx = (b.x - a.x) || 0; // In case x is undefined.
     const dy = (b.y - a.y) || 0;
     const dz = (b.z - a.z) || 0;
-    return Math.pow(dx, 2) + Math.pow(dy, 2) + Math.pow(dz, 2);
+    return dx * dx + dy * dy + dz * dz;
   }
 
   /**
