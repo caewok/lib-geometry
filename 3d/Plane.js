@@ -86,19 +86,21 @@ export class Plane {
    * @returns {number}
    */
   static angleBetweenVectors(v1, v2) {
-    return Math.acos(v1.dot(v2) / v1.magnitude());
+    const v1Mag = v1.magnitude();
+    const v2Mag = v2.magnitude();
+    if ( !v1Mag || !v2Mag ) return 0;
+    return Math.acos(v1.dot(v2) / (v1Mag * v2Mag));
   }
 
   static angleBetweenSegments(a, b, c, d) {
-    // Dot product of the two vectors
-    // Divide by magnitude of the first
-    // Divide by magnitude of the second
     const V1 = b.subtract(a);
     const V2 = d.subtract(c);
-    const mag = (V1.magnitude() * V2.magnitude());
-    if ( !mag ) return 0;
+    const magV1 = V1.magnitude();
+    const magV2 = V2.magnitude();
+    const mag = magV1 * magV2;
+    if (!mag) return 0;
 
-    return Math.acos(V1.dot(V2) / (V1.magnitude() * V2.magnitude()));
+    return Math.acos(V1.dot(V2) / mag);
   }
 
   /**
@@ -107,15 +109,15 @@ export class Plane {
    * @returns {object} Object with a, b, c, d
    */
   get equation() {
-    const N = this.normal;
-    const P = this.point;
+      const N = this.normal;
+      const P = this.point;
 
     return {
-      a: N.x,
-      b: N.y,
-      c: N.z,
-      d: -N.dot(P)
-    };
+        a: N.x,
+        b: N.y,
+        c: N.z,
+        d: -N.dot(P)
+      };
   }
 
   /**
