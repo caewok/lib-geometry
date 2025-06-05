@@ -62,7 +62,7 @@ function precision(n, digits = 2) {
   */
 export async function QBenchmarkLoop(iterations, thisArg, fn_name, ...args) {
   const name = `${thisArg.name || thisArg.constructor.name}.${fn_name}`;
-  const fn = (...args) => thisArg[fn_name](...args);
+  const fn = async (...args) => thisArg[fn_name](...args);
   return await QBenchmarkLoopFn(iterations, fn, name, ...args);
 }
 
