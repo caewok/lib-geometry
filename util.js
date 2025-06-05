@@ -853,7 +853,7 @@ function bresenhamLine3d(x1, y1, z1, x2, y2, z2) {
  * @returns {Iterator<PIXI.Point>}
  */
 export function* bresenhamLineIterator(a, b) {
-  yield a.clone();
+  yield new PIXI.Point(a.x, a.y);
 
   let x1 = Math.round(a.x);
   let y1 = Math.round(a.y);
@@ -898,7 +898,7 @@ export function* bresenhamLineIterator(a, b) {
  * @testing
  */
 export function* bresenhamLine3dIterator(a, b) {
-  yield a.clone();
+  yield new PIXI.Point(a.x, a.y);
 
   const Point3d = CONFIG.GeometryLib.threeD.Point3d;
   let x1 = Math.round(a.x);
