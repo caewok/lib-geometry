@@ -156,7 +156,15 @@ function lineSegmentIntersects(a, b, { inside = false } = {}) {
   const aContained = this.contains(a.x, a.y);
   const bContained = this.contains(b.x, b.y);
   if ( aContained && bContained ) return inside;
-  return aContained || bContained;
+  if ( aContained || bContained ) return true;
+
+  // Both endpoints are outside the circle.
+  // Test if the closest point on the segment to the circle is within the circle.
+  const ctr = this.center;
+  const closest = foundry.utils.closestPointToSegment(ctr, a, b);
+  const r2 = this.radius * this.radius;
+  const d2 = PIXI.Point.distanceSquaredBetween(closest, ctr);
+  return r2 > d2;
 }
 
 /**
