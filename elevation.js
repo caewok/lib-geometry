@@ -163,7 +163,7 @@ function regionBottomE() {
   return this.document.elevation.bottom ?? Number.NEGATIVE_INFINITY;
 }
 
-async function regionWallTopE(value) {
+async function setRegionTopE(value) {
  if ( !(is.null(value) || Number.isNumeric(value)) ) {
     console.err("setRegionTopE value must be a number or null.");
     return;
@@ -172,7 +172,7 @@ async function regionWallTopE(value) {
   return this.document.update({ "elevation.top": value });
 }
 
-async function regionWallBottomE(value) {
+async function setRegionBottomE(value) {
   if ( !(is.null(value) || Number.isNumeric(value)) ) {
     console.err("setRegionTopE value must be a number or null.");
     return;
@@ -410,6 +410,13 @@ PATCHES.Wall.ELEVATION.METHODS = {
 };
 
 // ----- NOTE: Region ----- //
+PATCHES.Region.ELEVATION.GETTERS = {
+  topE: regionTopE,
+  topZ: zTop,
+  bottomE: regionBottomE,
+  bottomZ: zBottom
+};
+
 PATCHES.Region.ELEVATION.METHODS = {
   setTopE: setRegionTopE,
   setTopZ: setZTop,
