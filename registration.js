@@ -99,6 +99,7 @@ const PATCHES = {
   "foundry.canvas.sources.PointVisionSource": PATCHES_ELEVATION.VisionSource,
   "PlaceableObject": PATCHES_ELEVATION.PlaceableObject,
   "Wall": PATCHES_ELEVATION.Wall,
+  "Region": PATCHES_ELEVATION.Region,
 
   // Elevation and Constrained Token patches
   "Token": foundry.utils.mergeObject(PATCHES_ELEVATION.Token, PATCHES_Token),

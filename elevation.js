@@ -42,6 +42,7 @@ PATCHES.VisionSource = { ELEVATION: {} };
 PATCHES.PlaceableObject = { ELEVATION: {} };
 PATCHES.Token = { ELEVATION: {} };
 PATCHES.Wall = { ELEVATION: {} };
+PATCHES.Region = { ELEVATION: {} };
 
 CONFIG.GeometryLib ??= {};
 CONFIG.GeometryLib.proneStatusId = "prone";
@@ -152,6 +153,34 @@ async function setWallBottomE(value) {
   const { ID, FLAGS } = MODULE_KEYS.EV;
   return this.document.update({ [`flags.${ID}.${FLAGS.ELEVATION}.bottom`]: value });
 }
+
+// ----- NOTE: Region elevation ----- //
+function regionTopE() {
+  return this.document.elevation.top ?? Number.POSITIVE_INFINITY;
+}
+
+function regionBottomE() {
+  return this.document.elevation.bottom ?? Number.NEGATIVE_INFINITY;
+}
+
+async function regionWallTopE(value) {
+ if ( !(is.null(value) || Number.isNumeric(value)) ) {
+    console.err("setRegionTopE value must be a number or null.");
+    return;
+  }
+  const { ID, FLAGS } = MODULE_KEYS.EV;
+  return this.document.update({ "elevation.top": value });
+}
+
+async function regionWallBottomE(value) {
+  if ( !(is.null(value) || Number.isNumeric(value)) ) {
+    console.err("setRegionTopE value must be a number or null.");
+    return;
+  }
+  return this.document.update({ "elevation.bottom": value });
+}
+
+// ----- NOTE: Token elevation ----- //
 
 /**
  * Calculated vertical height of a token.
@@ -377,6 +406,14 @@ PATCHES.Wall.ELEVATION.METHODS = {
   setTopE: setWallTopE,
   setTopZ: setZTop,
   setBottomE: setWallBottomE,
+  setBottomZ: setZBottom
+};
+
+// ----- NOTE: Region ----- //
+PATCHES.Region.ELEVATION.METHODS = {
+  setTopE: setRegionTopE,
+  setTopZ: setZTop,
+  setBottomE: setRegionBottomE,
   setBottomZ: setZBottom
 };
 
