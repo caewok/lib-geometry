@@ -62,7 +62,18 @@ export class Ellipse extends PIXI.Ellipse {
    */
   constructor(x, y, halfWidth, halfHeight, { rotation = 0 } = {}) {
     super(x, y, halfWidth, halfHeight);
-    this.rotation = Math.normalizeDegrees(rotation);
+    this.rotation = rotation;
+    this.recalculateProperties();
+  }
+
+  /**
+   * Recalculate properties set on construction.
+   */
+  recalculateProperties() {
+    const halfWidth = this.width;
+    const halfHeight = this.height;
+
+    this.rotation = Math.normalizeDegrees(this.rotation);
     this.radians = Math.toRadians(this.rotation);
 
     this.major = Math.max(halfWidth, halfHeight);
