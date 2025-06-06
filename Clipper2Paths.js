@@ -58,6 +58,28 @@ export class Clipper2Paths {
     return path;
   }
 
+  /**
+   * Convert an array of Clipper1 path points {X, Y} to a Path64.
+   * @param {Clipper1Path} pts
+   * @returns {Path64}
+   */
+  static pathFromClipper1Points(pts, scalingFactor = 1) {
+    const nPts = pts.length;
+    const path = new Path64(nPts)
+    if ( scalingFactor === 1 ) {
+      for ( let i = 0; i < nPts; i += 1 ) {
+        const pt = pts[i];
+        path[i] = new Point64(pt.X, pt.Y);
+      }
+    } else {
+      for ( let i = 0; i < nPts; i += 1 ) {
+        const pt = pts[i];
+        path[i] = new Point64({ x: pt.X, y: pt.Y }, scalingFactor);
+      }
+    }
+    return path;
+  }
+
   static pathToPoints(path, scalingFactor = 1) {
     const invScale = 1 / scalingFactor;
     return path.map(pt64 => new PIXI.Point(pt64.x * invScale, pt64.y * invScale));
