@@ -66,6 +66,13 @@ export class Ellipse extends PIXI.Ellipse {
     this.recalculateProperties();
   }
 
+  clone() {
+    const out = super.clone();
+    out.rotation = this.rotation;
+    out.recalculateProperties();
+    return out;
+  }
+
   /**
    * Recalculate properties set on construction.
    */
