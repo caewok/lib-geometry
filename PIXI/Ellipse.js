@@ -118,7 +118,7 @@ function pointIsOn(point, epsilon = 1e-08) {
  */
 function toPolygon({ density } = {}) {
   // Default to the larger radius for density
-  density ??= PIXI.Circle.approximateVertexDensity(this.major);
+  density ??= PIXI.Circle.approximateVertexDensity(this.majorRadius);
 
   // Translate to a circle to get the circle polygon
   const cirPoly = this._toCircle().toPolygon({ density });
@@ -205,7 +205,7 @@ function overlaps(other) {
 
 function _overlapsEllipse(other) {
   // Simple test based on centers and shortest radius.
-  const r2 = Math.pow(this.minor + other.minor, 2); // Sum the two minor axis radii.
+  const r2 = Math.pow(this.minorRadius + other.minorRadius, 2); // Sum the two minor axis radii.
   const d2 = PIXI.Point.distanceSquaredBetween(this.center, other.center);
   if ( d2 < r2 ) return true;
 
@@ -243,7 +243,7 @@ function _overlapsCircle(circle) {
   if ( circle.contains(this.x, this.y) ) return true;
 
   // Simple test based on radius.
-  const r2 = Math.pow(circle.radius + this.minor, 2);
+  const r2 = Math.pow(circle.radius + this.minorRadius, 2);
   const d2 = PIXI.Point.distanceSquaredBetween(this.center, circle.center);
   if ( d2 < r2 ) return true;
 
@@ -281,7 +281,7 @@ function _overlapsPolygon(other) {
  */
 function pointsBetween(a, b, { density } = {}) {
   // Default to the larger radius for density
-  density ??= PIXI.Circle.approximateVertexDensity(this.major);
+  density ??= PIXI.Circle.approximateVertexDensity(this.majorRadius);
 
   // Translate to a circle
   const cir = this._toCircle();
@@ -306,10 +306,10 @@ function pointsBetween(a, b, { density } = {}) {
  * @returns {PIXI.Polygon|null}       The intersected polygon or null if no solution was present
  */
 function intersectPolygon(polygon, { density, clipType, weilerAtherton=true, ...options } = {}) {
-  if ( !this.major || !this.minor ) return new PIXI.Polygon([]);
+  if ( !this.majorRadius || !this.minorRadius ) return new PIXI.Polygon([]);
 
   // Default to the larger radius for density
-  density ??= PIXI.Circle.approximateVertexDensity(this.major);
+  density ??= PIXI.Circle.approximateVertexDensity(this.majorRadius);
   clipType ??= WeilerAthertonClipper.CLIP_TYPES.INTERSECT;
 
   // Use Weiler-Atherton for efficient intersection or union.

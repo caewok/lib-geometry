@@ -152,7 +152,8 @@ export class Ellipse extends PIXI.Ellipse {
     }
 
     // Default to bounding box of the radius circle
-    return new PIXI.Rectangle(this.x - this.major, this.y - this.major, this.major * 2, this.major * 2);
+    const major = this.majorRadius;
+    return new PIXI.Rectangle(this.x - major, this.y - major, major * 2, major * 2);
   }
 
   /**
@@ -174,7 +175,7 @@ export class Ellipse extends PIXI.Ellipse {
 
   _overlapsEllipse(other) {
     // Simple test based on centers and shortest radius.
-    const r2 = Math.pow(this.minor + other.minor, 2); // Sum the two minor axis radii.
+    const r2 = Math.pow(this.minorRadius + other.minorRadius, 2); // Sum the two minor axis radii.
     const d2 = PIXI.Point.distanceSquaredBetween(this.center, other.center);
     if ( d2 < r2 ) return true;
 
@@ -215,7 +216,7 @@ export class Ellipse extends PIXI.Ellipse {
     if ( circle.contains(this.x, this.y) ) return true;
 
     // Simple test based on radius.
-    const r2 = Math.pow(circle.radius + this.minor, 2);
+    const r2 = Math.pow(circle.radius + this.minorRadius, 2);
     const d2 = PIXI.Point.distanceSquaredBetween(this.center, circle.center);
     if ( d2 < r2 ) return true;
 
@@ -224,7 +225,7 @@ export class Ellipse extends PIXI.Ellipse {
     const cirCtr = PIXI.Point._tmp1;
     circle.center.translate(-this.x, -this.y, cirCtr).rotate(-this.radians, cirCtr);
     return this.constructor.quickEllipsesOverlapTest(
-      0, 0, this.major, this.minor,
+      0, 0, this.majorRadius, this.minorRadius,
       cirCtr.x, cirCtr.y, circle.radius, circle.radius
     );
   }
