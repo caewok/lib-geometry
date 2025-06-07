@@ -66,22 +66,23 @@ function _toCartesianCoords(a, outPoint) {
 
 function _toCircleCoords(a, outPoint) {
   outPoint ??= new PIXI.Point();
+  const ratio = this.height / this.width;
 
-  outPoint.x = a.x * (1 / this.ratio);
+  outPoint.x = a.x * ratio;
   outPoint.y = a.y;
   return outPoint;
 }
 
 function _fromCircleCoords(a, outPoint) {
   outPoint ??= new PIXI.Point();
-
-  outPoint.x = a.x * this.ratio;
+  const ratio = this.width / this.height;
+  outPoint.x = a.x * ratio;
   outPoint.y = a.y;
 
   return outPoint;
 }
 
-function _toCircle() { return new PIXI.Circle(0, 0, this.minorRadius); }
+function _toCircle() { return new PIXI.Circle(0, 0, this.height); }
 
 /**
  * Determine if the point is on or nearly on this polygon.
