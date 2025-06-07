@@ -61,6 +61,7 @@ import { PATCHES as PATCHES_Circle } from "./PIXI/Circle.js";
 import { PATCHES as PATCHES_Point } from "./PIXI/Point.js";
 import { PATCHES as PATCHES_Polygon } from "./PIXI/Polygon.js";
 import { PATCHES as PATCHES_Rectangle } from "./PIXI/Rectangle.js";
+import { PATCHES as PATCHES_Ellipse } from "./PIXI/Ellipse.js";
 
 // Elevation
 import { PATCHES as PATCHES_ELEVATION } from "./elevation.js";
@@ -90,6 +91,7 @@ const PATCHES = {
   "PIXI.Point": PATCHES_Point,
   "PIXI.Polygon": PATCHES_Polygon,
   "PIXI.Rectangle": PATCHES_Rectangle,
+  "PIXI.Ellipse": PATCHES_Ellipse,
 
   // PixelCache
   "Tile": PATCHES_Tile,
