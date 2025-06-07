@@ -9,7 +9,7 @@ import "../Matrix.js";
 export const PATCHES = {};
 PATCHES.PIXI = {};
 
-import { Ellipse } from "./Ellipse.js";
+import { Ellipse } from "../Ellipse.js";
 
 /**
  * Calculate area of rectangle

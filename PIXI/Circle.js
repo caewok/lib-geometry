@@ -7,7 +7,7 @@ PIXI
 export const PATCHES = {};
 PATCHES.PIXI = {};
 
-import { Ellipse } from "./Ellipse.js";
+import { Ellipse } from "../Ellipse.js";
 
 /**
  * Calculate the angle of a point in relation to a circle.
