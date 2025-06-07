@@ -9,6 +9,8 @@ import "../Matrix.js";
 export const PATCHES = {};
 PATCHES.PIXI = {};
 
+import { Ellipse } from "./Ellipse.js";
+
 /**
  * Calculate area of rectangle
  * @returns {number}
@@ -90,6 +92,7 @@ function overlaps(shape) {
   if ( shape instanceof PIXI.Polygon ) { return this._overlapsPolygon(shape); }
   if ( shape instanceof PIXI.Circle ) { return this._overlapsCircle(shape); }
   if ( shape instanceof PIXI.Rectangle ) { return this._overlapsRectangle(shape); }
+  if ( other instanceof Ellipse ) return other._overlapsRectangle(this);
   if ( shape.toPolygon) return this._overlapsPolygon(shape.toPolygon());
   console.warn("overlaps|shape not recognized.", shape);
   return false;

@@ -7,6 +7,8 @@ PIXI
 export const PATCHES = {};
 PATCHES.PIXI = {};
 
+import { Ellipse } from "./Ellipse.js";
+
 /**
  * Calculate the angle of a point in relation to a circle.
  * This is the angle of a line from the circle center to the point.
@@ -56,6 +58,7 @@ function overlaps(other) {
   if ( other instanceof PIXI.Circle ) return this._overlapsCircle(other);
   if ( other instanceof PIXI.Polygon ) return other._overlapsCircle(this);
   if ( other instanceof PIXI.Rectangle ) return other._overlapsCircle(this);
+  if ( other instanceof Ellipse ) return other._overlapsCircle(this);
   if ( other.toPolygon) return other.toPolygon()._overlapsCircle(this);
   console.warn("overlaps|shape not recognized.", other);
   return false;

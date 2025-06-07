@@ -1,6 +1,7 @@
 /* globals
+CONFIG,
 PIXI,
-WeilerAthertonClipper
+WeilerAthertonClipper,
 */
 "use strict";
 
@@ -112,7 +113,7 @@ export class Ellipse extends PIXI.Ellipse {
    * Center of the ellipse
    * @type {Point}
    */
-  get center() { return { x: this.x, y: this.y }; }
+  get center() { return new PIXI.Point(this.x, this.y); }
 
   /**
    * Area of the ellipse
@@ -330,6 +331,116 @@ export class Ellipse extends PIXI.Ellipse {
     // Test for intersection on the circle.
     return cir.lineSegmentIntersects(a, b);
   }
+
+  /**
+   * Does this ellipse overlap something else?
+   * @param {PIXI.Rectangle|PIXI.Circle|PIXI.Polygon|PIXI.Ellipse} other
+   * @returns {boolean}
+   */
+  overlaps(other) {
+    if ( other instanceof Ellipse ) return this._overlapsEllipse(other);
+    if ( other instanceof PIXI.Circle ) return this._overlapsCircle(other);
+
+    // Conversion to circle space may rotate the rectangle, so use polygon.
+    if ( other instanceof PIXI.Rectangle ) return this._overlapsPolygon(other.toPolygon());
+    if ( other instanceof PIXI.Polygon ) return this._overlapsPolygon(other);
+    if ( other.toPolygon ) return this._overlapsPolygon(other.toPolygon());
+    console.warn("overlaps|shape not recognized.", other);
+    return false;
+  }
+
+  _overlapsEllipse(other) {
+    // Simple test based on centers and shortest radius.
+    const r2 = Math.pow(this.minor, other.minor, 2); // Sum the two minor axis radii.
+    const d2 = PIXI.Point.distanceSquaredBetween(this.center, other.center);
+    if ( d2 < r2 ) return true;
+
+    // If no rotation or aligned to an axis, use the quick test.
+    // Check if the distance between the centers of the two ellipses
+    // is less than the sum of their effective radii along the line
+    // connecting their centers.
+    if ( this.rotation % 90 === 0 && other.rotation % 90 === 0 ) {
+      // (x2 - x1)² / (a1 + a2)² + (y2 - y1)² / (b1 + b2)² <= 1
+      const thisIsVertical = this.rotation === 90 || this.rotation === 270;
+      const otherIsVertical = other.rotation === 90 || other.rotation === 270;
+      const [thisWidth, thisHeight] = thisIsVertical ? [this.height, this.width] : [this.width, this.height];
+      const [otherWidth, otherHeight] = otherIsVertical ? [other.height, other.width] : [other.width, other.height];
+      return this.constructor.quickEllipsesOverlapTest(
+        this.x, this.y, thisWidth, thisHeight,
+        other.x, other.y, otherWidth, otherHeight
+      );
+    }
+
+    // Convert to this ellipse's circle space and test circle-ellipse overlap.
+    const cir = this._toCircle();
+
+    // Move to ellipse coordinates and then to circle coordinates.
+    // Use the major-minor points to determine height and width of the converted ellipse.
+    const otherCtr = PIXI.Point._tmp1.set(other.x, other.y);
+    const otherV = otherCtr.fromAngle(other.radians, other.width, PIXI.Point._tmp2);
+    const otherCV = otherCtr.fromAngle(other.radians + Math.PI_1_2, other.height, PIXI.Point._tmp3);
+
+    const c = this.toCircleCoords(this.fromCartesianCoords(otherCtr));
+    const v = this.toCircleCoords(this.fromCartesianCoords(otherV));
+    const cv = this.toCircleCoords(this.fromCartesianCoords(otherCV));
+    const w = PIXI.Point.distanceBetween(c, v);
+    const h = PIXI.Point.distanceBetween(c, cv);
+    const ellipse = new Ellipse(c.x, c.y, w, h, { rotation: other.rotation });
+    return cir.overlaps(ellipse);
+  }
+
+  /**
+   * Test for ellipses overlap where neither is rotated.
+   * @param {number} ax       X coordinate
+   * @param {number} ay       Y coordinate
+   * @param {number} aMajor   Major axis radius
+   * @param {number} aMinor   Minor axis radius
+   * @param {number} bx       X coordinate
+   * @param {number} by       Y coordinate
+   * @param {number} bMajor   Major axis radius
+   * @param {number} bMinor   Minor axis radius
+   */
+  static quickEllipsesOverlapTest(ax, ay, aMajor, aMinor, bx, by, bMajor, bMinor) {
+    // (x2 - x1)² / (a1 + a2)² + (y2 - y1)² / (b1 + b2)² <= 1
+    const dx = bx - ax;
+    const dy = by - ay;
+    const major = aMajor + bMajor;
+    const minor = aMinor + bMinor;
+    return ((dx * dx) / (major * major)) + ((dy * dy) / (minor * minor)) <= 1;
+  }
+
+  _overlapsCircle(circle) {
+    // Simple test based on radius.
+    const r2 = Math.pow(circle.radius + this.minor, 2);
+    const d2 = PIXI.Point.distanceSquaredBetween(this.center, circle.center);
+    if ( d2 < r2 ) return true;
+
+    // Align this ellipse to the axis at 0,0 and rotate to 0º.
+    // I.e, move the circle and then rotate it.
+    const cirCtr = PIXI.Point._tmp1;
+    circle.center.translate(-this.x, -this.y, cirCtr).rotate(-this.radians, cirCtr);
+    return this.constructor.quickEllipsesOverlapTest(
+      0, 0, this.major, this.minor,
+      cirCtr.x, cirCtr.y, circle.radius, circle.radius
+    );
+  }
+
+  _overlapsRectangle(other) {
+     // Conversion to circle space may rotate the rectangle, so use polygon.
+     return this._overlapsPolygon(other.toPolygon());
+  }
+
+  _overlapsPolygon(other) {
+    // Convert this ellipse to a circle and test against converted polygon.
+    const cir = this.toCircle();
+
+    // Move polygon to ellipse coordinates.
+    const pts = [...other.iteratePoints({ close: false })].map(pt => this.toCircleCoords(pt));
+    const poly = new PIXI.Polygon(pts);
+    return poly._overlapsCircle(cir);
+  }
+
+
 
   /**
    * Get all the points for a polygon approximation of a circle between two points on the circle.
