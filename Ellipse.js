@@ -113,7 +113,7 @@ export class Ellipse extends PIXI.Ellipse {
    * @param {PIXI.Point} [outPoint] A point-like object to store the result.
    * @returns {PIXI.Point}
    */
-  fromCartesianCoords(a, outPoint) {
+  _fromCartesianCoords(a, outPoint) {
     outPoint ??= new PIXI.Point();
     a = PIXI.Point.fromObject(a);
     a.translate(-this.x, -this.y, outPoint).rotate(-this.radians, outPoint);
@@ -126,7 +126,7 @@ export class Ellipse extends PIXI.Ellipse {
    * @param {PIXI.Point} [outPoint] A point-like object to store the result.
    * @returns {Point}
    */
-  toCartesianCoords(a, outPoint) {
+  _toCartesianCoords(a, outPoint) {
     outPoint ??= new PIXI.Point();
     a = PIXI.Point.fromObject(a);
     a.rotate(this.radians, outPoint).translate(this.x, this.y, outPoint);
@@ -202,9 +202,9 @@ export class Ellipse extends PIXI.Ellipse {
     const otherV = otherCtr.fromAngle(other.radians, other.width, PIXI.Point._tmp2);
     const otherCV = otherCtr.fromAngle(other.radians + Math.PI_1_2, other.height, PIXI.Point._tmp3);
 
-    const c = this.toCircleCoords(this.fromCartesianCoords(otherCtr));
-    const v = this.toCircleCoords(this.fromCartesianCoords(otherV));
-    const cv = this.toCircleCoords(this.fromCartesianCoords(otherCV));
+    const c = this._toCircleCoords(this._fromCartesianCoords(otherCtr));
+    const v = this._toCircleCoords(this._fromCartesianCoords(otherV));
+    const cv = this._toCircleCoords(this._fromCartesianCoords(otherCV));
     const w = PIXI.Point.distanceBetween(c, v);
     const h = PIXI.Point.distanceBetween(c, cv);
     const ellipse = new Ellipse(c.x, c.y, w, h, { rotation: otherRot });

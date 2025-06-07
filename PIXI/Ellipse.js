@@ -95,7 +95,7 @@ function pointIsOn(point, epsilon = 1e-08) {
 
   // Move point to Ellipse-space
   const pt = PIXI.Point.fromObject(point);
-  this.fromCartesianCoords(pt, pt);
+  this._fromCartesianCoords(pt, pt);
 
   // Reject if x is outside the bounds
   if ( pt.x < -width
@@ -131,8 +131,8 @@ function toPolygon({ density } = {}) {
     const cirPt = new PIXI.Point(cirPts[i], cirPts[i + 1]);
     const ePt = new PIXI.Point();
 
-    this.fromCircleCoords(cirPt, ePt);
-    this.toCartesianCoords(ePt, ePt);
+    this._fromCircleCoords(cirPt, ePt);
+    this._toCartesianCoords(ePt, ePt);
 
     pts[i] = ePt.x;
     pts[i+1] = ePt.y;
@@ -154,14 +154,14 @@ function segmentIntersections(a, b) {
   const cir = this._toCircle();
 
   // Move to ellipse coordinates and then to circle coordinates.
-  a = this.toCircleCoords(this.fromCartesianCoords(a));
-  b = this.toCircleCoords(this.fromCartesianCoords(b));
+  a = this._toCircleCoords(this._fromCartesianCoords(a));
+  b = this._toCircleCoords(this._fromCartesianCoords(b));
 
   // Get the intersection points and convert back to cartesian coords.
   // Add t0 to indicate distance from a, to match other segmentIntersection functions.
   const dist2 = PIXI.Point.distanceSquaredBetween(a, b);
   return cir.segmentIntersections(a, b).map(ix => {
-    const newIx = this.toCartesianCoords(this.fromCircleCoords(ix));
+    const newIx = this._toCartesianCoords(this._fromCircleCoords(ix));
     newIx.t0 =  Math.sqrt(PIXI.Point.distanceSquaredBetween(a, ix) / dist2);
     return newIx;
   });
@@ -178,8 +178,8 @@ function lineSegmentIntersects(a, b) {
   const cir = this._toCircle();
 
   // Move to ellipse coordinates and then to circle coordinates.
-  a = this.toCircleCoords(this.fromCartesianCoords(a));
-  b = this.toCircleCoords(this.fromCartesianCoords(b));
+  a = this._toCircleCoords(this._fromCartesianCoords(a));
+  b = this._toCircleCoords(this._fromCartesianCoords(b));
 
   // Test for intersection on the circle.
   return cir.lineSegmentIntersects(a, b);
@@ -264,10 +264,10 @@ function _overlapsRectangle(other) {
 
 function _overlapsPolygon(other) {
   // Convert this ellipse to a circle and test against converted polygon.
-  const cir = this.toCircle();
+  const cir = this._toCircle();
 
   // Move polygon to ellipse coordinates.
-  const pts = [...other.iteratePoints({ close: false })].map(pt => this.toCircleCoords(pt));
+  const pts = [...other.iteratePoints({ close: false })].map(pt => this._toCircleCoords(pt));
   const poly = new PIXI.Polygon(pts);
   return poly._overlapsCircle(cir);
 }
@@ -287,12 +287,12 @@ function pointsBetween(a, b, { density } = {}) {
   const cir = this._toCircle();
 
   // Move to ellipse coordinates and then to circle coordinates
-  a = this.toCircleCoords(this.fromCartesianCoords(a));
-  b = this.toCircleCoords(this.fromCartesianCoords(b));
+  a = this._toCircleCoords(this._fromCartesianCoords(a));
+  b = this._toCircleCoords(this._fromCartesianCoords(b));
 
   // Get the points and translate back to cartesian coordinates
   const pts = cir.pointsBetween(a, b, { density });
-  return pts.map(pt => this.toCartesianCoords(this.fromCircleCoords(pt)));
+  return pts.map(pt => this._toCartesianCoords(this._fromCircleCoords(pt)));
 }
 
 /**
