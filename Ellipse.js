@@ -228,6 +228,12 @@ export class Ellipse extends PIXI.Ellipse {
       cirCtr.x, cirCtr.y, circle.radius, circle.radius
     );
   }
+
+  draw(drawTool, opts = {}) {
+    drawTool ??= CONFIG.GeometryLib.Draw;
+    const shape = this.rotation ? this.toPolygon : this;
+    drawTool.shape(shape, opts);
+  }
 }
 
 GEOMETRY_CONFIG.Ellipse ??= Ellipse;
