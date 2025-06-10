@@ -1418,8 +1418,8 @@ export class MatrixFlat {
   print({ startR, startC, endR, endC } = {}) {
     startR ??= 0;
     startC ??= 0;
-    endR ??= mat.nrow;
-    endC ??= mat.ncol;
+    endR ??= this.nrow;
+    endC ??= this.ncol;
 
     // console.table prints arrays of arrays nicely.
     const out = new Array(endR - startR);
