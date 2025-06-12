@@ -1,6 +1,7 @@
 /* globals
 CONFIG,
-PIXI
+foundry,
+PIXI,
 */
 "use strict";
 
