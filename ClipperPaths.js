@@ -244,6 +244,9 @@ export class ClipperPaths {
     return this.paths.map(pts => {
       const poly = PIXI.Polygon.fromClipperPoints(pts, {scalingFactor: this.scalingFactor});
       poly.isHole = !ClipperLib.Clipper.Orientation(pts);
+
+      // Could use reverseSolution but not guaranteed control over that parameter.
+      if ( poly.isHole ^ poly.isClockwise ) poly.reverseOrientation();
       return poly;
     });
   }

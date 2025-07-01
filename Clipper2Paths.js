@@ -199,6 +199,9 @@ export class Clipper2Paths {
       const pts = this.constructor.pathToFlatArray(path, this.scalingFactor);
       const poly = new PIXI.Polygon(...pts);
       poly.isHole = !Clipper2.Clipper.isPositive(path);
+
+      // Could use reverseSolution but not guaranteed control over that parameter.
+      if ( poly.isHole ^ poly.isClockwise ) poly.reverseOrientation();
       return poly;
     });
   }
