@@ -127,19 +127,21 @@ export class ClipperPaths {
       holes: [],
       dimensions: 2
     };
-
     const paths = this.paths;
     const nPaths = paths.length;
-    if ( nPaths === 0 ) return out;
+    if ( !nPaths ) return out;
 
-    out.vertices = this.constructor.flattenPath(paths[0]);
-    for ( let i = 1; i < nPaths; i += 1 ) {
-      const path = paths[i];
-      const isHole = !ClipperLib.Clipper.Orientation(path);
-      if ( !isHole ) console.warn("Earcut may fail with multiple outer polygons.");
-      const category = isHole ? out.holes : out.vertices;
-      category.push(this.constructor.flattenPath(path));
-    }
+    let numBasePolys = 0;
+    this.toPolygons().forEach(poly => {
+      if ( poly.isHole ) out.holes.push(poly.points);
+      else {
+        out.vertices.push(...poly.points);
+        numBasePolys += 1;
+      }
+    });
+    // If poly -- hole -- poly, could be fine if second poly encompassed by hole.
+    // But multiple independent polys could be an issue.
+    if ( numBasePolys > 1 ) console.warn("Earcut may fail with multiple outer polygons.");
 
     // Concatenate holes and add indices
     const nHoles = out.holes.length;
@@ -155,7 +157,6 @@ export class ClipperPaths {
       }
       out.holes = indices;
     }
-
     return out;
   }
 
