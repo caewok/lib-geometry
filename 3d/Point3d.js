@@ -385,10 +385,13 @@ export class Point3d extends PIXI.Point {
    */
   to2d({x = "x", y = "y", homogenous = false} = {}) {
     if ( homogenous ) {
-      const coords = new Set(["x", "y", "z"]);
-      coords.delete(x);
-      coords.delete(y);
-      const z = coords.first();
+      let z = "z"
+      if ( !(x === "x" && y === "y") ) { // In rare case when homogenous along another dimension.
+        const coords = new Set(["x", "y", "z"]);
+        coords.delete(x);
+        coords.delete(y);
+        z = coords.first();
+      }
       return new PIXI.Point(this[x] / this[z], this[y] / this[z]);
     }
     return new PIXI.Point(this[x], this[y]);
