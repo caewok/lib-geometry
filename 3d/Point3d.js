@@ -377,12 +377,20 @@ export class Point3d extends PIXI.Point {
 
   /**
    * Drop the z dimension; return a new PIXI.Point
-   * @param [object] [options]    Options that affect which axes are used
-   * @param [string] [options.x]  Which 3d axis to use for the x axis
-   * @param [string] [options.y]  Which 3d axis to use for the y axis
+   * @param {object} [opts]    Options that affect which axes are used
+   * @param {string} [opts.x]  Which 3d axis to use for the x axis
+   * @param {string} [opts.y]  Which 3d axis to use for the y axis
+   * @param {boolean} [opts.homogeous] Whether to divde by the third ("z") axis
    * @returns {PIXI.Point}
    */
-  to2d({x = "x", y = "y"} = {}) {
+  to2d({x = "x", y = "y", homogenous = false} = {}) {
+    if ( homogenous ) {
+      const coords = new Set(["x", "y", "z"]);
+      coords.delete(x);
+      coords.delete(y);
+      const z = coords.first();
+      return new PIXI.Point(this[x] / this[z], this[y] / this[z]);
+    }
     return new PIXI.Point(this[x], this[y]);
   }
 
