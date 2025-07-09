@@ -7,7 +7,12 @@ PIXI
 import "./Point3d.js";
 import "../Matrix.js";
 import { GEOMETRY_CONFIG } from "../const.js";
+import { Point3d } from "./Point3d.js";
 
+const tmpPt3d0 = new Point3d();
+const tmpPt3d1 = new Point3d();
+const tmpPt3d2 = new Point3d();
+const tmpPt3d3 = new Point3d();
 
 // Class to represent a plane
 export class Plane {
@@ -50,10 +55,10 @@ export class Plane {
     b = b.clone();
     c = c.clone();
 
-    const vAB = b.subtract(a);
-    const vAC = c.subtract(a);
+    const vAB = b.subtract(a, tmpPt3d0);
+    const vAC = c.subtract(a, tmpPt3d1);
 
-    const normal = vAB.cross(vAC);
+    const normal = vAB.cross(vAC, tmpPt3d2);
     const plane = new Plane(a, normal);
     plane._threePoints = {a, b, c};
     return plane;
@@ -93,8 +98,8 @@ export class Plane {
   }
 
   static angleBetweenSegments(a, b, c, d) {
-    const V1 = b.subtract(a);
-    const V2 = d.subtract(c);
+    const V1 = b.subtract(a, tmpPt3d0);
+    const V2 = d.subtract(c, tmpPt3d1);
     const magV1 = V1.magnitude();
     const magV2 = V2.magnitude();
     const mag = magV1 * magV2;
@@ -194,7 +199,7 @@ export class Plane {
    */
   distanceToPoint(a) {
     const { normal, point } = this;
-    return normal.dot(a.subtract(point));
+    return normal.dot(a.subtract(point, tmpPt3d0));
   }
 
   /**
@@ -217,11 +222,11 @@ export class Plane {
    */
   static rayIntersectionTriangle3d(rayOrigin, rayDirection, v0, v1, v2) {
     // Calculate the edge vectors of the triangle
-    const edge1 = v1.subtract(v0);
-    const edge2 = v2.subtract(v0);
+    const edge1 = v1.subtract(v0, tmpPt3d0);
+    const edge2 = v2.subtract(v0, tmpPt3d1);
 
     // Calculate the determinant of the triangle
-    const pvec = rayDirection.cross(edge2);
+    const pvec = rayDirection.cross(edge2, tmpPt3d2);
 
     // If the determinant is near zero, ray lies in plane of triangle
     const det = edge1.dot(pvec);
@@ -229,11 +234,11 @@ export class Plane {
     const invDet = 1 / det;
 
     // Calculate the intersection point using barycentric coordinates
-    const tvec = rayOrigin.subtract(v0);
+    const tvec = rayOrigin.subtract(v0, tmpPt3d3);
     const u = invDet * tvec.dot(pvec);
     if (u < 0 || u > 1) return null;  // Intersection point is outside of triangle
 
-    const qvec = tvec.cross(edge1);
+    const qvec = tvec.cross(edge1, edge1);
     const v = invDet * rayDirection.dot(qvec);
     if (v < 0 || u + v > 1) return null;  // Intersection point is outside of triangle
 
@@ -316,8 +321,7 @@ export class Plane {
     // Triangles are 0 - 1 - 2 and 1-2-3
 
     return Plane.rayIntersectionTriangle3d(rayOrigin, rayDirection, v0, v1, v2)
-      ?? Plane.rayIntersectionTriangle3d(rayOrigin, rayDirection, v1, v2, v3)
-      ?? null;
+      ?? Plane.rayIntersectionTriangle3d(rayOrigin, rayDirection, v1, v2, v3);
   }
 
   /**
@@ -335,34 +339,36 @@ export class Plane {
    */
   static rayIntersectionQuad3dLD(rayOrigin, rayDirection, v0, v1, v2, v3) {
     // Reject rays using the barycentric coordinates of the intersection point with respect to T
-    const E01 = v1.subtract(v0);
-    const E03 = v3.subtract(v0);
-    const P = rayDirection.cross(E03);
+    const E01 = v1.subtract(v0, tmpPt3d0);
+    const E03 = v3.subtract(v0, tmpPt3d1);
+    const P = rayDirection.cross(E03, tmpPt3d2);
     const det = E01.dot(P);
     if ( Math.abs(det) < Number.EPSILON ) return null;
 
-    const T = rayOrigin.subtract(v0);
+    const T = rayOrigin.subtract(v0, tmpPt3d3);
     const alpha = T.dot(P) / det;
     if ( alpha < 0 ) return null;
     if ( alpha > 1 ) return null;
 
-    const Q = T.cross(E01);
+    const Q = T.cross(E01, E01);
     const beta = rayDirection.dot(Q) / det;
     if ( beta < 0 ) return null;
     if ( beta > 1 ) return null;
 
+    // Done with E01 (tmpPt3d0), P (tmpPt3d2), T (tmpPt3d3).
+
     // Reject rays using the barycentric coordinates of the intersection point with respect to T'
     if ( (alpha + beta) > 1 ) {
-      const E23 = v3.subtract(v2);
-      const E21 = v1.subtract(v2);
-      const Pprime = rayDirection.cross(E21);
+      const E23 = v3.subtract(v2, tmpPt3d0);
+      const E21 = v1.subtract(v2, tmpPt3d2);
+      const Pprime = rayDirection.cross(E21, E21);
       const detprime = E23.dot(Pprime);
       if ( Math.abs(detprime) < Number.EPSILON ) return null;
 
-      const Tprime = rayOrigin.subtract(v2);
+      const Tprime = rayOrigin.subtract(v2, tmpPt3d3);
       const alphaprime = Tprime.dot(Pprime) / detprime;
       if ( alphaprime < 0 ) return null;
-      const Qprime = Tprime.cross(E23);
+      const Qprime = Tprime.cross(E23, E23);
       const betaprime = rayDirection.dot(Qprime) / detprime;
       if ( betaprime < 0 ) return null;
     }
@@ -411,8 +417,8 @@ export class Plane {
     // https://math.stackexchange.com/questions/684141/check-if-a-point-is-on-a-plane-minimize-the-use-of-multiplications-and-divisio
     const vs = this.axisVectors;
     const a = this.point;
-    const b = this.point.add(vs.v);
-    const c = this.point.add(vs.u);
+    const b = this.point.add(vs.v, tmpPt3d0);
+    const c = this.point.add(vs.u, tmpPt3d1);
 
     const m = new CONFIG.GeometryLib.Matrix([
       [a.x, b.x, c.x, p.x],
@@ -488,10 +494,10 @@ export class Plane {
     const { normal: N, point: P } = this;
     const vs = this.axisVectors;
 
-    const u = P.add(vs.u);
-    const v = P.subtract(vs.v);
+    const u = P.add(vs.u, tmpPt3d0);
+    const v = P.subtract(vs.v, tmpPt3d1);
     const A = P;
-    const n = P.add(N);
+    const n = P.add(N, tmpPt3d2);
 
     // Three points
     /* Original version, for testing
@@ -577,7 +583,7 @@ export class Plane {
     // Test if line and plane are parallel and do not intersect.
     if ( dot.almostEqual(0) ) return null;
 
-    const w = l0.subtract(P);
+    const w = l0.subtract(P, tmpPt3d0);
     const fac = -N.dot(w) / dot;
     const u = l.multiplyScalar(fac);
     return l0.add(u);
@@ -634,7 +640,7 @@ export class Plane {
     const N2 = other.normal;
 
     // Cross product of the two normals is the direction of the line.
-    const direction = N1.cross(N2);
+    const direction = N1.cross(N2, tmpPt3d0);
 
     // Parallel planes have a cross product with zero magnitude
     if ( !direction.magnitudeSquared() ) return null;

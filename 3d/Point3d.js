@@ -35,6 +35,9 @@ PIXI
 import { GEOMETRY_CONFIG } from "../const.js";
 import "../Matrix.js";
 
+// Temporary points used internally.
+const tmpPt0 = new PIXI.Point();
+
 /**
  * 3-D version of PIXI.Point
  * See https://pixijs.download/dev/docs/packages_math_src_Point.ts.html
@@ -631,7 +634,7 @@ export class Point3d extends PIXI.Point {
    * @returns {boolean}
    */
   equalXY(other) {
-    const pt2d = PIXI.Point._tmp.set(this.x, this.y);
+    const pt2d = tmpPt0.set(this.x, this.y);
     return pt2d.equals(other);
   }
 
@@ -642,7 +645,7 @@ export class Point3d extends PIXI.Point {
    * @returns {boolean}
    */
   almostEqualXY(other, epsilon) {
-    const pt2d = PIXI.Point._tmp.set(this.x, this.y);
+    const pt2d = tmpPt0.set(this.x, this.y);
     return pt2d.almostEqual(other, epsilon);
   }
 
