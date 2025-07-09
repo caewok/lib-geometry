@@ -286,6 +286,29 @@ function segmentIntersections(a, b, { indices = false } = {}) {
 }
 
 /**
+ * Get all intersection points for a line that goes through A|B
+ * @param {Point} a   Endpoint A of the segment
+ * @param {Point} b   Endpoint B of the segment
+ * @param {object} [options]    Optional parameters
+ * @param {object[]} [options.edges]  Array of edges for this polygon, from this.iterateEdges.
+ * @param {boolean} [options.indices] If true, return the indices for the edges instead of intersections
+ * @returns {Point[]} Array of intersections or empty.
+ *   If intersections returned, the t of each intersection is the distance along the a|b segment.
+ */
+function lineIntersections(a, b, { indices = false } = {}) {
+  const edges = this.pixiEdges();
+  const ixIndices = [];
+  const ixs = [];
+  edges.forEach((edge, i) => {
+    const ix = foundry.utils.lineLineIntersection(a, b, edge.A, edge.B);
+    if ( indices ) { ixIndices.push(i); return; }
+    if ( ix.t0.between(0, 1) || ix.almostEqual(edge.A) || ix.almostEqual(edge.B) ) ixs.push(ix);
+  });
+  if ( indices ) return ixIndices;
+  return ixs;
+}
+
+/**
  * Get all the points for this polygon between two points on the polygon
  * Points are clockwise from a to b.
  * @param { Point } a
