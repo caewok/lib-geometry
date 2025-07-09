@@ -315,13 +315,9 @@ export class Plane {
   static rayIntersectionQuad3d(rayOrigin, rayDirection, v0, v1, v2, v3) {
     // Triangles are 0 - 1 - 2 and 1-2-3
 
-    const t0 = Plane.rayIntersectionTriangle3d(rayOrigin, rayDirection, v0, v1, v2);
-    if ( t0 ) return t0;
-
-    const t1 = Plane.rayIntersectionTriangle3d(rayOrigin, rayDirection, v1, v2, v3);
-    if ( t1 ) return t1;
-
-    return null;
+    return Plane.rayIntersectionTriangle3d(rayOrigin, rayDirection, v0, v1, v2)
+      ?? Plane.rayIntersectionTriangle3d(rayOrigin, rayDirection, v1, v2, v3)
+      ?? null;
   }
 
   /**
@@ -606,6 +602,22 @@ export class Plane {
   lineSegmentIntersects(a, b) {
     const pts = this.threePoints;
     return CONFIG.GeometryLib.utils.lineSegment3dPlaneIntersects(a, b, pts.a, pts.b, pts.c);
+  }
+
+  /**
+   * Is this plane parallel to another?
+   * @param {Plane} other   Other plane to intersect
+   * @returns {boolean} True if parallel
+   */
+  isParallelToPlane(other) {
+    const N1 = this.normal;
+    const N2 = other.normal;
+
+    // Cross product of the two normals is the direction of the line.
+    const direction = N1.cross(N2);
+
+    // Parallel planes have a cross product with zero magnitude
+    return Boolean(!direction.magnitudeSquared())
   }
 
   /**
