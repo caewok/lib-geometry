@@ -654,9 +654,13 @@ export class Point3d extends PIXI.Point {
    */
   cross(other, outPoint) {
     outPoint ??= new this.constructor();
-    outPoint.x = (this.y * other.z) - (this.z * other.y);
-    outPoint.y = (this.z * other.x) - (this.x * other.z);
+
+    // Avoid overwriting other incase it is outPoint.
+    const x = (this.y * other.z) - (this.z * other.y);
+    const y = (this.z * other.x) - (this.x * other.z);
     outPoint.z = (this.x * other.y) - (this.y * other.x);
+    outPoint.x = x;
+    outPoint.y = y;
 
     return outPoint;
   }
