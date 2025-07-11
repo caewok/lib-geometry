@@ -125,14 +125,14 @@ function wallTopE() {
 
   // Previously used foundry.utils.getProperty but it is slow.
   return this.document.flags[EV.ID]?.[EV.FLAGS.ELEVATION]?.top
-    ?? this.document.flags[WH.ID]?.[WH.FLAGS.ELEVATION]?.top
+    ?? this.document.flags[WH.ID]?.top
     ?? Number.POSITIVE_INFINITY;
 }
 
 function wallBottomE() {
   const { EV, WH } = MODULE_KEYS;
   return this.document.flags[EV.ID]?.[EV.FLAGS.ELEVATION]?.bottom
-    ?? this.document.flags[WH.ID]?.[WH.FLAGS.ELEVATION]?.bottom
+    ?? this.document.flags[WH.ID]?.bottom
     ?? Number.NEGATIVE_INFINITY;
 }
 
@@ -164,16 +164,15 @@ function regionBottomE() {
 }
 
 async function setRegionTopE(value) {
- if ( !(is.null(value) || Number.isNumeric(value)) ) {
+ if ( !(value === null || Number.isNumeric(value)) ) {
     console.err("setRegionTopE value must be a number or null.");
     return;
   }
-  const { ID, FLAGS } = MODULE_KEYS.EV;
   return this.document.update({ "elevation.top": value });
 }
 
 async function setRegionBottomE(value) {
-  if ( !(is.null(value) || Number.isNumeric(value)) ) {
+  if ( !(value === null || Number.isNumeric(value)) ) {
     console.err("setRegionTopE value must be a number or null.");
     return;
   }
