@@ -426,7 +426,7 @@ export class MatrixFlat {
 
     if ( M ) M.zero();
     else M = this.zeroes(4, 4);
-    M.setIndex(0, 0, f / aspect); // DIAG1
+    M.setIndex(0, 0, f / aspect); // DIAG0
     M.setIndex(1, 1, f);          // f
     M.setIndex(2, 3, -1);         // -1
 
@@ -1335,7 +1335,7 @@ export class MatrixFlat {
     const x = Array.fromRange(n);
     const y = Array.fromRange(n);
     const k = {};
-    let det = this.optimizedNDet(n, this, x, y, k);
+    let det = this.constructor.optimizedNDet(n, this, x, y, k);
     if ( !det ) throw new Error("Matrix is not invertible");
 
     det = 1 / det;
@@ -1396,7 +1396,7 @@ export class MatrixFlat {
           const iy = y[0];
           const xf = x.filter(e => e !== ix);
           const yf = y.filter(e => e !== iy);
-          const der = this.constructor.optimizedNDet(n - 1, m, xf, yf, k);
+          const der = this.optimizedNDet(n - 1, m, xf, yf, k);
           d += m.getIndex(iy, ix) * plus * der;
           plus *= -1;
         }
