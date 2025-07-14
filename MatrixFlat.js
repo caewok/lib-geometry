@@ -1322,9 +1322,9 @@ export class MatrixFlat {
      i.almostEqual(Matrix.identity(m.dim1,m.dim2))
    *
    */
-  invert() {
-    // Cannot use this matrix as the outMatrix b/c the double for loop needs a separate out matrix.
-    const outMatrix = this.constructor.empty(this.nrow, this.ncol);
+  invert(outMatrix) {
+    outMatrix ??= this.constructor.empty(this.nrow, this.ncol);
+    if ( this === outMatrix ) console.error("Must supply a distinct matrix to store the inversion.");
 
     if ( this.nrow < 2 || this.nrow !== this.ncol ) {
       console.error("Cannot use invert on a non-square matrix.");
