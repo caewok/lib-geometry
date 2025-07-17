@@ -35,13 +35,6 @@ PIXI
 import { GEOMETRY_CONFIG } from "../const.js";
 import "../Matrix.js";
 
-// Temporary points used internally.
-const tmpPt0 = new PIXI.Point();
-
-const tmpPt3d0 = new Point3d();
-const tmpPt3d1 = new Point3d();
-const tmpPt3d2 = new Point3d();
-
 /**
  * 3-D version of PIXI.Point
  * See https://pixijs.download/dev/docs/packages_math_src_Point.ts.html
@@ -692,6 +685,11 @@ export class Point3d extends PIXI.Point {
   static _tmp2 = new this();
   static _tmp3 = new this();
 }
+
+// Temporary points used internally.
+const tmpPt0 = new PIXI.Point();
+const tmpPt3d0 = new Point3d();
+const tmpPt3d1 = new Point3d();
 
 /**
  * The effective maximum texture size that Foundry VTT "ever" has to worry about.
