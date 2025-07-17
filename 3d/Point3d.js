@@ -47,6 +47,8 @@ const tmpPt3d2 = new Point3d();
  * See https://pixijs.download/dev/docs/packages_math_src_Point.ts.html
  */
 export class Point3d extends PIXI.Point {
+  toString() { return `{x: ${this.x}, y: ${this.y}, z: ${this.z}}`; }
+
   /**
    * @param {number} [x=0] - position of the point on the x axis
    * @param {number} [y=0] - position of the point on the y axis
