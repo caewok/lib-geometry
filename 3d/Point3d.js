@@ -40,8 +40,6 @@ import "../Matrix.js";
  * See https://pixijs.download/dev/docs/packages_math_src_Point.ts.html
  */
 export class Point3d extends PIXI.Point {
-  toString() { return `{x: ${this.x}, y: ${this.y}, z: ${this.z}}`; }
-
   toJSON() { return { ...this }; }
 
   /**
@@ -709,5 +707,7 @@ const MAX_TEXTURE_SIZE2 = Math.pow(MAX_TEXTURE_SIZE, 2);
 export function numPositiveDigits(n) {
   return (Math.log(n) * Math.LOG10E) + 1 | 0;
 }
+
+Point3d.prototype.toString = function() { return `{x: ${this.x}, y: ${this.y}, z: ${this.z}}`};
 
 GEOMETRY_CONFIG.threeD.Point3d ??= Point3d;
