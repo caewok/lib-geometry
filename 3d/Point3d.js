@@ -49,6 +49,8 @@ const tmpPt3d2 = new Point3d();
 export class Point3d extends PIXI.Point {
   toString() { return `{x: ${this.x}, y: ${this.y}, z: ${this.z}}`; }
 
+  toJSON() { return { ...this }; }
+
   /**
    * @param {number} [x=0] - position of the point on the x axis
    * @param {number} [y=0] - position of the point on the y axis
