@@ -43,6 +43,8 @@ function litTokenBorder() { return ConstrainedTokenBorder.get(this).litShape(); 
 
 function brightLitTokenBorder() { return ConstrainedTokenBorder.get(this).brightLitShape(); }
 
+function soundTokenBorder() { return ConstrainedTokenBorder.get(this).soundShape(); }
+
 /**
  * New getter: Token.prototype.tokenShape
  * Cache the token shape.
@@ -62,4 +64,5 @@ PATCHES.CONSTRAINED_TOKEN_BORDER.GETTERS = {
   isConstrainedTokenBorder,
   litTokenBorder,
   brightLitTokenBorder,
+  soundTokenBorder,
 };

@@ -72,6 +72,7 @@ import { PATCHES as PATCHES_CanvasEdges } from "./CanvasEdges.js";
 import { PATCHES as PATCHES_ConstrainedTokenBorder } from "./ConstrainedTokenBorder.js";
 import { PATCHES as PATCHES_Edge } from "./Edge.js";
 import { PATCHES as PATCHES_AmbientLight } from "./AmbientLight.js";
+import { PATCHES as PATCHES_AmbientSound } from "./AmbientSound.js";
 
 // PixelCache
 import "./PixelCache.js";
@@ -109,6 +110,7 @@ const PATCHES = {
   "foundry.canvas.edges.Edge": PATCHES_Edge,
   "ConstrainedTokenBorder": PATCHES_ConstrainedTokenBorder,
   "foundry.documents.BaseAmbientLight": PATCHES_AmbientLight,
+  "foundry.documents.BaseAmbientSound": PATCHES_AmbientSound,
 }
 
 export function registerGeometry() {
