@@ -38,6 +38,10 @@ import "../Matrix.js";
 // Temporary points used internally.
 const tmpPt0 = new PIXI.Point();
 
+const tmpPt3d0 = new Point3d();
+const tmpPt3d1 = new Point3d();
+const tmpPt3d2 = new Point3d();
+
 /**
  * 3-D version of PIXI.Point
  * See https://pixijs.download/dev/docs/packages_math_src_Point.ts.html
@@ -305,8 +309,8 @@ export class Point3d extends PIXI.Point {
    * @returns {number}  Angle, in radians
    */
   static angleBetween(a, b, c) {
-    const ba = a.subtract(b);
-    const bc = c.subtract(b);
+    const ba = a.subtract(b, tmpPt3d0);
+    const bc = c.subtract(b, tmpPt3d1);
     const dot = ba.dot(bc);
     const denom = ba.magnitude() * bc.magnitude();
     return Math.acos(dot / denom);

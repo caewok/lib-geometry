@@ -72,17 +72,25 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
 
   #litShape;
 
+  #brightLitShape;
+
   /**
    * Get the lit token shape.
    */
   litShape() {
     if ( this.#dirtyLitShape ) {
       this.#litShape = this.constructor.constructLitTokenShape(this._token);
+      this.#brightLitShape = this.constructor.constructBrightLitTokenShape(this._token);
       // console.log(`Updating lit border shape for ${this._token.name}`, [...this.#litShape.iteratePoints({closed: false})]);
       this.#clearUpdateFlags();
       this.#dirtyLitShape = !canvas.ready; // Avoid caching values until edges loaded.
     }
     return this.#litShape;
+  }
+
+  brightLitShape() {
+    if ( this.#dirtyLitShape ) { const tmp = this.litShape; }
+    return this.#brightLitShape;
   }
 
   /**
@@ -313,6 +321,13 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
     return poly;
   }
 
+  static constructBrightLitTokenShape(token) {
+    const shape = this.constrainTokenShapeWithBrightLights(token);
+    const poly = this.clipperShapeToPolygon(shape);
+    if ( !poly || poly.points < 6 ) return undefined;
+    return poly;
+  }
+
   /**
    * @param {ClipperPaths|Clipper2Paths} shape
    * @returns {PIXI.Polygon|undefined}
@@ -355,6 +370,44 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
 
       // If the token overlaps the light, then we may need to intersect the shape.
       if ( tokenBorder.overlaps(lightShape) ) lightShapes.push(lightShape);
+    }
+    if ( !lightShapes.length ) return undefined;
+
+    const combined = ClipperPaths.fromPolygons(lightShapes)
+      .combine()
+      .intersectPaths(ClipperPaths.fromPolygons([tokenBorder.toPolygon()]))
+      .clean()
+      .simplify();
+    return combined;
+  }
+
+  /**
+   * Take a token and intersects it with a set of bright lights.
+   * Determined by intersecting each light shape with its bright radius.
+   * @param {Token} token
+   * @returns {PIXI.Polygon|PIXI.Rectangle|ClipperPaths|undefined}
+   */
+  static constrainTokenShapeWithBrightLights(token) {
+    const tokenBorder = token.constrainedTokenBorder;
+
+    // If the global light source is present, then we can use the whole token.
+    if ( canvas.environment.globalLightSource.active ) return tokenBorder;
+
+    // Cannot really use quadtree b/c it doesn't contain all light sources.
+    const lightShapes = [];
+    for ( const light of canvas.effects.lightSources.values() ) {
+      const lightShape = light.shape;
+      if ( !light.active || lightShape.points < 6 ) continue; // Avoid disabled or broken lights.
+
+      // Intersect with the bright radius to get the bright light shape.
+      if ( !l.brightRadius ) continue;
+      const brightLightShape = lightShape.intersectCircle(new PIXI.Circle(l.x, l.y, l.brightRadius));
+
+      // If a light envelops the token shape, then we can use the entire token shape.
+      if ( brightLightShape.envelops(tokenBorder) ) return tokenBorder;
+
+      // If the token overlaps the light, then we may need to intersect the shape.
+      if ( tokenBorder.overlaps(brightLightShape) ) lightShapes.push(brightLightShape);
     }
     if ( !lightShapes.length ) return undefined;
 
