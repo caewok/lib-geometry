@@ -371,6 +371,14 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
     return poly;
   }
 
+  static constructSoundTokenShape(token) {
+    const shape = this.constrainTokenShapeWithSounds(token);
+    const poly = this.clipperShapeToPolygon(shape);
+    if ( !poly || poly.points < 6 ) return undefined;
+    return poly;
+  }
+
+
   /**
    * @param {ClipperPaths|Clipper2Paths} shape
    * @returns {PIXI.Polygon|undefined}
