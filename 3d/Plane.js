@@ -9,6 +9,9 @@ import "../Matrix.js";
 import { GEOMETRY_CONFIG } from "../const.js";
 import { Point3d } from "./Point3d.js";
 
+const originPt3d = new Point3d();
+Object.freeze(originPt3d);
+
 const tmpPt3d0 = new Point3d();
 const tmpPt3d1 = new Point3d();
 const tmpPt3d2 = new Point3d();
@@ -44,8 +47,11 @@ export class Plane {
   }
 
   /**
-   * Construct plane from set of 3 points that lie on the plane
-   * @param {Point3d} a
+   * Construct plane from set of 3 points that lie on the plane.
+   * Constructed such that the plane faces the direction of the normal vector.
+   * I.e., whichSide returns a value > 0 (CCW) for points a - b - c - d where d is on the facing side.
+   * and the normal also faces d.
+   * @param {Point3d} a           Points arranged counterclockwise from view of a point facing the plane.
    * @param {Point3d} b
    * @param {Point3d} c
    * @returns {Plane}
@@ -58,7 +64,7 @@ export class Plane {
     const vAB = b.subtract(a, tmpPt3d0);
     const vAC = c.subtract(a, tmpPt3d1);
 
-    const normal = vAB.cross(vAC, tmpPt3d2);
+    const normal = vAC.cross(vAB, tmpPt3d2); // So the orientation matches.
     const plane = new Plane(a, normal);
     plane._threePoints = {a, b, c};
     return plane;
@@ -404,13 +410,8 @@ export class Plane {
    * Point nearly on the plane will return very small values.
    */
   whichSide(p) {
-    const {a, b, c} = this.threePoints;
-
-    // Assuming p0, u, v are CCW:
-    // - Positive if p0, u, v are seen as CCW from p
-    // - Negative if p0, u, v are seen as CW from p
-    return CONFIG.GeometryLib.utils.orient3dFast(a, b, c, p);
-
+    const V = p.subtract(this.point, tmpPt3d0);
+    return this.normal.dot(V);
   }
 
   isPointOnPlane(p) {
@@ -420,7 +421,7 @@ export class Plane {
     const b = this.point.add(vs.v, tmpPt3d0);
     const c = this.point.add(vs.u, tmpPt3d1);
 
-    const m = new CONFIG.GeometryLib.Matrix([
+    const m = new CONFIG.GeometryLib.FlatMatrix([
       [a.x, b.x, c.x, p.x],
       [a.y, b.y, c.y, p.y],
       [a.z, b.z, c.z, p.z],
@@ -597,6 +598,15 @@ export class Plane {
    */
   lineSegmentIntersection(p0, p1) {
     return this.lineIntersection(p0, p1.subtract(p0));
+
+    /* Or
+    v0 = p0.subtract(this.point)
+    v1 = p1.subtract(p0);
+
+    t = -this.normal.dot(v0) / (this.normal.dot(v1))
+    // If this.normal.dot(v1) === 0, line is parallel to the plane.
+
+    */
   }
 
   /**
@@ -606,8 +616,8 @@ export class Plane {
    * @returns {boolean}
    */
   lineSegmentIntersects(a, b) {
-    const pts = this.threePoints;
-    return CONFIG.GeometryLib.utils.lineSegment3dPlaneIntersects(a, b, pts.a, pts.b, pts.c);
+    // Endpoints a and b must be on opposite sides of the plane.
+    return this.whichSide(a) * this.whichSide(b) <= 0; // If 0, point is on the plane.
   }
 
   /**
@@ -640,18 +650,60 @@ export class Plane {
     const N2 = other.normal;
 
     // Cross product of the two normals is the direction of the line.
-    const direction = N1.cross(N2, tmpPt3d0);
+    const direction = N1.cross(N2, tmpPt3d3);
 
     // Parallel planes have a cross product with zero magnitude
     if ( !direction.magnitudeSquared() ) return null;
 
-    // Intersect a line of this plane with the second plane to get a point shared by both
-    const thisPoints = this.threePoints;
+    // Find shared point on the line of intersection between the two planes.
+    // Project the origin (0,0,0) and the normal of the second plane onto the first plane (plane1).
+    // This defines a line within plane1.
+    const projectedOrigin = this.projectPointOnPlane(originPt3d, tmpPt3d1); // tmpPt3d0 used by projectPointOnPlane
+    const projectedN2 = this.projectPointOnPlane(other.normal, tmpPt3d2);
 
-    const ix = other.lineSegmentIntersection(thisPoints.a, thisPoints.b);
+    // The direction vector of the line in plane1.
+    const lineDirection = projectedN2.subtract(projectedOrigin, projectedN2);
 
+    // Now we find the intersection of this line with the second plane (plane2).
+    // A line is defined by L(t) = startPoint + t * direction
+    // A plane is defined by n . (x - p) = 0
+    // Substitute x with L(t) to solve for t.
+    // n2 . (projectedOrigin + t * lineDirection - p2) = 0
+    // n2 . (projectedOrigin - p2) + t * (n2 . lineDirection) = 0
+    // t = - (n2 . (projectedOrigin - p2)) / (n2 . lineDirection)
+    const denominator = other.normal.dot(lineDirection);
+
+    // If the denominator is close to zero, the line is parallel to the plane.
+    // This happens if the planes are parallel.
+    // Can skip b/c we checked for parallel planes above.
+    /*
+    if ( Math.abs(denominator) < 1e-06 ) {
+      const dist = this.normal.dot(other.point.subtract(this.point));
+      if ( Math.abs(dist) < 1e-06 ) return this.point; // The planes are coincident, any point on plane1 is a shared point.
+      return null; // Planes are parallel and distinct.
+    }
+    */
+    const numerator = other.normal.dot(projectedOrigin.subtract(other.point, tmpPt3d0));
+    const t = -numerator / denominator;
+    const ix = new CONFIG.GeometryLib.threeD.Point3d();
+    projectedOrigin.add(lineDirection.multiplyScalar(t, ix), ix);
     return { point: ix, direction };
   }
+
+  /**
+   * Projects a point onto the plane.
+   * @param {Point3d} pt           Point to project
+   * @returns {Point3d} The projected point
+   */
+  projectPointOnPlane(pt, outPoint) {
+    outPoint ??= new CONFIG.GeometryLib.threeD.Point3d();
+    const v = pt.subtract(this.point, tmpPt3d0);
+    const dist = v.dot(this.plane.normal);
+    const vScaled = this.normal.multiplyScalar(dist, tmpPt3d0);
+    pt.subtract(vScaled, outPoint);
+    return outPoint;
+  }
+
 }
 
 /**
