@@ -1032,10 +1032,10 @@ function canUseFanTriangulation(centroid) {
  *   True forces the fan and does not check
  * @returns {PIXI.Polygon[]} Array of triangle polygons
  */
-function triangulate({ useFan: null, centroid } = {}) {
+function triangulate({ useFan, centroid } = {}) {
   const pts = this.points;
   centroid ??= this.center();
-  if ( useFan === null ) useFan = this.canUseFanTriangulation(centroid);
+  if ( typeof useFan === "undefined" ) useFan = this.canUseFanTriangulation(centroid);
   if ( useFan ) {
     const center = [centroid.x, centroid.y];
     const ln = pts.length;
