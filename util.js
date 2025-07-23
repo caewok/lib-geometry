@@ -58,7 +58,10 @@ export function registerFoundryUtilsMethods() {
       convertFromDistance: convertFromDistanceCutaway,
       convertFromElevation: convertFromElevationCutaway
     },
-    extractPixels
+    extractPixels,
+    almostLessThan,
+    almostGreaterThan,
+    almostBetween,
   };
 
 
@@ -1415,3 +1418,12 @@ export function segmentOverlap(a, b, c, d) {
 
   return res;
 }
+
+export function almostLessThan(a, b) { return a < b || a.almostEqual(b); }
+
+export function almostGreaterThan(a, b) { return a > b || a.almostEqual(b); }
+
+export function almostBetween(value, min, max) {
+  return almostLessThan(value, max) && almostGreaterThan(value, min);
+}
+
