@@ -1012,6 +1012,61 @@ function pixiEdges({ close = true } = {}) {
   return close ? this._pixiEdges : this._pixiEdges.slice(0, -1);
 }
 
+/**
+ * Can this polygon be triangulated using a fan?
+ * @param {PIXI.Point} centroid       Assumed center point
+ * @returns {boolean}
+ */
+function canUseFanTriangulation(centroid) {
+  centroid ??= this.center();
+  if ( !this.contains(centroid.x, centroid.y) ) return false;
+  const lines = [...this.iteratePoints({ close: false })].map(B => {
+    return { A: centroid, B };
+  });
+  return !this.linesCross(lines); // Lines cross ignores lines that only share endpoints.
+}
+
+/**
+ * Triangulate the polygon.
+ * @param {useFan} [useFan]    Use fan algorithm to triangulate if possible. Only works if the lines don't cross.
+ *   True forces the fan and does not check
+ * @returns {PIXI.Polygon[]} Array of triangle polygons
+ */
+function triangulate({ useFan: null, centroid } = {}) {
+  const pts = this.points;
+  centroid ??= this.center();
+  if ( useFan === null ) useFan = this.canUseFanTriangulation(centroid);
+  if ( useFan ) {
+    const center = [centroid.x, centroid.y];
+    const ln = pts.length;
+    const polys = new Array(ln);
+    let a = pts.slice(ln - 2, ln); // i, i + 2 for the very last point; cycle through to beginning.
+    for ( let i = 0, j = 0; i < ln; ) {
+      const b = pts.slice(i, i + 2);
+      const pts = [...center, ...a, ...b];
+      polys[j++] = new PIXI.Polygon(pts);
+      a = b;
+    }
+    return polys;
+  }
+
+  // Use earcut.
+  const indices = PIXI.utils.earcut(pts);
+  const ln = indices.length;
+  const polys = new Array(ln / 3);
+  for ( const i = 0, j = 0; i < ln; ) {
+    const idx0 = indices[i++];
+    const idx1 = indices[i++];
+    const idx2 = indices[i++];
+    polys[j++] = new PIXI.Polygon(
+      pts[idx0], pts[idx0 + 1], // x, y
+      pts[idx1], pts[idx1 + 1],
+      pts[idx2], pts[idx2 + 1],
+    );
+  }
+  return polys;
+}
+
 
 PATCHES.PIXI.GETTERS = {
   area,
@@ -1032,6 +1087,10 @@ PATCHES.PIXI.METHODS = {
   // Equality
   equals,
   almostEqual,
+
+  // Triangulation
+  triangulate,
+  canUseFanTriangulation,
 
   // Other methods
   toPolygon: function() { return this; },
