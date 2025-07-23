@@ -1,0 +1,376 @@
+/* globals
+CONFIG,
+PIXI
+*/
+"use strict";
+
+import { GEOMETRY_CONFIG } from "../const.js";
+import { Point3d } from "./Point3d.js";
+
+const axes = {
+  x: new Point3d(1, 0, 0),
+  y: new Point3d(0, 1, 0),
+  z: new Point3d(0, 0, 1),
+};
+Object.freeze(axes.x);
+Object.freeze(axes.y);
+Object.freeze(axes.z);
+
+/* Axis-aligned bounding box
+  Represent a bounding box as a minimum and maximum point in 2d or 3d.
+*/
+
+export class AABB2d {
+  static POINT_CLASS = PIXI.Point;
+
+  static axes = ["x", "y", "z"];
+
+  /** @type {PIXI.Point} */
+  min = new this.constructor.POINT_CLASS(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY);
+
+  /** @type {PIXI.Point} */
+  max = new this.constructor.POINT_CLASS(Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY);
+
+  /**
+   * Union multiple bounds.
+   * @param {AABB2d} ....bounds
+   * @returns {AABB2d}
+   */
+  static union(...bounds) {
+    const out = new this();
+    const { min, max } = out;
+    for ( const axis of this.constructor.axes ) {
+      const boundsMin = bounds.map(b => b.min[axis]);
+      const boundsMax = bounds.map(b => b.max[axis]);
+      min[axis] = Math.min(...boundsMin, min[axis]);
+      max[axis] = Math.max(...boundsMax, max[axis]);
+    }
+    return out;
+  }
+
+  /**
+   * @param {PIXI.Point[]} pts    Points to include within the bounds
+   * @param {AABB2d} out          The AABB to update; leave undefined to construct a new one
+   * @returns {AABB2d}
+   */
+  static fromPoints(pts = [], out) {
+    out ??= new this();
+    const { min, max } = out;
+    for ( const pt of pts ) {
+      for ( const axis of this.constructor.axes ) {
+        min[axis] = Math.min(pt[axis] ?? 0, min[axis]);
+        max[axis] = Math.max(pt[axis] ?? 0, max[axis]);
+      }
+    }
+    return out;
+  }
+
+  /**
+   * @param {PIXI.Circle} circle
+   * @returns {AABB2d}
+   */
+  static fromCircle(circle) {
+    const out = new this();
+    out.min.set(circle.x - circle.radius, circle.y - circle.radius);
+    out.max.set(circle.x + circle.radius, circle.y + circle.radius);
+    return out;
+  }
+
+  /**
+   * @param {PIXI.Ellipse} ellipse
+   * @returns {AABB2d}
+   */
+  static fromEllipse(ellipse) {
+    // PIXI.Ellipse has same properties as PIXI.Rectangle.
+    return this.fromRectangle(ellipse);
+  }
+
+  /**
+   * @param {PIXI.Rectangle} rect
+   * @returns {AABB2d}
+   */
+  static fromRectangle(rect) {
+    const out = new this();
+    out.min.set(rect.x - rect.width, rect.y - rect.height);
+    out.max.set(rect.x + rect.width, rect.y + rect.height);
+    return out;
+
+  }
+
+  /**
+   * @param {PIXI.Polygon} polygon
+   * @returns {AABB2d}
+   */
+  static fromPolygon(poly) {
+    // Iterating the points will determine the min/max values.
+    return this.fromPoints(poly.iteratePoints({ close: false }));
+  }
+
+  /**
+   * @param {Tile} tile
+   * @returns {AABB2d}
+   */
+  static fromTile(tile) {
+    return this.fromRectangle(tile.bounds);
+  }
+
+  /**
+   * @param {Wall} wall
+   * @returns {AABB2d}
+   */
+  static fromWall(wall) {
+    return this.fromEdge(wall.edge);
+  }
+
+  /**
+   * @param {Edge} edge
+   * @returns {AABB2d}
+   */
+  static fromEdge(edge) {
+    return this.fromPoints([edge.a, edge.b]);
+  }
+
+  /**
+   * @param {Token} token
+   * @returns {AABB2d}
+   */
+  static fromToken(token) {
+    const border = token.tokenBorder;
+    return border instanceof PIXI.Rectangle ? this.fromRectangle(border) : this.fromPolygon(border);
+  }
+
+  /**
+   * Does this bounding box almost contain the point?
+   * @param {PIXI.Point} p
+   * @param {number} [epsilon=1e-06]        How close to min/max for the point to count as contained
+   * @returns {AABB2d}
+   */
+  almostContainsPoint(p, epsilon = 1e-06) {
+    const { min, max } = this;
+    for ( const axis of this.constructor.axes ) {
+      if ( !p[axis].almostBetween(min[axis], max[axis], epsilon) ) return false
+    }
+    return true;
+  }
+
+  /**
+   * Does this bounding box contain the point?
+   * @param {PIXI.Point} p
+   */
+  containsPoint(p) {
+    const { min, max } = this;
+    for ( const axis of this.constructor.axes ) {
+      if ( !p[axis].between(min[axis], max[axis]) ) return false
+    }
+    return true;
+  }
+
+  /**
+   * @param {PIXI.Point} [outPoint]
+   * @returns {outPoint}
+   */
+  *iterateVertices(outPoint) {
+    outPoint ??= new this.constructor.POINT_CLASS();
+    const pts = [this.min, this.max];
+    for ( const xType of pts ) {
+      for ( const yType of pts ) {
+        yield outPoint.set(xType.x, yType.y);
+      }
+    }
+  }
+}
+
+export class AABB3d extends AABB2d {
+
+  static POINT_CLASS = Point3d;
+
+  /** @type {Point3d} */
+  min = new this.constructor.POINT_CLASS(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY);
+
+  /** @type {Point3d} */
+  max = new this.constructor.POINT_CLASS(Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY);
+
+  /**
+   * @param {PIXI.Circle} circle            2d circle, assumed to be flat on the plane
+   * @param {number} [elevationZ=0]         Intended elevation in the z axis
+   * @returns {AABB3d}
+   */
+  static fromCircle(circle, elevationZ = 0) {
+    const out = super.fromCircle(circle);
+    out.min.z = elevationZ;
+    out.max.z = elevationZ;
+    return out;
+  }
+
+  /**
+   * @param {PIXI.Ellipse} ellipse          2d ellipse, assumed to be flat on the plane
+   * @param {number} [elevationZ=0]         Intended elevation in the z axis
+   * @returns {AABB3d}
+   */
+  static fromEllipse(ellipse, elevationZ = 0) {
+    const out = super.fromEllipse(ellipse);
+    out.min.z = elevationZ;
+    out.max.z = elevationZ;
+    return out;
+  }
+
+  /**
+   * @param {PIXI.Rectangle} rect           2d rectangle, assumed to be flat on the plane
+   * @param {number} [elevationZ=0]         Intended elevation in the z axis
+   * @returns {AABB3d}
+   */
+  static fromRectangle(rect, elevationZ = 0) {
+    const out = super.fromRectangle(rect);
+    out.min.z = elevationZ;
+    out.max.z = elevationZ;
+    return out;
+  }
+
+  /**
+   * @param {PIXI.Polygon} poly             2d polygon, assumed to be flat on the plane
+   * @param {number} [elevationZ=0]         Intended elevation in the z axis
+   * @returns {AABB3d}
+   */
+
+  static fromPolygon(poly, elevationZ = 0) {
+    const out = super.fromPolygon(poly);
+    out.min.z = elevationZ;
+    out.max.z = elevationZ;
+    return out;
+  }
+
+  /**
+   * @param {Tile} tile
+   * @returns {AABB3d}
+   */
+  static fromTile(tile) {
+    const out = super.fromTile(tile);
+    const elevZ = tile.elevationZ;
+    out.max.z = elevZ;
+    out.min.z = elevZ;
+    return out;
+  }
+
+  /**
+   * @param {Edge} edge
+   * @returns {AABB3d}
+   */
+  static fromWall(wall) {
+    const { topZ, bottomZ } = wall;
+    const out = super.fromWall(wall);
+    out.min.z = bottomZ
+    out.max.z = topZ;
+    return out;
+  }
+
+  /**
+   * @param {Edge} edge
+   * @returns {AABB3d}
+   */
+  static fromEdge(edge) {
+    const out = super.fromEdge(edge);
+    const { a, b } = edge.elevationLibGeometry;
+    out.min.z = Math.min(a.bottom ?? Number.NEGATIVE_INFINITY, b.bottom ?? Number.NEGATIVE_INFINITY);
+    out.max.z = Math.max(a.top ?? Number.POSITIVE_INFINITY, b.top ?? Number.POSITIVE_INFINITY);
+    return out;
+  }
+
+  /**
+   * @param {Token} token
+   * @returns {AABB3d}
+   */
+  static fromToken(token) {
+    const out = super.fromToken(token);
+    out.min.z = token.bottomZ;
+    out.max.z = token.topZ;
+    return out;
+  }
+
+  /**
+   * @param {Sphere} sphere
+   * @returns {AABB3d}
+   */
+  static fromSphere(sphere) {
+    const out = new this();
+    const { center, radius } = sphere;
+    out.min.set(center.x - radius, center.y - radius, center.z - radius);
+    out.max.set(center.x + radius, center.y + radius, center.z + radius);
+    return out;
+  }
+
+  /**
+   * @param {Polygon3d} poly3d
+   * @returns {AABB3d}
+   */
+  static fromPolygon3d(poly3d, out) {
+    if ( poly3d instanceof CONFIG.GeometryLib.threeD.Circle3d ) return this.fromCircle3d(poly3d, out);
+    return this.fromPoints(poly3d.points, out);
+  }
+
+  /**
+   * @param {Circle3d} circle3d
+   * @returns {AABB3d}
+   */
+  static fromCircle3d(circle3d, out) {
+    out ??= new this();
+
+    // Project the radius onto each axis: sqrt(1 - normal[axis]**2)
+    // Normal must be normalized.
+    const rX = Math.sqrt(1 - (circle3d.plane.normal.x ** 2));
+    const rY = Math.sqrt(1 - (circle3d.plane.normal.y ** 2));
+    const rZ = Math.sqrt(1 - (circle3d.plane.normal.z ** 2));
+
+    const { center, radius } = circle3d;
+    out.min.set(
+      center.x - (radius * rX),
+      center.y - (radius * rY),
+      center.z - (radius * rZ),
+    );
+    out.max.set(
+      center.x + (radius * rX),
+      center.y + (radius * rY),
+      center.z + (radius * rZ),
+    );
+    return out;
+  }
+
+  static fromCircle3d_2(circle3d, out) {
+    out ??= new this();
+
+    // See https://stackoverflow.com/questions/2592011/bounding-boxes-for-circle-and-arcs-in-3d
+    const angle = (A , B) => {
+      const dot = A.dot(B);
+      return dot <= -1.0 ? Math.PI
+        : dot >= 1.0 ? 0.0
+        : Math.acos(dot);
+    }
+    const N = circle3d.plane.normal;
+    const ax = angle(N, axes.x);
+    const ay = angle(N, axes.y);
+    const az = angle(N, axes.z);
+    const R = pt3d_0.set(Math.sin(ax), Math.sin(ay), Math.sin(az)) * circle3d.radius;
+    const { x, y, z } = this.center;
+    out.min.set(x - R.x, y - R.y, z - R.z);
+    out.max.set(x + R.x, y + R.y, z + R.z);
+    return out;
+  }
+
+  /**
+   * @param {Point3d} [outPoint]
+   * @returns {outPoint}
+   */
+  *iterateVertices(outPoint) {
+    outPoint ??= new this.constructor.POINT_CLASS();
+    const pts = [this.min, this.max];
+    for ( const xType of pts ) {
+      for ( const yType of pts ) {
+        for ( const zType of pts) {
+          yield outPoint.set(xType.x, yType.y, zType.z);
+        }
+      }
+    }
+  }
+}
+
+GEOMETRY_CONFIG.AABB2d = AABB2d;
+GEOMETRY_CONFIG.threeD.AABB3d = AABB3d;
