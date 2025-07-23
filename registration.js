@@ -11,47 +11,52 @@ import { GEOMETRY_CONFIG } from "./const.js";
 import { registerFoundryUtilsMethods } from "./util.js";
 
 // Regular Polygons
-import "./RegularPolygon/RegularPolygon.js";
-import "./RegularPolygon/EquilateralTriangle.js";
-import "./RegularPolygon/Square.js";
-import "./RegularPolygon/Hexagon.js";
-import "./RegularPolygon/RegularStar.js";
+// import "./RegularPolygon/RegularPolygon.js";
+// import "./RegularPolygon/EquilateralTriangle.js";
+// import "./RegularPolygon/Square.js";
+// import "./RegularPolygon/Hexagon.js";
+// import "./RegularPolygon/RegularStar.js";
 
 // Centered Polygons
-import "./CenteredPolygon/CenteredPolygonBase.js";
-import "./CenteredPolygon/CenteredPolygon.js";
-import "./CenteredPolygon/CenteredRectangle.js";
+// import "./CenteredPolygon/CenteredPolygonBase.js";
+// import "./CenteredPolygon/CenteredPolygon.js";
+// import "./CenteredPolygon/CenteredRectangle.js";
 
 // Holed Shapes
-import "./ShapeHoled.js";
+// import "./ShapeHoled.js";
 
 // 3d
-import "./3d/Plane.js";
-import "./3d/Point3d.js";
-import "./3d/Ray3d.js";
+// import "./3d/Plane.js";
+// import "./3d/Point3d.js";
+// import "./3d/Ray3d.js";
+// import "./3d/Sphere.js";
+// import "./3d/Polygon3d.js";
+
+// AABB
+// import "./AABB.js";
 
 // Draw
-import "./Draw.js";
+// import "./Draw.js";
 
 // Ellipse
-import "./Ellipse.js";
+// import "./Ellipse.js";
 
 // Matrix
-import "./Matrix.js";
-import "./MatrixFlat.js";
+// import "./Matrix.js";
+// import "./MatrixFlat.js";
 
 // Shadow
-import "./Shadow.js";
+// import "./Shadow.js";
 
 // ClipperPaths
-import "./ClipperPaths.js";
-import "./Clipper2Paths.js";
+// import "./ClipperPaths.js";
+// import "./Clipper2Paths.js";
 
 // Graph
-import "./Graph.js";
+// import "./Graph.js";
 
 // Benchmark
-import "./Benchmark.js";
+// import "./Benchmark.js";
 
 // Patcher
 import { Patcher } from "../Patcher.js";
@@ -75,17 +80,17 @@ import { PATCHES as PATCHES_AmbientLight } from "./AmbientLight.js";
 import { PATCHES as PATCHES_AmbientSound } from "./AmbientSound.js";
 
 // PixelCache
-import "./PixelCache.js";
+// import "./PixelCache.js";
 import { PATCHES as PATCHES_Tile } from "./Tile.js";
 
 // Grid measurement
-import "./GridCoordinates.js";
-import "./3d/GridCoordinates3d.js";
-import "./3d/RegionMovementWaypoint3d.js";
-import "./3d/HexGridCoordinates3d.js";
+// import "./GridCoordinates.js";
+// import "./3d/GridCoordinates3d.js";
+// import "./3d/RegionMovementWaypoint3d.js";
+// import "./3d/HexGridCoordinates3d.js";
 
 // Cutaway
-import "./CutawayPolygon.js";
+// import "./CutawayPolygon.js";
 
 const PATCHES = {
   "PIXI.Circle": PATCHES_Circle,
