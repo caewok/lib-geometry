@@ -158,7 +158,7 @@ export class Polygon3d {
   // ----- NOTE: Centroid ----- //
 
   /** @type {Point3d} */
-  #centroid = new CONFIG.GeometryLib.Point3d();
+  #centroid = new CONFIG.GeometryLib.threeD.Point3d();
 
   #dirtyCentroid = true;
 

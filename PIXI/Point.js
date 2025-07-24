@@ -202,7 +202,7 @@ function to3d({ x = "x", y = "y", z} = {}) {
   const x3d = x ? this[x] : 0;
   const y3d = y ? this[y] : 0;
   const z3d = z ? this[z] : 0;
-  return new CONFIG.GeometryLib.Point3d(x3d, y3d, z3d);
+  return new CONFIG.GeometryLib.threeD.Point3d(x3d, y3d, z3d);
 }
 
 /**
