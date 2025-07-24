@@ -5,7 +5,6 @@ PIXI
 "use strict";
 
 import "./Point3d.js";
-import "../Matrix.js";
 import { GEOMETRY_CONFIG } from "../const.js";
 import { Point3d } from "./Point3d.js";
 
@@ -519,14 +518,14 @@ export class Plane {
 
     // Adjust for row-major matrix and left-hand coordinate system
 
-    const S = new CONFIG.GeometryLib.Matrix([
+    const S = new CONFIG.GeometryLib.FlatMatrix([
       [A.x, A.y, A.z, 1],
       [u.x, u.y, u.z, 1],
       [v.x, v.y, v.z, 1],
       [n.x, n.y, n.z, 1]
     ]);
 
-    const D = new CONFIG.GeometryLib.Matrix([
+    const D = new CONFIG.GeometryLib.FlatMatrix([
       [0, 0, 0, 1],
       [1, 0, 0, 1],
       [0, 1, 0, 1],
