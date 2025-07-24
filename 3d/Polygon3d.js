@@ -47,7 +47,7 @@ export class Polygon3d {
 
   constructor(n = 0) {
     this.points.length = n;
-    for ( let i = 0; i < n; i += 1 ) this.points[i] = new CONFIG.GeometryLib.threeD.Point3d();
+    for ( let i = 0; i < n; i += 1 ) this.points[i] = new Point3d();
   }
 
   // ----- NOTE: In-place modifiers ----- //
