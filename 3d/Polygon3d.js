@@ -1532,11 +1532,11 @@ function convexHull(points) {
   return upperHull.concat(lowerHull);
 }
 
-GEOMETRY_CONFIG.Polygon3d = Polygon3d;
-GEOMETRY_CONFIG.Circle3d = Circle3d;
-GEOMETRY_CONFIG.Triangle3d = Triangle3d;
-GEOMETRY_CONFIG.Quad3d = Quad3d;
-GEOMETRY_CONFIG.Polygons3d = Polygons3d;
+GEOMETRY_CONFIG.threeD.Polygon3d = Polygon3d;
+GEOMETRY_CONFIG.threeD.Circle3d = Circle3d;
+GEOMETRY_CONFIG.threeD.Triangle3d = Triangle3d;
+GEOMETRY_CONFIG.threeD.Quad3d = Quad3d;
+GEOMETRY_CONFIG.threeD.Polygons3d = Polygons3d;
 
 
 /* Testing
