@@ -425,7 +425,7 @@ export class Plane {
       [a.x, b.x, c.x, p.x],
       [a.y, b.y, c.y, p.y],
       [a.z, b.z, c.z, p.z],
-      [1,   1,   1,   1]    // eslint-disable-line no-multi-spaces
+      [1,   1,   1,   1],
     ]);
 
     return m.determinant().almostEqual(0);

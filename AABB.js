@@ -7,6 +7,8 @@ PIXI
 import { GEOMETRY_CONFIG } from "../const.js";
 import { Point3d } from "./Point3d.js";
 
+const pt3d_0 = new Point3d();
+
 const axes = {
   x: new Point3d(1, 0, 0),
   y: new Point3d(0, 1, 0),

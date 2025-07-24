@@ -1054,7 +1054,7 @@ function triangulate({ useFan, centroid } = {}) {
   const indices = PIXI.utils.earcut(pts);
   const ln = indices.length;
   const polys = new Array(ln / 3);
-  for ( const i = 0, j = 0; i < ln; ) {
+  for ( let i = 0, j = 0; i < ln; ) {
     const idx0 = indices[i++];
     const idx1 = indices[i++];
     const idx2 = indices[i++];
@@ -1100,6 +1100,7 @@ PATCHES.PIXI.METHODS = {
   linesCross,
   lineSegmentIntersects,
   pad,
+  lineIntersections,
   segmentIntersections,
   pointsBetween,
   translate,

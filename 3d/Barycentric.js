@@ -5,7 +5,7 @@ PIXI,
 "use strict";
 
 import { GEOMETRY_CONFIG } from "../const.js";
-import { Point3d } from "../../geometry/3d/Point3d.js";
+import { Point3d } from "./Point3d.js";
 
 const tmpPt3d = new Point3d();
 
@@ -123,5 +123,5 @@ export class BarycentricPoint extends Point3d {
   }
 }
 
-GEOMETRY_CONFIG.threeD.Barycentric = Barycentric;
+GEOMETRY_CONFIG.threeD.BarycentricPoint = BarycentricPoint;
 GEOMETRY_CONFIG.threeD.BaryTriangleData = BaryTriangleData;
