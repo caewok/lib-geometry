@@ -120,7 +120,7 @@ export class Polygon3d {
       this.calculateAABB(this.#aabb);
       this.#dirtyAABB = false;
     }
-    return this._bounds;
+    return this.#aabb;
   }
 
   _calculateAABB(aabb) { aabb.constructor.fromPolygon3d(this.points, aabb); }
@@ -1251,19 +1251,14 @@ export class Polygons3d extends Polygon3d {
    */
   clearCache() {
     this.#applyMethodToAll("clearCache");
-    this._bounds.x = undefined;
-    this.#centroid = undefined;
-    // No #plane for Polygons3d.
+    super.clearCache();
   }
 
   clean() { this.#applyMethodToAll("clean"); }
 
   setZ(z) {
     this.#applyMethodToAll("setZ", z);
-
-    // No need to clear each polygon, as setZ will have already done that.
-    this._bounds.x = undefined;
-    this.#centroid = undefined;
+    this.clearCache();
   }
 
   reverseOrientation() { this.#applyMethodToAll("reverseOrientation"); return this; }
