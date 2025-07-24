@@ -4,8 +4,8 @@ PIXI
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "../const.js";
-import { Point3d } from "./Point3d.js";
+import { GEOMETRY_CONFIG } from "./const.js";
+import { Point3d } from "./3d/Point3d.js";
 
 const pt3d_0 = new Point3d();
 
