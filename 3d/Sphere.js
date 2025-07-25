@@ -64,6 +64,36 @@ export class Sphere {
   toCircle2d() { return new PIXI.Circle(this.x, this.y, this.radius); }
 
   /**
+   * Does a planar polygon overlap?
+   * @param {Polygon3d} poly3d
+   * @returns {boolean}
+   */
+  overlapsPolygon3d(poly3d) {
+    if ( poly3d instanceof CONFIG.GeometryLib.threeD.Circle3d ) return this.overlapsCircle3d(poly3d);
+    for ( const pt of poly3d.iteratePoints({ close: false }) ) {
+      const inside = this.contains(pt);
+      if ( inside ) return true;
+    }
+
+    // Project onto the polygon polygon plane and test for overlap.
+    const sphereCircle = this.#planarCircle(poly3d.plane);
+    const poly2d = poly3d.toPlanarPolygon();
+    return sphereCircle.overlaps(poly2d);
+  }
+
+  overlapsCircle3d(circle3d) {
+    if ( this.containsPoint(circle3d.center) ) return true;
+
+    const sphereCircle = this.#planarCircle(circle3d.plane);
+    if ( !sphereCircle ) return false;
+    if ( sphereCircle instanceof CONFIG.GeometryLib.threeD.Point3d ) return true;
+
+    // Project onto the circle plane and test for overlap.
+    const circle2d = circle3d.toPlanarCircle();
+    return sphereCircle.overlaps(circle2d);
+  }
+
+  /**
    * Intersect this sphere with a planar polygon.
    * @param {Polygon3d} poly3d
    * @returns {Polygon3d|Point3d|null}
@@ -79,12 +109,15 @@ export class Sphere {
       if ( !(allInside || allOutside) ) break;
     }
     if ( allInside ) return poly3d;
-    if ( allOutside ) return null;
+    if ( allOutside && !poly3d.contains(this.center) ) return null;
 
+    // If poly is outside the sphere and contains sphere center, it contains the entire sphere
+    // Otherwise, it is an intersection.
     // Project the sphere to the plane.
     const sphereCircle = this.#planarCircle(poly3d.plane);
     if ( !sphereCircle ) return null;
     if ( sphereCircle instanceof CONFIG.GeometryLib.threeD.Point3d ) return sphereCircle;
+    if ( allOutside ) return CONFIG.GeometryLib.threeD.Circle3d.fromPlanarCircle(sphereCircle, poly3d.plane);
     const poly2d = sphereCircle.intersectPolygon(poly3d.toPlanarPolygon());
     return Polygon3d.fromPlanarPolygon(poly2d, poly3d.plane);
   }

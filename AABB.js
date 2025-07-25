@@ -8,6 +8,11 @@ import { GEOMETRY_CONFIG } from "./const.js";
 import { Point3d } from "./3d/Point3d.js";
 
 const pt3d_0 = new Point3d();
+const pt3d_1 = new Point3d();
+const pt3d_2 = new Point3d();
+const pt3d_3 = new Point3d();
+const ptOnes = new Point3d(1, 1, 1);
+Object.freeze(ptOnes);
 
 const axes = {
   x: new Point3d(1, 0, 0),
@@ -179,6 +184,66 @@ export class AABB2d {
         yield outPoint.set(xType.x, yType.y);
       }
     }
+  }
+
+  /**
+   * Does this AABB overlap another?
+   * @param {AABB2d} other
+   * @returns {boolean}
+   */
+  overlapsAABB(other) {
+    // Separating Axis Theorem: Must overlap on every axis.
+    // A.minX <= B.maxX && A.maxX >= B.minX && ...same for y, z
+    for ( const axis of this.constructor.axes ) {
+      if ( this.min[axis] > other.max[axis] || this.max[axis] < other.min[axis] ) return false;
+    }
+    return false;
+  }
+
+  /**
+   * Does the segment cross the aabb bounds or is contained within?
+   * @param {Point3d} a
+   * @param {Point3d} b
+   * @returns {boolean}
+   */
+  overlapsSegment(a, b) {
+    // See https://jacco.ompf2.com/2022/04/13/how-to-build-a-bvh-part-1-basics/
+    const { min, max } = this.aabb;
+    const rayOrigin = a;
+    const rayDirection = b.subtract(a, pt3d_0);
+    const invDirection = ptOnes.divide(rayDirection, pt3d_3);
+    const t1 = pt3d_1;
+    const t2 = pt3d_2;
+
+    min.subtract(rayOrigin, t1).multiply(invDirection, t1);
+    max.subtract(rayOrigin, t2).multiply(invDirection, t2);
+    const xMinMax = Math.minMax(t1.x, t2.x);
+    const yMinMax = Math.minMax(t1.y, t2.y);
+    const zMinMax = Math.minMax(t1.z, t2.z);
+    const tmax = Math.min(xMinMax.max, yMinMax.max, zMinMax.max);
+    if ( tmax <= 0 ) return false;
+
+    const tmin = Math.max(xMinMax.min, yMinMax.min, zMinMax.min);
+    return tmax >= tmin && (tmin * tmin) < rayDirection.dot(rayDirection);
+  }
+
+  /**
+   * Does a sphere overlap the bounds?
+   * @param {Sphere} sphere
+   * @returns {boolean}
+   */
+  overlapsSphere(sphere) {
+    if ( this.containsPoint(sphere.center) ) return true;
+
+    // https://stackoverflow.com/questions/28343716/sphere-intersection-test-of-aabb
+    const { min, max } = this.aabb;
+    let dmin = 0;
+    for ( const axis of this.constructor.axes ) {
+      const c = sphere.center[axis];
+      if ( c < min[axis] ) dmin += Math.pow(c - min[axis], 2);
+      else if ( c > max[axis] ) dmin += Math.pow(c - max[axis], 2);
+    }
+    return dmin <= sphere.radiusSquared;
   }
 }
 
@@ -355,6 +420,79 @@ export class AABB3d extends AABB2d {
     out.min.set(x - R.x, y - R.y, z - R.z);
     out.max.set(x + R.x, y + R.y, z + R.z);
     return out;
+  }
+
+  /**
+   * Test if a convex planar shape overlaps the bounds.
+   * @param {Polygon3d} poly3d
+   * @return {boolean}
+   */
+  overlapsConvexPolygon3d(poly3d) {
+    if ( poly3d instanceof CONFIG.GeometryLib.threeD.Circle3d ) return this.overlapsCircle3d(poly3d);
+
+    const axes = [...axes, poly3d.plane.normal]; // Plane N is already normalized.
+
+    // Iterate through each polygon edge.
+    const EPSILON = 1e-08;
+    const iter = poly3d.iteratePoints({ close: true });
+    let a = iter.next().value;
+    if ( this.containsPoint(a) ) return true;
+
+    for ( const b of iter ) {
+      const edgeDir = b.subtract(a, pt3d_0);
+      if ( this.containsPoint(b) ) return true;
+
+      // Only consider non-zero edge directions.
+      if ( edgeDir.magnitude > EPSILON ) {
+        edgeDir.normalize(edgeDir);
+        for ( const aabbDir of axes ) {
+          const crossAxis = aabbDir.cross(edgeDir, pt3d_1);
+          if ( crossAxis.magnitude() > EPSILON ) axes.push(crossAxis.normalize());
+        }
+      }
+      a = b;
+    }
+
+    // SAT Test: Iterate through all collected axes and check for separation
+    const polyVertices = [...poly3d];
+    const aabbVertices = [...this.iterateVertices()];
+    for ( const axis of axes ) {
+      // Project all vertices of both shapes onto the current axis
+      const rectProjections = polyVertices.map(v => v.dot(axis));
+      const aabbProjections = aabbVertices.map(v => v.dot(axis));
+
+      // Find the minimum and maximum projected values for both shapes
+      const rectMin = Math.min(...rectProjections);
+      const rectMax = Math.max(...rectProjections);
+      const aabbMin = Math.min(...aabbProjections);
+      const aabbMax = Math.max(...aabbProjections);
+
+      // Check for overlap on this axis
+      // If the maximum projection of one shape is less than the minimum projection of the other,
+      // or vice-versa, then there is a gap, and a separating axis has been found.
+      if (rectMax < aabbMin || aabbMax < rectMin) return false; // Separating axis found, no intersection
+    }
+    return true; // No separating axis; must be intersecting.
+  }
+
+  overlapsCircle3d(circle3d) {
+    const { min, max } = this;
+    const { center, radiusSquared, plane } = circle3d;
+    if ( this.containsPoint(center) ) return true;
+
+    // Find the point on the AABB closest to the circle's center.
+    const closestPoint = pt3d_0.set(
+      Math.max(min.x, Math.min(center.x, max.x)),
+      Math.max(min.y, Math.min(center.y, max.y)),
+      Math.max(min.z, Math.min(center.z, max.z)),
+    );
+
+    // Project this closest point onto the circle's plane.
+    const planarPt = plane.conversion2dMatrix.multiplyPoint3d(closestPoint, pt3d_0);
+
+    // Check if the projected point is inside the circle.
+    const dist2 = PIXI.Point.distanceSquaredBetween(planarPt, center);
+    return dist2 <= radiusSquared;
   }
 
   /**

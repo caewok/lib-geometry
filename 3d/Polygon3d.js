@@ -804,6 +804,12 @@ export class Circle3d extends Polygon3d {
 
   static fromVertices(...args) { return Polygon3d.fromVertices(...args); }
 
+  static fromPlanarCircle(circle2d, plane) {
+    const invM2d = plane.conversion2dMatrixInverse;
+    const center3d = invM2d.multiplyPoint(CONFIG.GeometryLib.threeD.Point3d._tmp.set(circle2d.center.x, circle2d.center.y, 0));
+    return (new this()).setDimensions(center3d, circle2d.radius);
+  }
+
   clone() {
     const out = super.clone();
     out.radius = this.radius; // Rest is already set via points.
