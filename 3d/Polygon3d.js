@@ -418,7 +418,7 @@ export class Polygon3d {
     }
     const sides = new Array(numSides);
     let i = 0;
-    for ( const edge of this.edges({ close: true }) ) {
+    for ( const edge of this.iterateEdges({ close: true }) ) {
       const { A, B } = edge;
       const z0 = bottomZ ?? A.z - heightZ;
       const z1 = bottomZ ?? B.z - heightZ;
