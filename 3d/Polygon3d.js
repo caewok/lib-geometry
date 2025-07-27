@@ -197,39 +197,54 @@ export class Polygon3d {
 
   // ----- NOTE: Factory methods ----- //
 
-  static fromPoints(pts) {
+  static fromPoints(pts, out) {
     const n = pts.length;
-    const poly3d = new this(n);
-    for ( let i = 0; i < n; i += 1 ) poly3d.points[i].copyPartial(pts[i]);
-    return poly3d;
-  }
-
-  static from2dPoints(pts, elevation = 0) {
-    const n = pts.length;
-    const poly3d = new this(n);
+    if ( out ) out.points.length = n;
+    else out = new this(n);
     for ( let i = 0; i < n; i += 1 ) {
-      const { x, y } = pts[i];
-      poly3d.points[i].set(x, y, elevation);
+      const outPt = out.points[i] ??= new CONFIG.GeometryLib.threeD.Point3d();
+      outPt.copyPartial(pts[i]);
     }
-    return poly3d;
-  }
-
-  static from3dPoints(pts) {
-    const n = pts.length;
-    const poly3d = new this(n);
-    for ( let i = 0; i < n; i += 1 ) poly3d.points[i].copyFrom(pts[i]);
-    return poly3d;
-  }
-
-  static fromPolygon(poly, elevation = 0) {
-    const out = new this(poly.points.length * 0.5);
-    if ( poly.isHole ) out.isHole = true;
-    poly.iteratePoints({ close: false }).forEach((pt, idx) => out.points[idx].set(pt.x, pt.y, elevation));
     return out;
   }
 
-  static fromClipperPaths(cpObj, elevation = 0) {
-    return cpObj.toPolygons().map(poly => this.fromPolygon(poly, elevation));
+  static from2dPoints(pts, elevation = 0, out) {
+    const n = pts.length;
+    if ( out ) out.points.length = n;
+    else out = new this(n);
+    for ( let i = 0; i < n; i += 1 ) {
+      const outPt = out.points[i] ??= new CONFIG.GeometryLib.threeD.Point3d()
+      const { x, y } = pts[i];
+      outPt.set(x, y, elevation);
+    }
+    return out;
+  }
+
+  static from3dPoints(pts, out) {
+    const n = pts.length;
+    if ( out ) out.points.length = n;
+    else out = new this(n);
+    for ( let i = 0; i < n; i += 1 ) {
+      const outPt = out.points[i] ??= new CONFIG.GeometryLib.threeD.Point3d()
+      outPt.copyFrom(pts[i]);
+    }
+    return out;
+  }
+
+  static fromPolygon(poly, elevation = 0, out) {
+    const n = poly.points.length * 0.5;
+    if ( out ) out.points.length = n;
+    else out = new this(n);
+    if ( poly.isHole ) out.isHole = true;
+    poly.iteratePoints({ close: false }).forEach((pt, idx) => {
+      const outPt = out.points[idx] ??= new CONFIG.GeometryLib.threeD.Point3d()
+      outPt.set(pt.x, pt.y, elevation)
+    });
+    return out;
+  }
+
+  static fromClipperPaths(cpObj, elevation = 0, out) {
+    return cpObj.toPolygons().map(poly => this.fromPolygon(poly, elevation, out));
   }
 
   /**
@@ -238,25 +253,27 @@ export class Polygon3d {
    * @param {Number[]} [indices]    Indices to determine order in which polygon points are created from vertices
    * @returns {Triangle[]}
    */
-  static fromVertices(vertices, indices, stride = 3) {
+  static fromVertices(vertices, indices, stride = 3, out) {
     const Point3d = CONFIG.GeometryLib.threeD.Point3d;
     const n = indices.length;
     if ( vertices.length % stride !== 0 ) console.error(`${this.name}.fromVertices|Length of vertices is not divisible by stride ${stride}: ${vertices.length}`);
     indices ??= Array.fromRange(Math.floor(vertices.length / 3));
     if ( n % 3 !== 0 ) console.error(`${this.name}.fromVertices|Length of indices is not divisible by 3: ${indices.length}`);
-    const poly3d = new this(n);
+    if ( out ) out.points.length = n;
+    else out = new this(n);
     for ( let i = 0, j = 0, jMax = n; j < jMax; j += 1 ) {
-      poly3d.points[j].copyFrom(pointFromVertices(i++, vertices, indices, stride, Point3d._tmp1));
+      const outPt = out.points[j] ??= new CONFIG.GeometryLib.threeD.Point3d()
+      outPt.copyFrom(pointFromVertices(i++, vertices, indices, stride, Point3d._tmp1));
     }
-    return poly3d;
+    return out;
   }
 
   /**
    * Make a copy of this polygon.
    * @returns {Polygon3d} A new polygon
    */
-  clone() {
-    const out = new this.constructor(this.points.length);
+  clone(out) {
+    out ??= new this.constructor(this.points.length);
     out.isHole = this.isHole;
     this.points.forEach((pt, idx) => out.points[idx].copyFrom(pt));
     return out;
@@ -384,6 +401,31 @@ export class Polygon3d {
       from2dM.multiplyPoint3d(pt3d_2, pt3d_2);
       return Triangle3d.from3Points(pt3d_0, pt3d_1, pt3d_2);
     });
+  }
+
+  /**
+   * Build a set of vertical Quad3ds representing sides of a polygon shape.
+   * Built facing outwards from the polygon, with polygon on top.
+   * @param {number} elevZ        Fixed elevation to use for the sides
+   * @param {number} heightZ      Relative elevation to the top; subtracted from topZ
+   */
+  buildTopSides(bottomZ, heightZ = 0) {
+    let numSides = 0;
+    switch ( this.constructor.name ) {
+      case "Circle3d": numSides = PIXI.Circle.approximateVertexDensity(this.radius); break;
+      case "Ellipse3d": numSides = PIXI.Circle.approximateVertexDensity(Math.max(this.radiusX, this.radiusY)); break;
+      default: numSides = this.points.length;
+    }
+    const sides = new Array(numSides);
+    let i = 0;
+    for ( const edge of this.edges({ close: true }) ) {
+      const { A, B } = edge;
+      const z0 = bottomZ ?? A.z - heightZ;
+      const z1 = bottomZ ?? B.z - heightZ;
+      const side = Quad3d().from4Points(edge.B, edge.A, pt3d_0.set(A.x, A.y, z0), pt3d_1.set(B.x, B.y, z1));
+      sides[i++] = side;
+    }
+    return sides;
   }
 
   // ----- NOTE: Iterators ----- //
@@ -525,12 +567,12 @@ export class Polygon3d {
    * @param {Point3d} rayDirection
    * @returns {Point3d|null}
    */
-  intersection(rayOrigin, rayDirection, minT = 0) {
+  intersection(rayOrigin, rayDirection, minT = 0, maxT = Number.POSITIVE_INFINITY) {
     // First get the plane intersection.
     const Point3d = CONFIG.GeometryLib.threeD.Point3d;
     const plane = this.plane;
     const t = plane.rayIntersection(rayOrigin, rayDirection);
-    if ( t === null || t < minT ) return null;
+    if ( t === null || !t.almostBetween(minT, maxT) ) return null;
     if ( t.almostEqual(0) ) return rayOrigin;
 
     const ix = new Point3d();
@@ -686,33 +728,25 @@ function pointFromVertices(i, vertices, indices, stride = 3, outPoint) {
 }
 
 /**
- * Planar circle. Not to be confused with a sphere! This is a slice of a sphere in a plane.
+ * Planar ellipse shape.
  */
-export class Circle3d extends Polygon3d {
+export class Ellipse3d extends Circle3d {
 
   /** @type {Point3d} */
   get center() { return this.points[0]; }
 
   /** @type {number} */
-  #radius = 0;
+  #radiusX = 0;
 
-  /** @type {number} */
-  #radiusSquared = 0;
+  get radiusX() { return this.#radiusX; }
 
-  get radius() { return this.#radius; }
+  set radiusX(value) { this.#radiusX = value; }
 
-  set radius(value) {
-    this.#radius = value;
-    this.#radiusSquared = value * value;
-  }
+  #radiusY = 0;
 
-  get radiusSquared() { return this.#radiusSquared; }
+  get radiusY() { return this.#radiusY; }
 
-  set radiusSquared(value) {
-    this.#radiusSquared = value;
-    this.#radius = Math.sqrt(value);
-  }
-
+  set radiusY(value) { this.#radiusY = value; }
 
   constructor() {
     super(3); // 3 points to define the plane. The first is the center.
@@ -720,9 +754,10 @@ export class Circle3d extends Polygon3d {
 
   // ----- NOTE: In-place modifiers ----- //
 
-  setDimensions(center, radius, b, c) {
+  setDimensions(center, radiusX, radiusY, b, c) {
     this.points[0].copyFrom(center);
-    this.radius = radius;
+    this.radiusX = radiusX;
+    this.radiusY = radiusY;
 
     if ( b && c ) {
       // Use the provided points to set up the circle plane.
@@ -730,8 +765,8 @@ export class Circle3d extends Polygon3d {
       this.points[2].set(c);
     } else {
       // Add 2 points to form a flat plane. May be later modified by a constructor.
-      this.points[1].set(center.x + radius, center.y, center.z);
-      this.points[2].set(center.x, center.y + radius, center.z);
+      this.points[1].set(center.x + radiusX, center.y, center.z);
+      this.points[2].set(center.x, center.y + radiusY, center.z);
     }
     this.clearCache();
     return this;
@@ -754,7 +789,7 @@ export class Circle3d extends Polygon3d {
 
   // ----- NOTE: Plane ----- //
 
-  get circle() { return new PIXI.Circle(this.center.x, this.center.y, this.radius); }
+  get ellipse() { return new PIXI.Ellipse(this.center.x, this.center.y, this.radiusX, this.radiusY); }
 
   // ----- NOTE: Centroid ----- //
 
@@ -762,28 +797,29 @@ export class Circle3d extends Polygon3d {
 
   // ----- NOTE: Factory methods ----- //
 
-  static fromCircle(cir, elevationZ = 0) {
-    return this.from3dPoint(pt3d_0.set(cir.x, cir.y, elevationZ), cir.radius);
+  static fromEllipse(ellipse, elevationZ = 0, out) {
+    return this.fromCenterPoint(pt3d_0.set(ellipse.x, ellipse.y, elevationZ), ellipse.width, ellipse.height, out);
   }
 
-  static from3dPoint(center, radius) {
-    return (new this()).setDimensions(center, radius);
+  static fromCenterPoint(center, radiusX, radiusY, out) {
+    out ??= new this();
+    return out.setDimensions(center, radiusX, radiusY);
   }
 
-  static fromPoints(_pts, _radius) {
+  static fromPoints(_pts, _radiusX, _radiusY, _out) {
     console.error("fromPlane|Not yet implemented.");
   }
 
-  static from2dPoints(_pts, _radius, _elevation = 0) {
+  static from2dPoints(_pts, _radiusX, _radiusY, _elevation = 0, _out) {
     console.error("fromPlane|Not yet implemented.");
-
   }
 
-  static from3dPoints(pts, radius) {
-    return (new this()).setDimensions(pts[0], radius, pts[1], pts[2]);
+  static from3dPoints(pts, radiusX, radiusY, out) {
+    out ??= new this();
+    return out.setDimensions(pts[0], radiusX, radiusY, pts[1], pts[2]);
   }
 
-  static fromPlane(center, radius, plane) {
+  static fromPlane(center, radiusX, radiusY, plane, out) {
     const pts = plane.threePoints;
 
     // Add two additional points to form the plane.
@@ -795,7 +831,8 @@ export class Circle3d extends Polygon3d {
       else if ( !c ) c = pt;
       else break;
     }
-    return (new this()).setDimensions(center, radius, b, c);
+    out ??= new this();
+    return out.setDimensions(center, radiusX, radiusY, b, c);
   }
 
   static fromPolygon(...args) { return Polygon3d.fromPolygon(...args); }
@@ -804,24 +841,26 @@ export class Circle3d extends Polygon3d {
 
   static fromVertices(...args) { return Polygon3d.fromVertices(...args); }
 
-  static fromPlanarCircle(circle2d, plane) {
+  static fromPlanarEllipse(ellipse2d, plane, out) {
     const invM2d = plane.conversion2dMatrixInverse;
-    const center3d = invM2d.multiplyPoint(CONFIG.GeometryLib.threeD.Point3d._tmp.set(circle2d.center.x, circle2d.center.y, 0));
-    return (new this()).setDimensions(center3d, circle2d.radius);
+    const center3d = invM2d.multiplyPoint(CONFIG.GeometryLib.threeD.Point3d._tmp.set(ellipse2d.center.x, ellipse2d.center.y, 0));
+    out ??= new this();
+    return out.setDimensions(center3d, ellipse2d.radiusX, ellipse2d.radiusY);
   }
 
-  clone() {
-    const out = super.clone();
-    out.radius = this.radius; // Rest is already set via points.
+  clone(out) {
+    out ??= super.clone();
+    out.radiusX = this.radiusX; // Rest is already set via points.
+    out.radiusY = this.radiusY;
     return out;
   }
 
   // ----- NOTE: Conversions to ----- //
 
-  toPlanarCircle() {
+  toPlanarEllipse() {
     const to2dM = this.plane.conversion2dMatrix;
     const center = to2dM.multiplyPoint3d(this.center);
-    return new PIXI.Circle(center.x, center.y, this.radius);
+    return new PIXI.Elllipse(center.x, center.y, this.radiusX, this.radiusY);
   }
 
 
@@ -852,8 +891,8 @@ export class Circle3d extends Polygon3d {
   toPerspectivePolygon(opts) { return this.toPolygon3d(opts).toPerspectivePolygon(); }
 
   toPlanarPolygon(opts) {
-    const cir = this.toPlanarCircle();
-    return cir.toPolygon(opts);
+    const ellipse = this.toPlanarEllipse();
+    return ellipse.toPolygon(opts);
   }
 
   toVertices(opts) { return this.toPolygon3d(opts).toVertices(opts); }
@@ -871,6 +910,72 @@ export class Circle3d extends Polygon3d {
 
   *iteratePoints(opts) {
     for ( const pt of this.toPolygon3d.iteratePoints(opts) ) yield pt;
+  }
+}
+
+/**
+ * Planar circle. Not to be confused with a sphere! This is a slice of a sphere in a plane.
+ */
+export class Circle3d extends Ellipse3d {
+
+  /** @type {number} */
+  #radius = 0;
+
+  /** @type {number} */
+  #radiusSquared = 0;
+
+  get radius() { return this.#radius; }
+
+  get radiusSquared() { return this.#radiusSquared; }
+
+  set radius(value) {
+    this.#radius = value;
+    this.#radiusSquared = value ** 2;
+  }
+
+  set radiusSquared(value) {
+    this.#radiusSquared = value;
+    this.#radius = Math.sqrt(value);
+  }
+
+  get radiusX() { return this.#radius; }
+
+  get radiusY() { return this.#radius; }
+
+  set radiusX(value) { this.radius = value; }
+
+  set radiusY(value) { this.radius = value; }
+
+  setDimensions(center, radius, b, c) { return super.setDimensions(center, radius, radius, b, c); }
+
+  // ----- NOTE: Plane ----- //
+
+  get circle() { return new PIXI.Circle(this.center.x, this.center.y, this.radius); }
+
+  // ----- NOTE: Factory methods ----- //
+
+  static fromCircle(cir, elevationZ = 0, out) {
+    return this.fromCenterPoint(pt3d_0.set(cir.x, cir.y, elevationZ), cir.radius, out);
+  }
+
+  static fromPlanarCircle(circle2d, plane, out) {
+    const invM2d = plane.conversion2dMatrixInverse;
+    const center3d = invM2d.multiplyPoint(CONFIG.GeometryLib.threeD.Point3d._tmp.set(circle2d.center.x, circle2d.center.y, 0));
+    out ??= new this();
+    return out.setDimensions(center3d, circle2d.radius);
+  }
+
+  // ----- NOTE: Conversions to ----- //
+
+  toPlanarCircle() {
+    const to2dM = this.plane.conversion2dMatrix;
+    const center = to2dM.multiplyPoint3d(this.center);
+    return new PIXI.Circle(center.x, center.y, this.radius);
+  }
+
+  toPlanarPolygon(opts) {
+    const cir = this.toPlanarCircle();
+    return cir.toPolygon(opts);
   }
 }
 
@@ -895,20 +1000,20 @@ export class Triangle3d extends Polygon3d {
 
   // ----- NOTE: Factory methods ----- //
 
-  static from3Points(a, b, c) {
-    const tri = new this();
-    tri.a.copyFrom(a);
-    tri.b.copyFrom(b);
-    tri.c.copyFrom(c);
-    return tri;
+  static from3Points(a, b, c, out) {
+    out ??= new this();
+    out.a.copyFrom(a);
+    out.b.copyFrom(b);
+    out.c.copyFrom(c);
+    return out;
   }
 
-  static fromPartial3Points(a, b, c) {
-    const tri = new this();
-    tri.a.copyPartial(a);
-    tri.b.copyPartial(b);
-    tri.c.copyPartial(c);
-    return tri;
+  static fromPartial3Points(a, b, c, out) {
+    out ??= new this();
+    out.a.copyPartial(a);
+    out.b.copyPartial(b);
+    out.c.copyPartial(c);
+    return out;
   }
 
   /**
@@ -1013,9 +1118,9 @@ export class Triangle3d extends Polygon3d {
     return CONFIG.GeometryLib.threeD.Plane.rayIntersectionTriangle3d(rayOrigin, rayDirection, this.a, this.b, this.c);
   }
 
-  intersection(rayOrigin, rayDirection, minT = 0) {
+  intersection(rayOrigin, rayDirection, minT = 0, maxT = Number.POSITIVE_INFINITY) {
     const t = this.intersectionT(rayOrigin, rayDirection);
-    if ( t === null || t < minT ) return null;
+    if ( t === null || !t.almostBetween(minT, maxT) ) return null;
     if ( t.almostEqual(0) ) return rayOrigin;
     const ix = new CONFIG.GeometryLib.threeD.Point3d();
     return rayOrigin.add(rayDirection.multiplyScalar(t, ix), ix);
@@ -1090,6 +1195,7 @@ export class Triangle3d extends Polygon3d {
   }
 }
 
+
 /**
  * A quad shape in 3d. Primarily for its fast intersection test and ease of splitting into triangles.
  */
@@ -1112,22 +1218,31 @@ export class Quad3d extends Polygon3d {
 
 // ----- NOTE: Factory methods ----- //
 
-  static from4Points(a, b, c, d) {
-    const quad = new this();
-    quad.a.copyFrom(a);
-    quad.b.copyFrom(b);
-    quad.c.copyFrom(c);
-    quad.d.copyFrom(d);
-    return quad;
+  static from4Points(a, b, c, d, out) {
+    out ??= new this();
+    out.a.copyFrom(a);
+    out.b.copyFrom(b);
+    out.c.copyFrom(c);
+    out.d.copyFrom(d);
+    return out;
   }
 
-  static fromPartial4Points(a, b, c, d) {
-    const quad = new this();
-    quad.a.copyPartial(a);
-    quad.b.copyPartial(b);
-    quad.c.copyPartial(c);
-    quad.c.copyPartial(d);
-    return quad;
+  static fromPartial4Points(a, b, c, d, out) {
+    out ??= new this();
+    out.a.copyPartial(a);
+    out.b.copyPartial(b);
+    out.c.copyPartial(c);
+    out.c.copyPartial(d);
+    return out;
+  }
+
+  static fromRectangle(rect, elevZ = 0, out) {
+    out ??= new this();
+    out.points[0].set(rect.left, rect.top, elevZ);
+    out.points[1].set(rect.left, rect.bottom, elevZ);
+    out.points[2].set(rect.right, rect.bottom, elevZ);
+    out.points[3].set(rect.right, rect.top, elevZ);
+    return out;
   }
 
   triangulate() {
@@ -1150,9 +1265,9 @@ export class Quad3d extends Polygon3d {
     return CONFIG.GeometryLib.threeD.Plane.rayIntersectionQuad3dLD(rayOrigin, rayDirection, this.a, this.b, this.c, this.d);
   }
 
-  intersection(rayOrigin, rayDirection) {
+  intersection(rayOrigin, rayDirection, minT = 0, maxT = Number.POSITIVE_INFINITY) {
     const t = this.intersectionT(rayOrigin, rayDirection);
-    if ( t === null || t < 0 ) return null;
+    if ( t === null || !t.almostBetween(minT, maxT) ) return null;
     if ( t.almostEqual(0) ) return rayOrigin;
     const ix = new CONFIG.GeometryLib.threeD.Point3d();
     return rayOrigin.add(rayDirection.multiplyScalar(t, ix), ix);
@@ -1335,8 +1450,8 @@ export class Polygons3d extends Polygon3d {
 
   static fromVertices(vertices, indices) { this.#createSingleUsingMethod("fromVertices", vertices, indices); }
 
-  clone() {
-    const out = new this.constructor(0);
+  clone(out) {
+    out ??= new this.constructor(0);
     out.polygons = this.polygons.map(poly => poly.clone());
     return out;
   }
@@ -1368,6 +1483,12 @@ export class Polygons3d extends Polygon3d {
     const out = new this();
     this.polygons.forEach(poly => out.polygons.push(...poly.triangulate(opts)));
     return out;
+  }
+
+  buildTopSides(bottomZ, heightZ = 0) {
+    const sides = [];
+    for ( const poly3d of this.polygons ) sides.push(...poly3d.buildTopSides(bottomZ, heightZ));
+    return sides;
   }
 
   // ----- NOTE: Iterators ----- //
@@ -1534,6 +1655,7 @@ function convexHull(points) {
 }
 
 GEOMETRY_CONFIG.threeD.Polygon3d = Polygon3d;
+GEOMETRY_CONFIG.threeD.Ellipse3d = Ellipse3d;
 GEOMETRY_CONFIG.threeD.Circle3d = Circle3d;
 GEOMETRY_CONFIG.threeD.Triangle3d = Triangle3d;
 GEOMETRY_CONFIG.threeD.Quad3d = Quad3d;
