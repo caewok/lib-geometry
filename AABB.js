@@ -46,7 +46,7 @@ export class AABB2d {
   static union(...bounds) {
     const out = new this();
     const { min, max } = out;
-    for ( const axis of this.constructor.axes ) {
+    for ( const axis of this.axes ) {
       const boundsMin = bounds.map(b => b.min[axis]);
       const boundsMax = bounds.map(b => b.max[axis]);
       min[axis] = Math.min(...boundsMin, min[axis]);
@@ -64,7 +64,7 @@ export class AABB2d {
     out ??= new this();
     const { min, max } = out;
     for ( const pt of pts ) {
-      for ( const axis of this.constructor.axes ) {
+      for ( const axis of this.axes ) {
         min[axis] = Math.min(pt[axis] ?? 0, min[axis]);
         max[axis] = Math.max(pt[axis] ?? 0, max[axis]);
       }
