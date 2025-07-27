@@ -76,8 +76,8 @@ export class AABB2d {
    * @param {PIXI.Circle} circle
    * @returns {AABB2d}
    */
-  static fromCircle(circle) {
-    const out = new this();
+  static fromCircle(circle, out) {
+    out ??= new this();
     out.min.set(circle.x - circle.radius, circle.y - circle.radius);
     out.max.set(circle.x + circle.radius, circle.y + circle.radius);
     return out;
@@ -87,63 +87,80 @@ export class AABB2d {
    * @param {PIXI.Ellipse} ellipse
    * @returns {AABB2d}
    */
-  static fromEllipse(ellipse) {
+  static fromEllipse(ellipse, out) {
     // PIXI.Ellipse has same properties as PIXI.Rectangle.
-    return this.fromRectangle(ellipse);
+    return this.fromRectangle(ellipse, out);
   }
 
   /**
    * @param {PIXI.Rectangle} rect
    * @returns {AABB2d}
    */
-  static fromRectangle(rect) {
-    const out = new this();
+  static fromRectangle(rect, out) {
+    out ??= new this();
     out.min.set(rect.x - rect.width, rect.y - rect.height);
     out.max.set(rect.x + rect.width, rect.y + rect.height);
     return out;
-
   }
 
   /**
    * @param {PIXI.Polygon} polygon
    * @returns {AABB2d}
    */
-  static fromPolygon(poly) {
+  static fromPolygon(poly, out) {
     // Iterating the points will determine the min/max values.
-    return this.fromPoints(poly.iteratePoints({ close: false }));
+    return this.fromPoints(poly.iteratePoints({ close: false }), out);
   }
 
   /**
    * @param {Tile} tile
    * @returns {AABB2d}
    */
-  static fromTile(tile) {
-    return this.fromRectangle(tile.bounds);
+  static fromTile(tile, out) {
+    return this.fromRectangle(tile.bounds, out);
+  }
+
+  static fromTileAlpha(tile, alphaThreshold = 0, out) {
+    if ( !(alphaThreshold && tile.evPixelCache) ) return this.fromTile(tile, out);
+    const bbox = tile.evPixelCache.getThresholdCanvasBoundingBox(alphaThreshold);
+    return bbox instanceof PIXI.Polygon ? this.fromPolygon(bbox, out) : this.fromRectangle(bbox, out);
   }
 
   /**
    * @param {Wall} wall
    * @returns {AABB2d}
    */
-  static fromWall(wall) {
-    return this.fromEdge(wall.edge);
+  static fromWall(wall, out) {
+    return this.fromEdge(wall.edge, out);
   }
 
   /**
    * @param {Edge} edge
    * @returns {AABB2d}
    */
-  static fromEdge(edge) {
-    return this.fromPoints([edge.a, edge.b]);
+  static fromEdge(edge, out) {
+    return this.fromPoints([edge.a, edge.b], out);
   }
 
   /**
    * @param {Token} token
    * @returns {AABB2d}
    */
-  static fromToken(token) {
+  static fromToken(token, out) {
     const border = token.tokenBorder;
-    return border instanceof PIXI.Rectangle ? this.fromRectangle(border) : this.fromPolygon(border);
+    return border instanceof PIXI.Rectangle ? this.fromRectangle(border, out) : this.fromPolygon(border, out);
+  }
+
+  /**
+   * Copy this AABB to another.
+   * @param {AABB2d} [other]
+   * @returns {AABB2d} other
+   */
+  clone(out) {
+    out ??= new this();
+    out.min.copyFrom(this.min);
+    out.max.copyFrom(this.max);
+    return out;
   }
 
   /**
@@ -258,14 +275,28 @@ export class AABB3d extends AABB2d {
   max = new this.constructor.POINT_CLASS(Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY);
 
   /**
+   * Convert a 2d AABB to a 3d AABB, by adding min and max z.
+   * @param {AABB2d} aabb2d
+   * @param {number} [maxZ=0]
+   * @param {number} [minZ=maxZ]
+   * @returns {AABB3d}
+   */
+  static fromAABB2d(aabb2d, maxZ = 0, minZ = maxZ, out) {
+    out ??= new this();
+    out.min.set(aabb2d.min.x, aabb2d.min.y, minZ);
+    out.max.set(aabb2d.max.z, aabb2d.max.y, maxZ);
+    return out;
+  }
+
+  /**
    * @param {PIXI.Circle} circle            2d circle, assumed to be flat on the plane
    * @param {number} [elevationZ=0]         Intended elevation in the z axis
    * @returns {AABB3d}
    */
-  static fromCircle(circle, elevationZ = 0) {
-    const out = super.fromCircle(circle);
-    out.min.z = elevationZ;
-    out.max.z = elevationZ;
+  static fromCircle(circle, maxZ = 0, minZ = maxZ, out) {
+    out = super.fromCircle(circle, out);
+    out.min.z = minZ;
+    out.max.z = maxZ;
     return out;
   }
 
@@ -274,10 +305,10 @@ export class AABB3d extends AABB2d {
    * @param {number} [elevationZ=0]         Intended elevation in the z axis
    * @returns {AABB3d}
    */
-  static fromEllipse(ellipse, elevationZ = 0) {
-    const out = super.fromEllipse(ellipse);
-    out.min.z = elevationZ;
-    out.max.z = elevationZ;
+  static fromEllipse(ellipse, maxZ = 0, minZ = maxZ, out) {
+    out = super.fromEllipse(ellipse, out);
+    out.min.z = minZ;
+    out.max.z = maxZ;
     return out;
   }
 
@@ -286,10 +317,10 @@ export class AABB3d extends AABB2d {
    * @param {number} [elevationZ=0]         Intended elevation in the z axis
    * @returns {AABB3d}
    */
-  static fromRectangle(rect, elevationZ = 0) {
-    const out = super.fromRectangle(rect);
-    out.min.z = elevationZ;
-    out.max.z = elevationZ;
+  static fromRectangle(rect, maxZ = 0, minZ = maxZ, out) {
+    out = super.fromRectangle(rect, out);
+    out.min.z = minZ;
+    out.max.z = maxZ;
     return out;
   }
 
@@ -299,10 +330,10 @@ export class AABB3d extends AABB2d {
    * @returns {AABB3d}
    */
 
-  static fromPolygon(poly, elevationZ = 0) {
-    const out = super.fromPolygon(poly);
-    out.min.z = elevationZ;
-    out.max.z = elevationZ;
+  static fromPolygon(poly, maxZ = 0, minZ = maxZ, out) {
+    out = super.fromPolygon(poly, out);
+    out.min.z = minZ;
+    out.max.z = maxZ;
     return out;
   }
 
@@ -310,8 +341,8 @@ export class AABB3d extends AABB2d {
    * @param {Tile} tile
    * @returns {AABB3d}
    */
-  static fromTile(tile) {
-    const out = super.fromTile(tile);
+  static fromTile(tile, out) {
+    out = super.fromTile(tile, out);
     const elevZ = tile.elevationZ;
     out.max.z = elevZ;
     out.min.z = elevZ;
@@ -322,9 +353,9 @@ export class AABB3d extends AABB2d {
    * @param {Edge} edge
    * @returns {AABB3d}
    */
-  static fromWall(wall) {
+  static fromWall(wall, out) {
     const { topZ, bottomZ } = wall;
-    const out = super.fromWall(wall);
+    out = super.fromWall(wall, out);
     out.min.z = bottomZ
     out.max.z = topZ;
     return out;
@@ -334,8 +365,8 @@ export class AABB3d extends AABB2d {
    * @param {Edge} edge
    * @returns {AABB3d}
    */
-  static fromEdge(edge) {
-    const out = super.fromEdge(edge);
+  static fromEdge(edge, out) {
+    out = super.fromEdge(edge, out);
     const { a, b } = edge.elevationLibGeometry;
     out.min.z = Math.min(a.bottom ?? Number.NEGATIVE_INFINITY, b.bottom ?? Number.NEGATIVE_INFINITY);
     out.max.z = Math.max(a.top ?? Number.POSITIVE_INFINITY, b.top ?? Number.POSITIVE_INFINITY);
@@ -346,8 +377,8 @@ export class AABB3d extends AABB2d {
    * @param {Token} token
    * @returns {AABB3d}
    */
-  static fromToken(token) {
-    const out = super.fromToken(token);
+  static fromToken(token, out) {
+    out = super.fromToken(token, out);
     out.min.z = token.bottomZ;
     out.max.z = token.topZ;
     return out;
@@ -357,8 +388,8 @@ export class AABB3d extends AABB2d {
    * @param {Sphere} sphere
    * @returns {AABB3d}
    */
-  static fromSphere(sphere) {
-    const out = new this();
+  static fromSphere(sphere, out) {
+    out ??= new this();
     const { center, radius } = sphere;
     out.min.set(center.x - radius, center.y - radius, center.z - radius);
     out.max.set(center.x + radius, center.y + radius, center.z + radius);
