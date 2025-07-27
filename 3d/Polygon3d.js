@@ -422,7 +422,7 @@ export class Polygon3d {
       const { A, B } = edge;
       const z0 = bottomZ ?? A.z - heightZ;
       const z1 = bottomZ ?? B.z - heightZ;
-      const side = Quad3d().from4Points(edge.B, edge.A, pt3d_0.set(A.x, A.y, z0), pt3d_1.set(B.x, B.y, z1));
+      const side = Quad3d.from4Points(edge.B, edge.A, pt3d_0.set(A.x, A.y, z0), pt3d_1.set(B.x, B.y, z1));
       sides[i++] = side;
     }
     return sides;
