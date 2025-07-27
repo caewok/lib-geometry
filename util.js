@@ -1419,11 +1419,11 @@ export function segmentOverlap(a, b, c, d) {
   return res;
 }
 
-export function almostLessThan(a, b) { return a < b || a.almostEqual(b); }
+export function almostLessThan(a, b, epsilon = 1e-06) { return a < b || a.almostEqual(b, epsilon); }
 
-export function almostGreaterThan(a, b) { return a > b || a.almostEqual(b); }
+export function almostGreaterThan(a, b, epsilon = 1e-06) { return a > b || a.almostEqual(b, epsilon); }
 
-export function almostBetween(value, min, max) {
-  return almostLessThan(value, max) && almostGreaterThan(value, min);
+export function almostBetween(value, min, max, epsilon = 1e-06) {
+  return almostLessThan(value, max, epsilon) && almostGreaterThan(value, min, epsilon);
 }
 
