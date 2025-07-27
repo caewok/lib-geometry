@@ -730,7 +730,7 @@ function pointFromVertices(i, vertices, indices, stride = 3, outPoint) {
 /**
  * Planar ellipse shape.
  */
-export class Ellipse3d extends Circle3d {
+export class Ellipse3d extends Polygon3d {
 
   /** @type {Point3d} */
   get center() { return this.points[0]; }
