@@ -909,7 +909,7 @@ export class Ellipse3d extends Polygon3d {
   // opts: { density, includeEndpoints = true }
   toPolygon3d(opts ) {
     const poly2d = this.toPlanarPolygon(opts);
-    return this.constructor.fromPlanarPolygon(poly2d, this.plane);
+    return Polygon3d.fromPlanarPolygon(poly2d, this.plane);
   }
 
   /**
