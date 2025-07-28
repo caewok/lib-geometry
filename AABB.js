@@ -90,8 +90,11 @@ export class AABB2d {
    * @returns {AABB2d}
    */
   static fromEllipse(ellipse, out) {
-    // PIXI.Ellipse has same properties as PIXI.Rectangle.
-    return this.fromRectangle(ellipse, out);
+    out ??= new this();
+    const { x, y, width, height } = ellipse;
+    out.min.set(x - width, x + width);
+    out.max.set(y - height, y + height);
+    return out;
   }
 
   /**
@@ -100,9 +103,8 @@ export class AABB2d {
    */
   static fromRectangle(rect, out) {
     out ??= new this();
-    // Don't use left/right/top/bottom b/c rect may actually be an ellipse.
-    out.min.set(rect.x, rect.y);
-    out.max.set(rect.x + rect.width, rect.y + rect.height);
+    out.min.set(rect.top, rect.left);
+    out.max.set(rect.bottom, rect.right);
     return out;
   }
 
