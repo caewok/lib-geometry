@@ -421,10 +421,10 @@ export class Plane {
     const c = this.point.add(vs.u, tmpPt3d1);
 
     const m = new CONFIG.GeometryLib.MatrixFlat([
-      [a.x, b.x, c.x, p.x],
-      [a.y, b.y, c.y, p.y],
-      [a.z, b.z, c.z, p.z],
-      [1,   1,   1,   1],
+      a.x, b.x, c.x, p.x,
+      a.y, b.y, c.y, p.y,
+      a.z, b.z, c.z, p.z,
+      1,   1,   1,   1,
     ], 4, 4);
 
     return m.determinant().almostEqual(0);
@@ -519,17 +519,17 @@ export class Plane {
     // Adjust for row-major matrix and left-hand coordinate system
 
     const S = new CONFIG.GeometryLib.MatrixFlat([
-      [A.x, A.y, A.z, 1],
-      [u.x, u.y, u.z, 1],
-      [v.x, v.y, v.z, 1],
-      [n.x, n.y, n.z, 1]
+      A.x, A.y, A.z, 1,
+      u.x, u.y, u.z, 1,
+      v.x, v.y, v.z, 1,
+      n.x, n.y, n.z, 1
     ], 4, 4);
 
     const D = new CONFIG.GeometryLib.MatrixFlat([
-      [0, 0, 0, 1],
-      [1, 0, 0, 1],
-      [0, 1, 0, 1],
-      [0, 0, 1, 1]
+      0, 0, 0, 1,
+      1, 0, 0, 1,
+      0, 1, 0, 1,
+      0, 0, 1, 1
     ], 4, 4);
 
     const Sinv = S.invert();
