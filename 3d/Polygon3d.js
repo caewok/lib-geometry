@@ -904,10 +904,11 @@ export class Ellipse3d extends Polygon3d {
 
   toPlanarEllipse() {
     const center = pt3d_0;
-    if ( this.center.almostEqual(this.plane.center) ) center.set(0, 0, 0);
+    const centroid = this.centroid;
+    if ( centroid.almostEqual(this.plane.point) ) center.set(0, 0, 0);
     else {
       const to2dM = this.plane.conversion2dMatrix;
-      to2dM.multiplyPoint3d(this.center, center);
+      to2dM.multiplyPoint3d(centroid, center);
     }
     return new PIXI.Ellipse(center.x, center.y, this.radiusX, this.radiusY);
   }
