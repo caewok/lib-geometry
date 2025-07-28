@@ -958,6 +958,11 @@ export class Circle3d extends Ellipse3d {
     return this.fromCenterPoint(pt3d_0.set(cir.x, cir.y, elevationZ), cir.radius, out);
   }
 
+  static fromCenterPoint(center, radius, out) {
+    out ??= new this();
+    return out.setDimensions(center, radius, radius);
+  }
+
   static fromPlanarCircle(circle2d, plane, out) {
     const invM2d = plane.conversion2dMatrixInverse;
     const center3d = invM2d.multiplyPoint(CONFIG.GeometryLib.threeD.Point3d._tmp.set(circle2d.center.x, circle2d.center.y, 0));
