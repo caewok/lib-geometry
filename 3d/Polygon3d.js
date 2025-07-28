@@ -947,11 +947,13 @@ export class Ellipse3d extends Polygon3d {
   // ----- NOTE: Iterators ----- //
 
   *iterateEdges(opts) {
-    for ( const edge of this.toPolygon3d().iterateEdges(opts) ) yield edge;
+    const poly3d = this.toPolygon3d();
+    for ( const edge of poly3d.iterateEdges(opts) ) yield edge;
   }
 
   *iteratePoints(opts) {
-    for ( const pt of this.toPolygon3d().iteratePoints(opts) ) yield pt;
+    const poly3d = this.toPolygon3d();
+    for ( const pt of poly3d.iteratePoints(opts) ) yield pt;
   }
 }
 
