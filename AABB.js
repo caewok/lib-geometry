@@ -6,6 +6,7 @@ PIXI
 
 import { GEOMETRY_CONFIG } from "./const.js";
 import { Point3d } from "./3d/Point3d.js";
+import { Draw } from "./Draw.js";
 
 const pt3d_0 = new Point3d();
 const pt3d_1 = new Point3d();
@@ -262,6 +263,13 @@ export class AABB2d {
     }
     return dmin <= sphere.radiusSquared;
   }
+
+  // ----- NOTE: Debug ----- //
+  draw2d({ draw, ...opts }) {
+    draw ??= new Draw();
+    draw.point(this.min, opts);
+    draw.point(this.max, opts);
+  }
 }
 
 export class AABB3d extends AABB2d {
@@ -293,7 +301,7 @@ export class AABB3d extends AABB2d {
    * @param {number} [elevationZ=0]         Intended elevation in the z axis
    * @returns {AABB3d}
    */
-  static fromCircle(circle, maxZ = 0, minZ = maxZ, out) {
+  static fromCircle(circle, out, { maxZ = 0, minZ = maxZ } = {}) {
     out = super.fromCircle(circle, out);
     out.min.z = minZ;
     out.max.z = maxZ;
@@ -305,7 +313,7 @@ export class AABB3d extends AABB2d {
    * @param {number} [elevationZ=0]         Intended elevation in the z axis
    * @returns {AABB3d}
    */
-  static fromEllipse(ellipse, maxZ = 0, minZ = maxZ, out) {
+  static fromEllipse(ellipse, out, { maxZ = 0, minZ = maxZ } = {}) {
     out = super.fromEllipse(ellipse, out);
     out.min.z = minZ;
     out.max.z = maxZ;
@@ -317,7 +325,7 @@ export class AABB3d extends AABB2d {
    * @param {number} [elevationZ=0]         Intended elevation in the z axis
    * @returns {AABB3d}
    */
-  static fromRectangle(rect, maxZ = 0, minZ = maxZ, out) {
+  static fromRectangle(rect, out, { maxZ = 0, minZ = maxZ } = {}) {
     out = super.fromRectangle(rect, out);
     out.min.z = minZ;
     out.max.z = maxZ;
@@ -330,7 +338,7 @@ export class AABB3d extends AABB2d {
    * @returns {AABB3d}
    */
 
-  static fromPolygon(poly, maxZ = 0, minZ = maxZ, out) {
+  static fromPolygon(poly, out, { maxZ = 0, minZ = maxZ } = {}) {
     out = super.fromPolygon(poly, out);
     out.min.z = minZ;
     out.max.z = maxZ;
