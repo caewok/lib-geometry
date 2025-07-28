@@ -360,7 +360,7 @@ export class Polygon3d {
     for ( let i = 0, j = 0; i < ln; i += 2, j += 1 ) {
       const x = poly2d.points[i];
       const y = poly2d.points[i + 1];
-      const pt3d = invM2d.multiplyPoint(CONFIG.GeometryLib.threeD.Point3d._tmp.set(x, y, 0));
+      const pt3d = invM2d.multiplyPoint3d(CONFIG.GeometryLib.threeD.Point3d._tmp.set(x, y, 0));
       pts3d[j] = pt3d;
     }
     return this.from3dPoints(pts3d);
@@ -843,7 +843,7 @@ export class Ellipse3d extends Polygon3d {
 
   static fromPlanarEllipse(ellipse2d, plane, out) {
     const invM2d = plane.conversion2dMatrixInverse;
-    const center3d = invM2d.multiplyPoint(CONFIG.GeometryLib.threeD.Point3d._tmp.set(ellipse2d.center.x, ellipse2d.center.y, 0));
+    const center3d = invM2d.multiplyPoint3d(CONFIG.GeometryLib.threeD.Point3d._tmp.set(ellipse2d.center.x, ellipse2d.center.y, 0));
     out ??= new this();
     return out.setDimensions(center3d, ellipse2d.radiusX, ellipse2d.radiusY);
   }
@@ -965,7 +965,7 @@ export class Circle3d extends Ellipse3d {
 
   static fromPlanarCircle(circle2d, plane, out) {
     const invM2d = plane.conversion2dMatrixInverse;
-    const center3d = invM2d.multiplyPoint(CONFIG.GeometryLib.threeD.Point3d._tmp.set(circle2d.center.x, circle2d.center.y, 0));
+    const center3d = invM2d.multiplyPoint3d(CONFIG.GeometryLib.threeD.Point3d._tmp.set(circle2d.center.x, circle2d.center.y, 0));
     out ??= new this();
     return out.setDimensions(center3d, circle2d.radius);
   }
