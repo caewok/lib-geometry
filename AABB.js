@@ -79,8 +79,9 @@ export class AABB2d {
    */
   static fromCircle(circle, out) {
     out ??= new this();
-    out.min.set(circle.x - circle.radius, circle.y - circle.radius);
-    out.max.set(circle.x + circle.radius, circle.y + circle.radius);
+    const { x, y, radius } = circle;
+    out.min.set(x - radius, y - radius);
+    out.max.set(x + radius, y + radius);
     return out;
   }
 
@@ -99,7 +100,8 @@ export class AABB2d {
    */
   static fromRectangle(rect, out) {
     out ??= new this();
-    out.min.set(rect.x - rect.width, rect.y - rect.height);
+    // Don't use left/right/top/bottom b/c rect may actually be an ellipse.
+    out.min.set(rect.x, rect.y);
     out.max.set(rect.x + rect.width, rect.y + rect.height);
     return out;
   }
@@ -265,7 +267,7 @@ export class AABB2d {
   }
 
   // ----- NOTE: Debug ----- //
-  draw2d({ draw, ...opts }) {
+  draw2d({ draw, ...opts } = {}) {
     draw ??= new Draw();
     draw.point(this.min, opts);
     draw.point(this.max, opts);
