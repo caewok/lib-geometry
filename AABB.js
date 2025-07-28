@@ -92,8 +92,8 @@ export class AABB2d {
   static fromEllipse(ellipse, out) {
     out ??= new this();
     const { x, y, width, height } = ellipse;
-    out.min.set(x - width, x + width);
-    out.max.set(y - height, y + height);
+    out.min.set(x - width, y - height);
+    out.max.set(x + width, y + height);
     return out;
   }
 
