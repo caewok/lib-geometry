@@ -804,7 +804,7 @@ export class Ellipse3d extends Polygon3d {
 
   static fromCenterPoint(center, radiusX, radiusY, out) {
     out ??= new this();
-    return out.setDimensions(center, radiusX, radiusY);
+    return out._setDimensions(center, radiusX, radiusY);
   }
 
   static calculateDimensionsFromPoints(pts, { center, radiusX, radiusY } = {}) {
