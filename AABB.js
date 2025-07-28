@@ -103,8 +103,8 @@ export class AABB2d {
    */
   static fromRectangle(rect, out) {
     out ??= new this();
-    out.min.set(rect.top, rect.left);
-    out.max.set(rect.bottom, rect.right);
+    out.min.set(rect.left, rect.top);
+    out.max.set(rect.right, rect.bottom);
     return out;
   }
 
@@ -407,6 +407,8 @@ export class AABB3d extends AABB2d {
     out.max.set(center.x + radius, center.y + radius, center.z + radius);
     return out;
   }
+
+
 
   /**
    * @param {Polygon3d} poly3d
