@@ -808,35 +808,38 @@ export class Ellipse3d extends Polygon3d {
   }
 
   static calculateDimensionsFromPoints(pts, { center, radiusX, radiusY } = {}) {
-    const cl = pts[0].constructor;
     if ( !center ) {
       // Find two opposite points to locate the center.
       let max2 = Number.NEGATIVE_INFINITY;
       const iter = Iterator.from(pts);
       const a = iter.next().value;
+      let lastB;
+      const cl = a.constructor;
       for ( const b of iter ) {
         // Walk around the ellipse until finding the furthest point from a.
         // That point is on the opposite side from a.
         const dist2 = cl.distanceSquaredBetween(a, b);
         if ( dist2 < max2 ) {
           center = cl._tmp3;
-          a.projectToward(b, 0.5, center);
+          a.projectToward(lastB, 0.5, center);
           break;
         }
         max2 = dist2;
+        lastB = b;
       }
     }
     if ( !(radiusX || radiusY) ) {
       // Must find the minimum and maximum distance from the polygon center to determine the two radii.
       let min2 = Number.POSITIVE_INFINITY;
       let max2 = Number.NEGATIVE_INFINITY;
+      const cl = center.constructor;
       for ( const pt of pts ) {
         const dist2 = cl.distanceSquaredBetween(center, pt);
         min2 = Math.min(min2, dist2);
         max2 = Math.max(max2, dist2);
       }
-      radiusX ||= max2;
-      radiusY ||= min2;
+      radiusX ||= Math.sqrt(max2);
+      radiusY ||= Math.sqrt(min2);
     }
     return { center, radiusX, radiusY };
   }
@@ -859,7 +862,7 @@ export class Ellipse3d extends Polygon3d {
 
   static fromPlanarPolygon(poly2d, plane, radiusX = null, radiusY = null) {
     const center = poly2d.center;
-    if ( radiusX && radiusY ) {
+    if ( !(radiusX || radiusY) ) {
       const res = this.calculateDimensionsFromPoints(poly2d.iteratePoints({ close: false }), { center, radiusX, radiusY });
       radiusX ??= res.radiusX;
       radiusY ??= res.radiusY;
@@ -900,11 +903,20 @@ export class Ellipse3d extends Polygon3d {
   // ----- NOTE: Conversions to ----- //
 
   toPlanarEllipse() {
-    const to2dM = this.plane.conversion2dMatrix;
-    const center = to2dM.multiplyPoint3d(this.center);
+    const center = pt3d_0;
+    if ( this.center.almostEqual(this.plane.center) ) center.set(0, 0, 0);
+    else {
+      const to2dM = this.plane.conversion2dMatrix;
+      to2dM.multiplyPoint3d(this.center, center);
+    }
     return new PIXI.Ellipse(center.x, center.y, this.radiusX, this.radiusY);
   }
 
+  /**
+   * Convert to 2d polygon, dropping z.
+   * @returns {PIXI.Polygon}
+   */
+  toPolygon2d(opts) {  return this.toPolygon3d(opts).toPolygon2d(opts); }
 
   // opts: { density, includeEndpoints = true }
   toPolygon3d(opts ) {
@@ -920,11 +932,7 @@ export class Ellipse3d extends Polygon3d {
    */
   toClipperPaths(opts) { return this.toPolygon3d(opts).toClipperPaths(opts); }
 
-  /**
-   * Convert to 2d polygon, dropping z.
-   * @returns {PIXI.Polygon}
-   */
-  toPolygon2d(opts) {  return this.toPolygon3d(opts).toPolygon2d(opts); }
+
 
   /**
    * Convert to 2d polygon by perspective transform, dividing each point by z.
@@ -1022,8 +1030,12 @@ export class Circle3d extends Ellipse3d {
   // ----- NOTE: Conversions to ----- //
 
   toPlanarCircle() {
-    const to2dM = this.plane.conversion2dMatrix;
-    const center = to2dM.multiplyPoint3d(this.center);
+    const center = pt3d_0;
+    if ( this.center.almostEqual(this.plane.center) ) center.set(0, 0, 0);
+    else {
+      const to2dM = this.plane.conversion2dMatrix;
+      to2dM.multiplyPoint3d(this.center, center);
+    }
     return new PIXI.Circle(center.x, center.y, this.radius);
   }
 
