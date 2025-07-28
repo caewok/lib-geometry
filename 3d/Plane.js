@@ -28,7 +28,7 @@ export class Plane {
   /**
    * Default construction is the XY canvas plane
    * @param {Point3d} normal    Normal vector to the plane
-   * @param {Point3d} point     Point on the plane
+   * @param {Point3d} point     Point on the plane, representing the plane's origin point
    */
   constructor(point = new CONFIG.GeometryLib.threeD.Point3d(0, 0, 0), normal = new CONFIG.GeometryLib.threeD.Point3d(0, 0, 1)) {
     this.normal.copyFrom(normal.normalize());
@@ -45,6 +45,13 @@ export class Plane {
     return Object.values(this.equation)
   }
 
+  static normalFromPoints(a, b, c, outPoint) {
+    outPoint ??= new CONFIG.GeometryLib.threeD.Point3d();
+    const vAB = b.subtract(a, tmpPt3d0);
+    const vAC = c.subtract(a, tmpPt3d1);
+    return vAC.cross(vAB, outPoint); // So the orientation matches.
+  }
+
   /**
    * Construct plane from set of 3 points that lie on the plane.
    * Constructed such that the plane faces the direction of the normal vector.
@@ -59,11 +66,7 @@ export class Plane {
     a = a.clone();
     b = b.clone();
     c = c.clone();
-
-    const vAB = b.subtract(a, tmpPt3d0);
-    const vAC = c.subtract(a, tmpPt3d1);
-
-    const normal = vAC.cross(vAB, tmpPt3d2); // So the orientation matches.
+    const N = this.normalFromPoints(a, b, c);
     const plane = new Plane(a, normal);
     plane._threePoints = {a, b, c};
     return plane;

@@ -50,6 +50,8 @@ export class Polygon3d {
     for ( let i = 0; i < n; i += 1 ) this.points[i] = new Point3d();
   }
 
+
+
   // ----- NOTE: In-place modifiers ----- //
 
   /**
@@ -98,9 +100,7 @@ export class Polygon3d {
    */
   reverseOrientation() {
     this.points.reverse();
-    const { a, c } = this.plane.threePoints;
-    this.plane._threePoints.c = a;
-    this.plane._threePoints.a = c;
+    if ( this.#plane ) this.plane.normal.multiplyScalar(-1);
     return this;
   }
 
@@ -131,13 +131,35 @@ export class Polygon3d {
   #plane;
 
   get plane() {
-    if ( !this.#plane ) {
-      // Assumes without testing that points are not collinear.
-      const Plane = CONFIG.GeometryLib.threeD.Plane;
-      this.#plane = Plane.fromPoints(this.points[0], this.points[1], this.points[2]);
-    }
+    if ( !this.#plane ) this.#plane = this._calculatePlane();
     return this.#plane;
   }
+
+  _calculatePlane() {
+    // Assumes without testing that points are not collinear.
+    // Construct the plane so the center of the polygon is the origin.
+    return this.constructor.calculatePlaneFromPoints(this.points, this.centroid);
+  }
+
+  static calculatePlaneFromPoints(pts, center) {
+    const iter = Iterator.from(pts);
+    const a = center ?? iter.next().value;
+
+    // Ensure no duplicates. Collinearity test is hard if we are in 3d. Would need to convert to 2d.
+    let pt;
+    do {
+      pt = iter.next().value;
+    } while ( pt && pt.almostEqual(a));
+    const b = pt;
+
+    do {
+      pt = iter.next().value;
+    } while ( pt && (pt.almostEqual(a) || pt.almostEqual(b)) );
+    const c = pt;
+    return CONFIG.GeometryLib.threeD.Plane.fromPoints(a, b, c);
+  }
+
+  set plane(value) { this.#plane = value; }
 
   /** @type {PIXI.Point[]} */
   #planarPoints = [];
@@ -197,25 +219,14 @@ export class Polygon3d {
 
   // ----- NOTE: Factory methods ----- //
 
-  static fromPoints(pts, out) {
-    const n = pts.length;
-    if ( out ) out.points.length = n;
-    else out = new this(n);
-    for ( let i = 0; i < n; i += 1 ) {
-      const outPt = out.points[i] ??= new CONFIG.GeometryLib.threeD.Point3d();
-      outPt.copyPartial(pts[i]);
-    }
-    return out;
-  }
-
   static from2dPoints(pts, elevation = 0, out) {
     const n = pts.length;
     if ( out ) out.points.length = n;
     else out = new this(n);
-    for ( let i = 0; i < n; i += 1 ) {
-      const outPt = out.points[i] ??= new CONFIG.GeometryLib.threeD.Point3d()
-      const { x, y } = pts[i];
-      outPt.set(x, y, elevation);
+    let i = 0;
+    for ( const pt of pts ) {
+      const outPt = out.points[i++] ??= new CONFIG.GeometryLib.threeD.Point3d()
+      outPt.set(pt.x, pt.y, elevation);
     }
     return out;
   }
@@ -232,15 +243,7 @@ export class Polygon3d {
   }
 
   static fromPolygon(poly, elevation = 0, out) {
-    const n = poly.points.length * 0.5;
-    if ( out ) out.points.length = n;
-    else out = new this(n);
-    if ( poly.isHole ) out.isHole = true;
-    poly.iteratePoints({ close: false }).forEach((pt, idx) => {
-      const outPt = out.points[idx] ??= new CONFIG.GeometryLib.threeD.Point3d()
-      outPt.set(pt.x, pt.y, elevation)
-    });
-    return out;
+    return this.from2dPoints(poly.iteratePoints({ close: false }), elevation, out);
   }
 
   static fromClipperPaths(cpObj, elevation = 0, out) {
@@ -267,6 +270,20 @@ export class Polygon3d {
     }
     return out;
   }
+
+  static fromPlanarPolygon(poly2d, plane) {
+    const invM2d = plane.conversion2dMatrixInverse;
+    const ln = poly2d.points.length;
+    const pts3d = new Array(Math.floor(ln / 2));
+    for ( let i = 0, j = 0; i < ln; i += 2, j += 1 ) {
+      const x = poly2d.points[i];
+      const y = poly2d.points[i + 1];
+      const pt3d = invM2d.multiplyPoint3d(CONFIG.GeometryLib.threeD.Point3d._tmp.set(x, y, 0));
+      pts3d[j] = pt3d;
+    }
+    return this.from3dPoints(pts3d);
+  }
+
 
   /**
    * Make a copy of this polygon.
@@ -351,19 +368,6 @@ export class Polygon3d {
 
   toPlanarPolygon() {
     return new PIXI.Polygon(this.planarPoints);
-  }
-
-  static fromPlanarPolygon(poly2d, plane) {
-    const invM2d = plane.conversion2dMatrixInverse;
-    const ln = poly2d.points.length;
-    const pts3d = new Array(Math.floor(ln / 2));
-    for ( let i = 0, j = 0; i < ln; i += 2, j += 1 ) {
-      const x = poly2d.points[i];
-      const y = poly2d.points[i + 1];
-      const pt3d = invM2d.multiplyPoint3d(CONFIG.GeometryLib.threeD.Point3d._tmp.set(x, y, 0));
-      pts3d[j] = pt3d;
-    }
-    return this.from3dPoints(pts3d);
   }
 
   /**
@@ -749,25 +753,27 @@ export class Ellipse3d extends Polygon3d {
   set radiusY(value) { this.#radiusY = value; }
 
   constructor() {
-    super(3); // 3 points to define the plane. The first is the center.
+    super(1); // 1 point representing the center.
   }
 
   // ----- NOTE: In-place modifiers ----- //
 
-  setDimensions(center, radiusX, radiusY, b, c) {
+  _calculatePlane() {
+    const Plane = CONFIG.GeometryLib.threeD.Plane;
+    const center = this.centroid;
+    const normal = pt3d_0;
+
+    // Add 2 points to form a flat plane.
+    pt3d_1.set(center.x + this.radiusX, center.y, center.z);
+    pt3d_2.set(center.x, center.y + this.radiusY, center.z);
+    CONFIG.GeometryLib.threeD.Plane.normalFromPoints(center, pt3d_1, pt3d_2, normal);
+    return new Plane(center, normal);
+  }
+
+  _setDimensions(center, radiusX, radiusY) {
     this.points[0].copyFrom(center);
     this.radiusX = radiusX;
     this.radiusY = radiusY;
-
-    if ( b && c ) {
-      // Use the provided points to set up the circle plane.
-      this.points[1].set(b);
-      this.points[2].set(c);
-    } else {
-      // Add 2 points to form a flat plane. May be later modified by a constructor.
-      this.points[1].set(center.x + radiusX, center.y, center.z);
-      this.points[2].set(center.x, center.y + radiusY, center.z);
-    }
     this.clearCache();
     return this;
   }
@@ -777,14 +783,9 @@ export class Ellipse3d extends Polygon3d {
   setZ(z = 0) { this.center.z = z; super.setZ(z); }
 
   reverseOrientation() {
-    // Don't touch the center point.
-    const tmp = this.points[1];
-    this.points.copyWithin(1, 2)
-    this.points[2] = tmp;
-
-    const { b, c } = this.plane.threePoints;
-    this.plane._threePoints.c = b;
-    this.plane._threePoints.b = c;
+    // No points to reverse.
+    this.plane.normal.multiplyScalar(-1);
+    return this;
   }
 
   // ----- NOTE: Plane ----- //
@@ -806,33 +807,67 @@ export class Ellipse3d extends Polygon3d {
     return out.setDimensions(center, radiusX, radiusY);
   }
 
-  static fromPoints(_pts, _radiusX, _radiusY, _out) {
-    console.error("fromPlane|Not yet implemented.");
-  }
-
-  static from2dPoints(_pts, _radiusX, _radiusY, _elevation = 0, _out) {
-    console.error("fromPlane|Not yet implemented.");
-  }
-
-  static from3dPoints(pts, radiusX, radiusY, out) {
-    out ??= new this();
-    return out.setDimensions(pts[0], radiusX, radiusY, pts[1], pts[2]);
-  }
-
-  static fromPlane(center, radiusX, radiusY, plane, out) {
-    const pts = plane.threePoints;
-
-    // Add two additional points to form the plane.
-    let b;
-    let c;
-    for ( const pt of pts ) {
-      if ( center.almostEqual(pt) ) continue;
-      if ( !b ) b = pt;
-      else if ( !c ) c = pt;
-      else break;
+  static calculateDimensionsFromPoints(pts, { center, radiusX, radiusY } = {}) {
+    const cl = pts[0].constructor;
+    if ( !center ) {
+      // Find two opposite points to locate the center.
+      let max2 = Number.NEGATIVE_INFINITY;
+      const iter = Iterator.from(pts);
+      const a = iter.next().value;
+      for ( const b of iter ) {
+        // Walk around the ellipse until finding the furthest point from a.
+        // That point is on the opposite side from a.
+        const dist2 = cl.distanceSquaredBetween(a, b);
+        if ( dist2 < max2 ) {
+          center = cl._tmp3;
+          a.projectToward(b, 0.5, center);
+          break;
+        }
+        max2 = dist2;
+      }
     }
+    if ( !(radiusX || radiusY) ) {
+      // Must find the minimum and maximum distance from the polygon center to determine the two radii.
+      let min2 = Number.POSITIVE_INFINITY;
+      let max2 = Number.NEGATIVE_INFINITY;
+      for ( const pt of pts ) {
+        const dist2 = cl.distanceSquaredBetween(center, pt);
+        min2 = Math.min(min2, dist2);
+        max2 = Math.max(max2, dist2);
+      }
+      radiusX ||= max2;
+      radiusY ||= min2;
+    }
+    return { center, radiusX, radiusY };
+  }
+
+  /**
+   * Construct from a set of points that are on the ellipse edge.
+   */
+  static from2dPoints(pts, elevation = 0, out, opts) {
+    const res = this.calculateDimensionsFromPoints(pts, opts);
+    return this.fromCenterPoint(pt3d_0.set(res.center.x, res.center.y, elevation), res.radiusX, res.radiusY, out);
+  }
+
+  static from3dPoints(pts, out, opts) {
+    const res = this.calculateDimensionsFromPoints(pts, opts);
     out ??= new this();
-    return out.setDimensions(center, radiusX, radiusY, b, c);
+    out._setDimensions(res.center, res.radiusX, res.radiusY);
+    out.plane = this.constructor.calculatePlaneFromPoints(pts, res.center);
+    return out;
+  }
+
+  static fromPlanarPolygon(poly2d, plane, radiusX = null, radiusY = null) {
+    const center = poly2d.center;
+    if ( radiusX && radiusY ) {
+      const res = this.calculateDimensionsFromPoints(poly2d.iteratePoints({ close: false }), { center, radiusX, radiusY });
+      radiusX ??= res.radiusX;
+      radiusY ??= res.radiusY;
+    }
+    const out = new this();
+    out._setDimensions(center, radiusX, radiusY);
+    out.plane = plane;
+    return out;
   }
 
   static fromPolygon(...args) { return Polygon3d.fromPolygon(...args); }
@@ -842,10 +877,17 @@ export class Ellipse3d extends Polygon3d {
   static fromVertices(...args) { return Polygon3d.fromVertices(...args); }
 
   static fromPlanarEllipse(ellipse2d, plane, out) {
-    const invM2d = plane.conversion2dMatrixInverse;
-    const center3d = invM2d.multiplyPoint3d(CONFIG.GeometryLib.threeD.Point3d._tmp.set(ellipse2d.center.x, ellipse2d.center.y, 0));
+    let center3d;
+    if ( ellipse2d.center.x.almostEqual(0) && ellipse2d.center.y.almostEqual(0) ) {
+      center3d = plane.point;
+    } else {
+      const invM2d = plane.conversion2dMatrixInverse;
+      center3d = invM2d.multiplyPoint3d(CONFIG.GeometryLib.threeD.Point3d._tmp.set(ellipse2d.center.x, ellipse2d.center.y, 0));
+    }
     out ??= new this();
-    return out.setDimensions(center3d, ellipse2d.radiusX, ellipse2d.radiusY);
+    out._setDimensions(center3d, ellipse2d.width, ellipse2d.height);
+    out.plane = plane;
+    return out;
   }
 
   clone(out) {
@@ -860,7 +902,7 @@ export class Ellipse3d extends Polygon3d {
   toPlanarEllipse() {
     const to2dM = this.plane.conversion2dMatrix;
     const center = to2dM.multiplyPoint3d(this.center);
-    return new PIXI.Elllipse(center.x, center.y, this.radiusX, this.radiusY);
+    return new PIXI.Ellipse(center.x, center.y, this.radiusX, this.radiusY);
   }
 
 
@@ -946,8 +988,6 @@ export class Circle3d extends Ellipse3d {
 
   set radiusY(value) { this.radius = value; }
 
-  setDimensions(center, radius, b, c) { return super.setDimensions(center, radius, radius, b, c); }
-
   // ----- NOTE: Plane ----- //
 
   get circle() { return new PIXI.Circle(this.center.x, this.center.y, this.radius); }
@@ -960,14 +1000,21 @@ export class Circle3d extends Ellipse3d {
 
   static fromCenterPoint(center, radius, out) {
     out ??= new this();
-    return out.setDimensions(center, radius, radius);
+    return out._setDimensions(center, radius, radius);
   }
 
   static fromPlanarCircle(circle2d, plane, out) {
-    const invM2d = plane.conversion2dMatrixInverse;
-    const center3d = invM2d.multiplyPoint3d(CONFIG.GeometryLib.threeD.Point3d._tmp.set(circle2d.center.x, circle2d.center.y, 0));
+    let center3d;
+    if ( circle2d.center.x.almostEqual(0) && circle2d.center.y.almostEqual(0) ) {
+      center3d = plane.point;
+    } else {
+      const invM2d = plane.conversion2dMatrixInverse;
+      center3d = invM2d.multiplyPoint3d(CONFIG.GeometryLib.threeD.Point3d._tmp.set(circle2d.center.x, circle2d.center.y, 0));
+    }
     out ??= new this();
-    return out.setDimensions(center3d, circle2d.radius);
+    out._setDimensions(center3d, circle2d.radius, circle2d.radius);
+    out.plane = plane;
+    return out;
   }
 
   // ----- NOTE: Conversions to ----- //
@@ -1432,8 +1479,6 @@ export class Polygons3d extends Polygon3d {
     for ( let i = 0; i < n; i += 1 ) polys3d.polygons[i] = polys[i];
     return polys3d;
   }
-
-  static fromPoints(pts) { return this.#createSingleUsingMethod("fromPoints", pts); }
 
   static from2dPoints(pts, elevation) { return this.#createSingleUsingMethod("from2dPoints", pts, elevation); }
 
