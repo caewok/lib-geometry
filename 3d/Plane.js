@@ -420,7 +420,7 @@ export class Plane {
     const b = this.point.add(vs.v, tmpPt3d0);
     const c = this.point.add(vs.u, tmpPt3d1);
 
-    const m = new CONFIG.GeometryLib.FlatMatrix([
+    const m = new CONFIG.GeometryLib.MatrixFlat([
       [a.x, b.x, c.x, p.x],
       [a.y, b.y, c.y, p.y],
       [a.z, b.z, c.z, p.z],
@@ -518,14 +518,14 @@ export class Plane {
 
     // Adjust for row-major matrix and left-hand coordinate system
 
-    const S = new CONFIG.GeometryLib.FlatMatrix([
+    const S = new CONFIG.GeometryLib.MatrixFlat([
       [A.x, A.y, A.z, 1],
       [u.x, u.y, u.z, 1],
       [v.x, v.y, v.z, 1],
       [n.x, n.y, n.z, 1]
     ]);
 
-    const D = new CONFIG.GeometryLib.FlatMatrix([
+    const D = new CONFIG.GeometryLib.MatrixFlat([
       [0, 0, 0, 1],
       [1, 0, 0, 1],
       [0, 1, 0, 1],
