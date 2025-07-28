@@ -1033,7 +1033,7 @@ export class Circle3d extends Ellipse3d {
   toPlanarCircle() {
     const center = pt3d_0;
     const centroid = this.centroid;
-    if ( centroid.almostEqual(this.plane.center) ) center.set(0, 0, 0);
+    if ( centroid.almostEqual(this.plane.point) ) center.set(0, 0, 0);
     else {
       const to2dM = this.plane.conversion2dMatrix;
       to2dM.multiplyPoint3d(centroid, center);
