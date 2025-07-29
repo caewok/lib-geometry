@@ -485,49 +485,70 @@ export class AABB3d extends AABB2d {
   overlapsConvexPolygon3d(poly3d) {
     if ( poly3d instanceof CONFIG.GeometryLib.threeD.Circle3d ) return this.overlapsCircle3d(poly3d);
 
-    const testAxes = [axes.x, axes.y, axes.z, poly3d.plane.normal]; // Plane N is already normalized.
+    // Early exit if polygon is empty
+    if ( !poly3d.points || poly3d.points.length === 0 ) return false;
 
-    // Iterate through each polygon edge.
-    const EPSILON = 1e-08;
+    // Check if any point is inside the AABB for early exit
+    for ( const point of poly3d.points ) {
+      if ( this.containsPoint(point) ) return true;
+    }
+
+    const testAxes = [
+       axes.x, axes.y, axes.z, // AABB face normals.
+       poly3d.plane.normal, // Plane N; already normalized.
+    ]; 
+
+    // Test AABB face normals
+    for (const axis of testAxes) {
+      if ( !this.overlapsOnAxis(poly3d, axis) ) return false;
+    }
+
+    // Test cross products of polygon edges with AABB edges
     const iter = poly3d.iteratePoints({ close: true });
     let a = iter.next().value;
-    if ( this.containsPoint(a) ) return true;
+    for (const b of iter) {
+      const edge = b.subtract(a, pt3d_0);
+      if (edge.lengthSquared() < 1e-10) continue; // Skip degenerate edges
 
-    for ( const b of iter ) {
-      const edgeDir = b.subtract(a, pt3d_0);
-      if ( this.containsPoint(b) ) return true;
+      // Test cross products with AABB edges
+      for (const axis of [axes.x, axes.y, axes.z]) {
+          const testAxis = edge.cross(axis).normalize();
+          if (testAxis.lengthSquared() < 1e-10) continue; // Skip parallel edges
 
-      // Only consider non-zero edge directions.
-      if ( edgeDir.magnitude > EPSILON ) {
-        edgeDir.normalize(edgeDir);
-        for ( const aabbDir of testAxes ) {
-          const crossAxis = aabbDir.cross(edgeDir, pt3d_1);
-          if ( crossAxis.magnitude() > EPSILON ) testAxes.push(crossAxis.normalize());
-        }
+          if ( !this.overlapsOnAxis(poly3d, testAxis) ) return false;
       }
       a = b;
     }
 
-    // SAT Test: Iterate through all collected axes and check for separation
-    const polyVertices = [...poly3d];
-    const aabbVertices = [...this.iterateVertices()];
-    for ( const axis of testAxes ) {
-      // Project all vertices of both shapes onto the current axis
-      const rectProjections = polyVertices.map(v => v.dot(axis));
-      const aabbProjections = aabbVertices.map(v => v.dot(axis));
+    return true;
+  }
 
-      // Find the minimum and maximum projected values for both shapes
-      const rectMin = Math.min(...rectProjections);
-      const rectMax = Math.max(...rectProjections);
-      const aabbMin = Math.min(...aabbProjections);
-      const aabbMax = Math.max(...aabbProjections);
+  // Helper method to project both shapes onto an axis and check for overlap
+  overlapsOnAxis(poly3d, axis) {
+    let minA = Number.POSITIVE_INFINITY;
+    let maxA = Number.NEGATIVE_INFINITY;
+    let minB = Number.POSITIVE_INFINITY;
+    let maxB = Number.NEGATIVE_INFINITY;
 
-      // Check for overlap on this axis
-      // If the maximum projection of one shape is less than the minimum projection of the other,
-      // or vice-versa, then there is a gap, and a separating axis has been found.
-      if (rectMax < aabbMin || aabbMax < rectMin) return false; // Separating axis found, no intersection
+    // Project AABB onto the axis
+    // Implementation depends on how you want to handle the AABB projection
+    // This is a simplified version
+    const aabbVertices = this.iterateVertices();
+    for (const v of aabbVertices) {
+        const proj = v.dot(axis);
+        minA = Math.min(minA, proj);
+        maxA = Math.max(maxA, proj);
     }
-    return true; // No separating axis; must be intersecting.
+
+    // Project polygon onto the axis
+    for (const point of poly3d.points) {
+        const proj = point.dot(axis);
+        minB = Math.min(minB, proj);
+        maxB = Math.max(maxB, proj);
+    }
+
+    // Check for overlap
+    return !(maxA < minB || maxB < minA);
   }
 
   overlapsCircle3d(circle3d) {
