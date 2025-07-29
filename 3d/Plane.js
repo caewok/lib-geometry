@@ -455,7 +455,7 @@ export class Plane {
     const v = new Point3d();
     w.cross(n, u).normalize(u);
     n.cross(u, v).normalize(v);
-    return { u, v };
+    return { v: u, u: v }; // Swap so the x-axis is first.
   }
 
   /**
