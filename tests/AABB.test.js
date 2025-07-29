@@ -38,8 +38,8 @@ describe('AABB2d.overlapsAABB', () => {
     box2.min = new PIXI.Point(3, 3);
     box2.max = new PIXI.Point(8, 8);
 
-    expect(box1.overlapsAABB(box2)).toBe(true);
-    expect(box2.overlapsAABB(box1)).toBe(true);
+    expect(box1.overlapsAABB(box2)).to.be.true;
+    expect(box2.overlapsAABB(box1)).to.be.true;
   });
 
   it('should return false when two boxes do not overlap', () => {
@@ -51,8 +51,8 @@ describe('AABB2d.overlapsAABB', () => {
     box2.min = new PIXI.Point(3, 3);
     box2.max = new PIXI.Point(5, 5);
 
-    expect(box1.overlapsAABB(box2)).toBe(false);
-    expect(box2.overlapsAABB(box1)).toBe(false);
+    expect(box1.overlapsAABB(box2)).to.be.false;
+    expect(box2.overlapsAABB(box1)).to.be.false;
   });
 
   it('should return true when boxes touch at the edge', () => {
@@ -64,8 +64,8 @@ describe('AABB2d.overlapsAABB', () => {
     box2.min = new PIXI.Point(2, 2);
     box2.max = new PIXI.Point(4, 4);
 
-    expect(box1.overlapsAABB(box2)).toBe(true);
-    expect(box2.overlapsAABB(box1)).toBe(true);
+    expect(box1.overlapsAABB(box2)).to.be.true;
+    expect(box2.overlapsAABB(box1)).to.be.true;
   });
 
   it('should work for negative coordinates', () => {
@@ -77,8 +77,8 @@ describe('AABB2d.overlapsAABB', () => {
     box2.min = new PIXI.Point(-2, -2);
     box2.max = new PIXI.Point(2, 2);
 
-    expect(box1.overlapsAABB(box2)).toBe(true);
-    expect(box2.overlapsAABB(box1)).toBe(true);
+    expect(box1.overlapsAABB(box2)).to.be.true;
+    expect(box2.overlapsAABB(box1)).to.be.true;
   });
 });
 
@@ -102,7 +102,7 @@ describe('AABB3d.overlapsConvexPolygon3d', () => {
     ];
     const polygon = Polygon3d.from3dPoints(points);
 
-    expect(aabb.overlapsConvexPolygon3d(polygon)).toBe(true);
+    expect(aabb.overlapsConvexPolygon3d(polygon)).to.be.true;
   });
 
   it('should return true when polygon intersects AABB', () => {
@@ -115,7 +115,7 @@ describe('AABB3d.overlapsConvexPolygon3d', () => {
     ];
     const polygon = Polygon3d.from3dPoints(points);
 
-    expect(aabb.overlapsConvexPolygon3d(polygon)).toBe(true);
+    expect(aabb.overlapsConvexPolygon3d(polygon)).to.be.true;
   });
 
   it('should return false when polygon is completely outside AABB', () => {
@@ -128,7 +128,7 @@ describe('AABB3d.overlapsConvexPolygon3d', () => {
     ];
     const polygon = Polygon3d.from3dPoints(points);
 
-    expect(aabb.overlapsConvexPolygon3d(polygon)).toBe(false);
+    expect(aabb.overlapsConvexPolygon3d(polygon)).to.be.false;
   });
 
   it('should handle edge case where polygon is coplanar with AABB face', () => {
@@ -141,7 +141,7 @@ describe('AABB3d.overlapsConvexPolygon3d', () => {
     ];
     const polygon = Polygon3d.from3dPoints(points);
 
-    expect(aabb.overlapsConvexPolygon3d(polygon)).toBe(true);
+    expect(aabb.overlapsConvexPolygon3d(polygon)).to.be.true;
   });
 
   it('should handle polygon that spans through AABB', () => {
@@ -153,14 +153,14 @@ describe('AABB3d.overlapsConvexPolygon3d', () => {
     ];
     const polygon = Polygon3d.from3dPoints(points);
 
-    expect(aabb.overlapsConvexPolygon3d(polygon)).toBe(true);
+    expect(aabb.overlapsConvexPolygon3d(polygon)).to.be.true;
   });
 
   it('should handle empty polygon', () => {
     const aabb = createAABB(0, 0, 0, 10, 10, 10);
     const polygon = new Polygon3d();
 
-    expect(aabb.overlapsConvexPolygon3d(polygon)).toBe(false);
+    expect(aabb.overlapsConvexPolygon3d(polygon)).to.be.false;
   });
 
   it('should handle polygon with single point inside AABB', () => {
@@ -168,7 +168,7 @@ describe('AABB3d.overlapsConvexPolygon3d', () => {
     const points = [new Point3d(5, 5, 5)];
     const polygon = Polygon3d.from3dPoints(points);
 
-    expect(aabb.overlapsConvexPolygon3d(polygon)).toBe(true);
+    expect(aabb.overlapsConvexPolygon3d(polygon)).to.be.true;
   });
 
   it('should handle polygon with single point outside AABB', () => {
@@ -176,7 +176,7 @@ describe('AABB3d.overlapsConvexPolygon3d', () => {
     const points = [new Point3d(15, 15, 15)];
     const polygon = Polygon3d.from3dPoints(points);
 
-    expect(aabb.overlapsConvexPolygon3d(polygon)).toBe(false);
+    expect(aabb.overlapsConvexPolygon3d(polygon)).to.be.false;
   });
 
   it('should handle polygon that touches AABB at a single point', () => {
@@ -188,7 +188,7 @@ describe('AABB3d.overlapsConvexPolygon3d', () => {
     ];
     const polygon = Polygon3d.from3dPoints(points);
 
-    expect(aabb.overlapsConvexPolygon3d(polygon)).toBe(true);
+    expect(aabb.overlapsConvexPolygon3d(polygon)).to.be.true;
   });
 
   it('should handle polygon that is a line segment', () => {
@@ -200,7 +200,7 @@ describe('AABB3d.overlapsConvexPolygon3d', () => {
     const polygon = Polygon3d.from3dPoints(points);
 
 
-    expect(aabb.overlapsConvexPolygon3d(polygon)).toBe(true);
+    expect(aabb.overlapsConvexPolygon3d(polygon)).to.be.true;
   });
 
   it('should handle polygon with points exactly on AABB faces', () => {
@@ -213,12 +213,12 @@ describe('AABB3d.overlapsConvexPolygon3d', () => {
     ];
     const polygon = Polygon3d.from3dPoints(points);
 
-    expect(aabb.overlapsConvexPolygon3d(polygon)).toBe(true);
+    expect(aabb.overlapsConvexPolygon3d(polygon)).to.be.true;
   });
 });
 
 },
-{ displayName: "libGeometry: AABB Testing" },
+{ displayName: "libGeometry: Axis-aligned Bounding Box (AABB)" },
 );
 
 });
