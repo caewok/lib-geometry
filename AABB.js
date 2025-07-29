@@ -553,6 +553,8 @@ export class AABB3d extends AABB2d {
   overlapsCircle3d(circle3d) {
     const { min, max } = this;
     const { center, radiusSquared, plane } = circle3d;
+
+    // Early exit if center is inside AABB
     if ( this.containsPoint(center) ) return true;
 
     // Find the point on the AABB closest to the circle's center.
@@ -563,11 +565,12 @@ export class AABB3d extends AABB2d {
     );
 
     // Project this closest point onto the circle's plane.
-    const planarPt = plane.conversion2dMatrix.multiplyPoint3d(closestPoint, pt3d_0);
+    const planePoint = plane.projectPointOnPlane(closestPoint, pt3d_1);
+    const centerPoint = plane.projectPointOnPlane(center, pt3d_2);
 
     // Check if the projected point is inside the circle.
-    const dist2 = PIXI.Point.distanceSquaredBetween(planarPt, center);
-    return dist2 <= radiusSquared;
+    const dist2 = PIXI.Point.distanceSquaredBetween(planePoint, centerPoint);
+    return CONFIG.GeometryLib.utils.almostLessThan(dist2, radiusSquared);
   }
 
   /**

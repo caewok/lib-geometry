@@ -113,7 +113,7 @@ export class Polygon3d {
     return this.#aabb;
   }
 
-  _calculateAABB(aabb) { aabb.constructor.fromPolygon3d(this.points, aabb); }
+  _calculateAABB(aabb) { aabb.constructor.fromPolygon3d(this, aabb); }
 
   // ----- NOTE: Plane ----- //
 
