@@ -128,36 +128,7 @@ export class Polygon3d {
   _calculatePlane() {
     // Assumes without testing that points are not collinear.
     // Construct the plane so the center of the polygon is the origin.
-    return this.constructor.calculatePlaneFromPoints(this.points);
-  }
-
-  static calculatePlaneFromPoints(pts) {
-    const pointsAreCollinear = CONFIG.GeometryLib.utils.pointsAreCollinear;
-    const iter = Iterator.from(pts);
-    const a = iter.next().value;
-
-    // Ensure no duplicates or collinearity
-    let b = null;
-    for (const point of iter) {
-      if (!point.almostEqual(a)) {
-        b = point;
-        break;
-      }
-    }
-
-    let c = null;
-    for (const point of iter) {
-      if (!point.almostEqual(a) && !point.almostEqual(b) && !pointsAreCollinear(a, b, point)) {
-        c = point;
-        break;
-      }
-    }
-    if (!c) {
-      console.error("Insufficient number of points to calculate plane.", pts);
-      return new CONFIG.GeometryLib.threeD.Plane();
-    }
-
-    return CONFIG.GeometryLib.threeD.Plane.fromPoints(a, b, c);
+    return CONFIG.GeometryLib.threeD.Plane.fromMultiplePoints(this.points);
   }
 
   set plane(value) { this.#plane = value; }
@@ -859,7 +830,7 @@ export class Ellipse3d extends Polygon3d {
     out ??= new this();
     out._setDimensions(res.center, res.radiusX, res.radiusY);
     out.points[0] = res.center;
-    out.plane = this.constructor.calculatePlaneFromPoints([res.center, ...pts]);
+    out.plane = CONFIG.GeometryLib.threeD.Plane.fromMultiplePoints([res.center, ...pts]);
     return out;
   }
 

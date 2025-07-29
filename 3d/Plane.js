@@ -72,6 +72,36 @@ export class Plane {
     return plane;
   }
 
+  static fromMultiplePoints(pts) {
+    const pointsAreCollinear = CONFIG.GeometryLib.utils.pointsAreCollinear;
+    const iter = Iterator.from(pts);
+    const a = iter.next().value;
+
+    // Ensure no duplicates or collinearity
+    let b = null;
+    for (const point of iter) {
+      if (!point.almostEqual(a)) {
+        b = point;
+        break;
+      }
+    }
+
+    let c = null;
+    for (const point of iter) {
+      if (!point.almostEqual(a) && !point.almostEqual(b) && !pointsAreCollinear(a, b, point)) {
+        c = point;
+        break;
+      }
+    }
+    if (!c) {
+      console.error("Insufficient number of points to calculate plane.", pts);
+      return new this();
+    }
+
+    return this.fromPoints(a, b, c);
+  }
+
+
   /**
    * Construct a plane from a wall
    * @param {Wall} wall
