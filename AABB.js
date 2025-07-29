@@ -268,6 +268,10 @@ export class AABB2d {
     return dmin <= sphere.radiusSquared;
   }
 
+  toPIXIRectangle() {
+    return new PIXI.Rectangle(this.min.x, this.min.y, this.max.x - this.min.x, this.max.y - this.min.y);
+  }
+
   // ----- NOTE: Debug ----- //
   draw2d({ draw, ...opts } = {}) {
     draw ??= new Draw();
