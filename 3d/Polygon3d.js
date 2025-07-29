@@ -13,15 +13,6 @@ import { Point3d } from "./Point3d.js";
 import { almostLessThan, almostGreaterThan } from "../util.js";
 import { AABB3d } from "../AABB.js";
 
-function isNearCollinear3d(a, b, c) {
-  const Point3d = CONFIG.GeometryLib.threeD.Point3d;
-  // Collinear if the normal is 0,0,0.
-  const vAB = b.subtract(a, Point3d._tmp1);
-  const vAC = c.subtract(a, Point3d._tmp2);
-  const normal = vAB.cross(vAC, Point3d._tmp3);
-  return normal.almostEqual({ x: 0, y: 0, z: 0 });
-}
-
 // Temporary points
 const pt3d_0 = new Point3d();
 const pt3d_1 = new Point3d();
@@ -50,8 +41,6 @@ export class Polygon3d {
     for ( let i = 0; i < n; i += 1 ) this.points[i] = new Point3d();
   }
 
-
-
   // ----- NOTE: In-place modifiers ----- //
 
   /**
@@ -74,12 +63,13 @@ export class Polygon3d {
     if ( this.#cleaned ) return;
 
     // Drop collinear points.
+    const pointsAreCollinear = CONFIG.GeometryLib.utils.pointsAreCollinear;
     const iter = this.iteratePoints({ close: true });
     let a = iter.next().value;
     let b = iter.next().value;
     const newPoints = [a];
     for ( let c of iter ) {
-      if ( !isNearCollinear3d(a, b, c) ) newPoints.push(b);
+      if ( !pointsAreCollinear(a, b, c) ) newPoints.push(b);
       a = b;
       b = c;
     }
@@ -147,16 +137,26 @@ export class Polygon3d {
     const a = iter.next().value;
 
     // Ensure no duplicates or collinearity
-    let pt;
-    do {
-      pt = iter.next().value;
-    } while ( pt && pt.almostEqual(a));
-    const b = pt;
+    let b = null;
+    for (const point of iter) {
+      if (!point.almostEqual(a)) {
+        b = point;
+        break;
+      }
+    }
 
-    do {
-      pt = iter.next().value;
-    } while ( pt && (pt.almostEqual(a) || pt.almostEqual(b) || pointsAreCollinear(a, b, pt))  );
-    const c = pt;
+    let c = null;
+    for (const point of iter) {
+      if (!point.almostEqual(a) && !point.almostEqual(b) && !pointsAreCollinear(a, b, point)) {
+        c = point;
+        break;
+      }
+    }
+    if (!c) {
+      console.error("Insufficient number of points to calculate plane.", pts);
+      return new CONFIG.GeometryLib.threeD.Plane();
+    }
+
     return CONFIG.GeometryLib.threeD.Plane.fromPoints(a, b, c);
   }
 
@@ -168,11 +168,12 @@ export class Polygon3d {
   // Points on the 2d plane in the plane's coordinate system.
   get planarPoints() {
     if ( !this.#planarPoints.length ) {
-      const nPoints = this.points.length;
-      this.#planarPoints.length === nPoints;
+      const points = this.points;
+      const nPoints = points.length;
+      this.#planarPoints.length = nPoints;
       const to2dM = this.plane.conversion2dMatrix;
       for ( let i = 0; i < nPoints; i += 1 ) {
-        this.#planarPoints[i] = to2dM.multiplyPoint3d(this.points[i]).to2d();
+        this.#planarPoints[i] = to2dM.multiplyPoint3d(points[i]).to2d();
       }
     }
     return this.#planarPoints;
