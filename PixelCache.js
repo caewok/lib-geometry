@@ -1,9 +1,10 @@
 /* globals
-PIXI,
+CONFIG,
 canvas,
 foundry,
+PIXI,
+Ray,
 TextureLoader,
-Ray
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";

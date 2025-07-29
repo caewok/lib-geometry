@@ -1,5 +1,5 @@
 /* globals
-CONFIG
+
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 
@@ -23,7 +23,7 @@ PATCHES.CONSTRAINED_TOKEN_BORDER = {};
  * @param {Partial<DatabaseCreateOperation>} options Additional options which modified the creation request
  * @param {string} userId                           The ID of the User who triggered the creation workflow
  */
-function createAmbientLight(document, options, userId) { ConstrainedTokenBorder._lightsID++; }
+function createAmbientLight(_document, _options, _userId) { ConstrainedTokenBorder._lightsID++; }
 
 /* -------------------------------------------- */
 
@@ -39,7 +39,7 @@ function createAmbientLight(document, options, userId) { ConstrainedTokenBorder.
  * @param {Partial<DatabaseUpdateOperation>} options Additional options which modified the update request
  * @param {string} userId                           The ID of the User who triggered the update workflow
  */
-function updateAmbientLight(document, changed, options, userId) { ConstrainedTokenBorder._lightsID++; }
+function updateAmbientLight(_document, _changed, _options, _userId) { ConstrainedTokenBorder._lightsID++; }
 
 /* -------------------------------------------- */
 
@@ -54,7 +54,7 @@ function updateAmbientLight(document, changed, options, userId) { ConstrainedTok
  * @param {Partial<DatabaseDeleteOperation>} options Additional options which modified the deletion request
  * @param {string} userId                           The ID of the User who triggered the deletion workflow
  */
-function deleteAmbientLight(document, options, userId) { ConstrainedTokenBorder._lightsID++; }
+function deleteAmbientLight(_document, _options, _userId) { ConstrainedTokenBorder._lightsID++; }
 
 
 PATCHES.CONSTRAINED_TOKEN_BORDER.HOOKS = { createAmbientLight, updateAmbientLight, deleteAmbientLight };

@@ -540,8 +540,10 @@ export class MatrixFlat {
    * @param {Point3d} up
    * @returns {Matrix} 4x4 matrix
    */
-  static lookAt(cameraPosition, targetPosition, up = Point3d._tmp.set(0, -1, 1), M, Minv) {
+  static lookAt(cameraPosition, targetPosition, up, M, Minv) {
     const Point3d = CONFIG.GeometryLib.threeD.Point3d;
+    up ??= Point3d._tmp.set(0, -1, 1);
+
     // NOTE: Foundry uses a left-hand coordinate system, with y reversed.
     const zAxis = cameraPosition.subtract(targetPosition); // ZAxis = forward
     if ( zAxis.almostEqual(Point3d._tmp3.set(0, 0, 0)) ) return { M: this.identity(4), Minv: this.identity(4) };

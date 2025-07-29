@@ -1,7 +1,7 @@
 /* globals
 canvas,
-CONFIG,
 CONST,
+PIXI,
 Ray,
 */
 "use strict";
@@ -223,7 +223,7 @@ export class Ray3d extends Ray {
     // Always measure Euclidean distances; only use gridSpaces later for the projected values.
     const A = this.A.to2d();
     const B = this.B.to2d();
-    const gridDistnace = PIXI.Point.distanceBetween(A, B);
+    const gridDistance = PIXI.Point.distanceBetween(A, B);
     A.x = B.x - gridDistance;
     A.y = B.y - height;
 

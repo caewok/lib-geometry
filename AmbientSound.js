@@ -1,5 +1,5 @@
 /* globals
-CONFIG
+
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 
@@ -23,7 +23,7 @@ PATCHES.CONSTRAINED_TOKEN_BORDER = {};
  * @param {Partial<DatabaseCreateOperation>} options Additional options which modified the creation request
  * @param {string} userId                           The ID of the User who triggered the creation workflow
  */
-function createAmbientSound(document, options, userId) { ConstrainedTokenBorder._soundsID++; }
+function createAmbientSound(_document, _options, _userId) { ConstrainedTokenBorder._soundsID++; }
 
 /* -------------------------------------------- */
 
@@ -39,7 +39,7 @@ function createAmbientSound(document, options, userId) { ConstrainedTokenBorder.
  * @param {Partial<DatabaseUpdateOperation>} options Additional options which modified the update request
  * @param {string} userId                           The ID of the User who triggered the update workflow
  */
-function updateAmbientSound(document, changed, options, userId) { ConstrainedTokenBorder._soundsID++; }
+function updateAmbientSound(_document, _changed, _options, _userId) { ConstrainedTokenBorder._soundsID++; }
 
 /* -------------------------------------------- */
 
@@ -54,7 +54,7 @@ function updateAmbientSound(document, changed, options, userId) { ConstrainedTok
  * @param {Partial<DatabaseDeleteOperation>} options Additional options which modified the deletion request
  * @param {string} userId                           The ID of the User who triggered the deletion workflow
  */
-function deleteAmbientSound(document, options, userId) { ConstrainedTokenBorder._soundsID++; }
+function deleteAmbientSound(_document, _options, _userId) { ConstrainedTokenBorder._soundsID++; }
 
 
 PATCHES.CONSTRAINED_TOKEN_BORDER.HOOKS = { createAmbientSound, updateAmbientSound, deleteAmbientSound };

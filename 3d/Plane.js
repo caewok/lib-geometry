@@ -67,7 +67,7 @@ export class Plane {
     b = b.clone();
     c = c.clone();
     const N = this.normalFromPoints(a, b, c);
-    const plane = new Plane(a, normal);
+    const plane = new Plane(a, N);
     plane._threePoints = {a, b, c};
     return plane;
   }

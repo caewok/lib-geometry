@@ -80,7 +80,7 @@ export async function QBenchmarkLoopFn(iterations, fn, name, ...args) {
   const timings = [];
   const num_warmups = Math.ceil(iterations * .05);
   for (let i = -num_warmups; i < iterations; i += 1) {
-    const tmp = performance.now();
+    performance.now();
     const t0 = performance.now();
     await fn(...args);
     const t1 = performance.now();
@@ -101,7 +101,7 @@ export async function QBenchmarkLoopFnWithSleep(iterations, fn, name, ...args) {
   const timings = [];
   const num_warmups = Math.ceil(iterations * .05);
   for (let i = -num_warmups; i < iterations; i += 1) {
-    const tmp = performance.now();
+    performance.now();
     const t0 = performance.now();
     await fn(...args);
     const t1 = performance.now();
@@ -136,7 +136,7 @@ export async function QBenchmarkLoopWithSetupFn(iterations, setupFn, fn, name, .
 
   for (let i = -num_warmups; i < iterations; i += 1) {
     const args = setupFn(...setupArgs);
-    const tmp = performance.now();
+    performance.now();
     const t0 = performance.now();
     await fn(...args);
     const t1 = performance.now();
@@ -157,7 +157,7 @@ export async function QBenchmarkLoopWithSetupFnWithSleep(iterations, setupFn, fn
 
   for (let i = -num_warmups; i < iterations; i += 1) {
     const args = setupFn(...setupArgs);
-    const tmp = performance.now();
+    performance.now();
     const t0 = performance.now();
     await fn(...args);
     const t1 = performance.now();
