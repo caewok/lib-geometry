@@ -47,7 +47,7 @@ export class AABB2d {
   static union(...bounds) {
     const out = new this();
     const { min, max } = out;
-    for ( const axis of this.axes ) {
+    for ( const axis of this.constructor.axes ) {
       const boundsMin = bounds.map(b => b.min[axis]);
       const boundsMax = bounds.map(b => b.max[axis]);
       min[axis] = Math.min(...boundsMin, min[axis]);
@@ -485,7 +485,7 @@ export class AABB3d extends AABB2d {
   overlapsConvexPolygon3d(poly3d) {
     if ( poly3d instanceof CONFIG.GeometryLib.threeD.Circle3d ) return this.overlapsCircle3d(poly3d);
 
-    const axes = [...axes, poly3d.plane.normal]; // Plane N is already normalized.
+    const testAxes = [...axes, poly3d.plane.normal]; // Plane N is already normalized.
 
     // Iterate through each polygon edge.
     const EPSILON = 1e-08;
@@ -500,9 +500,9 @@ export class AABB3d extends AABB2d {
       // Only consider non-zero edge directions.
       if ( edgeDir.magnitude > EPSILON ) {
         edgeDir.normalize(edgeDir);
-        for ( const aabbDir of axes ) {
+        for ( const aabbDir of testAxes ) {
           const crossAxis = aabbDir.cross(edgeDir, pt3d_1);
-          if ( crossAxis.magnitude() > EPSILON ) axes.push(crossAxis.normalize());
+          if ( crossAxis.magnitude() > EPSILON ) testAxes.push(crossAxis.normalize());
         }
       }
       a = b;
@@ -511,7 +511,7 @@ export class AABB3d extends AABB2d {
     // SAT Test: Iterate through all collected axes and check for separation
     const polyVertices = [...poly3d];
     const aabbVertices = [...this.iterateVertices()];
-    for ( const axis of axes ) {
+    for ( const axis of testAxes ) {
       // Project all vertices of both shapes onto the current axis
       const rectProjections = polyVertices.map(v => v.dot(axis));
       const aabbProjections = aabbVertices.map(v => v.dot(axis));
