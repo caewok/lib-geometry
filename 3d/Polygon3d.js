@@ -138,14 +138,15 @@ export class Polygon3d {
   _calculatePlane() {
     // Assumes without testing that points are not collinear.
     // Construct the plane so the center of the polygon is the origin.
-    return this.constructor.calculatePlaneFromPoints(this.points, this.centroid);
+    return this.constructor.calculatePlaneFromPoints(this.points);
   }
 
-  static calculatePlaneFromPoints(pts, center) {
+  static calculatePlaneFromPoints(pts) {
+    const pointsAreCollinear = CONFIG.GeometryLib.utils.pointsAreCollinear;
     const iter = Iterator.from(pts);
-    const a = center ?? iter.next().value;
+    const a = iter.next().value;
 
-    // Ensure no duplicates. Collinearity test is hard if we are in 3d. Would need to convert to 2d.
+    // Ensure no duplicates or collinearity
     let pt;
     do {
       pt = iter.next().value;
@@ -154,7 +155,7 @@ export class Polygon3d {
 
     do {
       pt = iter.next().value;
-    } while ( pt && (pt.almostEqual(a) || pt.almostEqual(b)) );
+    } while ( pt && (pt.almostEqual(a) || pt.almostEqual(b) || pointsAreCollinear(a, b, pt))  );
     const c = pt;
     return CONFIG.GeometryLib.threeD.Plane.fromPoints(a, b, c);
   }
@@ -856,7 +857,8 @@ export class Ellipse3d extends Polygon3d {
     const res = this.calculateDimensionsFromPoints(pts, opts);
     out ??= new this();
     out._setDimensions(res.center, res.radiusX, res.radiusY);
-    out.plane = this.constructor.calculatePlaneFromPoints(pts, res.center);
+    out.points[0] = res.center;
+    out.plane = this.constructor.calculatePlaneFromPoints([res.center, ...pts]);
     return out;
   }
 

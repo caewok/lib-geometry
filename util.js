@@ -43,6 +43,7 @@ export function registerFoundryUtilsMethods() {
     bresenhamHexLine3d,
     trimLineSegmentToPixelRectangle,
     doSegmentsOverlap,
+    pointsAreCollinear,
     findOverlappingPoints,
     IX_TYPES,
     segmentCollision,
@@ -75,6 +76,10 @@ export function registerFoundryUtilsMethods() {
   };
   CONFIG.GeometryLib.registered.add("utils");
 }
+
+const pt3d_0 = new Point3d();
+const pt3d_1 = new Point3d();
+const pt3d_2 = new Point3d();
 
 /**
  * Round numbers that are close to 0 or 1.
@@ -1248,6 +1253,17 @@ export function doSegmentsOverlap(a, b, c, d) {
   // If collinear, B is within A|B or D is within A|B
   const pts = findOverlappingPoints(a, b, c, d);
   return pts.length;
+}
+
+export function pointsAreCollinear(a, b, c, epsilon = 1e-06) {
+  if ( Object.hasOwn(a, "z") ) return foundry.utils.orient2dFast(a, b, c).almostEqual(epsilon);
+
+  // Collinear 3d points form a degenerate triangle with zero area.
+  // Test the cross products.
+  const ab = b.subtract(a, pt3d_0);
+  const bc = c.subtract(b, pt3d_1);
+  const cross = ab.cross(bc, pt3d_2);
+  return cross.almostEqual(0, epsilon);
 }
 
 /**
