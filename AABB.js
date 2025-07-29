@@ -217,7 +217,8 @@ export class AABB2d {
     // Separating Axis Theorem: Must overlap on every axis.
     // A.minX <= B.maxX && A.maxX >= B.minX && ...same for y, z
     for ( const axis of this.constructor.axes ) {
-      if ( this.min[axis] > other.max[axis] || this.max[axis] < other.min[axis] ) return false;
+      // If not overlapping on an axis, return false.
+      if ( this.max[axis] < other.min[axis] || other.max[axis] < this.min[axis] ) return false;
     }
     return false;
   }
@@ -268,8 +269,13 @@ export class AABB2d {
     return dmin <= sphere.radiusSquared;
   }
 
-  toPIXIRectangle() {
-    return new PIXI.Rectangle(this.min.x, this.min.y, this.max.x - this.min.x, this.max.y - this.min.y);
+  toPIXIRectangle(out) {
+    out ??= new PIXI.Rectangle();
+    out.x = this.min.x;
+    out.y = this.min.y;
+    out.width = this.min.y, this.max.x - this.min.x;
+    out.height = this.max.y - this.min.y;
+    return out;
   }
 
   // ----- NOTE: Debug ----- //
