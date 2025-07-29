@@ -117,7 +117,7 @@ export class Polygon3d {
 
   get aabb() {
     if ( this.#dirtyAABB ) {
-      this.calculateAABB(this.#aabb);
+      this._calculateAABB(this.#aabb);
       this.#dirtyAABB = false;
     }
     return this.#aabb;
