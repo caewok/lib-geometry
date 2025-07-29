@@ -220,7 +220,7 @@ export class AABB2d {
       // If not overlapping on an axis, return false.
       if ( this.max[axis] < other.min[axis] || other.max[axis] < this.min[axis] ) return false;
     }
-    return false;
+    return true;
   }
 
   /**
