@@ -496,7 +496,7 @@ export class AABB3d extends AABB2d {
     const testAxes = [
        axes.x, axes.y, axes.z, // AABB face normals.
        poly3d.plane.normal, // Plane N; already normalized.
-    ]; 
+    ];
 
     // Test AABB face normals
     for (const axis of testAxes) {
@@ -506,15 +506,14 @@ export class AABB3d extends AABB2d {
     // Test cross products of polygon edges with AABB edges
     const iter = poly3d.iteratePoints({ close: true });
     let a = iter.next().value;
-    for (const b of iter) {
+    for ( const b of iter ) {
       const edge = b.subtract(a, pt3d_0);
-      if (edge.lengthSquared() < 1e-10) continue; // Skip degenerate edges
+      if (edge.magnitudeSquared() < 1e-10) continue; // Skip degenerate edges
 
       // Test cross products with AABB edges
-      for (const axis of [axes.x, axes.y, axes.z]) {
+      for ( const axis of [axes.x, axes.y, axes.z] ) {
           const testAxis = edge.cross(axis).normalize();
-          if (testAxis.lengthSquared() < 1e-10) continue; // Skip parallel edges
-
+          if ( testAxis.magnitudeSquared() < 1e-10 ) continue; // Skip parallel edges
           if ( !this.overlapsOnAxis(poly3d, testAxis) ) return false;
       }
       a = b;

@@ -1,9 +1,32 @@
+/* globals
+Hooks,
+PIXI
+*/
+"use strict";
+
 import { AABB2d } from "./AABB.js";
 import { Point3d } from "./3d/Point3d.js";
 
 import { AABB3d } from '../AABB.js';
 import { Polygon3d } from '../3d/Polygon3d.js';
-import { Plane } from '../3d/Plane.js';
+// import { Plane } from '../3d/Plane.js';
+
+/*
+Draw = CONFIG.GeometryLib.Draw
+AABB2d = CONFIG.GeometryLib.AABB2d
+AABB3d = CONFIG.GeometryLib.threeD.AABB3d
+Point3d = CONFIG.GeometryLib.threeD.Point3d
+Plane = CONFIG.GeometryLib.threeD.Plane
+Polygon3d = CONFIG.GeometryLib.threeD.Polygon3d
+
+*/
+
+Hooks.on("quenchReady", (quench) => {
+  quench.registerBatch(
+    "libGeometry.AABB",
+
+  (context) => {
+      const { describe, it, expect } = context;
 
 describe('AABB2d.overlapsAABB', () => {
   it('should return true when two boxes overlap', () => {
@@ -69,12 +92,6 @@ describe('AABB3d.overlapsConvexPolygon3d', () => {
     return aabb;
   }
 
-  // Helper function to create a simple polygon
-  function createPolygon3d(points, normal = new Point3d(0, 0, 1)) {
-    const plane = new Plane(normal, 0);
-    return new Polygon3d(points, { plane });
-  }
-
   it('should return true when polygon is completely inside AABB', () => {
     const aabb = createAABB(0, 0, 0, 10, 10, 10);
     const points = [
@@ -83,7 +100,7 @@ describe('AABB3d.overlapsConvexPolygon3d', () => {
       new Point3d(8, 8, 2),
       new Point3d(2, 8, 2)
     ];
-    const polygon = createPolygon3d(points);
+    const polygon = Polygon3d.from3dPoints(points);
 
     expect(aabb.overlapsConvexPolygon3d(polygon)).toBe(true);
   });
@@ -96,7 +113,7 @@ describe('AABB3d.overlapsConvexPolygon3d', () => {
       new Point3d(12, 12, 8),
       new Point3d(8, 12, 8)
     ];
-    const polygon = createPolygon3d(points);
+    const polygon = Polygon3d.from3dPoints(points);
 
     expect(aabb.overlapsConvexPolygon3d(polygon)).toBe(true);
   });
@@ -109,7 +126,7 @@ describe('AABB3d.overlapsConvexPolygon3d', () => {
       new Point3d(20, 20, 15),
       new Point3d(15, 20, 15)
     ];
-    const polygon = createPolygon3d(points);
+    const polygon = Polygon3d.from3dPoints(points);
 
     expect(aabb.overlapsConvexPolygon3d(polygon)).toBe(false);
   });
@@ -122,7 +139,7 @@ describe('AABB3d.overlapsConvexPolygon3d', () => {
       new Point3d(8, 8, 10),
       new Point3d(2, 8, 10)
     ];
-    const polygon = createPolygon3d(points, new Point3d(0, 0, 1));
+    const polygon = Polygon3d.from3dPoints(points);
 
     expect(aabb.overlapsConvexPolygon3d(polygon)).toBe(true);
   });
@@ -134,14 +151,14 @@ describe('AABB3d.overlapsConvexPolygon3d', () => {
       new Point3d(5, 5, 15),  // Above AABB
       new Point3d(15, 15, 5)  // Outside AABB but still intersects
     ];
-    const polygon = createPolygon3d(points);
+    const polygon = Polygon3d.from3dPoints(points);
 
     expect(aabb.overlapsConvexPolygon3d(polygon)).toBe(true);
   });
 
   it('should handle empty polygon', () => {
     const aabb = createAABB(0, 0, 0, 10, 10, 10);
-    const polygon = createPolygon3d([]);
+    const polygon = new Polygon3d();
 
     expect(aabb.overlapsConvexPolygon3d(polygon)).toBe(false);
   });
@@ -149,7 +166,7 @@ describe('AABB3d.overlapsConvexPolygon3d', () => {
   it('should handle polygon with single point inside AABB', () => {
     const aabb = createAABB(0, 0, 0, 10, 10, 10);
     const points = [new Point3d(5, 5, 5)];
-    const polygon = createPolygon3d(points);
+    const polygon = Polygon3d.from3dPoints(points);
 
     expect(aabb.overlapsConvexPolygon3d(polygon)).toBe(true);
   });
@@ -157,7 +174,7 @@ describe('AABB3d.overlapsConvexPolygon3d', () => {
   it('should handle polygon with single point outside AABB', () => {
     const aabb = createAABB(0, 0, 0, 10, 10, 10);
     const points = [new Point3d(15, 15, 15)];
-    const polygon = createPolygon3d(points);
+    const polygon = Polygon3d.from3dPoints(points);
 
     expect(aabb.overlapsConvexPolygon3d(polygon)).toBe(false);
   });
@@ -169,7 +186,7 @@ describe('AABB3d.overlapsConvexPolygon3d', () => {
       new Point3d(15, 10, 10),
       new Point3d(15, 15, 10)
     ];
-    const polygon = createPolygon3d(points);
+    const polygon = Polygon3d.from3dPoints(points);
 
     expect(aabb.overlapsConvexPolygon3d(polygon)).toBe(true);
   });
@@ -180,7 +197,8 @@ describe('AABB3d.overlapsConvexPolygon3d', () => {
       new Point3d(5, 5, 5),
       new Point3d(15, 15, 15)
     ];
-    const polygon = createPolygon3d(points);
+    const polygon = Polygon3d.from3dPoints(points);
+
 
     expect(aabb.overlapsConvexPolygon3d(polygon)).toBe(true);
   });
@@ -193,8 +211,14 @@ describe('AABB3d.overlapsConvexPolygon3d', () => {
       new Point3d(10, 10, 0), // Corner point
       new Point3d(0, 10, 0)   // Edge
     ];
-    const polygon = createPolygon3d(points, new Point3d(0, 0, 1));
+    const polygon = Polygon3d.from3dPoints(points);
 
     expect(aabb.overlapsConvexPolygon3d(polygon)).toBe(true);
   });
+});
+
+},
+{ displayName: "libGeometry: AABB Testing" },
+);
+
 });
