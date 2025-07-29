@@ -7,10 +7,7 @@ PIXI
 */
 "use strict";
 
-import "./CenteredPolygon/CenteredRectangle.js";
-import "./CenteredPolygon/CenteredPolygon.js";
-import "./Ellipse.js";
-import "./3d/Point3d.js";
+import { Point3d } from "./3d/Point3d.js";
 import { GEOMETRY_CONFIG } from "./const.js";
 import { extractPixels } from "./extract-pixels.js";
 
@@ -80,6 +77,8 @@ export function registerFoundryUtilsMethods() {
 const pt3d_0 = new Point3d();
 const pt3d_1 = new Point3d();
 const pt3d_2 = new Point3d();
+
+const pt_0 = new PIXI.Point;
 
 /**
  * Round numbers that are close to 0 or 1.
@@ -175,7 +174,7 @@ dist(end, currPt) < dist(start, currPt) && dist(currPt, start) > dist(start, end
 function from2dCutaway(cutawayPt, start, end, outPoint) {
   outPoint ??= new CONFIG.GeometryLib.threeD.RegionMovementWaypoint3d();
   // b/c outPoint is 3d, makes sure to get the 2d values.
-  const xy = start.to2d().towardsPointSquared(end, cutawayPt.x, PIXI.Point._tmp);
+  const xy = start.to2d().towardsPointSquared(end, cutawayPt.x, pt_0);
   outPoint.x = xy.x;
   outPoint.y = xy.y;
   outPoint.z = cutawayPt.y;
