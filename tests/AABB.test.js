@@ -4,8 +4,8 @@ PIXI
 */
 "use strict";
 
-import { AABB2d } from "./AABB.js";
-import { Point3d } from "./3d/Point3d.js";
+import { AABB2d } from "../AABB.js";
+import { Point3d } from "../3d/Point3d.js";
 
 import { AABB3d } from '../AABB.js';
 import { Polygon3d } from '../3d/Polygon3d.js';
