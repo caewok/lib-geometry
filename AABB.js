@@ -40,6 +40,20 @@ export class AABB2d {
   max = new this.constructor.POINT_CLASS(Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY);
 
   /**
+   * The width (delta) along each axis.
+   * @returns {Point3d}
+   */
+  getDelta(out) {
+    out ??= new Point3d();
+    return this.max.subtract(this.min, out);
+  }
+
+  getCenter(out) {
+    const delta = this.getDelta(pt3d_0);
+    return this.min.add(delta.multiplyScalar(0.5, out), out);
+  }
+
+  /**
    * Union multiple bounds.
    * @param {AABB2d} ....bounds
    * @returns {AABB2d}
@@ -275,6 +289,15 @@ export class AABB2d {
     out.y = this.min.y;
     out.width = this.min.y, this.max.x - this.min.x;
     out.height = this.max.y - this.min.y;
+    return out;
+  }
+
+  toFinite(out) {
+    out = this.clone(out);
+    for ( const axis of this.constructor.axes ) {
+      if ( !Number.isFinite(out.max[axis]) ) out.max[axis] = 1e06;
+      if ( !Number.isFinite(out.min[axis]) ) out.min[axis] = -1e06;
+    }
     return out;
   }
 
