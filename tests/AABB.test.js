@@ -19,6 +19,7 @@ AABB3d = CONFIG.GeometryLib.threeD.AABB3d
 Point3d = CONFIG.GeometryLib.threeD.Point3d
 Plane = CONFIG.GeometryLib.threeD.Plane
 Polygon3d = CONFIG.GeometryLib.threeD.Polygon3d
+Circle3d = CONFIG.GeometryLib.threeD.Circle3d
 
 */
 
@@ -247,7 +248,8 @@ describe('AABB3d.overlapsCircle3d', () => {
   it('should return true when circle intersects AABB face', () => {
     const aabb = createAABB(0, 0, 0, 10, 10, 10);
     // Circle's plane is parallel to XY plane, intersects with top face
-    const circle = createCircle3d(5, 5, 12, 3); // Center above top face, radius extends into AABB
+    const verticalN = new Point3d(1, 0, 0);
+    const circle = createCircle3d(5, 5, 12, 3, verticalN); // Center above top face, radius extends into AABB
 
     expect(aabb.overlapsCircle3d(circle)).to.be.true;
   });

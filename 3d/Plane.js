@@ -730,7 +730,7 @@ export class Plane {
   projectPointOnPlane(pt, outPoint) {
     outPoint ??= new CONFIG.GeometryLib.threeD.Point3d();
     const v = pt.subtract(this.point, tmpPt3d0);
-    const dist = v.dot(this.plane.normal);
+    const dist = v.dot(this.normal);
     const vScaled = this.normal.multiplyScalar(dist, tmpPt3d0);
     pt.subtract(vScaled, outPoint);
     return outPoint;
