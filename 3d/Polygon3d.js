@@ -497,12 +497,14 @@ export class Polygon3d {
   transform(M, poly3d) {
     poly3d ??= this.clone();
     poly3d.points.forEach((pt, idx) => M.multiplyPoint3d(this.points[idx], pt));
+    poly3d.clearCache();
     return poly3d;
   }
 
   multiplyScalar(multiplier, poly3d) {
     poly3d ??= this.clone();
     poly3d.points.forEach(pt => pt.multiplyScalar(multiplier, pt));
+    poly3d.clearCache();
     return poly3d;
   }
 
@@ -510,6 +512,7 @@ export class Polygon3d {
     poly3d ??= this.clone();
     const scalePt = CONFIG.GeometryLib.threeD.Point3d._tmp1.set(x, y, z);
     poly3d.points.forEach(pt => pt.multiply(scalePt, pt));
+    poly3d.clearCache();
     return poly3d;
   }
 
@@ -521,6 +524,7 @@ export class Polygon3d {
       pt.y *= zInv;
       pt.z = 1;
     });
+    poly3d.clearCache();
     return poly3d;
   }
 
@@ -1412,8 +1416,8 @@ export class Polygons3d extends Polygon3d {
   /**
    * Clear the getter caches.
    */
-  clearCache() {
-    this.#applyMethodToAll("clearCache");
+  clearCache(clearPolygons = true) {
+    if ( clearPolygons ) this.#applyMethodToAll("clearCache");
     super.clearCache();
   }
 
@@ -1570,13 +1574,29 @@ export class Polygons3d extends Polygon3d {
 
   // ----- NOTE: Transformations ----- //
 
-  transform(M, poly3d) { return this.#applyMethodToAllWithClone("transform", poly3d, M); }
+  transform(M, poly3d) {
+    const out = this.#applyMethodToAllWithClone("transform", poly3d, M);
+    out.clearCache(false);
+    return out;
+  }
 
-  multiplyScalar(multiplier, poly3d) { return this.#applyMethodToAllWithClone("multiplyScalar", poly3d, multiplier); }
+  multiplyScalar(multiplier, poly3d) {
+    const out = this.#applyMethodToAllWithClone("multiplyScalar", poly3d, multiplier);
+    out.clearCache(false);
+    return out;
+  }
 
-  scale(opts, poly3d) { return this.#applyMethodToAllWithClone("scale", poly3d, opts); }
+  scale(opts, poly3d) {
+    const out = this.#applyMethodToAllWithClone("scale", poly3d, opts);
+    out.clearCache(false);
+    return out;
+  }
 
-  divideByZ(poly3d) { return this.#applyMethodToAllWithClone("divideByZ", poly3d); }
+  divideByZ(poly3d) {
+    const out = this.#applyMethodToAllWithClone("divideByZ", poly3d);
+    out.clearCache(false);
+    return out;
+  }
 
   // ----- NOTE: Intersection ----- //
 
