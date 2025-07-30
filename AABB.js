@@ -176,7 +176,7 @@ export class AABB2d {
    * @returns {AABB2d} other
    */
   clone(out) {
-    out ??= new this();
+    out ??= new this.constructor();
     out.min.copyFrom(this.min);
     out.max.copyFrom(this.max);
     return out;
