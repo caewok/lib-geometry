@@ -3,6 +3,7 @@ CONFIG,
 PIXI,
 foundry
 */
+/* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
 import { Pool } from "../Pool.js";
@@ -539,6 +540,6 @@ PATCHES.PIXI.METHODS = {
   rotate,
   roundDecimals,
   fromAngle,
-  to2d: function() { return this; } // For parallel with Point3d.
+  to2d: function() { return this; }, // For parallel with Point3d.
   release,
 };

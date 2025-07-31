@@ -1,7 +1,5 @@
 /* globals
-canvas,
-CONFIG,
-PIXI
+
 */
 "use strict";
 
@@ -26,7 +24,7 @@ export class Pool {
   }
 
   increasePool(n = this.initialSize) {
-    for ( let i = 0; i < n; i += 1 ) pool.add(this.objConstructor(this));
+    for ( let i = 0; i < n; i += 1 ) this.pool.add(this.objConstructor(this));
   }
 
   /**

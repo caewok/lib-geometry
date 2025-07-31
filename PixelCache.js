@@ -478,8 +478,9 @@ export class PixelCache extends PIXI.Rectangle {
 
     this._fromCanvasCoordinates(ellipse.halfHeight, 0, localDim);
     const halfHeight = localDim.x - local0.x;
-    out = new PIXI.Ellipse(origin.x, origin.y, halfWidth, halfHeight);
+    const out = new PIXI.Ellipse(origin.x, origin.y, halfWidth, halfHeight);
     PIXI.Point.release(localDim, local0);
+    return out;
   }
 
   /**
@@ -490,7 +491,7 @@ export class PixelCache extends PIXI.Rectangle {
   _rectangleToLocalCoordinates(rect) {
     const TL = this._fromCanvasCoordinates(rect.left, rect.top, PIXI.Point.tmp);
     const BR = this._fromCanvasCoordinates(rect.right, rect.bottom, PIXI.Point.tmp);
-    const rect = new PIXI.Rectangle(TL.x, TL.y, BR.x - TL.x, BR.y - TL.y);
+    rect = new PIXI.Rectangle(TL.x, TL.y, BR.x - TL.x, BR.y - TL.y);
     PIXI.Point.release(TL, BR);
     return rect;
   }

@@ -207,7 +207,7 @@ export class Ellipse extends PIXI.Ellipse {
     const c = this._toCircleCoords(this._fromCartesianCoords(otherCtr));
     const v = this._toCircleCoords(this._fromCartesianCoords(otherV));
     const cv = this._toCircleCoords(this._fromCartesianCoords(otherCV));
-    PIXI.Point.release(otherCtr, ohterV, otherCV);
+    PIXI.Point.release(otherCtr, otherV, otherCV);
 
     const w = PIXI.Point.distanceBetween(c, v);
     const h = PIXI.Point.distanceBetween(c, cv);
