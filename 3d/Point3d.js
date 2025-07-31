@@ -281,10 +281,10 @@ export class Point3d extends PIXI.Point {
     const w1_2 = width * scaleX * 0.5;
     const h1_2 = height * scaleY * 0.5;
     const pts = [
-      new Point3d(-w1_2, -h1_2, 0), // TL
-      new Point3d(w1_2, -h1_2, 0),  // TR
-      new Point3d(w1_2, h1_2, 0),   // BL
-      new Point3d(-w1_2, h1_2, 0)   // BR
+      Point3d.tmp.set(-w1_2, -h1_2, 0), // TL
+      Point3d.tmp.set(w1_2, -h1_2, 0),  // TR
+      Point3d.tmp.set(w1_2, h1_2, 0),   // BL
+      Point3d.tmp.set(-w1_2, h1_2, 0)   // BR
     ];
 
     // Rotate points to match tile rotation.
@@ -401,7 +401,9 @@ export class Point3d extends PIXI.Point {
    * @param {boolean} [opts.homogeous] Whether to divde by the third ("z") axis
    * @returns {PIXI.Point}
    */
-  to2d({x = "x", y = "y", homogenous = false} = {}) {
+  to2d({x = "x", y = "y", homogenous = false} = {}, outPoint) {
+    outPoint ??= PIXI.Point.tmp;
+
     if ( homogenous ) {
       let z = "z"
       if ( !(x === "x" && y === "y") ) { // In rare case when homogenous along another dimension.
@@ -410,9 +412,9 @@ export class Point3d extends PIXI.Point {
         coords.delete(y);
         z = coords.first();
       }
-      return new PIXI.Point(this[x] / this[z], this[y] / this[z]);
+      return outPoint.set(this[x] / this[z], this[y] / this[z]);
     }
-    return new PIXI.Point(this[x], this[y]);
+    return outPoint.set(this[x], this[y]);
   }
 
   /**
@@ -693,7 +695,8 @@ export class Point3d extends PIXI.Point {
    *   (Will create new point if none provided.)
    * @returns {Point3d}
    */
-  normalize(outPoint = new Point3d()) {
+  normalize(outPoint) {
+    outPoint ??= this.constructor.tmp;
     return super.normalize(outPoint);
   }
 }

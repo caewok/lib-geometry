@@ -67,7 +67,9 @@ export class Ray3d extends Ray {
    */
   project(t) {
     const pt = super.project(t);
-    return new Point3d(pt.x, pt.y, this.A.z + (t * this.dz));
+    const out = Point3d.tmp.set(pt.x, pt.y, this.A.z + (t * this.dz));
+    pt.release();
+    return out;
   }
 
   /*

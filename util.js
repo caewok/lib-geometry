@@ -7,7 +7,6 @@ PIXI
 */
 "use strict";
 
-import { Point3d } from "./3d/Point3d.js";
 import { GEOMETRY_CONFIG } from "./const.js";
 import { extractPixels } from "./extract-pixels.js";
 
@@ -73,10 +72,6 @@ export function registerFoundryUtilsMethods() {
   };
   CONFIG.GeometryLib.registered.add("utils");
 }
-
-const pt3d_0 = new Point3d();
-const pt3d_1 = new Point3d();
-const pt3d_2 = new Point3d();
 
 const pt_0 = new PIXI.Point;
 
@@ -174,7 +169,9 @@ dist(end, currPt) < dist(start, currPt) && dist(currPt, start) > dist(start, end
 function from2dCutaway(cutawayPt, start, end, outPoint) {
   outPoint ??= new CONFIG.GeometryLib.threeD.RegionMovementWaypoint3d();
   // b/c outPoint is 3d, makes sure to get the 2d values.
-  const xy = start.to2d().towardsPointSquared(end, cutawayPt.x, pt_0);
+  const xy =
+
+  start.to2d().towardsPointSquared(end, cutawayPt.x, pt_0);
   outPoint.x = xy.x;
   outPoint.y = xy.y;
   outPoint.z = cutawayPt.y;
@@ -302,6 +299,7 @@ function categorizePointsInOutConvexPolygon(poly, points, epsilon = 1e-08) {
         }
       }
     }
+    edge.A.release();
     if ( found === nPts ) return out;
   }
 
@@ -1259,10 +1257,14 @@ export function pointsAreCollinear(a, b, c, epsilon = 1e-06) {
 
   // Collinear 3d points form a degenerate triangle with zero area.
   // Test the cross products.
-  const ab = b.subtract(a, pt3d_0);
-  const bc = c.subtract(b, pt3d_1);
-  const cross = ab.cross(bc, pt3d_2);
-  return cross.almostEqual(0, epsilon);
+  const ab = b.subtract(a);
+  const bc = c.subtract(b);
+  const cross = ab.cross(bc);
+  const out = cross.almostEqual(0, epsilon);
+  ab.release();
+  bc.release();
+  cross.release();
+  return out;
 }
 
 /**

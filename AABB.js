@@ -44,7 +44,7 @@ export class AABB2d {
    * @returns {Point3d}
    */
   getDelta(out) {
-    out ??= new Point3d();
+    out ??= CONFIG.GeometryLib.threeD.Point3d.tmp;
     return this.max.subtract(this.min, out);
   }
 

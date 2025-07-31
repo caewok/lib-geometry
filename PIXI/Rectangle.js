@@ -54,12 +54,11 @@ function almostEqual(other, epsilon = 1e-08) {
  * @returns {x, y} PIXI.Point
  */
 function* iteratePoints({close = true} = {}) {
-  const A = new PIXI.Point(this.x, this.y);
-  yield A;
-  yield new PIXI.Point(this.x + this.width, this.y);
-  yield new PIXI.Point(this.x + this.width, this.y + this.height);
-  yield new PIXI.Point(this.x, this.y + this.height);
-  if ( close ) yield A;
+  yield PIXI.Point.tmp.set(this.x, this.y);
+  yield PIXI.Point.tmp.set(this.x + this.width, this.y);
+  yield PIXI.Point.tmp.set(this.x + this.width, this.y + this.height);
+  yield PIXI.Point.tmp.set(this.x, this.y + this.height);
+  if ( close ) yield PIXI.Point.tmp.set(this.x, this.y); // A again.
 }
 
 /**
@@ -71,14 +70,14 @@ function* iteratePoints({close = true} = {}) {
  * Edges link, such that edge0.B === edge.1.A.
  */
 function* iterateEdges({close = true} = {}) {
-  const A = new PIXI.Point(this.x, this.y);
-  const B = new PIXI.Point(this.x + this.width, this.y);
+  const A = PIXI.Point.tmp.set(this.x, this.y);
+  const B = PIXI.Point.tmp.set(this.x + this.width, this.y);
   yield { A, B };
 
-  const C = new PIXI.Point(this.x + this.width, this.y + this.height);
+  const C = PIXI.Point.tmp.set(this.x + this.width, this.y + this.height);
   yield { A: B, B: C };
 
-  const D = new PIXI.Point(this.x, this.y + this.height);
+  const D = PIXI.Point.tmp.set(this.x, this.y + this.height);
   yield { A: C, B: D };
   if ( close ) yield { A: D, B: A };
 }
@@ -144,14 +143,15 @@ function _overlapsPolygon(poly) {
 
   const pts = poly.iteratePoints({ close: true });
   let a = pts.next().value;
-  if ( !a ) return false;
-  if ( this.contains(a.x, a.y) ) return true;
+  if ( !a ) { a.release(); return false; }
+  if ( this.contains(a.x, a.y) ) { a.release(); return true; }
 
   for ( const b of pts ) {
     if ( this.lineSegmentIntersects(a, b) || this.contains(b.x, b.y) ) return true;
+    a.release();
     a = b;
   }
-
+  a.release();
   return false;
 }
 
@@ -212,6 +212,7 @@ function _envelopsPolygon(poly) {
   const iter = poly.iteratePoints({ close: false });
   for ( const pt of iter ) {
     if ( !this.contains(pt.x, pt.y) ) return false;
+    pt.release();
   }
   return true;
 }
@@ -466,8 +467,10 @@ function rotateAroundCenter(rotation = 0) {
   const rMat = CONFIG.GeometryLib.Matrix.rotationZ(Math.toRadians(rotation));
   const M = tMat.multiply3x3(rMat).multiply3x3(tMat.invert);
   const pts = [...this.iteratePoints({ close: true })];
-  const tPts = pts.map(pt => M.multiplyPoint2d(pt));
-  return new PIXI.Polygon(...tPts);
+  const tPts = pts.map(pt => M.multiplyPoint2d(pt, pt));
+  const out = new PIXI.Polygon(...tPts);
+  PIXI.Point.release(...tPts);
+  return out;
 }
 
 /**

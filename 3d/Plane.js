@@ -11,11 +11,6 @@ import { Point3d } from "./Point3d.js";
 const originPt3d = new Point3d();
 Object.freeze(originPt3d);
 
-const tmpPt3d0 = new Point3d();
-const tmpPt3d1 = new Point3d();
-const tmpPt3d2 = new Point3d();
-const tmpPt3d3 = new Point3d();
-
 // Class to represent a plane
 export class Plane {
 
@@ -46,10 +41,13 @@ export class Plane {
   }
 
   static normalFromPoints(a, b, c, outPoint) {
-    outPoint ??= new CONFIG.GeometryLib.threeD.Point3d();
-    const vAB = b.subtract(a, tmpPt3d0);
-    const vAC = c.subtract(a, tmpPt3d1);
-    return vAC.cross(vAB, outPoint); // So the orientation matches.
+    const Point3d = CONFIG.GeometryLib.threeD.Point3d;
+    outPoint ??= Point3d.tmp;
+    const vAB = b.subtract(a);
+    const vAC = c.subtract(a);
+    vAC.cross(vAB, outPoint); // So the orientation matches.
+    Point3d.release(vAB, vAC);
+    return outPoint;
   }
 
   /**
@@ -136,14 +134,15 @@ export class Plane {
   }
 
   static angleBetweenSegments(a, b, c, d) {
-    const V1 = b.subtract(a, tmpPt3d0);
-    const V2 = d.subtract(c, tmpPt3d1);
+    const V1 = b.subtract(a);
+    const V2 = d.subtract(c);
     const magV1 = V1.magnitude();
     const magV2 = V2.magnitude();
     const mag = magV1 * magV2;
-    if (!mag) return 0;
-
-    return Math.acos(V1.dot(V2) / mag);
+    const out = mag ? Math.acos(V1.dot(V2) / mag) : 0;
+    V1.release();
+    V2.release();
+    return out;
   }
 
   /**
@@ -237,7 +236,10 @@ export class Plane {
    */
   distanceToPoint(a) {
     const { normal, point } = this;
-    return normal.dot(a.subtract(point, tmpPt3d0));
+    const delta = a.subtract(point);
+    const out = normal.dot(delta);
+    delta.release();
+    return out;
   }
 
   /**
@@ -259,30 +261,43 @@ export class Plane {
    *
    */
   static rayIntersectionTriangle3d(rayOrigin, rayDirection, v0, v1, v2) {
+    const Point3d = CONFIG.GeometryLib.threeD.Point3d;
+
     // Calculate the edge vectors of the triangle
-    const edge1 = v1.subtract(v0, tmpPt3d0);
-    const edge2 = v2.subtract(v0, tmpPt3d1);
+    const edge1 = v1.subtract(v0);
+    const edge2 = v2.subtract(v0);
 
     // Calculate the determinant of the triangle
-    const pvec = rayDirection.cross(edge2, tmpPt3d2);
+    const pvec = rayDirection.cross(edge2);
 
     // If the determinant is near zero, ray lies in plane of triangle
     const det = edge1.dot(pvec);
-    if (det > -Number.EPSILON && det < Number.EPSILON) return null;  // Ray is parallel to triangle
+    if (det > -Number.EPSILON && det < Number.EPSILON) {
+      Point3d.release(edge1, edge2, pvec);
+      return null;  // Ray is parallel to triangle
+    }
     const invDet = 1 / det;
 
     // Calculate the intersection point using barycentric coordinates
-    const tvec = rayOrigin.subtract(v0, tmpPt3d3);
+    const tvec = rayOrigin.subtract(v0);
     const u = invDet * tvec.dot(pvec);
-    if (u < 0 || u > 1) return null;  // Intersection point is outside of triangle
+    if (u < 0 || u > 1) {
+      Point3d.release(edge1, edge2, pvec, tvec);
+      return null;  // Intersection point is outside of triangle
+    }
 
     const qvec = tvec.cross(edge1, edge1);
     const v = invDet * rayDirection.dot(qvec);
-    if (v < 0 || u + v > 1) return null;  // Intersection point is outside of triangle
+    if (v < 0 || u + v > 1) {
+      Point3d.release(edge1, edge2, pvec, tvec, qvec);
+      return null;  // Intersection point is outside of triangle
+    }
 
     // Calculate the distance to the intersection point
     const t = invDet * edge2.dot(qvec);
-    return t > Number.EPSILON ? t : null;
+    const out = t > Number.EPSILON ? t : null;
+    Point3d.release(edge1, edge2, pvec, tvec, qvec);
+    return out;
   }
 
   /**
@@ -376,38 +391,56 @@ export class Plane {
    * @returns {number|null}  Null if no intersection. If negative, the intersection is behind the ray origin.
    */
   static rayIntersectionQuad3dLD(rayOrigin, rayDirection, v0, v1, v2, v3) {
-    // Reject rays using the barycentric coordinates of the intersection point with respect to T
-    const E01 = v1.subtract(v0, tmpPt3d0);
-    const E03 = v3.subtract(v0, tmpPt3d1);
-    const P = rayDirection.cross(E03, tmpPt3d2);
-    const det = E01.dot(P);
-    if ( Math.abs(det) < Number.EPSILON ) return null;
+    const Point3d = CONFIG.GeometryLib.threeD.Point3d;
 
-    const T = rayOrigin.subtract(v0, tmpPt3d3);
+    // Reject rays using the barycentric coordinates of the intersection point with respect to T
+    const E01 = v1.subtract(v0);
+    const E03 = v3.subtract(v0);
+    const P = rayDirection.cross(E03);
+    const det = E01.dot(P);
+    if ( Math.abs(det) < Number.EPSILON ) {
+      Point3d.release(E01, E03, P)
+      return null;
+    }
+
+    const T = rayOrigin.subtract(v0);
     const alpha = T.dot(P) / det;
-    if ( alpha < 0 ) return null;
-    if ( alpha > 1 ) return null;
+    if ( alpha < 0 || alpha > 1 ) {
+      Point3d.release(E01, E03, P, T);
+      return null;
+    }
 
     const Q = T.cross(E01, E01);
     const beta = rayDirection.dot(Q) / det;
-    if ( beta < 0 ) return null;
-    if ( beta > 1 ) return null;
+    if ( beta < 0 || beta > 1 ) {
+      Point3d.release(E01, E03, P, T, Q);
+      return null;
+    }
 
-    // Done with E01 (tmpPt3d0), P (tmpPt3d2), T (tmpPt3d3).
+    // Done with E01, E03, P, T.
+    Point3d.release(E01, E03, P, T);
+
 
     // Reject rays using the barycentric coordinates of the intersection point with respect to T'
     if ( (alpha + beta) > 1 ) {
-      const E23 = v3.subtract(v2, tmpPt3d0);
-      const E21 = v1.subtract(v2, tmpPt3d2);
+      const E23 = v3.subtract(v2);
+      const E21 = v1.subtract(v2);
       const Pprime = rayDirection.cross(E21, E21);
       const detprime = E23.dot(Pprime);
-      if ( Math.abs(detprime) < Number.EPSILON ) return null;
+      if ( Math.abs(detprime) < Number.EPSILON ) {
+        Point3d.release(E23, E21, Pprime);
+        return null;
+      }
 
-      const Tprime = rayOrigin.subtract(v2, tmpPt3d3);
+      const Tprime = rayOrigin.subtract(v2);
       const alphaprime = Tprime.dot(Pprime) / detprime;
-      if ( alphaprime < 0 ) return null;
+      if ( alphaprime < 0 ) {
+        Point3d.release(E23, E21, Pprime, Tprime);
+        return null;
+      }
       const Qprime = Tprime.cross(E23, E23);
       const betaprime = rayDirection.dot(Qprime) / detprime;
+      Point3d.release(E23, E21, Pprime, Qprime, Tprime, Qprime);
       if ( betaprime < 0 ) return null;
     }
 
@@ -442,16 +475,18 @@ export class Plane {
    * Point nearly on the plane will return very small values.
    */
   whichSide(p) {
-    const V = p.subtract(this.point, tmpPt3d0);
-    return this.normal.dot(V);
+    const V = p.subtract(this.point);
+    const out = this.normal.dot(V);
+    V.release();
+    return out;
   }
 
   isPointOnPlane(p) {
     // https://math.stackexchange.com/questions/684141/check-if-a-point-is-on-a-plane-minimize-the-use-of-multiplications-and-divisio
     const vs = this.axisVectors;
     const a = this.point;
-    const b = this.point.add(vs.v, tmpPt3d0);
-    const c = this.point.add(vs.u, tmpPt3d1);
+    const b = this.point.add(vs.v);
+    const c = this.point.add(vs.u);
 
     const m = new CONFIG.GeometryLib.MatrixFlat([
       a.x, b.x, c.x, p.x,
@@ -459,7 +494,8 @@ export class Plane {
       a.z, b.z, c.z, p.z,
       1,   1,   1,   1,
     ], 4, 4);
-
+    b.release();
+    c.release();
     return m.determinant().almostEqual(0);
   }
 
@@ -481,8 +517,8 @@ export class Plane {
             : n.y < n.z ? w.set(0, 1, 0)
               : w.set(0, 0, 1);
 
-    const u = new Point3d();
-    const v = new Point3d();
+    const u = Point3d.tmp;
+    const v = Point3d.tmp;
     w.cross(n, u).normalize(u);
     n.cross(u, v).normalize(v);
     w.release();
@@ -528,10 +564,10 @@ export class Plane {
     const { normal: N, point: P } = this;
     const vs = this.axisVectors;
 
-    const u = P.add(vs.u, tmpPt3d0);
-    const v = P.subtract(vs.v, tmpPt3d1);
+    const u = P.add(vs.u);
+    const v = P.subtract(vs.v);
     const A = P;
-    const n = P.add(N, tmpPt3d2);
+    const n = P.add(N);
 
     // Three points
     /* Original version, for testing
@@ -565,6 +601,7 @@ export class Plane {
       0, 1, 0, 1,
       0, 0, 1, 1
     ], 4, 4);
+    CONFIG.GeometryLib.threeD.Point3d.release(u, v, n);
 
     const Sinv = S.invert();
     return Sinv.multiply4x4(D);
@@ -617,10 +654,13 @@ export class Plane {
     // Test if line and plane are parallel and do not intersect.
     if ( dot.almostEqual(0) ) return null;
 
-    const w = l0.subtract(P, tmpPt3d0);
+    const w = l0.subtract(P);
     const fac = -N.dot(w) / dot;
     const u = l.multiplyScalar(fac);
-    return l0.add(u);
+    const out = l0.add(u);
+    w.release();
+    u.release();
+    return out;
   }
 
   /**
@@ -630,7 +670,10 @@ export class Plane {
    * @returns {Point3d|null}
    */
   lineSegmentIntersection(p0, p1) {
-    return this.lineIntersection(p0, p1.subtract(p0));
+    const delta = p1.subtract(p0);
+    const ix = this.lineIntersection(p0, delta);
+    delta.release();
+    return ix;
 
     /* Or
     v0 = p0.subtract(this.point)
@@ -683,19 +726,22 @@ export class Plane {
     const N2 = other.normal;
 
     // Cross product of the two normals is the direction of the line.
-    const direction = N1.cross(N2, tmpPt3d3);
+    const direction = N1.cross(N2);
 
     // Parallel planes have a cross product with zero magnitude
-    if ( !direction.magnitudeSquared() ) return null;
+    if ( !direction.magnitudeSquared() ) {
+      direction.release();
+      return null;
+    }
 
     // Find shared point on the line of intersection between the two planes.
     // Project the origin (0,0,0) and the normal of the second plane onto the first plane (plane1).
     // This defines a line within plane1.
-    const projectedOrigin = this.projectPointOnPlane(originPt3d, tmpPt3d1); // tmpPt3d0 used by projectPointOnPlane
-    const projectedN2 = this.projectPointOnPlane(other.normal, tmpPt3d2);
+    const projectedOrigin = this.projectPointOnPlane(originPt3d);
+    const projectedN2 = this.projectPointOnPlane(other.normal);
 
     // The direction vector of the line in plane1.
-    const lineDirection = projectedN2.subtract(projectedOrigin, projectedN2);
+    const lineDirection = projectedN2.subtract(projectedOrigin);
 
     // Now we find the intersection of this line with the second plane (plane2).
     // A line is defined by L(t) = startPoint + t * direction
@@ -716,10 +762,14 @@ export class Plane {
       return null; // Planes are parallel and distinct.
     }
     */
-    const numerator = other.normal.dot(projectedOrigin.subtract(other.point, tmpPt3d0));
+    const Point3d = CONFIG.GeometryLib.threeD.Point3d;
+    const delta = projectedOrigin.subtract(other.point);
+    const numerator = other.normal.dot(delta);
     const t = -numerator / denominator;
-    const ix = new CONFIG.GeometryLib.threeD.Point3d();
+    const ix = Point3d.tmp;
     projectedOrigin.add(lineDirection.multiplyScalar(t, ix), ix);
+    Point3d.release(projectedOrigin, projectedN2, lineDirection, delta);
+
     return { point: ix, direction };
   }
 
@@ -729,14 +779,15 @@ export class Plane {
    * @returns {Point3d} The projected point
    */
   projectPointOnPlane(pt, outPoint) {
-    outPoint ??= new CONFIG.GeometryLib.threeD.Point3d();
-    const v = pt.subtract(this.point, tmpPt3d0);
+    const Point3d = CONFIG.GeometryLib.threeD.Point3d;
+    outPoint ??= Point3d.tmp;
+    const v = pt.subtract(this.point);
     const dist = v.dot(this.normal);
-    const vScaled = this.normal.multiplyScalar(dist, tmpPt3d0);
+    const vScaled = this.normal.multiplyScalar(dist);
     pt.subtract(vScaled, outPoint);
+    Point3d.release(v, vScaled);
     return outPoint;
   }
-
 }
 
 /**

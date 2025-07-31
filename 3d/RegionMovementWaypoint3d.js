@@ -5,9 +5,9 @@ CONFIG
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import "./Point3d.js";
 import { elevationForUnit, unitElevation, roundNearWhole } from "../util.js";
 import { GEOMETRY_CONFIG } from "../const.js";
+import { Pool } from "../Pool.js";
 
 // ----- NOTE: 3d versions of Foundry typedefs ----- //
 
@@ -25,6 +25,13 @@ import { GEOMETRY_CONFIG } from "../const.js";
  * treat objects with {i,j} parameters differently.
  */
 export class RegionMovementWaypoint3d extends GEOMETRY_CONFIG.threeD.Point3d {
+
+  static #pool = new Pool(_pool => new RegionMovementWaypoint3d());
+
+  static release(...args) { args.forEach(arg => this.#pool.release(arg)); }
+
+  static get tmp() { return this.#pool.acquire(); }
+
   /** @type {number<grid units>} */
   get elevation() { return CONFIG.GeometryLib.utils.pixelsToGridUnits(this.z); }
 
@@ -94,11 +101,6 @@ export class RegionMovementWaypoint3d extends GEOMETRY_CONFIG.threeD.Point3d {
     outPoint.elevation = elevationForUnit(unitElevation(this.elevation));
     return outPoint;
   }
-
-  // Temporary points that can be passed to RegionMovementWaypoint3d methods
-  static _tmp = new this();
-  static _tmp2 = new this();
-  static _tmp3 = new this();
 }
 
 GEOMETRY_CONFIG.threeD.RegionMovementWaypoint3d ??= RegionMovementWaypoint3d;

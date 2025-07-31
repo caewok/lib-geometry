@@ -29,26 +29,35 @@ function area() {
  * @returns {Point}
  */
 function centroid() {
-  const pts = [...this.iteratePoints({close: true})];
+  const pts = this.iteratePoints({close: true});
   const ln = pts.length;
   switch ( ln ) {
     case 0: return undefined;
-    case 1: return pts[0]; // Should not happen if close is true
-    case 2: return pts[0];
-    case 3: return PIXI.Point.midPoint(pts[0], pts[1]);
+    case 1: return pts.next().value; // Should not happen if close is true
+    case 2: {
+      const a = pts.next().value;
+      const b = pts.next().value;
+      const out = PIXI.Point.midPoint(a, b);
+      a.release();
+      b.release();
+      return out;
+    }
   }
-  const outPoint = new PIXI.Point();
+  const outPoint = PIXI.Point.tmp;
   let area = 0;
-  const iter = ln - 1;
-  for ( let i = 0; i < iter; i += 1 ) {
-    const iPt = pts[i];
-    const jPt = pts[i + 1];
-    const ijX = (iPt.x + jPt.x);
-    area += ijX * (iPt.y - jPt.y); // See signedArea function
-    const mult = (iPt.x * jPt.y) - (jPt.x * iPt.y);
-    outPoint.x += ijX * mult;
-    outPoint.y += (iPt.y + jPt.y) * mult;
+  let a = pts.next().value;
+  for ( const b of pts ) {
+    const sumX = a.x + b.x;
+    area += sumX * (a.y - b.y); // See signedArea function.
+    const mult = (a.x * b.y) - (b.x * a.y);
+    outPoint.x += sumX * mult;
+    outPoint.y += (a.y + b.y) * mult;
+
+    a.release();
+    a = b;
   }
+  a.release();
+
   area = -area * 0.5;
   const areaMult = 1 / (6 * area);
   outPoint.x *= areaMult;
@@ -194,10 +203,10 @@ function* iterateEdges({close = true} = {}) {
   const ln = this.points.length;
   if ( ln < 4 ) return;
 
-  const firstA = new PIXI.Point(this.points[0], this.points[1]);
+  const firstA = PIXI.Point.tmp.set(this.points[0], this.points[1]);
   let A = firstA;
   for (let i = 2; i < ln; i += 2) {
-    const B = new PIXI.Point(this.points[i], this.points[i + 1]);
+    const B = PIXI.Point.tmp.set(this.points[i], this.points[i + 1]);
     yield { A, B };
     A = B;
   }
@@ -220,10 +229,10 @@ function* iteratePoints({ close = true } = {}) {
 
   const num = ln - (this.isClosed ? 2 : 0);
   for (let i = 0; i < num; i += 2) {
-    yield new PIXI.Point(this.points[i], this.points[i + 1]);
+    yield PIXI.Point.tmp.set(this.points[i], this.points[i + 1]);
   }
 
-  if ( close ) yield new PIXI.Point(this.points[0], this.points[1]);
+  if ( close ) yield PIXI.Point.tmp.set(this.points[0], this.points[1]);
 }
 
 /**
@@ -235,6 +244,7 @@ function linesCross(lines) {
   for ( const edge of this.iterateEdges() ) {
     for ( const line of lines ) {
       if ( CONFIG.GeometryLib.utils.lineSegmentCrosses(edge.A, edge.B, line.A, line.B) ) return true;
+      edge.A.release(); // B will later be set to A, so don't release it.
     }
   }
 
@@ -396,19 +406,35 @@ function _overlapsPolygon(other) {
 
   const pts1 = this.iteratePoints({ close: true });
   let a = pts1.next().value;
-  if ( !a ) return false;
-  if ( other.contains(a.x, a.y) ) return true;
+  if ( !a ) {
+    a.release();
+    return false;
+  }
+  if ( other.contains(a.x, a.y) ) {
+    a.release();
+    return true;
+  }
 
   for ( const b of pts1 ) {
-    if ( other.contains(b.x, b.y) ) return true;
+    if ( other.contains(b.x, b.y) ) {
+      PIXI.Point.release(a, b);
+      return true;
+    }
     const pts2 = other.iteratePoints({ close: true });
     let c = pts2.next().value;
     for ( const d of pts2 ) {
-      if ( foundry.utils.lineSegmentIntersects(a, b, c, d) || this.contains(d.x, d.y) ) return true;
+      if ( foundry.utils.lineSegmentIntersects(a, b, c, d) || this.contains(d.x, d.y) ) {
+        PIXI.Point.release(a, b, c, d);
+        return true;
+      }
+      c.release();
       c = d;
     }
+    c.release();
+    a.release();
     a = b;
   }
+  a.release();
 
   return false;
 }
@@ -434,6 +460,7 @@ function _overlapsCircle(circle) {
     // Get point on the line closest to segment from circle center
     const c = foundry.utils.closestPointToSegment(circle, s.A, s.B);
     if ( circle.contains(c.x, c.y) ) return true;
+    s.A.release(); // B will become A, so don't release.
   }
 
   return false;
@@ -454,12 +481,14 @@ function _envelopsPolygon(poly) {
   const iter = poly.iteratePoints({ close: false });
   for ( const pt of iter ) {
     if ( !this.contains(pt.x, pt.y) ) return false;
+    pt.release();
   }
 
   // Step 3: Cannot have intersecting lines.
   const edges = poly.iterateEdges();
   for ( const edge of edges ) {
     if ( this.lineSegmentIntersects(edge.A, edge.B) ) return false;
+    edge.A.release(); // B will become A so don't release.
   }
   return true;
 }
@@ -481,6 +510,7 @@ function _envelopsRectangle(rect) {
   const edges = rect.iterateEdges();
   for ( const edge of edges ) {
     if ( this.lineSegmentIntersects(edge.A, edge.B) ) return false;
+    edge.A.release(); // B will become A so don't release.
   }
   return true;
 }
@@ -502,6 +532,7 @@ function _envelopsCircle(circle) {
   for ( const edge of edges ) {
     const ixs = circle.segmentIntersections(edge.A, edge.B);
     if ( ixs.length ) return false;
+    edge.A.release(); // B will become A so don't release.
   }
   return true;
 }
@@ -554,7 +585,10 @@ function signedArea({ scalingFactor } = {}) {
   });
 
   const ln = pts.length;
-  if ( ln < 4 ) return 0; // Incl. closing point, should have 4
+  if ( ln < 4 ) {
+    PIXI.Point.release(...pts);
+    return 0; // Incl. closing point, should have 4
+  }
 
   // (first + second) * (first - second)
   // ...
@@ -567,6 +601,7 @@ function signedArea({ scalingFactor } = {}) {
     const jPt = pts[i + 1];
     area += (iPt.x + jPt.x) * (iPt.y - jPt.y);
   }
+  PIXI.Point.release(...pts);
 
   if ( scalingFactor ) area /= Math.pow(scalingFactor, 2);
 
@@ -806,18 +841,17 @@ function clean({epsilon = 1e-8, epsilonCollinear = 1e-12} = {}) {
   if ( !prev || !curr ) return this;
   const cleanPoints = [prev.x, prev.y];
   for ( const next of pts ) {
-    if ( curr.almostEqual(prev, epsilon) ) {
-      curr = next;
-      continue;
-    }
-    if ( foundry.utils.orient2dFast(prev, curr, next).almostEqual(0, epsilonCollinear) ) {
-      curr = next;
+    if ( curr.almostEqual(prev, epsilon)
+      || foundry.utils.orient2dFast(prev, curr, next).almostEqual(0, epsilonCollinear) ) {
+      curr.release(); curr = next;
       continue;
     }
     cleanPoints.push(curr.x, curr.y);
-    prev = curr;
-    curr = next;
+
+    prev.release(); prev = curr;
+    curr.release(); curr = next;
   }
+  prev.release(); curr.release();
 
   // Check for and remove closing point.
   const ln = cleanPoints.length;
@@ -885,10 +919,15 @@ function equals(other) {
   const nPoints = otherPoints.length;
   for ( const thisPoint of thisPoints ) {
     k = k % nPoints;
-    if ( !thisPoint.equals(otherPoints[k]) ) return false;
+    if ( !thisPoint.equals(otherPoints[k]) ) {
+      thisPoint.release();
+      PIXI.Point.release(...otherPoints);
+      return false;
+    }
     k += 1;
+    thisPoint.release();
   }
-
+  PIXI.Point.release(...otherPoints);
   return true;
 }
 
@@ -919,10 +958,15 @@ function almostEqual(other, epsilon = 1e-08) {
   const nPoints = otherPoints.length;
   for ( const thisPoint of thisPoints ) {
     k = k % nPoints;
-    if ( !thisPoint.almostEqual(otherPoints[k], epsilon) ) return false;
+    if ( !thisPoint.almostEqual(otherPoints[k], epsilon) ) {
+      thisPoint.release();
+      PIXI.Point.release(...otherPoints);
+      return false;
+    }
     k += 1;
+    thisPoint.release();
   }
-
+  PIXI.Point.release(...otherPoints);
   return true;
 }
 
@@ -1023,7 +1067,9 @@ function canUseFanTriangulation(centroid) {
   const lines = [...this.iteratePoints({ close: false })].map(B => {
     return { A: centroid, B };
   });
-  return !this.linesCross(lines); // Lines cross ignores lines that only share endpoints.
+  const out = !this.linesCross(lines); // Lines cross ignores lines that only share endpoints.
+  lines.forEach(l => l.B.release());
+  return out;
 }
 
 /**

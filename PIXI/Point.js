@@ -191,12 +191,13 @@ function copyPartial(p) {
  * @param {PIXI.Point} b
  * @returns {PIXI.Point}
  */
-function midPoint(a, b) {
+function midPoint(a, b, outPoint) {
+  outPoint ??= this.tmp;
   a.x ||= 0;
   a.y ||= 0;
   b.x ||= 0;
   b.y ||= 0;
-  return this.tmp.set( a.x + ((b.x - a.x) / 2), a.y + ((b.y - a.y) / 2));
+  return outPoint.set( a.x + ((b.x - a.x) / 2), a.y + ((b.y - a.y) / 2));
 }
 
 /**
@@ -478,6 +479,13 @@ function sortKey() {
   return (MAX_TEXTURE_SIZE * x) + y;
 }
 
+// For parallel with Point3d.
+function to2d(_opts, outPoint) {
+  outPoint ??= this.constructor.tmp;
+  outPoint.copyFrom(this);
+  return outPoint;
+}
+
 /**
  * Iterator: x then y.
  */
@@ -540,6 +548,6 @@ PATCHES.PIXI.METHODS = {
   rotate,
   roundDecimals,
   fromAngle,
-  to2d: function() { return this; }, // For parallel with Point3d.
+  to2d,
   release,
 };

@@ -5,15 +5,7 @@ PIXI
 "use strict";
 
 import { GEOMETRY_CONFIG } from "../const.js";
-import { Point3d } from "./Point3d.js";
 import { Polygon3d } from "./Polygon3d.js";
-
-// Temporary points.
-const tmpPt3d0 = new Point3d();
-const tmpPt3d1 = new Point3d();
-const tmpPt3d2 = new Point3d();
-const tmpPt3d3 = new Point3d();
-const tmpPt3d4 = new Point3d();
 
 /* Sphere
 Represent a 3d sphere, with some functions to manipulate it.
@@ -257,24 +249,36 @@ export class Sphere {
   static fromThreePoints(a, b, c) {
     const Point3d = CONFIG.GeometryLib.threeD.Point3d;
 
-    // tmpPt3d0 used by fromTwoPoints
-    const ca = c.subtract(a, tmpPt3d1);
-    const ba = b.subtract(a, tmpPt3d2);
-    const cb = c.subtract(a, tmpPt3d3);
-
     // Check if an angle is obtuse.
-    if ( a.subtract(b, tmpPt3d4).dot(cb) <= 0 ) return this.fromTwoPoints(a, c); // Angle b is obtuse.
-    if ( a.subtract(c, tmpPt3d4).dot(cb) <= 0 ) return this.fromTwoPoints(a, b); // Angle c is obtuse.
-    if ( ba.dot(ca) <= 0 ) return this.sphereFromTwoPoints(b, c); // Angle a is obtuse or collinear.
+    const cb = c.subtract(a);
+    const ab = a.subtract(b);
+    if (ab.dot(cb) <= 0 ) {
+      Point3d.release(ab, cb);
+      return this.fromTwoPoints(a, c); // Angle b is obtuse.
+    }
+
+    const ac = a.subtract(c);
+    if ( ac.dot(cb) <= 0 ) {
+      Point3d.release(cb, ab, ac);
+      return this.fromTwoPoints(a, b); // Angle c is obtuse.
+    }
+
+    const ca = c.subtract(a);
+    const ba = b.subtract(a);
+    if ( ba.dot(ca) <= 0 ) {
+      Point3d.release(cb, ab, ac, ca, ba);
+      return this.sphereFromTwoPoints(b, c); // Angle a is obtuse or collinear.
+    }
 
     // If triangle is acute, the circumsphere is the minimal sphere.
-    const cross_ba_bc = ba.cross(ca, tmpPt3d4);
+    const cross_ba_bc = ba.cross(ca);
     const denominator = 2 * cross_ba_bc.magnitudeSquared();
 
     // If points are collinear, denominator is 0, but this case is handled by the obtuse checks above.
     if (Math.abs(denominator) < 1e-9) {
       // Fallback for safety, although should not be reached.
       console.error("fromThreePoints|Collinear points found", { a, b, c });
+      Point3d.release(cb, ab, ac, ca, ba, cross_ba_bc);
 
       // Find the two points that are furthest apart.
       const distAB = Point3d.distanceSquaredBetween(a, b);
@@ -282,15 +286,19 @@ export class Sphere {
       const distBC = Point3d.distanceSquaredBetween(b, c);
       if ( distAB >= distAC && distAB >= distBC ) return this.sphereFromTwoPoints(a, b);
       if ( distAC >= distAB && distAC >= distBC ) return this.sphereFromTwoPoints(a, c);
+
       return this.sphereFromTwoPoints(b, c);
     }
 
-    const term1 = cross_ba_bc.cross(ba, tmpPt3d4).multiplyScalar(ca.magnitudeSquared(), tmpPt3d4);
-    const term2 = ca.cross(cross_ba_bc, tmpPt3d0).multiplyScalar(ba.magnitudeSquared(), tmpPt3d0);
+    const term1 = Point3d.tmp;
+    const term2 = Point3d.tmp;
+    cross_ba_bc.cross(ba, term1).multiplyScalar(ca.magnitudeSquared(), term1);
+    ca.cross(cross_ba_bc, term2).multiplyScalar(ba.magnitudeSquared(), term2);
 
     const out = new this();
     out.radiusSquared = Point3d.distanceSquaredBetween(this.center, a);
     term1.add(term2, out.center).multiplyScalar(1/denominator, out.center).add(a, out.center);
+    Point3d.release(cb, ab, ac, ca, ba, cross_ba_bc, term1, term2);
     return out;
   }
 

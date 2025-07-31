@@ -142,6 +142,7 @@ function _envelopsPolygon(poly) {
   const iter = poly.iteratePoints({ close: false });
   for ( const pt of iter ) {
     if ( !this.contains(pt.x, pt.y) ) return false;
+    pt.release();
   }
   return true;
 }
