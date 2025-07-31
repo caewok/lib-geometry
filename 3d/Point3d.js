@@ -184,7 +184,7 @@ export class Point3d extends PIXI.Point {
    * @returns {Point3d}
    */
   static fromPointSource(source, outPoint) {
-    outPoint ??= new this();
+    outPoint ??= this.tmp;
     const { x, y, elevationZ } = source;
     outPoint.set(
       x ?? source.object.center.x, // Vision sources have no x, y.
@@ -201,8 +201,8 @@ export class Point3d extends PIXI.Point {
   static fromToken(token) {
     const { x, y } = token.center;
     return {
-      top: new this(x, y, token.topZ),
-      bottom: new this(x, y, token.bottomZ)
+      top: this.tmp.set(x, y, token.topZ),
+      bottom: this.tmp.set(x, y, token.bottomZ)
     };
   }
 
@@ -215,7 +215,7 @@ export class Point3d extends PIXI.Point {
    * @returns {Point3d}
    */
   static fromTokenCenter(token, outPoint) {
-    outPoint ??= new this();
+    outPoint ??= this.tmp;
     const { center, bottomZ, topZ } = token;
     const z = bottomZ + ((topZ - bottomZ) * 0.5);
     outPoint.set(center.x, center.y, z);
@@ -230,7 +230,7 @@ export class Point3d extends PIXI.Point {
    * @returns {Point3d}
    */
   static fromTokenVisionHeight(token, outPoint) {
-    outPoint ??= new this();
+    outPoint ??= this.tmp;
     const { center, visionZ } = token;
     outPoint.set(center.x, center.y, visionZ);
     return outPoint;
@@ -256,12 +256,12 @@ export class Point3d extends PIXI.Point {
 
     return {
       A: {
-        top: new this(edge.a.x, edge.a.y, top),
-        bottom: new this(edge.a.x, edge.a.y, bottom)
+        top: this.tmp.set(edge.a.x, edge.a.y, top),
+        bottom: this.tmp.set(edge.a.x, edge.a.y, bottom)
       },
       B: {
-        top: new this(edge.b.x, edge.b.y, top),
-        bottom: new this(edge.b.x, edge.b.y, bottom)
+        top: this.tmp(edge.b.x, edge.b.y, top),
+        bottom: this.tmp(edge.b.x, edge.b.y, bottom)
       }
     };
   }
@@ -427,7 +427,7 @@ export class Point3d extends PIXI.Point {
    * @returns A clone of this point
    */
   clone() {
-    return new this.constructor(this.x, this.y, this.z);
+    return this.tmp.set(this.x, this.y, this.z);
   }
 
   /**
@@ -505,7 +505,7 @@ export class Point3d extends PIXI.Point {
    * @returns {Point3d}
    */
   add(other, outPoint) {
-    outPoint ??= new this.constructor();
+    outPoint ??= this.tmp;
     super.add(other, outPoint);
     outPoint.z = this.z + (other.z || 0);
 
@@ -521,7 +521,7 @@ export class Point3d extends PIXI.Point {
    * @returns {Point3d}
    */
   subtract(other, outPoint) {
-    outPoint ??= new this.constructor();
+    outPoint ??= this.tmp;
     super.subtract(other, outPoint);
     outPoint.z = this.z - (other.z || 0);
 
@@ -537,7 +537,7 @@ export class Point3d extends PIXI.Point {
    * @returns {Point3d}
    */
   multiply(other, outPoint) {
-    outPoint ??= new this.constructor();
+    outPoint ??= this.tmp;
     super.multiply(other, outPoint);
     outPoint.z = this.z * (other.z || 0);
 
@@ -553,7 +553,7 @@ export class Point3d extends PIXI.Point {
    * @returns {Point3d}
    */
   divide(other, outPoint) {
-    outPoint ??= new this.constructor();
+    outPoint ??= this.tmp;
     super.divide(other, outPoint);
     outPoint.z = this.z / other.z;
 
@@ -569,7 +569,7 @@ export class Point3d extends PIXI.Point {
    * @returns {Point3d}
    */
   multiplyScalar(scalar, outPoint) {
-    outPoint ??= new this.constructor();
+    outPoint ??= this.tmp;
     super.multiplyScalar(scalar, outPoint);
     outPoint.z = this.z * scalar;
 
@@ -584,7 +584,7 @@ export class Point3d extends PIXI.Point {
    * @returns {Point3d}
    */
   min(other, outPoint) {
-    outPoint ??= new this.constructor();
+    outPoint ??= this.tmp;
     super.min(other, outPoint);
     outPoint.z = Math.min(this.z, other.z);
     return outPoint;
@@ -598,7 +598,7 @@ export class Point3d extends PIXI.Point {
    * @returns {Point3d}
    */
   max(other, outPoint) {
-    outPoint ??= new this.constructor();
+    outPoint ??= this.tmp;
     super.max(other, outPoint);
     outPoint.z = Math.max(this.z, other.z);
     return outPoint;
@@ -675,7 +675,7 @@ export class Point3d extends PIXI.Point {
    * @returns {Point3d}
    */
   cross(other, outPoint) {
-    outPoint ??= new this.constructor();
+    outPoint ??= this.tmp;
 
     // Avoid overwriting other incase it is outPoint.
     const x = (this.y * other.z) - (this.z * other.y);

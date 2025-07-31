@@ -27,7 +27,7 @@ function getTmp() { return pool.acquire(); }
  * @returns {PIXI.Point} coordinates
  */
 function invertKey(key, outPoint) {
-  outPoint ??= new this();
+  outPoint ??= this.tmp;
   return outPoint.copyFrom(this._invertKey(key));
 }
 
@@ -56,7 +56,7 @@ function roundDecimals(places = 0) {
 function fromObject(obj) {
   const x = obj.x ?? 0;
   const y = obj.y ?? 0;
-  return new this(x, y);
+  return this.tmp.set(x, y);
 }
 
 /**
@@ -153,7 +153,7 @@ function flatMapPoints(ptsArr, transformFn) {
 function fromAngleStatic(origin, radians, distance) {
   const dx = Math.cos(radians);
   const dy = Math.sin(radians);
-  return new this(origin.x + (dx * distance), origin.y + (dy * distance));
+  return this.tmp.set(origin.x + (dx * distance), origin.y + (dy * distance));
 }
 
 /**
@@ -165,7 +165,7 @@ function fromAngleStatic(origin, radians, distance) {
  * @returns {Point}  Coordinates of point that lies distance away from origin along angle.
  */
 function fromAngle(radians, distance, outPoint) {
-  outPoint ??= new this.constructor();
+  outPoint ??= this.tmp;
   const dx = Math.cos(radians);
   const dy = Math.sin(radians);
   outPoint.copyFrom({ x: dx, y: dy});
@@ -196,7 +196,7 @@ function midPoint(a, b) {
   a.y ||= 0;
   b.x ||= 0;
   b.y ||= 0;
-  return new this( a.x + ((b.x - a.x) / 2), a.y + ((b.y - a.y) / 2));
+  return this.tmp.set( a.x + ((b.x - a.x) / 2), a.y + ((b.y - a.y) / 2));
 }
 
 /**
@@ -223,7 +223,7 @@ function to3d({ x = "x", y = "y", z} = {}) {
  * @returns {PIXI.Point}
  */
 function add(other, outPoint) {
-  outPoint ??= new this.constructor();
+  outPoint ??= this.tmp;
   outPoint.x = this.x + other.x;
   outPoint.y = this.y + other.y;
   return outPoint;
@@ -238,7 +238,7 @@ function add(other, outPoint) {
  * @returns {PIXI.Point}
  */
 function subtract(other, outPoint) {
-  outPoint ??= new this.constructor();
+  outPoint ??= this.tmp;
   outPoint.x = this.x - other.x;
   outPoint.y = this.y - other.y;
 
@@ -254,7 +254,7 @@ function subtract(other, outPoint) {
  * @returns {PIXI.Point}
  */
 function multiply(other, outPoint) {
-  outPoint ??= new this.constructor();
+  outPoint ??= this.tmp;
   outPoint.x = this.x * other.x;
   outPoint.y = this.y * other.y;
   return outPoint;
@@ -269,7 +269,7 @@ function multiply(other, outPoint) {
  * @returns {PIXI.Point}
  */
 function multiplyScalar(scalar, outPoint) {
-  outPoint ??= new this.constructor();
+  outPoint ??= this.tmp;
   outPoint.x = this.x * scalar;
   outPoint.y = this.y * scalar;
   return outPoint;
@@ -284,7 +284,7 @@ function multiplyScalar(scalar, outPoint) {
  * @returns {PIXI.Point}
  */
 function divide(other, outPoint) {
-  outPoint ??= new this.constructor();
+  outPoint ??= this.tmp;
   outPoint.x = this.x / other.x;
   outPoint.y = this.y / other.y;
   return outPoint;
@@ -298,7 +298,7 @@ function divide(other, outPoint) {
  * @returns {PIXI.Point}
  */
 function min(other, outPoint) {
-  outPoint ??= new this.constructor();
+  outPoint ??= this.tmp;
   outPoint.x = Math.min(this.x, other.x);
   outPoint.y = Math.min(this.y, other.y);
   return outPoint;
@@ -312,7 +312,7 @@ function min(other, outPoint) {
  * @returns {PIXI.Point}
  */
 function max(other, outPoint) {
-  outPoint ??= new this.constructor();
+  outPoint ??= this.tmp;
   outPoint.x = Math.max(this.x, other.x);
   outPoint.y = Math.max(this.y, other.y);
   return outPoint;
@@ -375,7 +375,7 @@ function normalize(outPoint) {
  * @returns {Point3d|PIXI.Point}
  */
 function projectToward(other, t, outPoint) {
-  outPoint ??= new this.constructor();
+  outPoint ??= this.tmp;
   const delta = other.subtract(this, outPoint);
   this.add(delta.multiplyScalar(t, outPoint), outPoint);
   return outPoint;
@@ -388,7 +388,7 @@ function projectToward(other, t, outPoint) {
  * @returns {Point3d|PIXI.Point}
  */
 function towardsPoint(other, distance, outPoint) {
-  outPoint ??= new this.constructor();
+  outPoint ??= this.tmp;
   const delta = other.subtract(this, outPoint);
   const t = distance / delta.magnitude();
   this.add(delta.multiplyScalar(t, outPoint), outPoint);
@@ -402,7 +402,7 @@ function towardsPoint(other, distance, outPoint) {
  * @returns {Point3d|PIXI.Point}
  */
 function towardsPointSquared(other, distance2, outPoint) {
-  outPoint ??= new this.constructor();
+  outPoint ??= this.tmp;
   const delta = other.subtract(this, outPoint);
   const sign = Math.sign(distance2);
   const t = sign * Math.sqrt(Math.abs(distance2) / delta.magnitudeSquared());
@@ -421,7 +421,7 @@ function towardsPointSquared(other, distance2, outPoint) {
  *   Pass an outPoint if the actual point is desired.
  */
 function projectToAxisValue(other, value, coordinate, outPoint) {
-  outPoint ??= new this.constructor();
+  outPoint ??= this.tmp;
   coordinate ??= "x";
   other.subtract(this, outPoint);
   if ( outPoint[coordinate] === 0 ) return null; // Line is parallel to that coordinate axis.
@@ -438,7 +438,7 @@ function projectToAxisValue(other, value, coordinate, outPoint) {
  * @returns {Point} A new point
  */
 function rotate(angle, outPoint) {
-  outPoint ??= new this.constructor();
+  outPoint ??= this.tmp;
   const cAngle = Math.cos(angle);
   const sAngle = Math.sin(angle);
   const { x, y } = this; // Avoid accidentally using the outPoint values when calculating new y.
@@ -455,7 +455,7 @@ function rotate(angle, outPoint) {
  * @returns {Point} A new point
  */
 function translate(dx, dy, outPoint) {
-  outPoint ??= new this.constructor();
+  outPoint ??= this.tmp;
   outPoint.x = this.x + dx;
   outPoint.y = this.y + dy;
   return outPoint;
