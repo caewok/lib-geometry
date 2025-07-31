@@ -51,7 +51,7 @@ export class Pool {
     const testObj = this.pool.first();
     const isValid = testObj.constructor.classTypes
       ? testObj.objectMatchesClassType(obj)
-      : obj instanceof testObj;
+      : obj instanceof testObj.constructor;
     if ( !isValid) {
       console.warn("Pool object does not match other instance in the pool.", { testObj, obj });
       return;
