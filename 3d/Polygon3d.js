@@ -247,18 +247,18 @@ export class Polygon3d {
   }
 
   static fromPlanarPolygon(poly2d, plane) {
-    const Point3d = CONFIG.GeometryLib.threeD;
+    const Point3d = CONFIG.GeometryLib.threeD.Point3d;
     const invM2d = plane.conversion2dMatrixInverse;
     const ln = poly2d.points.length;
     const pts3d = new Array(Math.floor(ln / 2));
     for ( let i = 0, j = 0; i < ln; i += 2, j += 1 ) {
       const x = poly2d.points[i];
       const y = poly2d.points[i + 1];
-      const pt3d = invM2d.multiplyPoint3d(Point3d.tmp.set(x, y, 0));
-      pts3d[j] = pt3d;
+      const pt3d = Point3d.tmp.set(x, y, 0);
+      pts3d[j] = invM2d.multiplyPoint3d(pt3d, pt3d);
     }
     const out = this.from3dPoints(pts3d);
-    pts3d.forEach(pt => pt.release());
+    Point3d.release(...pts3d);
     return out;
   }
 
