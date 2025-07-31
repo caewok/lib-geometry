@@ -360,8 +360,10 @@ export class PixelCache extends PIXI.Rectangle {
    */
   _canvasAtIndex(i, outPoint) {
     outPoint ??= new PIXI.Point();
-    const local = this._localAtIndex(i, PIXI.Point._tmp);
-    return this._toCanvasCoordinates(local.x, local.y, outPoint);
+    const local = this._localAtIndex(i, PIXI.Point.tmp);
+    const out = this._toCanvasCoordinates(local.x, local.y, outPoint);
+    local.release();
+    return out;
   }
 
   /**
@@ -453,9 +455,12 @@ export class PixelCache extends PIXI.Rectangle {
     const origin = this._fromCanvasCoordinates(circle.x, circle.y);
 
     // For radius, use two points of equivalent distance to compare.
-    const radius = this._fromCanvasCoordinates(circle.radius, 0, PIXI.Point._tmp2).x
-      - this._fromCanvasCoordinates(0, 0, PIXI.Point._tmp3).x;
-    return new PIXI.Circle(origin.x, origin.y, radius);
+    const local = this._fromCanvasCoordinates(circle.radius, 0, PIXI.Point.tmp);
+    const local0 = this._fromCanvasCoordinates(0, 0, PIXI.Point.tmp);
+    const radius = local.x - local0.x;
+    const out = new PIXI.Circle(origin.x, origin.y, radius);
+    PIXI.Point.release(local, local0);
+    return out;
   }
 
   /**
@@ -464,14 +469,17 @@ export class PixelCache extends PIXI.Rectangle {
    * @returns {PIXI.Ellipse}
    */
   _ellipseToLocalCoordinates(ellipse) {
-    const origin = this._fromCanvasCoordinates(ellipse.x, ellipse.y, PIXI.Point._tmp);
+    const origin = this._fromCanvasCoordinates(ellipse.x, ellipse.y, PIXI.Point.tmp);
 
     // For halfWidth and halfHeight, use two points of equivalent distance to compare.
-    const halfWidth = this._fromCanvasCoordinates(ellipse.halfWidth, 0, PIXI.Point._tmp2).x
-      - this._fromCanvasCoordinates(0, 0, PIXI.Point._tmp3).x;
-    const halfHeight = this._fromCanvasCoordinates(ellipse.halfHeight, 0, PIXI.Point._tmp2).x
-      - this._fromCanvasCoordinates(0, 0, PIXI.Point._tmp3).x;
-    return new PIXI.Ellipse(origin.x, origin.y, halfWidth, halfHeight);
+    const localDim = this._fromCanvasCoordinates(ellipse.halfWidth, 0, PIXI.Point.tmp);
+    const local0 = this._fromCanvasCoordinates(0, 0, PIXI.Point.tmp);
+    const halfWidth = localDim.x - local0.x;
+
+    this._fromCanvasCoordinates(ellipse.halfHeight, 0, localDim);
+    const halfHeight = localDim.x - local0.x;
+    out = new PIXI.Ellipse(origin.x, origin.y, halfWidth, halfHeight);
+    PIXI.Point.release(localDim, local0);
   }
 
   /**
@@ -480,9 +488,11 @@ export class PixelCache extends PIXI.Rectangle {
    * @returns {PIXI.Rectangle}
    */
   _rectangleToLocalCoordinates(rect) {
-    const TL = this._fromCanvasCoordinates(rect.left, rect.top, PIXI.Point._tmp2);
-    const BR = this._fromCanvasCoordinates(rect.right, rect.bottom, PIXI.Point._tmp3);
-    return new PIXI.Rectangle(TL.x, TL.y, BR.x - TL.x, BR.y - TL.y);
+    const TL = this._fromCanvasCoordinates(rect.left, rect.top, PIXI.Point.tmp);
+    const BR = this._fromCanvasCoordinates(rect.right, rect.bottom, PIXI.Point.tmp);
+    const rect = new PIXI.Rectangle(TL.x, TL.y, BR.x - TL.x, BR.y - TL.y);
+    PIXI.Point.release(TL, BR);
+    return rect;
   }
 
   /**
@@ -494,13 +504,15 @@ export class PixelCache extends PIXI.Rectangle {
     const points = poly.points;
     const ln = points.length;
     const newPoints = Array(ln);
+    const local = PIXI.Point.tmp;
     for ( let i = 0; i < ln; i += 2 ) {
       const x = points[i];
       const y = points[i + 1];
-      const local = this._fromCanvasCoordinates(x, y, PIXI.Point._tmp);
+      this._fromCanvasCoordinates(x, y, local);
       newPoints[i] = local.x;
       newPoints[i + 1] = local.y;
     }
+    local.release();
     return new PIXI.Polygon(newPoints);
   }
 
@@ -782,8 +794,10 @@ export class PixelCache extends PIXI.Rectangle {
    */
   pixelsForRelativePointsFromCanvas(x, y, canvasOffsets, localOffsets) {
     localOffsets ??= this.convertCanvasOffsetGridToLocal(canvasOffsets);
-    const pt = this._fromCanvasCoordinates(x, y, PIXI.Point._tmp);
-    return this._pixelsForRelativePointsFromLocal(pt.x, pt.y, localOffsets);
+    const pt = this._fromCanvasCoordinates(x, y, PIXI.Point.tmp);
+    const out = this._pixelsForRelativePointsFromLocal(pt.x, pt.y, localOffsets);
+    pt.release();
+    return out;
   }
 
   // ----- NOTE: Aggregators ----- //
@@ -1367,7 +1381,7 @@ export class PixelCache extends PIXI.Rectangle {
       const value = this.pixels[i];
       if ( !value ) continue;
       const alpha = Math.pow(value / this.maximumPixelValue, gammaExp);
-      const pt = coordFn.call(this, i, PIXI.Point._tmp);
+      const pt = coordFn.call(this, i);
       CONFIG.GeometryLib.Draw.point(pt, { color, alpha, radius });
     }
   }
@@ -1382,12 +1396,12 @@ export class PixelCache extends PIXI.Rectangle {
     let coordFn;
     let valueFn;
     if ( local ) {
-      coordFn = (localX, localY) => PIXI.Point._tmp.set(localX, localY);
+      coordFn = (localX, localY) => new PIXI.Point(localX, localY);
       valueFn = this._pixelAtLocal;
     } else {
-      coordFn = (localX, localY) => this._toCanvasCoordinates(localX, localY, PIXI.Point._tmp);
+      coordFn = (localX, localY) => this._toCanvasCoordinates(localX, localY);
       valueFn = (localX, localY) => {
-        const canvasPt = this._toCanvasCoordinates(localX, localY, PIXI.Point._tmp);
+        const canvasPt = this._toCanvasCoordinates(localX, localY);
         return this.pixelAtCanvas(canvasPt.x, canvasPt.y);
       }
     }
@@ -1529,9 +1543,10 @@ export class TrimmedPixelCache extends PixelCache {
     const idx = this._indexAtCanvas(x, y);
     if ( idx ) return this.pixels[idx];
 
-    const localPt = this._fromCanvasCoordinates(x, y, PIXI.Point._tmp);
-    if ( this.#fullLocalBounds.contains(localPt.x, localPt.y) ) return 0;
-    return null;
+    const localPt = this._fromCanvasCoordinates(x, y, PIXI.Point.tmp);
+    const out = this.#fullLocalBounds.contains(localPt.x, localPt.y) ? 0 : null;
+    localPt.release();
+    return out;
   }
 }
 
@@ -1701,12 +1716,13 @@ export class TilePixelCache extends TrimmedPixelCache {
       case 270: {
         // Rotation will change the TL and BR points; adjust accordingly.
         const { left, right, top, bottom } = rect;
-        const TL = this._fromCanvasCoordinates(left, top, PIXI.Point._tmp);
-        const TR = this._fromCanvasCoordinates(right, top, PIXI.Point._tmp2);
-        const BR = this._fromCanvasCoordinates(right, bottom, PIXI.Point._tmp3);
-        const BL = this._fromCanvasCoordinates(left, bottom);
+        const TL = this._fromCanvasCoordinates(left, top, PIXI.Point.tmp);
+        const TR = this._fromCanvasCoordinates(right, top, PIXI.Point.tmp);
+        const BR = this._fromCanvasCoordinates(right, bottom, PIXI.Point.tmp);
+        const BL = this._fromCanvasCoordinates(left, bottom, PIXI.Point.tmp);
         const localX = Math.minMax(TL.x, TR.x, BR.x, BL.x);
         const localY = Math.minMax(TL.y, TR.y, BR.y, BL.y);
+        PIXI.Point.release(TL, TR, BR, BL);
         return new PIXI.Rectangle(localX.min, localY.min, localX.max - localX.min, localY.max - localY.min);
       }
       default: {

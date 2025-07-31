@@ -170,8 +170,10 @@ export class Polygon3d {
       const M2d = plane.conversion2dMatrix;
       const poly2d = new PIXI.Polygon(this.points.map(pt3d => M2d.multiplyPoint3d(pt3d).to2d()));
       const ctr = poly2d.center;
-      this.#centroid = plane.conversion2dMatrixInverse.multiplyPoint3d(Point3d._tmp.set(ctr.x, ctr.y, 0));
+      const ctr3d = Point3d.tmp.set(ctr.x, ctr.y, 0);
+      this.#centroid = plane.conversion2dMatrixInverse.multiplyPoint3d(ctr3d);
       this.#dirtyCentroid = false;
+      ctr3d.release();
     }
     return this.#centroid;
   }
@@ -239,22 +241,25 @@ export class Polygon3d {
     else out = new this(n);
     for ( let i = 0, j = 0, jMax = n; j < jMax; j += 1 ) {
       const outPt = out.points[j] ??= new CONFIG.GeometryLib.threeD.Point3d()
-      outPt.copyFrom(pointFromVertices(i++, vertices, indices, stride, Point3d._tmp1));
+      pointFromVertices(i++, vertices, indices, stride, outPt);
     }
     return out;
   }
 
   static fromPlanarPolygon(poly2d, plane) {
+    const Point3d = CONFIG.GeometryLib.threeD;
     const invM2d = plane.conversion2dMatrixInverse;
     const ln = poly2d.points.length;
     const pts3d = new Array(Math.floor(ln / 2));
     for ( let i = 0, j = 0; i < ln; i += 2, j += 1 ) {
       const x = poly2d.points[i];
       const y = poly2d.points[i + 1];
-      const pt3d = invM2d.multiplyPoint3d(CONFIG.GeometryLib.threeD.Point3d._tmp.set(x, y, 0));
+      const pt3d = invM2d.multiplyPoint3d(Point3d.tmp.set(x, y, 0));
       pts3d[j] = pt3d;
     }
-    return this.from3dPoints(pts3d);
+    const out = this.from3dPoints(pts3d);
+    pts3d.forEach(pt => pt.release());
+    return out;
   }
 
 
@@ -510,9 +515,10 @@ export class Polygon3d {
 
   scale({ x = 1, y = 1, z = 1} = {}, poly3d) {
     poly3d ??= this.clone();
-    const scalePt = CONFIG.GeometryLib.threeD.Point3d._tmp1.set(x, y, z);
+    const scalePt = CONFIG.GeometryLib.threeD.Point3d.tmp1.set(x, y, z);
     poly3d.points.forEach(pt => pt.multiply(scalePt, pt));
     poly3d.clearCache();
+    scalePt.release();
     return poly3d;
   }
 
@@ -673,13 +679,14 @@ export class Polygon3d {
     Draw.point(res.point, { radius: 2 })
     Draw.point(b3d, { radius: 2 })
     */
-
+    const Point3d = CONFIG.GeometryLib.threeD.Point3d;
     const poly2d = new PIXI.Polygon(this.planarPoints);
     const ixs = poly2d.lineIntersections(a, b);
     ixs.sort((a, b) => a.t0 - b.t0);
     const from2dM = this.plane.conversion2dMatrixInverse;
-    const pts3d = ixs.map(ix => from2dM.multiplyPoint3d(CONFIG.GeometryLib.threeD.Point3d._tmp.set(ix.x, ix.y, 0)));
-    if ( pts3d.length === 1 ) return ixs[0];
+    const pts3d = ixs.map(ix => from2dM.multiplyPoint3d(new Point3d(ix.x, ix.y, 0)));
+    if ( pts3d.length === 1 ) return pts3d[0];
+
     const segments = [];
     let currSegment = { a: null, b: null };
     pts3d.forEach(ix => {
@@ -797,7 +804,7 @@ export class Ellipse3d extends Polygon3d {
         // That point is on the opposite side from a.
         const dist2 = cl.distanceSquaredBetween(a, b);
         if ( dist2 < max2 ) {
-          center = cl._tmp3;
+          center = new cl();
           a.projectToward(lastB, 0.5, center);
           break;
         }
@@ -863,11 +870,12 @@ export class Ellipse3d extends Polygon3d {
       center3d = plane.point;
     } else {
       const invM2d = plane.conversion2dMatrixInverse;
-      center3d = invM2d.multiplyPoint3d(CONFIG.GeometryLib.threeD.Point3d._tmp.set(ellipse2d.center.x, ellipse2d.center.y, 0));
+      center3d = invM2d.multiplyPoint3d(CONFIG.GeometryLib.threeD.Point3d.tmp.set(ellipse2d.center.x, ellipse2d.center.y, 0));
     }
     out ??= new this();
     out._setDimensions(center3d, ellipse2d.width, ellipse2d.height);
     out.plane = plane;
+    center3d.release();
     return out;
   }
 
@@ -998,11 +1006,12 @@ export class Circle3d extends Ellipse3d {
       center3d = plane.point;
     } else {
       const invM2d = plane.conversion2dMatrixInverse;
-      center3d = invM2d.multiplyPoint3d(CONFIG.GeometryLib.threeD.Point3d._tmp.set(circle2d.center.x, circle2d.center.y, 0));
+      center3d = invM2d.multiplyPoint3d(CONFIG.GeometryLib.threeD.Point3d.tmp.set(circle2d.center.x, circle2d.center.y, 0));
     }
     out ??= new this();
     out._setDimensions(center3d, circle2d.radius, circle2d.radius);
     out.plane = plane;
+    center3d.release();
     return out;
   }
 
@@ -1074,12 +1083,18 @@ export class Triangle3d extends Polygon3d {
     indices ??= Array.fromRange(Math.floor(vertices.length / 3));
     if ( indices.length % 3 !== 0 ) console.error(`${this.name}.fromVertices|Length of indices is not divisible by 3: ${indices.length}`);
     const tris = new Array(Math.floor(indices.length / 3));
+    const a = Point3d.tmp;
+    const b = Point3d.tmp;
+    const c = Point3d.tmp;
     for ( let i = 0, j = 0, jMax = tris.length; j < jMax; j += 1 ) {
-      const a = pointFromVertices(i++, vertices, indices, stride, Point3d._tmp1);
-      const b = pointFromVertices(i++, vertices, indices, stride, Point3d._tmp2);
-      const c = pointFromVertices(i++, vertices, indices, stride, Point3d._tmp3);
+      pointFromVertices(i++, vertices, indices, stride, a);
+      pointFromVertices(i++, vertices, indices, stride, b);
+      pointFromVertices(i++, vertices, indices, stride, c);
       tris[j] = this.from3Points(a, b, c);
     }
+    a.release();
+    b.release();
+    c.release();
     return tris;
   }
 

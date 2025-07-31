@@ -542,24 +542,31 @@ export class MatrixFlat {
    */
   static lookAt(cameraPosition, targetPosition, up, M, Minv) {
     const Point3d = CONFIG.GeometryLib.threeD.Point3d;
-    up ??= Point3d._tmp.set(0, -1, 1);
 
     // NOTE: Foundry uses a left-hand coordinate system, with y reversed.
-    const zAxis = cameraPosition.subtract(targetPosition); // ZAxis = forward
-    if ( zAxis.almostEqual(Point3d._tmp3.set(0, 0, 0)) ) return { M: this.identity(4), Minv: this.identity(4) };
+    const zAxis = Point3d.tmp;
+    cameraPosition.subtract(targetPosition, zAxis); // ZAxis = forward
+    if ( zAxis.almostEqual(Point3d.ZERO) ) {
+      zAxis.release();
+      return { M: this.identity(4), Minv: this.identity(4) };
+    }
     zAxis.normalize(zAxis);
 
-    const xAxis = Point3d._tmp2.set(1, 0, 0);
-    const yAxis = Point3d._tmp1.set(0, 1, 0);
+    const xAxis = Point3d.tmp.set(1, 0, 0);
+    const yAxis = Point3d.tmp.set(0, 1, 0);
     if ( zAxis.x || zAxis.y ) {
-      up.cross(zAxis, xAxis); // XAxis = right
+      const tmpUp = up ? Point3d.tmp.copyFrom(up) : Point3d.tmp.set(0, -1, 1);
+      tmpUp.cross(zAxis, xAxis); // XAxis = right
       if ( xAxis.magnitudeSquared() ) xAxis.normalize(xAxis); // Don't normalize if 0, 0, 0
       zAxis.cross(xAxis, yAxis); // YAxis = up
+      tmpUp.release();
     }
     // Otherwise camera either directly overhead or directly below
     // Overhead if zAxis.z is positive
     // xAxis = new CONFIG.GeometryLib.threeD.Point3d(1, 0, 0);
     // yAxis = new CONFIG.GeometryLib.threeD.Point3d(0, 1, 0);
+
+
 
     if ( M ) M.zero();
     else M = this.zeroes(4, 4);
@@ -612,6 +619,10 @@ export class MatrixFlat {
       xAxis.z, yAxis.z, zAxis.z, 0,
       -(xAxis.dot(cameraPosition)), -(yAxis.dot(cameraPosition)), -(zAxis.dot(cameraPosition)), 1
     */
+
+    xAxis.release();
+    yAxis.release();
+    zAxis.release();
 
     return { M, Minv };
   }

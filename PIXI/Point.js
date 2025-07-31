@@ -5,16 +5,19 @@ foundry
 */
 "use strict";
 
-import "../3d/Point3d.js";
+import { Pool } from "../Pool.js";
 
 export const PATCHES = {};
 PATCHES.PIXI = {};
 
-// Temporary points that can be passed to PIXI.Point methods
-PIXI.Point._tmp = new PIXI.Point();
-PIXI.Point._tmp1 = new PIXI.Point();
-PIXI.Point._tmp2 = new PIXI.Point();
-PIXI.Point._tmp3 = new PIXI.Point();
+const pool = new Pool(_pool => new PIXI.Point());
+
+function releaseStatic(...args) { args.forEach(arg => pool.release(arg)); }
+
+function release() { pool.release(this); }
+
+function getTmp() { return pool.acquire(); }
+
 
 /**
  * Invert a wall key to get the coordinates.
@@ -68,13 +71,18 @@ function fromObject(obj) {
 function angleBetween(a, b, c, { clockwiseAngle = false } = {}) {
   // See https://mathsathome.com/angle-between-two-vectors/
   // Create new pixi points so that 2d distance works when passing 3d points.
-  const ba = new PIXI.Point(a.x - b.x, a.y - b.y);
-  const bc = new PIXI.Point(c.x - b.x, c.y - b.y);
+  const tmp0 = PIXI.Point.tmp;
+  const tmp1 = PIXI.Point.tmp;
+
+  const ba = a.subtract(b, tmp0);
+  const bc = c.subtract(b, tmp1);
   const dot = ba.dot(bc);
   const denom = ba.magnitude() * bc.magnitude();
 
   let angle = Math.acos(dot / denom);
   if ( clockwiseAngle && foundry.utils.orient2dFast(a, b, c) > 0 ) angle = (Math.PI * 2) - angle;
+  tmp0.release();
+  tmp1.release();
   return angle;
 }
 
@@ -488,7 +496,11 @@ PIXI.Point.prototype[Symbol.iterator] = function() {
 
 PATCHES.PIXI.GETTERS = {
   key,
-  sortKey
+  sortKey,
+};
+
+PATCHES.PIXI.STATIC_GETTERS = {
+  tmp: getTmp,
 };
 
 PATCHES.PIXI.STATIC_METHODS = {
@@ -500,7 +512,8 @@ PATCHES.PIXI.STATIC_METHODS = {
   flatMapPoints,
   fromObject,
   invertKey,
-  _invertKey
+  _invertKey,
+  release: releaseStatic,
 };
 
 PATCHES.PIXI.METHODS = {
@@ -527,4 +540,5 @@ PATCHES.PIXI.METHODS = {
   roundDecimals,
   fromAngle,
   to2d: function() { return this; } // For parallel with Point3d.
+  release,
 };

@@ -277,9 +277,17 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
   #edgeIsCollinearToBoundary(edge) {
     const boundary = this.config.boundaryShapes[0]; // Always a single shape b/c set in initialize.
     if ( boundary instanceof PIXI.Rectangle ) {
-      const delta = edge.b.subtract(edge.a, PIXI.Point._tmp);
-      if ( !delta.x && (edge.a.x.almostEqual(boundary.left) || edge.a.x.almostEqual(boundary.right)) ) return true;
-      if ( !delta.y && (edge.a.y.almostEqual(boundary.top) || edge.a.y.almostEqual(boundary.bottom)) ) return true;
+      const delta = PIXI.Point.tmp;
+      edge.b.subtract(edge.a, delta);
+      if ( !delta.x && (edge.a.x.almostEqual(boundary.left) || edge.a.x.almostEqual(boundary.right)) ) {
+        delta.release();
+        return true;
+      }
+      if ( !delta.y && (edge.a.y.almostEqual(boundary.top) || edge.a.y.almostEqual(boundary.bottom)) ) {
+        delta.release();
+        return true;
+      }
+      delta.release();
     } else if ( boundary instanceof PIXI.Polygon ) {
       const orient2d = foundry.utils.orient2dFast;
       for ( const boundaryEdge of boundary.iterateEdges() ) {

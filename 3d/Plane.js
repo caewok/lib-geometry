@@ -473,7 +473,7 @@ export class Plane {
     // Find the minimum index
     const Point3d = CONFIG.GeometryLib.threeD.Point3d;
     const n = this.normal;
-    const w = Point3d._tmp3;
+    const w = Point3d.tmp;
     n.x === 0 ? w.set(1, 0, 0)
       : n.y === 0 ? w.set(0, 1, 0)
         : n.z === 0 ? w.set(0, 0, 1)
@@ -485,6 +485,7 @@ export class Plane {
     const v = new Point3d();
     w.cross(n, u).normalize(u);
     n.cross(u, v).normalize(v);
+    w.release();
     return { v: u, u: v }; // Swap so the x-axis is first.
   }
 

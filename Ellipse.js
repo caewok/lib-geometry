@@ -200,13 +200,15 @@ export class Ellipse extends PIXI.Ellipse {
     // Convert to this ellipse's circle space and test circle-ellipse overlap.
     // Move to ellipse coordinates and then to circle coordinates.
     // Use the major-minor points to determine height and width of the converted ellipse.
-    const otherCtr = PIXI.Point._tmp1.set(other.x, other.y);
-    const otherV = otherCtr.fromAngle(other.radians, other.width, PIXI.Point._tmp2);
-    const otherCV = otherCtr.fromAngle(other.radians + Math.PI_1_2, other.height, PIXI.Point._tmp3);
+    const otherCtr = PIXI.Point.tmp.set(other.x, other.y);
+    const otherV = otherCtr.fromAngle(other.radians, other.width, PIXI.Point.tmp);
+    const otherCV = otherCtr.fromAngle(other.radians + Math.PI_1_2, other.height, PIXI.Point.tmp);
 
     const c = this._toCircleCoords(this._fromCartesianCoords(otherCtr));
     const v = this._toCircleCoords(this._fromCartesianCoords(otherV));
     const cv = this._toCircleCoords(this._fromCartesianCoords(otherCV));
+    PIXI.Point.release(otherCtr, ohterV, otherCV);
+
     const w = PIXI.Point.distanceBetween(c, v);
     const h = PIXI.Point.distanceBetween(c, cv);
     const ellipse = new Ellipse(c.x, c.y, w, h, { rotation: otherRot });
@@ -223,12 +225,14 @@ export class Ellipse extends PIXI.Ellipse {
 
     // Align this ellipse to the axis at 0,0 and rotate to 0º.
     // I.e, move the circle and then rotate it.
-    const cirCtr = PIXI.Point._tmp1;
+    const cirCtr = PIXI.Point.tmp;
     circle.center.translate(-this.x, -this.y, cirCtr).rotate(-this.radians, cirCtr);
-    return this.constructor.quickEllipsesOverlapTest(
+    const out = this.constructor.quickEllipsesOverlapTest(
       0, 0, this.majorRadius, this.minorRadius,
       cirCtr.x, cirCtr.y, circle.radius, circle.radius
     );
+    cirCtr.release();
+    return out;
   }
 
   draw(drawTool, opts = {}) {

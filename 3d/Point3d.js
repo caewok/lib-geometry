@@ -33,7 +33,7 @@ PIXI
  * @property {Point3d} br
  */
 import { GEOMETRY_CONFIG } from "../const.js";
-import "../Matrix.js";
+import { Pool } from "../Pool.js";
 
 /**
  * 3-D version of PIXI.Point
@@ -51,6 +51,17 @@ export class Point3d extends PIXI.Point {
     super(x, y);
     this.z = z;
   }
+
+  static #pool = new Pool(_pool => new Point3d());
+
+  static release(...args) { args.forEach(arg => this.#pool.release(arg)); }
+
+  release() {
+    // No need to clear the object, as no cache used.
+    this.#pool.release(this);
+  }
+
+  static get tmp() { return this.#pool.acquire(); }
 
   /**
    * Iterator: x then y.
@@ -277,13 +288,13 @@ export class Point3d extends PIXI.Point {
 
     // Rotate points to match tile rotation.
     if ( rotation ) {
-      const rotZ = CONFIG.GeometryLib.Matrix.rotationZ(Math.toRadians(rotation));
+      const rotZ = CONFIG.GeometryLib.MatrixFlat.rotationZ(Math.toRadians(rotation));
       pts.forEach(pt => rotZ.multiplyPoint3d(pt, pt));
     }
 
     // Translate to canvas position.
     const center = bounds.center;
-    const trM = CONFIG.GeometryLib.Matrix.translation(center.x + offsetX, center.y + offsetY, elevationZ);
+    const trM = CONFIG.GeometryLib.MatrixFlat.translation(center.x + offsetX, center.y + offsetY, elevationZ);
     pts.forEach(pt => trM.multiplyPoint3d(pt, pt));
 
     return {
@@ -304,10 +315,14 @@ export class Point3d extends PIXI.Point {
    * @returns {number}  Angle, in radians
    */
   static angleBetween(a, b, c) {
-    const ba = a.subtract(b, tmpPt3d0);
-    const bc = c.subtract(b, tmpPt3d1);
+    const tmp0 = this.tmp;
+    const tmp1 = this.tmp;
+    const ba = a.subtract(b, tmp0);
+    const bc = c.subtract(b, tmp1);
     const dot = ba.dot(bc);
     const denom = ba.magnitude() * bc.magnitude();
+    tmp0.release();
+    tmp1.release();
     return Math.acos(dot / denom);
   }
 
@@ -633,8 +648,10 @@ export class Point3d extends PIXI.Point {
    * @returns {boolean}
    */
   equalXY(other) {
-    const pt2d = tmpPt0.set(this.x, this.y);
-    return pt2d.equals(other);
+    const pt2d = PIXI.Point.tmp.set(this.x, this.y);
+    const out = pt2d.equals(other);
+    pt2d.release();
+    return out;
   }
 
   /**
@@ -644,8 +661,10 @@ export class Point3d extends PIXI.Point {
    * @returns {boolean}
    */
   almostEqualXY(other, epsilon) {
-    const pt2d = tmpPt0.set(this.x, this.y);
-    return pt2d.almostEqual(other, epsilon);
+    const pt2d = PIXI.Point.tmp.set(this.x, this.y);
+    const out = pt2d.almostEqual(other, epsilon);
+    pt2d.release();
+    return out;
   }
 
   /**
@@ -676,18 +695,7 @@ export class Point3d extends PIXI.Point {
   normalize(outPoint = new Point3d()) {
     return super.normalize(outPoint);
   }
-
-  // Temporary points that can be passed to PIXI.Point methods
-  static _tmp = new this();
-  static _tmp1 = new this();
-  static _tmp2 = new this();
-  static _tmp3 = new this();
 }
-
-// Temporary points used internally.
-const tmpPt0 = new PIXI.Point();
-const tmpPt3d0 = new Point3d();
-const tmpPt3d1 = new Point3d();
 
 /**
  * The effective maximum texture size that Foundry VTT "ever" has to worry about.
@@ -709,5 +717,8 @@ export function numPositiveDigits(n) {
 }
 
 Point3d.prototype.toString = function() { return `{x: ${this.x}, y: ${this.y}, z: ${this.z}}`};
+
+Point3d.ZERO = new Point3d(0, 0, 0);
+Object.freeze(Point3d.ZERO);
 
 GEOMETRY_CONFIG.threeD.Point3d ??= Point3d;
