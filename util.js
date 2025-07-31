@@ -76,6 +76,18 @@ export function registerFoundryUtilsMethods() {
 const pt_0 = new PIXI.Point;
 
 /**
+ * Define a null set class and null set which always contains 0 elements.
+ * The class simply removes the add method.
+ */
+class NullSet extends Set {
+  add(value) {
+   console.error(`${MODULE_ID}|Attempted to add ${value} to a NullSet.`, value);
+   return this;
+  }
+}
+export const NULL_SET = new NullSet();
+
+/**
  * Round numbers that are close to 0 or 1.
  * @param {number} n            Number to round
  * @param {number} [epsilon]    Passed to almostEqual

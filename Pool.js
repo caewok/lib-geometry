@@ -48,8 +48,12 @@ export class Pool {
     // Basic test that the object belongs.
     if ( !this.pool.size ) this.increasePool();
 
-    if ( !(obj instanceof this.pool.first().constructor) ) {
-      console.warn("Pool object does not match other instance in the pool.");
+    const testObj = this.pool.first();
+    const isValid = testObj.constructor.classTypes
+      ? testObj.objectMatchesClassType(obj)
+      : obj instanceof testObj;
+    if ( !isValid) {
+      console.warn("Pool object does not match other instance in the pool.", { testObj, obj });
       return;
     }
     this.pool.add(obj);

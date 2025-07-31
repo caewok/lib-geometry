@@ -35,6 +35,7 @@ PIXI
  */
 import { GEOMETRY_CONFIG } from "../const.js";
 import { Pool } from "../Pool.js";
+import { NULL_SET } from "../util.js";
 
 /**
  * 3-D version of PIXI.Point
@@ -42,6 +43,25 @@ import { Pool } from "../Pool.js";
  */
 export class Point3d extends PIXI.Point {
   toJSON() { return { ...this }; }
+
+  static classTypes = new Set("Point3d"); // Alternative to instanceof
+
+  inheritsClassType(type) {
+    let proto = this;
+    do {
+      if ( proto.constructor.classTypes.has(type) ) return true;
+      proto = Object.getPrototypeOf(proto);
+    } while ( proto );
+    return false;
+  }
+
+  objectMatchesClassType(obj) {
+    return this.constructor.classTypes.equals(obj.constructor.classTypes || NULL_SET);
+  }
+
+  objectOverlapsClassType(obj) {
+    return this.constructor.classTypes.intersects(obj.constructor.classTypes || NULL_SET);
+  }
 
   /**
    * @param {number} [x=0] - position of the point on the x axis
