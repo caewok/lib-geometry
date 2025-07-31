@@ -427,7 +427,7 @@ export class Point3d extends PIXI.Point {
    * @returns A clone of this point
    */
   clone() {
-    return this.tmp.constructor.set(this.x, this.y, this.z);
+    return this.constructor.tmp.set(this.x, this.y, this.z);
   }
 
   /**
