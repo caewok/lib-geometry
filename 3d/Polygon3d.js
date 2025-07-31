@@ -777,7 +777,7 @@ export class Ellipse3d extends Polygon3d {
 
     // Add 2 points to form a flat plane. Form CCW.
     const b = Point3d.tmp.set(center.x + this.radiusX, center.y, center.z);
-    const c = Point3d.set(center.x, center.y - this.radiusY, center.z);
+    const c = Point3d.tmp.set(center.x, center.y - this.radiusY, center.z);
     CONFIG.GeometryLib.threeD.Plane.normalFromPoints(center, b, c, normal);
     const out = new Plane(center, normal);
     Point3d.release(normal, b, c);
