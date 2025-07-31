@@ -219,13 +219,13 @@ export class Polygon3d {
 
   static fromPolygon(poly, elevation = 0, out) {
     const pts = [...poly.iteratePoints({ close: false })];
-    this.from2dPoints(pts, elevation, out);
+    out = this.from2dPoints(pts, elevation, out);
     PIXI.Point.release(...pts);
     return out;
   }
 
-  static fromClipperPaths(cpObj, elevation = 0, out) {
-    return cpObj.toPolygons().map(poly => this.fromPolygon(poly, elevation, out));
+  static fromClipperPaths(cpObj, elevation = 0) {
+    return cpObj.toPolygons().map(poly => this.fromPolygon(poly, elevation));
   }
 
   /**
