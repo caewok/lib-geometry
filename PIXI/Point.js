@@ -11,7 +11,7 @@ import { Pool } from "../Pool.js";
 export const PATCHES = {};
 PATCHES.PIXI = {};
 
-const pool = new Pool(_pool => new PIXI.Point());
+const pool = new Pool(_pool => new PIXI.Point()); // Instead of static #pool, just hide it here.
 
 function releaseStatic(...args) { args.forEach(arg => pool.release(arg)); }
 

@@ -59,7 +59,7 @@ export class Point3d extends PIXI.Point {
 
   release() {
     // No need to clear the object, as no cache used.
-    this.#pool.release(this);
+    this.constructor.release(this);
   }
 
   static get tmp() { return this.#pool.acquire(); }
