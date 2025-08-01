@@ -1222,14 +1222,14 @@ export class MatrixFlat {
     outMatrix.arr[2] = m6 + m7 + m9 + m10 + m14 + m16 + m18;
 
     // Row 1
-    outMatrix.arr[4] = m2 + m3 + m4 + m6 + m14 + m16 + m17;
-    outMatrix.arr[5] = m2 + m4 + m5 + m6 + m20;
-    outMatrix.arr[6] = m14 + m16 + m17 + m18 + m21;
+    outMatrix.arr[3] = m2 + m3 + m4 + m6 + m14 + m16 + m17;
+    outMatrix.arr[4] = m2 + m4 + m5 + m6 + m20;
+    outMatrix.arr[5] = m14 + m16 + m17 + m18 + m21;
 
     // Row 2
-    outMatrix.arr[7] = m6 + m7 + m8 + m11 + m12 + m13 + m14;
-    outMatrix.arr[8] = m12 + m13 + m14 + m15 + m22;
-    outMatrix.arr[9] = m6 + m7 + m8 + m9 + m23;
+    outMatrix.arr[6] = m6 + m7 + m8 + m11 + m12 + m13 + m14;
+    outMatrix.arr[7] = m12 + m13 + m14 + m15 + m22;
+    outMatrix.arr[8] = m6 + m7 + m8 + m9 + m23;
 
     return outMatrix;
   }
