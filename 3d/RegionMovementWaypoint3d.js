@@ -26,14 +26,17 @@ import { Pool } from "../Pool.js";
  */
 export class RegionMovementWaypoint3d extends GEOMETRY_CONFIG.threeD.Point3d {
 
-  static classTypes = new Set("RegionMovementWaypoint3d"); // Alternative to instanceof
+  static classTypes = new Set([this.constructor.name]); // Alternative to instanceof
 
   inheritsClassType(type) {
     let proto = this;
+    let classTypes = proto.constructor.classTypes;
     do {
-      if ( proto.constructor.classTypes.has(type) ) return true;
+      if ( classTypes.has(type) ) return true;
       proto = Object.getPrototypeOf(proto);
-    } while ( proto );
+      classTypes = proto?.constructor?.classTypes;
+
+    } while ( classTypes );
     return false;
   }
 
@@ -44,6 +47,7 @@ export class RegionMovementWaypoint3d extends GEOMETRY_CONFIG.threeD.Point3d {
   objectOverlapsClassType(obj) {
     return this.constructor.classTypes.intersects(obj.constructor.classTypes || NULL_SET);
   }
+
 
   static #pool = new Pool(_pool => new RegionMovementWaypoint3d());
 

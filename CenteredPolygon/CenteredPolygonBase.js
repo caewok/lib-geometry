@@ -16,25 +16,6 @@ CONFIG.GeometryLib.CenteredPolygons ??= {};
  */
 export class CenteredPolygonBase extends PIXI.Polygon {
 
-  static classTypes = new Set("Centered", "Polygon"); // Alternative to instanceof
-
-  inheritsClassType(type) {
-    let proto = this;
-    do {
-      if ( proto.constructor.classTypes.has(type) ) return true;
-      proto = Object.getPrototypeOf(proto);
-    } while ( proto );
-    return false;
-  }
-
-  objectMatchesClassType(obj) {
-    return this.constructor.classTypes.equals(obj.constructor.classTypes || NULL_SET);
-  }
-
-  objectOverlapsClassType(obj) {
-    return this.constructor.classTypes.intersects(obj.constructor.classTypes || NULL_SET);
-  }
-
   /** @type {PIXI.Point} */
   origin = new PIXI.Point();
 

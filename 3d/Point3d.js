@@ -44,14 +44,17 @@ import { NULL_SET } from "../util.js";
 export class Point3d extends PIXI.Point {
   toJSON() { return { ...this }; }
 
-  static classTypes = new Set("Point3d"); // Alternative to instanceof
+  static classTypes = new Set([this.constructor.name]); // Alternative to instanceof
 
   inheritsClassType(type) {
     let proto = this;
+    let classTypes = proto.constructor.classTypes;
     do {
-      if ( proto.constructor.classTypes.has(type) ) return true;
+      if ( classTypes.has(type) ) return true;
       proto = Object.getPrototypeOf(proto);
-    } while ( proto );
+      classTypes = proto?.constructor?.classTypes;
+
+    } while ( classTypes );
     return false;
   }
 

@@ -35,6 +35,28 @@ import { getOffsetDistanceFn } from "../grid_distance.js";
  */
 export class HexGridCoordinates3d extends GEOMETRY_CONFIG.threeD.GridCoordinates3d {
 
+  static classTypes = new Set([this.constructor.name]); // Alternative to instanceof
+
+  inheritsClassType(type) {
+    let proto = this;
+    let classTypes = proto.constructor.classTypes;
+    do {
+      if ( classTypes.has(type) ) return true;
+      proto = Object.getPrototypeOf(proto);
+      classTypes = proto?.constructor?.classTypes;
+
+    } while ( classTypes );
+    return false;
+  }
+
+  objectMatchesClassType(obj) {
+    return this.constructor.classTypes.equals(obj.constructor.classTypes || NULL_SET);
+  }
+
+  objectOverlapsClassType(obj) {
+    return this.constructor.classTypes.intersects(obj.constructor.classTypes || NULL_SET);
+  }
+
   /**
    * Create this point from hex coordinates plus optional elevation.
    * @param {HexagonalGridCube} hexCube
