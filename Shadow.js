@@ -167,7 +167,7 @@ export class ShadowProjection {
       [-(L.x * P.b), dot - (L.y * P.b), -(L.z * P.b), -1 * P.b],
       [-(L.x * P.c), -(L.y * P.c), dot - (L.z * P.c), -1 * P.c],
       [-(L.x * P.d), -(L.y * P.d), -(L.z * P.d), dot - P.d]
-    ]);
+    ], 4, 4);
   }
 
   /**
@@ -510,12 +510,12 @@ export class ShadowProjection {
     const dotNV = N.dot(v);
     const scaledDotNV = dotNV + d;
 
-    return new Matrix([[
+    return new Matrix([
       -(scaledDotNL * v.x) + (scaledDotNV * l.x),
       -(scaledDotNL * v.y) + (scaledDotNV * l.y),
       -(scaledDotNL * v.z) + (scaledDotNV * l.z),
       dotNV - dotNL
-    ]]);
+    ], 1, 4);
   }
 
   _calculateIntersectionMatrix2(l0, delta) {
@@ -536,12 +536,12 @@ export class ShadowProjection {
       l0.z + delta.z * fac
     )
     */
-    return new Matrix([[
+    return new Matrix([
       (l0.x * dotNdelta) + (delta.x * -dotNw),
       (l0.y * dotNdelta) + (delta.y * -dotNw),
       (l0.z * dotNdelta) + (delta.z * -dotNw),
       dotNdelta
-    ]]);
+    ], 4, 1);
   }
 }
 
