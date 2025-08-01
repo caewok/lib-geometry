@@ -59,6 +59,29 @@ drawing.drawShape(bounds)
  */
 export class CenteredPolygon extends GEOMETRY_CONFIG.CenteredPolygons.CenteredPolygonBase {
 
+  static classTypes = new Set([this.name]); // Alternative to instanceof
+
+  inheritsClassType(type) {
+    let proto = this;
+    let classTypes = proto.constructor.classTypes;
+    do {
+      if ( classTypes.has(type) ) return true;
+      proto = Object.getPrototypeOf(proto);
+      classTypes = proto?.constructor?.classTypes;
+
+    } while ( classTypes );
+    return false;
+  }
+
+  objectMatchesClassType(obj) {
+    return this.constructor.classTypes.equals(obj.constructor.classTypes || NULL_SET);
+  }
+
+  objectOverlapsClassType(obj) {
+    return this.constructor.classTypes.intersects(obj.constructor.classTypes || NULL_SET);
+  }
+
+
   /**
    * @param {Point} origin    Center point of the polygon.
    * @param {number[]} pts  Points of the polygon, where 0,0 is the center

@@ -50,6 +50,29 @@ drawing.drawShape(bounds)
  * - rotation
  */
 export class Ellipse extends PIXI.Ellipse {
+  static classTypes = new Set([this.name]); // Alternative to instanceof
+
+  inheritsClassType(type) {
+    let proto = this;
+    let classTypes = proto.constructor.classTypes;
+    do {
+      if ( classTypes.has(type) ) return true;
+      proto = Object.getPrototypeOf(proto);
+      classTypes = proto?.constructor?.classTypes;
+
+    } while ( classTypes );
+    return false;
+  }
+
+  objectMatchesClassType(obj) {
+    return this.constructor.classTypes.equals(obj.constructor.classTypes || NULL_SET);
+  }
+
+  objectOverlapsClassType(obj) {
+    return this.constructor.classTypes.intersects(obj.constructor.classTypes || NULL_SET);
+  }
+
+
   /**
    * Default representation has the major axis horizontal (halfWidth), minor axis vertical (halfHeight)
    *
@@ -163,7 +186,7 @@ export class Ellipse extends PIXI.Ellipse {
    * @returns {boolean}
    */
   overlaps(other) {
-    if ( other instanceof Ellipse ) return this._overlapsEllipse(other);
+    if ( other instanceof PIXI.Ellipse ) return this._overlapsEllipse(other);
     if ( other instanceof PIXI.Circle ) return this._overlapsCircle(other);
 
     // Conversion to circle space may rotate the rectangle, so use polygon.

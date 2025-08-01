@@ -372,7 +372,7 @@ function overlaps(other) {
   if ( other instanceof PIXI.Polygon ) { return this._overlapsPolygon(other); }
   if ( other instanceof PIXI.Circle ) { return this._overlapsCircle(other); }
   if ( other instanceof PIXI.Rectangle ) { return other._overlapsPolygon(this); }
-  if ( other instanceof Ellipse ) return other._overlapsPolygon(this);
+  if ( other instanceof PIXI.Ellipse ) return other._overlapsPolygon(this);
   if ( other.toPolygon) return this._overlapsPolygon(other.toPolygon());
   console.warn("overlaps|shape not recognized.", other);
   return false;

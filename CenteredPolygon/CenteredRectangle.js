@@ -44,6 +44,29 @@ drawing.drawShape(bounds)
  */
 export class CenteredRectangle extends GEOMETRY_CONFIG.CenteredPolygons.CenteredPolygonBase {
 
+  static classTypes = new Set([this.name], "Rectangle"); // Alternative to instanceof
+
+  inheritsClassType(type) {
+    let proto = this;
+    let classTypes = proto.constructor.classTypes;
+    do {
+      if ( classTypes.has(type) ) return true;
+      proto = Object.getPrototypeOf(proto);
+      classTypes = proto?.constructor?.classTypes;
+
+    } while ( classTypes );
+    return false;
+  }
+
+  objectMatchesClassType(obj) {
+    return this.constructor.classTypes.equals(obj.constructor.classTypes || NULL_SET);
+  }
+
+  objectOverlapsClassType(obj) {
+    return this.constructor.classTypes.intersects(obj.constructor.classTypes || NULL_SET);
+  }
+
+
   /**
    * @param {Point} origin   Center point of the rectangle. Can be left undefined if leftCorner is provided.
    * @param {number} width   Length of the sides in the X direction

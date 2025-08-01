@@ -20,6 +20,29 @@ Each can be intersected quickly using WA
 
 export class RegularPolygon extends PIXI.Polygon {
 
+  static classTypes = new Set([this.name], "Polygon", "Regular"); // Alternative to instanceof
+
+  inheritsClassType(type) {
+    let proto = this;
+    let classTypes = proto.constructor.classTypes;
+    do {
+      if ( classTypes.has(type) ) return true;
+      proto = Object.getPrototypeOf(proto);
+      classTypes = proto?.constructor?.classTypes;
+
+    } while ( classTypes );
+    return false;
+  }
+
+  objectMatchesClassType(obj) {
+    return this.constructor.classTypes.equals(obj.constructor.classTypes || NULL_SET);
+  }
+
+  objectOverlapsClassType(obj) {
+    return this.constructor.classTypes.intersects(obj.constructor.classTypes || NULL_SET);
+  }
+
+
   /**
    * Vertices when the polygon is centered on 0,0.
    * @type {PIXI.Point[]}

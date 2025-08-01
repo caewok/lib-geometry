@@ -192,7 +192,6 @@ function lineSegmentIntersects(a, b) {
  * @returns {boolean}
  */
 function overlaps(other) {
-  if ( other instanceof Ellipse ) return other._overlapsEllipse(this);
   if ( other instanceof PIXI.Ellipse ) return this._overlapsEllipse(other);
   if ( other instanceof PIXI.Circle ) return this._overlapsCircle(other);
 
