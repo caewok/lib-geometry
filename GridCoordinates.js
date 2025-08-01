@@ -5,9 +5,8 @@ PIXI,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "./const.js";
+import { GEOMETRY_CONFIG, GRID_DIAGONALS } from "./const.js";
 import {
-  GRID_DIAGONALS,
   gridDistanceBetween,
   alternatingGridDistance,
   getOffsetDistanceFn } from "./grid_distance.js";

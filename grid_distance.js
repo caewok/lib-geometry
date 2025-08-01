@@ -11,12 +11,7 @@ import { Point3d } from "./3d/Point3d.js";
 import { HexGridCoordinates3d } from "./3d/HexGridCoordinates3d.js";
 import { GridCoordinates3d } from "./3d/GridCoordinates3d.js";
 import { pixelsToGridUnits } from "./util.js";
-
-/**
- * Foundry's CONST.GRID_DIAGONALS plus Euclidean.
- * @enum {number}
- */
-export const GRID_DIAGONALS = { EUCLIDEAN: -1, ...CONST.GRID_DIAGONALS };
+import { GRID_DIAGONALS } from "./const.js";
 
 /**
  * Measure the distance between two points accounting for the current grid rules.

@@ -48,6 +48,12 @@ export const MODULE_KEYS = {
   }
 };
 
+/**
+ * Foundry's CONST.GRID_DIAGONALS plus Euclidean.
+ * @enum {number}
+ */
+export const GRID_DIAGONALS = { EUCLIDEAN: -1, ...CONST.GRID_DIAGONALS };
+
 
 // Hook init b/c game.modules is not initialized at start.
 Hooks.once("init", function() {

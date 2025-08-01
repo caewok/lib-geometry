@@ -9,11 +9,6 @@ PIXI
 
 import { GEOMETRY_CONFIG } from "./const.js";
 import { extractPixels } from "./extract-pixels.js";
-import { Point3d } from "./3d/Point3d.js";
-import { RegionMovementWaypoint3d } from "./3d/RegionMovementWaypoint3d.js";
-import { CenteredRectangle } from "./CenteredPolygon/CenteredRectangle.js";
-import { CenteredPolygon } from "./CenteredPolygon/CenteredPolygon.js";
-import { Ellipse } from "./Ellipse.js";
 
 // Functions that would go in foundry.utils if that object were extensible
 export function registerFoundryUtilsMethods() {
@@ -176,7 +171,7 @@ dist(end, currPt) < dist(start, currPt) && dist(currPt, start) > dist(start, end
  * @returns {RegionMovementWaypoint3d}
  */
 function from2dCutaway(cutawayPt, start, end, outPoint) {
-  outPoint ??= new RegionMovementWaypoint3d();
+  outPoint ??= new GEOMETRY_CONFIG.threeD.RegionMovementWaypoint3d();
   // b/c outPoint is 3d, makes sure to get the 2d values.
   const xy =
 
@@ -390,11 +385,11 @@ Math.PI_1_2 = Math.PI * 0.5;
 export function centeredPolygonFromDrawing(drawing) {
   switch ( drawing.document.shape.type ) {
     case Drawing.SHAPE_TYPES.RECTANGLE:
-      return CenteredRectangle.fromDrawing(drawing);
+      return GEOMETRY_CONFIG.threeD.CenteredRectangle.fromDrawing(drawing);
     case Drawing.SHAPE_TYPES.ELLIPSE:
-      return Ellipse.fromDrawing(drawing);
+      return GEOMETRY_CONFIG.threeD.Ellipse.fromDrawing(drawing);
     case Drawing.SHAPE_TYPES.POLYGON:
-      return CenteredPolygon.fromDrawing(drawing);
+      return GEOMETRY_CONFIG.threeD.CenteredPolygon.fromDrawing(drawing);
     case Drawing.SHAPE_TYPES.CIRCLE: {
       const width = drawing.document.shape.width;
       return PIXI.Circle(drawing.document.x + width * 0.5, drawing.document.y + width * 0.5, width);
@@ -927,7 +922,7 @@ export function* bresenhamLine3dIterator(a, b) {
       z1 += incZ;
 
       // Return the point.
-      yield new Point3d(Math.round(x1), Math.round(y1), Math.round(z1));
+      yield new GEOMETRY_CONFIG.threeD.Point3d(Math.round(x1), Math.round(y1), Math.round(z1));
     }
   } else {
     // Iterate through the line
@@ -938,7 +933,7 @@ export function* bresenhamLine3dIterator(a, b) {
       z1 += incZ;
 
       // Return the point.
-      yield new Point3d(Math.round(x1), Math.round(y1), Math.round(z1));
+      yield new GEOMETRY_CONFIG.threeD.Point3d(Math.round(x1), Math.round(y1), Math.round(z1));
     }
   }
 }
