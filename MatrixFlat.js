@@ -778,7 +778,7 @@ export class MatrixFlat {
     const r = n - 1;
     outMatrix.setIndex(r, 0, x);
     outMatrix.setIndex(r, 1, y);
-    if ( typeof z !== "undefined ) outMatrix.setIndex(r, 2, z);
+    if ( typeof z !== "undefined" ) outMatrix.setIndex(r, 2, z);
     return outMatrix;
   }
 
