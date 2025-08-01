@@ -6,7 +6,6 @@ foundry
 "use strict";
 
 import { Pool } from "../Pool.js";
-import { Point3d } from "../3d/Point3d.js";
 import { roundDecimals as roundDecimalsNumber } from "../util.js";
 
 export const PATCHES = {};
@@ -198,21 +197,6 @@ function midPoint(a, b, outPoint) {
   b.x ||= 0;
   b.y ||= 0;
   return outPoint.set( a.x + ((b.x - a.x) / 2), a.y + ((b.y - a.y) / 2));
-}
-
-/**
- * Convert 2d point to 3d
- * @param [object] [options]    Choices that affect the axes used.
- * @param [string] [options.x]  What 2d axis to use for the 3d x axis
- * @param [string] [options.y]  What 2d axis to use for the 3d y axis
- * @param [string] [options.z]  What 2d axis to use for the 3d z axis
- * @returns {Point3d}
- */
-function to3d({ x = "x", y = "y", z} = {}) {
-  const x3d = x ? this[x] : 0;
-  const y3d = y ? this[y] : 0;
-  const z3d = z ? this[z] : 0;
-  return new Point3d(x3d, y3d, z3d);
 }
 
 /**
@@ -553,7 +537,6 @@ PATCHES.PIXI.METHODS = {
   magnitudeSquared,
   almostEqual,
   normalize,
-  to3d,
   projectToward,
   towardsPoint,
   towardsPointSquared,

@@ -5,7 +5,6 @@ PIXI,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { GridCoordinates3d } from "./3d/GridCoordinates3d.js";
 import { GEOMETRY_CONFIG } from "./const.js";
 import {
   GRID_DIAGONALS,
@@ -123,12 +122,6 @@ export class GridCoordinates extends PIXI.Point {
    * @returns {this}
    */
   to2d() { return this; }
-
-  /**
-   * Convert to 3d.
-   * @returns {GridCoordinates3d}
-   */
-  to3d() { return GridCoordinates3d.fromObject(this); }
 
   /**
    * Test if this offset is equal to another
