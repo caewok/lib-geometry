@@ -3,7 +3,7 @@ PIXI
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "../const.js";
+import { GEOMETRY_CONFIG, pointsAreCollinear } from "../const.js";
 import { Point3d } from "./Point3d.js";
 import { MatrixFlat } from "../MatrixFlat.js";
 
@@ -73,7 +73,6 @@ export class Plane {
   }
 
   static fromMultiplePoints(pts) {
-    const pointsAreCollinear = pointsAreCollinear;
     const iter = Iterator.from(pts);
     const a = iter.next().value;
 
