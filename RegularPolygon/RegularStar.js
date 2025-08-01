@@ -4,7 +4,7 @@ PIXI
 */
 "use strict";
 
-import "./RegularPolygon.js";
+import { RegularPolygon } from "./RegularPolygon.js";
 import { GEOMETRY_CONFIG } from "../const.js";
 import { NULL_SET } from "../util.js";
 
@@ -18,7 +18,7 @@ import { NULL_SET } from "../util.js";
  *
  * See https://martiancraft.com/blog/2017/03/geometry-of-stars/
  */
-export class RegularStar extends GEOMETRY_CONFIG.RegularPolygons.RegularPolygon {
+export class RegularStar extends RegularPolygon {
 
   static classTypes = new Set([this.name], "Star"); // Alternative to instanceof
 

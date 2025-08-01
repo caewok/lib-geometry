@@ -4,7 +4,7 @@ PIXI
 "use strict";
 
 import { GEOMETRY_CONFIG } from "../const.js";
-import "./CenteredPolygonBase.js";
+import { CenteredPolygonBase } from "./CenteredPolygonBase.js";
 import { NULL_SET } from "../util.js";
 
 /* Testing
@@ -43,7 +43,7 @@ drawing.drawShape(bounds)
  * Comparable to RegularPolygon and PIXI.Rectangle class, where
  * the Platonic shape is stored at the origin 0, 0 and translated.
  */
-export class CenteredRectangle extends GEOMETRY_CONFIG.CenteredPolygons.CenteredPolygonBase {
+export class CenteredRectangle extends CenteredPolygonBase {
 
   static classTypes = new Set([this.name], "Rectangle"); // Alternative to instanceof
 

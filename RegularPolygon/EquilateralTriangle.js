@@ -4,10 +4,10 @@ PIXI
 "use strict";
 
 import { GEOMETRY_CONFIG } from "../const.js";
-import "./RegularPolygon.js";
+import { RegularPolygon } from "./RegularPolygon.js";
 import { NULL_SET } from "../util.js";
 
-export class EquilateralTriangle extends GEOMETRY_CONFIG.RegularPolygons.RegularPolygon {
+export class EquilateralTriangle extends RegularPolygon {
   static classTypes = new Set([this.name], "Triangle"); // Alternative to instanceof
 
   inheritsClassType(type) {

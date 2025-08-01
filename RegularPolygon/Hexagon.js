@@ -5,7 +5,7 @@ canvas
 "use strict";
 
 import { GEOMETRY_CONFIG } from "../const.js";
-import "./RegularPolygon.js";
+import { RegularPolygon } from "./RegularPolygon.js";
 import { NULL_SET } from "../util.js";
 
 /**
@@ -14,7 +14,7 @@ import { NULL_SET } from "../util.js";
  * @param {Number}  width     Distance from left to right, through center.
  * @param {Number}  height    Distance from top to bottom, through center.
  */
-export class Hexagon extends GEOMETRY_CONFIG.RegularPolygons.RegularPolygon {
+export class Hexagon extends RegularPolygon {
   static classTypes = new Set([this.name]); // Alternative to instanceof
 
   inheritsClassType(type) {

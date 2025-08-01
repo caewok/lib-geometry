@@ -7,6 +7,7 @@ canvas,
 import { elevationForUnit, unitElevation, roundNearWhole, pixelsToGridUnits, gridUnitsToPixels, NULL_SET } from "../util.js";
 import { GEOMETRY_CONFIG } from "../const.js";
 import { Pool } from "../Pool.js";
+import { Point3d } from "./Point3d.js";
 
 // ----- NOTE: 3d versions of Foundry typedefs ----- //
 
@@ -23,7 +24,7 @@ import { Pool } from "../Pool.js";
  * Does not handle GridOffset3d so that it can be passed to 2d Foundry functions that
  * treat objects with {i,j} parameters differently.
  */
-export class RegionMovementWaypoint3d extends GEOMETRY_CONFIG.threeD.Point3d {
+export class RegionMovementWaypoint3d extends Point3d {
 
   static classTypes = new Set([this.name]); // Alternative to instanceof
 

@@ -3,7 +3,7 @@ PIXI
 */
 "use strict";
 
-import "./RegularPolygon.js";
+import { RegularPolygon } from "./RegularPolygon.js";
 import { GEOMETRY_CONFIG } from "../const.js";
 import { NULL_SET } from "../util.js";
 
@@ -19,7 +19,7 @@ const diagonalRotations = new Set([0, 90, 180, 270]); // Oriented [] turned 45º
  * @param {number} [options.rotation]   Rotation in degrees
  * @param {number} [options.width]      Alternative specification when skipping radius
  */
-export class Square extends GEOMETRY_CONFIG.RegularPolygons.RegularPolygon {
+export class Square extends RegularPolygon {
   static classTypes = new Set([this.name]); // Alternative to instanceof
 
   inheritsClassType(type) {

@@ -47,7 +47,7 @@ import {
  * A 3d point that can function as Point3d|GridOffset3d|RegionMovementWaypoint.
  * Links z to the elevation property.
  */
-export class GridCoordinates3d extends GEOMETRY_CONFIG.threeD.RegionMovementWaypoint3d {
+export class GridCoordinates3d extends RegionMovementWaypoint3d {
 
   static classTypes = new Set([this.name]); // Alternative to instanceof
 

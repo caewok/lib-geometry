@@ -9,6 +9,7 @@ game
 import { GEOMETRY_CONFIG } from "../const.js";
 import { roundNearWhole, bresenhamHexLine3d, NULL_SET } from "../util.js";
 import { getOffsetDistanceFn } from "../grid_distance.js";
+import { GridCoordinates3d } from "./GridCoordinates3d.js";
 
 /**
  * Cube coordinates in a hexagonal grid. q + r + s = 0.
@@ -30,7 +31,7 @@ import { getOffsetDistanceFn } from "../grid_distance.js";
  * A 3d point that can also represent a 4d hex coordinate (q, r, s, k).
  * Links z to the elevation property.
  */
-export class HexGridCoordinates3d extends GEOMETRY_CONFIG.threeD.GridCoordinates3d {
+export class HexGridCoordinates3d extends GridCoordinates3d {
 
   static classTypes = new Set([this.name]); // Alternative to instanceof
 
