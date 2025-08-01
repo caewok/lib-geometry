@@ -3,9 +3,10 @@ PIXI
 */
 "use strict";
 
-import { GEOMETRY_CONFIG, pointsAreCollinear } from "../const.js";
+import { GEOMETRY_CONFIG } from "../const.js";
 import { Point3d } from "./Point3d.js";
 import { MatrixFlat } from "../MatrixFlat.js";
+import { pointsAreCollinear } from "./util.js";
 
 const originPt3d = new Point3d();
 Object.freeze(originPt3d);
