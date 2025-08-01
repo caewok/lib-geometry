@@ -35,7 +35,7 @@ import { getOffsetDistanceFn } from "../grid_distance.js";
  */
 export class HexGridCoordinates3d extends GEOMETRY_CONFIG.threeD.GridCoordinates3d {
 
-  static classTypes = new Set([this.constructor.name]); // Alternative to instanceof
+  static classTypes = new Set([this.name]); // Alternative to instanceof
 
   inheritsClassType(type) {
     let proto = this;

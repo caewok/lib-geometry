@@ -26,7 +26,7 @@ import { Pool } from "../Pool.js";
  */
 export class RegionMovementWaypoint3d extends GEOMETRY_CONFIG.threeD.Point3d {
 
-  static classTypes = new Set([this.constructor.name]); // Alternative to instanceof
+  static classTypes = new Set([this.name]); // Alternative to instanceof
 
   inheritsClassType(type) {
     let proto = this;

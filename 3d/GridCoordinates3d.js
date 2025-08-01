@@ -50,7 +50,7 @@ import {
  */
 export class GridCoordinates3d extends GEOMETRY_CONFIG.threeD.RegionMovementWaypoint3d {
 
-  static classTypes = new Set([this.constructor.name]); // Alternative to instanceof
+  static classTypes = new Set([this.name]); // Alternative to instanceof
 
   inheritsClassType(type) {
     let proto = this;
