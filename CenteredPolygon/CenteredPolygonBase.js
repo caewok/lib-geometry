@@ -1,12 +1,11 @@
 /* globals
-CONFIG,
-PIXI
+PIXI,
 */
 "use strict";
 
 import { GEOMETRY_CONFIG } from "../const.js";
-CONFIG.GeometryLib ??= {};
-CONFIG.GeometryLib.CenteredPolygons ??= {};
+GEOMETRY_CONFIG.CenteredPolygons ??= {};
+import { NULL_SET } from "../util.js";
 
 /**
  * Base class to be extended by others.

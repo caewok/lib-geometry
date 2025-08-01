@@ -1,5 +1,4 @@
 /* globals
-CONFIG,
 PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
@@ -7,6 +6,7 @@ PIXI,
 
 import { GEOMETRY_CONFIG } from "../const.js";
 import { Point3d } from "./Point3d.js";
+import { NULL_SET } from "../util.js";
 
 export class BaryTriangleData {
 
@@ -123,7 +123,7 @@ export class BarycentricPoint extends Point3d {
    * @returns {number}
    */
   interpolateNumber(a, b, c) {
-    const pt = CONFIG.GeometryLib.threeD.Point3d.tmp.set(a, b, c);
+    const pt = Point3d.tmp.set(a, b, c);
     const out = this.dot(pt);
     pt.release();
     return out;

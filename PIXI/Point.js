@@ -1,5 +1,4 @@
 /* globals
-CONFIG,
 PIXI,
 foundry
 */
@@ -7,6 +6,8 @@ foundry
 "use strict";
 
 import { Pool } from "../Pool.js";
+import { Point3d } from "./3d/Point3d.js";
+import { roundDecimals as roundDecimalsNumber } from "../util.js";
 
 export const PATCHES = {};
 PATCHES.PIXI = {};
@@ -18,7 +19,6 @@ function releaseStatic(...args) { args.forEach(arg => pool.release(arg)); }
 function release() { pool.release(this); }
 
 function getTmp() { return pool.acquire(); }
-
 
 /**
  * Invert a wall key to get the coordinates.
@@ -43,8 +43,8 @@ function _invertKey(key) {
  * @returns {this}
  */
 function roundDecimals(places = 0) {
-  this.x = CONFIG.GeometryLib.utils.roundDecimals(this.x, places);
-  this.y = CONFIG.GeometryLib.utils.roundDecimals(this.y, places);
+  this.x = roundDecimalsNumber(this.x, places);
+  this.y = roundDecimalsNumber(this.y, places);
   return this;
 }
 
@@ -212,7 +212,7 @@ function to3d({ x = "x", y = "y", z} = {}) {
   const x3d = x ? this[x] : 0;
   const y3d = y ? this[y] : 0;
   const z3d = z ? this[z] : 0;
-  return new CONFIG.GeometryLib.threeD.Point3d(x3d, y3d, z3d);
+  return new Point3d(x3d, y3d, z3d);
 }
 
 /**
@@ -316,6 +316,19 @@ function max(other, outPoint) {
   outPoint ??= this.constructor.tmp;
   outPoint.x = Math.max(this.x, other.x);
   outPoint.y = Math.max(this.y, other.y);
+  return outPoint;
+}
+
+/**
+ * Get the absolute of the coordinates.
+ * @param {PIXI.Point} [outPoint]    A point-like object in which to store the value.
+ *   (Will create new point if none provided.)
+ * @returns {PIXI.Point}
+ */
+function abs(outPoint) {
+  outPoint ??= this.constructor.tmp;
+  outPoint.x = Math.abs(this.x);
+  outPoint.y = Math.abs(this.y);
   return outPoint;
 }
 
@@ -534,6 +547,7 @@ PATCHES.PIXI.METHODS = {
   min,
   max,
   copyPartial,
+  abs,
   dot,
   magnitude,
   magnitudeSquared,

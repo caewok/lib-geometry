@@ -5,6 +5,7 @@ PIXI
 
 import "./RegularPolygon.js";
 import { GEOMETRY_CONFIG } from "../const.js";
+import { NULL_SET } from "../util.js";
 
 const squareRotations = new Set([45, 135, 225, 315]); // Oriented []
 const diagonalRotations = new Set([0, 90, 180, 270]); // Oriented [] turned 45º

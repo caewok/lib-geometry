@@ -1,5 +1,4 @@
 /* globals
-CONFIG,
 canvas,
 foundry,
 PIXI,
@@ -11,8 +10,8 @@ TextureLoader,
 
 import { extractPixels } from "./extract-pixels.js";
 import { roundFastPositive, bresenhamLine, bresenhamLineIterator, trimLineSegmentToPixelRectangle } from "./util.js";
-import "./Draw.js";
-import "./Matrix.js";
+import { Draw } from "./Draw.js";
+import { MatrixFlat as Matrix } from "./MatrixFlat.js";
 import { GEOMETRY_CONFIG } from "./const.js";
 
 
@@ -123,11 +122,11 @@ export class PixelCache extends PIXI.Rectangle {
    * @returns {Matrix}
    */
   _calculateToLocalTransform() {
-    const mTranslate = CONFIG.GeometryLib.Matrix.translation(-this.scale.x, -this.scale.y)
+    const mTranslate = Matrix.translation(-this.scale.x, -this.scale.y)
 
     // Scale based on resolution.
     const resolution = this.scale.resolution;
-    const mRes = CONFIG.GeometryLib.Matrix.scale(resolution, resolution);
+    const mRes = Matrix.scale(resolution, resolution);
     return mTranslate.multiply3x3(mRes);
   }
 
@@ -1373,7 +1372,7 @@ export class PixelCache extends PIXI.Rectangle {
    * Draw a representation of this pixel cache on the canvas, where alpha channel is used
    * to represent values. For debugging.
    */
-  draw({color = CONFIG.GeometryLib.Draw.COLORS.blue, gammaCorrect = false, local = false, skip = 10, radius = 1 } = {}) {
+  draw({color = Draw.COLORS.blue, gammaCorrect = false, local = false, skip = 10, radius = 1 } = {}) {
     const ln = this.pixels.length;
     const coordFn = local ? this._localAtIndex : this._canvasAtIndex;
     const gammaExp = gammaCorrect ? 1 / 2.2 : 1;
@@ -1383,7 +1382,7 @@ export class PixelCache extends PIXI.Rectangle {
       if ( !value ) continue;
       const alpha = Math.pow(value / this.maximumPixelValue, gammaExp);
       const pt = coordFn.call(this, i);
-      CONFIG.GeometryLib.Draw.point(pt, { color, alpha, radius });
+      Draw.point(pt, { color, alpha, radius });
     }
   }
 
@@ -1391,7 +1390,7 @@ export class PixelCache extends PIXI.Rectangle {
    * For debugging, to test coordinate conversion.
    * Use `pixelAtLocal` or `pixelAtCanvas` to get the value. Unlike `draw`, which iterates from the pixel indices directly.
    */
-  drawFromCoords({color = CONFIG.GeometryLib.Draw.COLORS.blue, gammaCorrect = false, skip = 10, radius = 1, local = false } = {}) {
+  drawFromCoords({color = Draw.COLORS.blue, gammaCorrect = false, skip = 10, radius = 1, local = false } = {}) {
     const gammaExp = gammaCorrect ? 1 / 2.2 : 1;
     const { right, left, top, bottom } = this;
     let coordFn;
@@ -1414,7 +1413,7 @@ export class PixelCache extends PIXI.Rectangle {
         if ( !value ) continue;
         const alpha = Math.pow(value / 255, gammaExp);
         const pt = coordFn.call(this, localX, localY);
-        CONFIG.GeometryLib.Draw.point(pt, { color, alpha, radius });
+        Draw.point(pt, { color, alpha, radius });
       }
     }
   }
@@ -1515,11 +1514,8 @@ export class TrimmedPixelCache extends PixelCache {
    */
   _calculateToLocalTransform() {
     // Translate to account for the trimmed border.
-    const mTranslate = CONFIG.GeometryLib.Matrix.translation(this.#fullLocalBounds.x, this.#fullLocalBounds.y);
+    const mTranslate = Matrix.translation(this.#fullLocalBounds.x, this.#fullLocalBounds.y);
     return super._calculateToLocalTransform().multiply3x3(mTranslate);
-
-    //const mTranslate = CONFIG.GeometryLib.Matrix.translation(this.#fullLocalBounds.x, this.#fullLocalBounds.y);
-    //return mTranslate.multiply3x3(super._calculateToLocalTransform());
   }
 
   /**
@@ -1621,28 +1617,28 @@ export class TilePixelCache extends TrimmedPixelCache {
     // 1. Clear the rotation
     // Translate so the center is 0,0
     const { x, y, width, height } = this.tile.document;
-    const mCenterTranslate = CONFIG.GeometryLib.Matrix.translation(-(width * 0.5) - x, -(height * 0.5) - y);
+    const mCenterTranslate = Matrix.translation(-(width * 0.5) - x, -(height * 0.5) - y);
 
     // Rotate around the Z axis
     // (The center must be 0,0 for this to work properly.)
     const rotation = -this.rotation;
-    const mRot = CONFIG.GeometryLib.Matrix.rotationZ(rotation, false);
+    const mRot = Matrix.rotationZ(rotation, false);
 
     // 2. Clear the scale
     // (The center must be 0,0 for this to work properly.)
     const { scaleX, scaleY } = this;
-    const mScale = CONFIG.GeometryLib.Matrix.scale(1 / scaleX, 1 / scaleY);
+    const mScale = Matrix.scale(1 / scaleX, 1 / scaleY);
 
     // 3. Clear the width/height
     // Translate so top corner is 0,0
     const { textureWidth, textureHeight, proportionalWidth, proportionalHeight } = this;
     const currWidth = textureWidth * proportionalWidth;
     const currHeight = textureHeight * proportionalHeight;
-    const mCornerTranslate = CONFIG.GeometryLib.Matrix.translation(currWidth * 0.5, currHeight * 0.5);
+    const mCornerTranslate = Matrix.translation(currWidth * 0.5, currHeight * 0.5);
 
     // Scale the canvas width/height back to texture width/height, if not 1:1.
     // (Must have top left corner at 0,0 for this to work properly.)
-    const mProportion = CONFIG.GeometryLib.Matrix.scale(1 / proportionalWidth, 1 / proportionalHeight);
+    const mProportion = Matrix.scale(1 / proportionalWidth, 1 / proportionalHeight);
 
     // 4. Scale based on resolution of the underlying pixel data
     const mRes = super._calculateToLocalTransform();

@@ -1,15 +1,16 @@
 /* globals
 canvas,
-CONFIG,
 CONST,
 foundry,
-game
+game,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import "./3d/Point3d.js";
-
+import { Point3d } from "./3d/Point3d.js";
+import { HexGridCoordinates3d } from "./3d/HexGridCoordinates3d.js";
+import { GridCoordinates3d } from "./3d/GridCoordinates3d.js";
+import { pixelsToGridUnits } from "./util.js";
 
 /**
  * Foundry's CONST.GRID_DIAGONALS plus Euclidean.
@@ -28,8 +29,7 @@ export const GRID_DIAGONALS = { EUCLIDEAN: -1, ...CONST.GRID_DIAGONALS };
  * @returns {number} Distance, in grid units
  */
 export function gridDistanceBetween(a, b, { altGridDistFn, diagonals } = {}) {
-  const geom = CONFIG.GeometryLib;
-  if ( canvas.grid.isGridless ) return geom.utils.pixelsToGridUnits(geom.threeD.Point3d.distanceBetween(a, b));
+  if ( canvas.grid.isGridless ) return pixelsToGridUnits(Point3d.distanceBetween(a, b));
   const distFn = canvas.grid.isHexagonal ? hexGridDistanceBetween : squareGridDistanceBetween;
   const dist = distFn(a, b, altGridDistFn, diagonals);
 
@@ -51,9 +51,10 @@ export function gridDistanceBetween(a, b, { altGridDistFn, diagonals } = {}) {
 function hexGridDistanceBetween(p0, p1, altGridDistFn, diagonals) {
   diagonals ??= canvas.grid.diagonals ?? game.settings.get("core", "gridDiagonals");
   const D = GRID_DIAGONALS;
-  if ( !(p0 instanceof CONFIG.GeometryLib.threeD.Point3d) ) p0 = CONFIG.GeometryLib.threeD.Point3d.fromObject(p0);
-  if ( !(p1 instanceof CONFIG.GeometryLib.threeD.Point3d) ) p1 = CONFIG.GeometryLib.threeD.Point3d.fromObject(p1);
 
+  // Ensure these are Point3ds.
+  p0 = Point3d.fromObject(p0);
+  p1 = Point3d.fromObject(p1);
 
   // Translate the 2d movement to cube units. Elevation is in grid size units.
   const d0 = canvas.grid.pointToCube(p0);
@@ -62,6 +63,7 @@ function hexGridDistanceBetween(p0, p1, altGridDistFn, diagonals) {
   d1.k = (p1.z / canvas.grid.size) || 0;
   const dist2d = foundry.grid.HexagonalGrid.cubeDistance(d0, d1);
   const distElev = Math.abs(d0.k - d1.k);
+  Point3d.release(p0, p1);
 
   // Like with squareGridDistanceBetween, use the maximum axis to avoid Math.max(), Max.min() throughout.
   const [maxAxis, minAxis] = dist2d > distElev ? [dist2d, distElev] : [distElev, dist2d];
@@ -94,21 +96,26 @@ function hexGridDistanceBetween(p0, p1, altGridDistFn, diagonals) {
 function squareGridDistanceBetween(p0, p1, altGridDistFn, diagonals) {
   diagonals ??= canvas.grid.diagonals ?? game.settings.get("core", "gridDiagonals");
   const D = GRID_DIAGONALS;
-  if ( !(p0 instanceof CONFIG.GeometryLib.threeD.Point3d) ) p0 = CONFIG.GeometryLib.threeD.Point3d.fromObject(p0);
-  if ( !(p1 instanceof CONFIG.GeometryLib.threeD.Point3d) ) p1 = CONFIG.GeometryLib.threeD.Point3d.fromObject(p1);
+
+  p0 = Point3d.fromObject(p0);
+  p1 = Point3d.fromObject(p1);
 
   // Normalize so that dx === 1 when traversing 1 grid space.
-  const dx = Math.abs(p0.x - p1.x) / canvas.grid.size;
-  const dy = Math.abs(p0.y - p1.y) / canvas.grid.size;
-  const dz = Math.abs(p0.z - p1.z) / canvas.grid.size;
+  // abs(p0.x - p1.x) / canvas.grid.size, ...
+  const delta = Point3d.tmp;
+  p0
+    .subtract(p1, delta)
+    .abs(delta)
+    .multiplyScalar(1 / canvas.grid.size, delta);
 
   // Make dx the maximum, dy, the middle, and dz the minimum change across the axes.
   // If two-dimensional, dz will be zero. (Slightly faster than an array sort.)
-  const minMax = Math.minMax(dx, dy, dz);
+  const minMax = Math.minMax(...delta);
   const maxAxis = minMax.max;
   const minAxis = minMax.min;
-  const midAxis = dx.between(dy, dz) ? dx
-    : dy.between(dx, dz) ? dy : dz;
+  const midAxis = delta.x.between(delta.y, delta.z) ? delta.x
+    : delta.y.between(delta.x, delta.z) ? delta.y : delta.z;
+  Point3d.release(p0, p1, delta);
 
   // TODO: Make setting to use Euclidean distance.
   // exactDistanceFn = setting ? Math.hypot : exactGridDistance;
@@ -209,7 +216,6 @@ function _alternatingGridDistance(maxAxis = 0, midAxis = 0, minAxis = 0) {
  * @returns {GridCoordinates3d[]}
  */
 export function getDirectPath(start, end) {
-  const { HexGridCoordinates3d, GridCoordinates3d } = CONFIG.GeometryLib.threeD;
   switch ( canvas.grid.type ) {
     case CONST.GRID_TYPES.GRIDLESS: return GridCoordinates3d._directPathGridless(start, end);
     case CONST.GRID_TYPES.SQUARE: return GridCoordinates3d._directPathSquare(start, end);
@@ -224,10 +230,9 @@ export function getDirectPath(start, end) {
  * @returns {function}
  */
 export function getOffsetDistanceFn(diagonals = 0) {
-  const { HexGridCoordinates3d, GridCoordinates3d, Point3d } = CONFIG.GeometryLib.threeD;
   switch ( canvas.grid.type ) {
     case CONST.GRID_TYPES.GRIDLESS:
-      return (a, b) => CONFIG.GeometryLib.utils.pixelsToGridUnits(Point3d.distanceBetween(a, b));
+      return (a, b) => pixelsToGridUnits(Point3d.distanceBetween(a, b));
     case CONST.GRID_TYPES.SQUARE: return GridCoordinates3d._singleOffsetDistanceFn(diagonals);
     default: return HexGridCoordinates3d._singleOffsetDistanceFn(diagonals);
   }

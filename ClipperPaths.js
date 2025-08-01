@@ -2,12 +2,11 @@
 PIXI,
 ClipperLib,
 canvas,
-CONFIG
 */
 "use strict";
 
 import { GEOMETRY_CONFIG } from "./const.js";
-import "./Draw.js";
+import { Draw } from "./Draw.js";
 
 /**
  * Class to manage ClipperPaths for multiple polygons.
@@ -461,7 +460,7 @@ export class ClipperPaths {
   /**
    * Draw the clipper paths, to the extent possible
    */
-  draw({ graphics = canvas.controls.debug, color = CONFIG.GeometryLib.Draw.COLORS.black, width = 1, fill, fillAlpha = 1 } = {}) {
+  draw({ graphics = canvas.controls.debug, color = Draw.COLORS.black, width = 1, fill, fillAlpha = 1 } = {}) {
     if ( !fill ) fill = color;
     const polys = this.toPolygons();
 

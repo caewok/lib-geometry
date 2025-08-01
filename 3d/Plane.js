@@ -1,12 +1,11 @@
 /* globals
-CONFIG,
 PIXI
 */
 "use strict";
 
-import "./Point3d.js";
 import { GEOMETRY_CONFIG } from "../const.js";
 import { Point3d } from "./Point3d.js";
+import { MatrixFlat } from "../MatrixFlat.js";
 
 const originPt3d = new Point3d();
 Object.freeze(originPt3d);
@@ -15,18 +14,22 @@ Object.freeze(originPt3d);
 export class Plane {
 
   /** @type {Point3d} */
-  normal = new CONFIG.GeometryLib.threeD.Point3d(0, 0, 1);
+  #normal = new Point3d(0, 0, 1);
+
+  get normal() { return this.#normal; }
+
+  set normal(value) { this.#normal.copyFrom(value).normalize(this.normal); }
 
   /** @type {Point3d} */
-  point = new CONFIG.GeometryLib.threeD.Point3d();
+  point = new Point3d();
 
   /**
    * Default construction is the XY canvas plane
    * @param {Point3d} normal    Normal vector to the plane
    * @param {Point3d} point     Point on the plane, representing the plane's origin point
    */
-  constructor(point = new CONFIG.GeometryLib.threeD.Point3d(0, 0, 0), normal = new CONFIG.GeometryLib.threeD.Point3d(0, 0, 1)) {
-    this.normal.copyFrom(normal.normalize());
+  constructor(point = Point3d.ZERO, normal) {
+    if ( normal ) this.normal = normal;
     this.point.copyFrom(point);
   }
 
@@ -41,7 +44,6 @@ export class Plane {
   }
 
   static normalFromPoints(a, b, c, outPoint) {
-    const Point3d = CONFIG.GeometryLib.threeD.Point3d;
     outPoint ??= Point3d.tmp;
     const vAB = b.subtract(a);
     const vAC = c.subtract(a);
@@ -71,7 +73,7 @@ export class Plane {
   }
 
   static fromMultiplePoints(pts) {
-    const pointsAreCollinear = CONFIG.GeometryLib.utils.pointsAreCollinear;
+    const pointsAreCollinear = pointsAreCollinear;
     const iter = Iterator.from(pts);
     const a = iter.next().value;
 
@@ -106,7 +108,7 @@ export class Plane {
    * @returns {Plane}
    */
   static fromWall(wall) {
-    const pts = CONFIG.GeometryLib.threeD.Point3d.fromWall(wall, { finite: true }); // Need finite so Normal can be calculated
+    const pts = Point3d.fromWall(wall, { finite: true }); // Need finite so Normal can be calculated
 
     // To keep the points simple, use different Z values
     const A = pts.A.top;
@@ -261,7 +263,6 @@ export class Plane {
    *
    */
   static rayIntersectionTriangle3d(rayOrigin, rayDirection, v0, v1, v2) {
-    const Point3d = CONFIG.GeometryLib.threeD.Point3d;
 
     // Calculate the edge vectors of the triangle
     const edge1 = v1.subtract(v0);
@@ -391,7 +392,6 @@ export class Plane {
    * @returns {number|null}  Null if no intersection. If negative, the intersection is behind the ray origin.
    */
   static rayIntersectionQuad3dLD(rayOrigin, rayDirection, v0, v1, v2, v3) {
-    const Point3d = CONFIG.GeometryLib.threeD.Point3d;
 
     // Reject rays using the barycentric coordinates of the intersection point with respect to T
     const E01 = v1.subtract(v0);
@@ -488,7 +488,7 @@ export class Plane {
     const b = this.point.add(vs.v);
     const c = this.point.add(vs.u);
 
-    const m = new CONFIG.GeometryLib.MatrixFlat([
+    const m = new MatrixFlat([
       a.x, b.x, c.x, p.x,
       a.y, b.y, c.y, p.y,
       a.z, b.z, c.z, p.z,
@@ -507,7 +507,6 @@ export class Plane {
   _calculateAxisVectors() {
     // https://math.stackexchange.com/questions/64430/find-extra-arbitrary-two-points-for-a-plane-given-the-normal-and-a-point-that-l
     // Find the minimum index
-    const Point3d = CONFIG.GeometryLib.threeD.Point3d;
     const n = this.normal;
     const w = Point3d.tmp;
     n.x === 0 ? w.set(1, 0, 0)
@@ -546,7 +545,7 @@ export class Plane {
     const { u, v } = this.axisVectors;
     const point = this.point;
 
-    return new CONFIG.GeometryLib.threeD.Point3d(
+    return Point3d.tmp.set(
       point.x + (pt.x * u.x) + (pt.y * v.x),
       point.y + (pt.x * u.y) + (pt.y * v.y),
       point.z + (pt.x * u.z) + (pt.y * v.z)
@@ -588,20 +587,20 @@ export class Plane {
 
     // Adjust for row-major matrix and left-hand coordinate system
 
-    const S = new CONFIG.GeometryLib.MatrixFlat([
+    const S = new MatrixFlat([
       A.x, A.y, A.z, 1,
       u.x, u.y, u.z, 1,
       v.x, v.y, v.z, 1,
       n.x, n.y, n.z, 1
     ], 4, 4);
 
-    const D = new CONFIG.GeometryLib.MatrixFlat([
+    const D = new MatrixFlat([
       0, 0, 0, 1,
       1, 0, 0, 1,
       0, 1, 0, 1,
       0, 0, 1, 1
     ], 4, 4);
-    CONFIG.GeometryLib.threeD.Point3d.release(u, v, n);
+    Point3d.release(u, v, n);
 
     const Sinv = S.invert();
     return Sinv.multiply4x4(D);
@@ -627,7 +626,7 @@ export class Plane {
 
     const d = N.dot(P);
 
-    const outPoint = new CONFIG.GeometryLib.threeD.Point3d();
+    const outPoint = Point3d.tmp;
 
     v.multiplyScalar(dotNL + d, outPoint);
     const b = l.multiplyScalar(dotNV + d);
@@ -762,7 +761,6 @@ export class Plane {
       return null; // Planes are parallel and distinct.
     }
     */
-    const Point3d = CONFIG.GeometryLib.threeD.Point3d;
     const delta = projectedOrigin.subtract(other.point);
     const numerator = other.normal.dot(delta);
     const t = -numerator / denominator;
@@ -779,7 +777,6 @@ export class Plane {
    * @returns {Point3d} The projected point
    */
   projectPointOnPlane(pt, outPoint) {
-    const Point3d = CONFIG.GeometryLib.threeD.Point3d;
     outPoint ??= Point3d.tmp;
     const v = pt.subtract(this.point);
     const dist = v.dot(this.normal);

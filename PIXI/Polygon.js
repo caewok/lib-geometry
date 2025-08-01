@@ -2,7 +2,6 @@
 PIXI,
 ClipperLib,
 foundry,
-CONFIG
 */
 "use strict";
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
@@ -10,7 +9,8 @@ CONFIG
 export const PATCHES = {};
 PATCHES.PIXI = {};
 
-import { Ellipse } from "../Ellipse.js";
+import { lineSegmentCrosses } from "../util.js";
+import { CutawayPolygon } from "../CutawayPolygon.js";
 
 /**
  * Calculate the area of this polygon.
@@ -243,7 +243,7 @@ function* iteratePoints({ close = true } = {}) {
 function linesCross(lines) {
   for ( const edge of this.iterateEdges() ) {
     for ( const line of lines ) {
-      if ( CONFIG.GeometryLib.utils.lineSegmentCrosses(edge.A, edge.B, line.A, line.B) ) return true;
+      if ( lineSegmentCrosses(edge.A, edge.B, line.A, line.B) ) return true;
       edge.A.release(); // B will later be set to A, so don't release it.
     }
   }
@@ -984,7 +984,7 @@ function almostEqual(other, epsilon = 1e-08) {
  * @returns {CutawayPolygon[]}
  */
 function cutaway(a, b, opts = {}) {
-  return CONFIG.GeometryLib.CutawayPolygon.cutawayBasicShape(this, a, b, { isHole: !this.isPositive, ...opts }); // Avoid setting the isHole parameter in opts; will get overriden if set in opts.
+  return CutawayPolygon.cutawayBasicShape(this, a, b, { isHole: !this.isPositive, ...opts }); // Avoid setting the isHole parameter in opts; will get overriden if set in opts.
 }
 
 /**

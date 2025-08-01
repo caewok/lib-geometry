@@ -1,11 +1,10 @@
 /* globals
 canvas,
-CONFIG
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { elevationForUnit, unitElevation, roundNearWhole } from "../util.js";
+import { elevationForUnit, unitElevation, roundNearWhole, pixelsToGridUnits, gridUnitsToPixels, NULL_SET } from "../util.js";
 import { GEOMETRY_CONFIG } from "../const.js";
 import { Pool } from "../Pool.js";
 
@@ -56,10 +55,10 @@ export class RegionMovementWaypoint3d extends GEOMETRY_CONFIG.threeD.Point3d {
   static get tmp() { return this.#pool.acquire(); }
 
   /** @type {number<grid units>} */
-  get elevation() { return CONFIG.GeometryLib.utils.pixelsToGridUnits(this.z); }
+  get elevation() { return pixelsToGridUnits(this.z); }
 
   /** @type {number<grid units>} */
-  set elevation(value) { this.z = CONFIG.GeometryLib.utils.gridUnitsToPixels(value); }
+  set elevation(value) { this.z = gridUnitsToPixels(value); }
 
   /**
    * Factory function to convert a generic point object to a RegionMovementWaypoint3d.

@@ -1,10 +1,12 @@
 /* globals
-CONFIG,
-PIXI
+PIXI,
 */
 "use strict";
 
 import { GEOMETRY_CONFIG } from "./const.js";
+import { Point3d } from "./3d/Point3d.js";
+import { cutaway, gridUnitsToPixels } from "./util.js";
+import { Draw } from "./Draw.js";
 
 /**
  * A cutaway polygon is a 2d representation of a vertical slice of a shape.
@@ -72,14 +74,14 @@ class CutawayPolygon extends PIXI.Polygon {
    * @param {Point} {x, y}
    * @returns {RegionMovementWaypoint3d}
    */
-  _from2d(pt2d) { return CONFIG.GeometryLib.utils.cutaway.from2d(pt2d, this.start, this.end); }
+  _from2d(pt2d) { return cutaway.from2d(pt2d, this.start, this.end); }
 
   /**
    * Convert 3d point to 2d position
    * @param {Point3d} {x, y, z}
    * @returns {PIXI.Point}
    */
-  _to2d(pt3d) { return CONFIG.GeometryLib.utils.cutaway.to2d(pt3d, this.start, this.end); }
+  _to2d(pt3d) { return cutaway.to2d(pt3d, this.start, this.end); }
 
   /**
    * Insert steps along the top of this cutaway.
@@ -156,7 +158,7 @@ class CutawayPolygon extends PIXI.Polygon {
     const ixs = shape.segmentIntersections(a, b);
     if ( ixs.length === 0 ) return [this.quadCutaway(a, b, opts)];
     if ( ixs.length === 1 ) {
-      const ix0 = CONFIG.GeometryLib.threeD.Point3d.fromObject(ixs[0]);
+      const ix0 = Point3d.Point3d.fromObject(ixs[0]);
       ix0.t0 = ixs[0].t0;
       const a2 = a.to2d();
       const b2 = b.to2d();
@@ -218,7 +220,7 @@ class CutawayPolygon extends PIXI.Polygon {
    * @returns {CutawayPolygon}
    */
   static quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, isHole = false } = {}) {
-    const to2d = CONFIG.GeometryLib.utils.cutaway.to2d;
+    const to2d = cutaway.to2d;
     start ??= a;
     end ??= b;
     topElevationFn ??= () => 1e06;
@@ -256,8 +258,7 @@ class CutawayPolygon extends PIXI.Polygon {
    * Set min elevation to one grid unit below the scene.
    */
   draw(opts = {}) {
-    const Draw = CONFIG.GeometryLib.Draw;
-    const { convertToDistance, convertToElevation } = CONFIG.GeometryLib.utils.cutaway;
+    const { convertToDistance, convertToElevation } = cutaway;
     opts.color ??= Draw.COLORS.red;
     opts.fill ??= Draw.COLORS.red;
     opts.fillAlpha ??= 0.3;
@@ -265,8 +266,8 @@ class CutawayPolygon extends PIXI.Polygon {
     const pts = this.pixiPoints({ close: false });
 
     // Locate the minimum point that is above an arbitrarily low value so we don't draw excessively large polys.
-    const LOWEST = CONFIG.GeometryLib.utils.gridUnitsToPixels(-100);
-    const HIGHEST = CONFIG.GeometryLib.utils.gridUnitsToPixels(100);
+    const LOWEST = gridUnitsToPixels(-100);
+    const HIGHEST = gridUnitsToPixels(100);
     for ( let i = 0, n = pts.length; i < n; i += 1 ) {
       const { x, y } = pts[i];
       const pt = { x, y: -Math.clamp(y, LOWEST, HIGHEST) } // Arbitrary cutoff for low elevations.

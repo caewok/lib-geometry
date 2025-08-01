@@ -1,5 +1,4 @@
 /* globals
-CONFIG,
 foundry,
 PIXI,
 */
@@ -8,7 +7,7 @@ PIXI,
 export const PATCHES = {};
 PATCHES.PIXI = {};
 
-import { Ellipse } from "../Ellipse.js";
+import { CutawayPolygon } from "../CutawayPolygon.js";
 
 /**
  * Calculate the angle of a point in relation to a circle.
@@ -183,7 +182,7 @@ function lineSegmentIntersects(a, b, { inside = false } = {}) {
  * @param {number} [opts.isHole=false]    Treat this shape as a hole; reverse the points of the returned polygon
  * @returns {CutawayPolygon[]}
  */
-function cutaway(a, b, opts) { return CONFIG.GeometryLib.CutawayPolygon.cutawayBasicShape(this, a, b, opts); }
+function cutaway(a, b, opts) { return CutawayPolygon.cutawayBasicShape(this, a, b, opts); }
 
 /**
  * Does this circle equal another in position and size?

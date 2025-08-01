@@ -6,6 +6,7 @@ foundry
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
+import { GEOMETRY_CONFIG } from "./const.js";
 import { gridUnitsToPixels, pixelsToGridUnits } from "./util.js";
 import { MODULE_KEYS } from "./const.js";
 
@@ -44,10 +45,9 @@ PATCHES.Token = { ELEVATION: {} };
 PATCHES.Wall = { ELEVATION: {} };
 PATCHES.Region = { ELEVATION: {} };
 
-CONFIG.GeometryLib ??= {};
-CONFIG.GeometryLib.proneStatusId = "prone";
-CONFIG.GeometryLib.proneMultiplier = 0.33;
-CONFIG.GeometryLib.visionHeightMultiplier = 1;
+GEOMETRY_CONFIG.proneStatusId = "prone";
+GEOMETRY_CONFIG.proneMultiplier = 0.33;
+GEOMETRY_CONFIG.visionHeightMultiplier = 1;
 
 /* Elevation handling
 Ignore data.elevation in PointSources (for now)

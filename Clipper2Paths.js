@@ -1,17 +1,17 @@
 /* globals
 PIXI,
 canvas,
-CONFIG
 */
 "use strict";
 
 import { GEOMETRY_CONFIG } from "./const.js";
-import "./Draw.js";
+import { Draw } from "./Draw.js";
 
 // See https://www.npmjs.com/package/clipper2-js
 import * as Clipper2 from "./clipper2_esm2020/clipper2-js.mjs";
 
 const { Path64, Paths64, Point64 } = Clipper2;
+GEOMETRY_CONFIG.clipperVersion = 1;
 
 /**
  * Class to manage Clipper2Paths for multiple polygons.
@@ -523,7 +523,7 @@ export class Clipper2Paths {
   /**
    * Draw the clipper paths, to the extent possible
    */
-  draw({ graphics = canvas.controls.debug, color = CONFIG.GeometryLib.Draw.COLORS.black, width = 1, fill, fillAlpha = 1 } = {}) {
+  draw({ graphics = canvas.controls.debug, color = Draw.COLORS.black, width = 1, fill, fillAlpha = 1 } = {}) {
     if ( !fill ) fill = color;
     const polys = this.toPolygons();
 

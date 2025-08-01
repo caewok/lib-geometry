@@ -1,6 +1,5 @@
 /* globals
 canvas,
-CONFIG,
 PIXI
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
@@ -35,7 +34,8 @@ PIXI
  */
 import { GEOMETRY_CONFIG } from "../const.js";
 import { Pool } from "../Pool.js";
-import { NULL_SET } from "../util.js";
+import { MatrixFlat } from "../MatrixFlat.js";
+import { NULL_SET, gridUnitsToPixels, roundDecimals } from "../util.js";
 
 /**
  * 3-D version of PIXI.Point
@@ -111,7 +111,7 @@ export class Point3d extends PIXI.Point {
    */
   static fromObject(obj) {
     const pt = super.fromObject(obj);
-    pt.z = obj.z ?? obj.elevationZ ?? (CONFIG.GeometryLib.utils.gridUnitsToPixels(obj.elevation) || 0); // gridUnitsToPixels(undefined) = NaN. Use || b/c NaN || 0 returns 0.
+    pt.z = obj.z ?? obj.elevationZ ?? (gridUnitsToPixels(obj.elevation) || 0); // gridUnitsToPixels(undefined) = NaN. Use || b/c NaN || 0 returns 0.
     return pt;
   }
 
@@ -312,13 +312,13 @@ export class Point3d extends PIXI.Point {
 
     // Rotate points to match tile rotation.
     if ( rotation ) {
-      const rotZ = CONFIG.GeometryLib.MatrixFlat.rotationZ(Math.toRadians(rotation));
+      const rotZ = MatrixFlat.rotationZ(Math.toRadians(rotation));
       pts.forEach(pt => rotZ.multiplyPoint3d(pt, pt));
     }
 
     // Translate to canvas position.
     const center = bounds.center;
-    const trM = CONFIG.GeometryLib.MatrixFlat.translation(center.x + offsetX, center.y + offsetY, elevationZ);
+    const trM = MatrixFlat.translation(center.x + offsetX, center.y + offsetY, elevationZ);
     pts.forEach(pt => trM.multiplyPoint3d(pt, pt));
 
     return {
@@ -517,7 +517,7 @@ export class Point3d extends PIXI.Point {
    */
   roundDecimals(places = 0) {
     super.roundDecimals(places);
-    this.z = CONFIG.GeometryLib.utils.roundDecimals(this.z, places);
+    this.z = roundDecimals(this.z, places);
     return this;
   }
 
@@ -626,6 +626,19 @@ export class Point3d extends PIXI.Point {
     outPoint ??= this.constructor.tmp;
     super.max(other, outPoint);
     outPoint.z = Math.max(this.z, other.z);
+    return outPoint;
+  }
+
+  /**
+   * Get the absolute of the coordinates.
+   * @param {PIXI.Point} [outPoint]    A point-like object in which to store the value.
+   *   (Will create new point if none provided.)
+   * @returns {PIXI.Point}
+   */
+  abs(outPoint) {
+    outPoint ??= this.constructor.tmp;
+    super.abs(outPoint);
+    outPoint.z = Math.abs(this.z);
     return outPoint;
   }
 

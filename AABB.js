@@ -1,17 +1,13 @@
 /* globals
-CONFIG,
-PIXI
+PIXI,
 */
 "use strict";
 
 import { GEOMETRY_CONFIG } from "./const.js";
 import { Point3d } from "./3d/Point3d.js";
 import { Draw } from "./Draw.js";
+import { almostLessThan } from "./utils.js";
 
-const pt3d_0 = new Point3d();
-const pt3d_1 = new Point3d();
-const pt3d_2 = new Point3d();
-const pt3d_3 = new Point3d();
 const ptOnes = new Point3d(1, 1, 1);
 Object.freeze(ptOnes);
 
@@ -44,13 +40,15 @@ export class AABB2d {
    * @returns {Point3d}
    */
   getDelta(out) {
-    out ??= CONFIG.GeometryLib.threeD.Point3d.tmp;
+    out ??= Point3d.tmp;
     return this.max.subtract(this.min, out);
   }
 
   getCenter(out) {
-    const delta = this.getDelta(pt3d_0);
-    return this.min.add(delta.multiplyScalar(0.5, out), out);
+    const delta = this.getDelta();
+    this.min.add(delta.multiplyScalar(0.5, out), out);
+    delta.release();
+    return out;
   }
 
   /**
@@ -247,21 +245,27 @@ export class AABB2d {
     // See https://jacco.ompf2.com/2022/04/13/how-to-build-a-bvh-part-1-basics/
     const { min, max } = this.aabb;
     const rayOrigin = a;
-    const rayDirection = b.subtract(a, pt3d_0);
-    const invDirection = ptOnes.divide(rayDirection, pt3d_3);
-    const t1 = pt3d_1;
-    const t2 = pt3d_2;
+    const rayDirection = b.subtract(a);
+    const invDirection = ptOnes.divide(rayDirection);
+    const t1 = Point3d.tmp;
+    const t2 = Point3d.tmp;
 
     min.subtract(rayOrigin, t1).multiply(invDirection, t1);
     max.subtract(rayOrigin, t2).multiply(invDirection, t2);
     const xMinMax = Math.minMax(t1.x, t2.x);
     const yMinMax = Math.minMax(t1.y, t2.y);
     const zMinMax = Math.minMax(t1.z, t2.z);
+    Point3d.release(t1, t2);
     const tmax = Math.min(xMinMax.max, yMinMax.max, zMinMax.max);
-    if ( tmax <= 0 ) return false;
 
-    const tmin = Math.max(xMinMax.min, yMinMax.min, zMinMax.min);
-    return tmax >= tmin && (tmin * tmin) < rayDirection.dot(rayDirection);
+    let out = false;
+    if ( tmax > 0 ) {
+      const tmin = Math.max(xMinMax.min, yMinMax.min, zMinMax.min);
+      out = tmax >= tmin && (tmin * tmin) < rayDirection.dot(rayDirection);
+    }
+    rayDirection.release();
+    invDirection.release();
+    return out;
   }
 
   /**
@@ -448,7 +452,7 @@ export class AABB3d extends AABB2d {
    * @returns {AABB3d}
    */
   static fromPolygon3d(poly3d, out) {
-    if ( poly3d instanceof CONFIG.GeometryLib.threeD.Circle3d ) return this.fromCircle3d(poly3d, out);
+    if ( poly3d.objectOverlapsClassType("Circle3d") ) return this.fromCircle3d(poly3d, out);
     return this.fromPoints(poly3d.points, out);
   }
 
@@ -493,10 +497,11 @@ export class AABB3d extends AABB2d {
     const ax = angle(N, axes.x);
     const ay = angle(N, axes.y);
     const az = angle(N, axes.z);
-    const R = pt3d_0.set(Math.sin(ax), Math.sin(ay), Math.sin(az)) * circle3d.radius;
+    const R = Point3d.tmp.set(Math.sin(ax), Math.sin(ay), Math.sin(az)) * circle3d.radius;
     const { x, y, z } = this.center;
     out.min.set(x - R.x, y - R.y, z - R.z);
     out.max.set(x + R.x, y + R.y, z + R.z);
+    R.release();
     return out;
   }
 
@@ -506,7 +511,7 @@ export class AABB3d extends AABB2d {
    * @return {boolean}
    */
   overlapsConvexPolygon3d(poly3d) {
-    if ( poly3d instanceof CONFIG.GeometryLib.threeD.Circle3d ) return this.overlapsCircle3d(poly3d);
+    if ( poly3d.objectOverlapsClassType("Circle3d") ) return this.overlapsCircle3d(poly3d);
 
     // Early exit if polygon is empty
     if ( !poly3d.points || poly3d.points.length === 0 ) return false;
@@ -529,19 +534,20 @@ export class AABB3d extends AABB2d {
     // Test cross products of polygon edges with AABB edges
     const iter = poly3d.iteratePoints({ close: true });
     let a = iter.next().value;
+    const edge = Point3d.tmp;
     for ( const b of iter ) {
-      const edge = b.subtract(a, pt3d_0);
+      b.subtract(a, edge);
       if (edge.magnitudeSquared() < 1e-10) continue; // Skip degenerate edges
 
       // Test cross products with AABB edges
       for ( const axis of [axes.x, axes.y, axes.z] ) {
           const testAxis = edge.cross(axis).normalize();
           if ( testAxis.magnitudeSquared() < 1e-10 ) continue; // Skip parallel edges
-          if ( !this.overlapsOnAxis(poly3d, testAxis) ) return false;
+          if ( !this.overlapsOnAxis(poly3d, testAxis) ) { edge.release(); return false; }
       }
       a = b;
     }
-
+    edge.release();
     return true;
   }
 
@@ -581,19 +587,20 @@ export class AABB3d extends AABB2d {
     if ( this.containsPoint(center) ) return true;
 
     // Find the point on the AABB closest to the circle's center.
-    const closestPoint = pt3d_0.set(
+    const closestPoint = Point3d.tmp.set(
       Math.max(min.x, Math.min(center.x, max.x)),
       Math.max(min.y, Math.min(center.y, max.y)),
       Math.max(min.z, Math.min(center.z, max.z)),
     );
 
     // Project this closest point onto the circle's plane.
-    const planePoint = plane.projectPointOnPlane(closestPoint, pt3d_1);
-    const centerPoint = plane.projectPointOnPlane(center, pt3d_2);
+    const planePoint = plane.projectPointOnPlane(closestPoint);
+    const centerPoint = plane.projectPointOnPlane(center);
 
     // Check if the projected point is inside the circle.
     const dist2 = PIXI.Point.distanceSquaredBetween(planePoint, centerPoint);
-    return CONFIG.GeometryLib.utils.almostLessThan(dist2, radiusSquared);
+    Point3d.release(closestPoint, planePoint, centerPoint);
+    return almostLessThan(dist2, radiusSquared);
   }
 
   /**

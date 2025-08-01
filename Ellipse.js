@@ -1,10 +1,11 @@
 /* globals
-CONFIG,
 PIXI,
 */
 "use strict";
 
 import { GEOMETRY_CONFIG } from "./const.js";
+import { Draw } from "./Draw.js";
+import { NULL_SET } from "../util.js";
 
 /* Testing
 api = game.modules.get('tokenvisibility').api;
@@ -259,7 +260,7 @@ export class Ellipse extends PIXI.Ellipse {
   }
 
   draw(drawTool, opts = {}) {
-    drawTool ??= CONFIG.GeometryLib.Draw;
+    drawTool ??= Draw;
     const shape = this.rotation ? this.toPolygon() : this;
     drawTool.shape(shape, opts);
   }

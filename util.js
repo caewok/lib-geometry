@@ -9,6 +9,11 @@ PIXI
 
 import { GEOMETRY_CONFIG } from "./const.js";
 import { extractPixels } from "./extract-pixels.js";
+import { Point3d } from "./3d/Point3d.js";
+import { RegionMovementWaypoint3d } from "./3d/RegionMovementWaypoint3d.js";
+import { CenteredRectangle } from "./CenteredPolygon/CenteredRectangle.js";
+import { CenteredPolygon } from "./CenteredPolygon/CenteredPolygon.js";
+import { Ellipse } from "./Ellipse.js";
 
 // Functions that would go in foundry.utils if that object were extensible
 export function registerFoundryUtilsMethods() {
@@ -47,14 +52,7 @@ export function registerFoundryUtilsMethods() {
     segmentIntersection,
     segmentOverlap,
     roundDecimals,
-    cutaway: {
-      to2d: to2dCutaway,
-      from2d: from2dCutaway,
-      convertToDistance: convertToDistanceCutaway,
-      convertToElevation: convertToElevationCutaway,
-      convertFromDistance: convertFromDistanceCutaway,
-      convertFromElevation: convertFromElevationCutaway
-    },
+    cutaway,
     extractPixels,
     almostLessThan,
     almostGreaterThan,
@@ -81,7 +79,7 @@ const pt_0 = new PIXI.Point;
  */
 class NullSet extends Set {
   add(value) {
-   console.error(`${MODULE_ID}|Attempted to add ${value} to a NullSet.`, value);
+   console.error(`GeometryLib|Attempted to add ${value} to a NullSet.`, value);
    return this;
   }
 }
@@ -179,7 +177,7 @@ dist(end, currPt) < dist(start, currPt) && dist(currPt, start) > dist(start, end
  * @returns {RegionMovementWaypoint3d}
  */
 function from2dCutaway(cutawayPt, start, end, outPoint) {
-  outPoint ??= new CONFIG.GeometryLib.threeD.RegionMovementWaypoint3d();
+  outPoint ??= new RegionMovementWaypoint3d();
   // b/c outPoint is 3d, makes sure to get the 2d values.
   const xy =
 
@@ -275,7 +273,7 @@ function lineLineIntersection(a, b, c, d, {t1=false}={}) {
  * @returns {object} Object containing the points, with arrays of inside, on edge, outside points.
  */
 function categorizePointsInOutConvexPolygon(poly, points, epsilon = 1e-08) {
-   const isOnSegment = CONFIG.GeometryLib.utils.isOnSegment;
+   const isOnSegment = isOnSegment;
 
   // Need to walk around the edges in clockwise order.
   if ( !poly.isClockwise ) poly.reverseOrientation();
@@ -416,11 +414,11 @@ Math.PI_1_2 = Math.PI * 0.5;
 function centeredPolygonFromDrawing(drawing) {
   switch ( drawing.document.shape.type ) {
     case Drawing.SHAPE_TYPES.RECTANGLE:
-      return CONFIG.GeometryLib.CenteredPolygons.CenteredRectangle.fromDrawing(drawing);
+      return CenteredRectangle.fromDrawing(drawing);
     case Drawing.SHAPE_TYPES.ELLIPSE:
-      return CONFIG.GeometryLib.Ellipse.fromDrawing(drawing);
+      return Ellipse.fromDrawing(drawing);
     case Drawing.SHAPE_TYPES.POLYGON:
-      return CONFIG.GeometryLib.CenteredPolygons.CenteredPolygon.fromDrawing(drawing);
+      return CenteredPolygon.fromDrawing(drawing);
     case Drawing.SHAPE_TYPES.CIRCLE: {
       const width = drawing.document.shape.width;
       return PIXI.Circle(drawing.document.x + width * 0.5, drawing.document.y + width * 0.5, width);
@@ -514,8 +512,8 @@ function lineSegmentCrosses(a, b, c, d, epsilon = 1e-08) {
 function lineSegment3dPlaneIntersects(a, b, c, d, e = { x: c.x, y: c.y, z: c.z + 1 }) {
   // A and b must be on opposite sides.
   // Parallels the 2d case.
-  const xa = CONFIG.GeometryLib.utils.orient3dFast(a, c, d, e);
-  const xb = CONFIG.GeometryLib.utils.orient3dFast(b, c, d, e);
+  const xa = orient3dFast(a, c, d, e);
+  const xb = orient3dFast(b, c, d, e);
   return xa * xb <= 0;
 }
 
@@ -626,9 +624,7 @@ function lineCircleIntersection(a, b, center, radius, epsilon=1e-8) {
 
   // Find quadratic intersection points
   const contained = aInside && bInside;
-  if ( !contained ) {
-    intersections = CONFIG.GeometryLib.utils.quadraticIntersection(a, b, center, radius, epsilon);
-  }
+  if ( !contained ) intersections = quadraticIntersection(a, b, center, radius, epsilon);
 
   // Return the intersection data
   return {
@@ -917,7 +913,6 @@ export function* bresenhamLineIterator(a, b) {
 export function* bresenhamLine3dIterator(a, b) {
   yield new PIXI.Point(a.x, a.y);
 
-  const Point3d = CONFIG.GeometryLib.threeD.Point3d;
   let x1 = Math.round(a.x);
   let y1 = Math.round(a.y);
   let z1 = Math.round(a.z);
@@ -1391,7 +1386,7 @@ export function endpointIntersection(a, b, c, d) {
  */
 export function segmentIntersection(a, b, c, d) {
   if ( !foundry.utils.lineSegmentIntersects(a, b, c, d) ) return null;
-  const ix = CONFIG.GeometryLib.utils.lineLineIntersection(a, b, c, d, { t1: true });
+  const ix = lineLineIntersection(a, b, c, d, { t1: true });
   ix.pt = PIXI.Point.fromObject(ix);
   ix.type = IX_TYPES.NORMAL;
   return ix;
@@ -1455,4 +1450,13 @@ export function almostGreaterThan(a, b, epsilon = 1e-06) { return a > b || a.alm
 export function almostBetween(value, min, max, epsilon = 1e-06) {
   return almostLessThan(value, max, epsilon) && almostGreaterThan(value, min, epsilon);
 }
+
+export const cutaway = {
+  to2d: to2dCutaway,
+  from2d: from2dCutaway,
+  convertToDistance: convertToDistanceCutaway,
+  convertToElevation: convertToElevationCutaway,
+  convertFromDistance: convertFromDistanceCutaway,
+  convertFromElevation: convertFromElevationCutaway
+};
 

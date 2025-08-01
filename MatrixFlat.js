@@ -1,10 +1,10 @@
 /* globals
-CONFIG,
-PIXI
+PIXI,
 */
 "use strict";
 
 import { GEOMETRY_CONFIG } from "./const.js";
+import { Point3d } from "./3d/Point3d.js";
 
 // Basic matrix operations
 // May eventually replace with math.js (when installed, call "math" to get functions)
@@ -328,7 +328,7 @@ export class MatrixFlat {
    * @param {Point3d} [options.outPoint]    Placeholder for the new Point3d.
    * @returns {PIXI.Point}
    */
-  toPoint3d({ xIndex = 0, yIndex = 1, zIndex = 2, homogenous = true, outPoint = new CONFIG.GeometryLib.threeD.Point3d() } = {}) {
+  toPoint3d({ xIndex = 0, yIndex = 1, zIndex = 2, homogenous = true, outPoint = new Point3d() } = {}) {
     const arr = this.arr;
     outPoint.x = arr[xIndex];
     outPoint.y = arr[yIndex];
@@ -541,7 +541,7 @@ export class MatrixFlat {
    * @returns {Matrix} 4x4 matrix
    */
   static lookAt(cameraPosition, targetPosition, up, M, Minv) {
-    const Point3d = CONFIG.GeometryLib.threeD.Point3d;
+    const Point3d = Point3d;
 
     // NOTE: Foundry uses a left-hand coordinate system, with y reversed.
     const zAxis = Point3d.tmp;
@@ -563,8 +563,8 @@ export class MatrixFlat {
     }
     // Otherwise camera either directly overhead or directly below
     // Overhead if zAxis.z is positive
-    // xAxis = new CONFIG.GeometryLib.threeD.Point3d(1, 0, 0);
-    // yAxis = new CONFIG.GeometryLib.threeD.Point3d(0, 1, 0);
+    // xAxis = new Point3d(1, 0, 0);
+    // yAxis = new Point3d(0, 1, 0);
 
 
 
@@ -1067,7 +1067,7 @@ export class MatrixFlat {
    * @param {Point3d} outPoint Optional point in which to store the result.
    * @returns {Point3d}
    */
-  multiplyPoint3d(point, outPoint = new CONFIG.GeometryLib.threeD.Point3d()) {
+  multiplyPoint3d(point, outPoint = new Point3d()) {
 
     // For speed, assume _idx is (col * this.nrow) + row
     // Array organized col0, row0, row1, row2, ... col1, row0, row1, ...

@@ -5,6 +5,7 @@ PIXI
 
 import { GEOMETRY_CONFIG } from "../const.js";
 import "./RegularPolygon.js";
+import { NULL_SET } from "../util.js";
 
 export class EquilateralTriangle extends GEOMETRY_CONFIG.RegularPolygons.RegularPolygon {
   static classTypes = new Set([this.name], "Triangle"); // Alternative to instanceof

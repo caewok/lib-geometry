@@ -1,15 +1,13 @@
 /* globals
-CONFIG,
 PIXI,
 */
 "use strict";
 
-import "../Matrix.js";
+import { MatrixFlat as Matrix } from "./MatrixFlat.js";
+import { CutawayPolygon } from "../CutawayPolygon.js";
 
 export const PATCHES = {};
 PATCHES.PIXI = {};
-
-import { Ellipse } from "../Ellipse.js";
 
 /**
  * Calculate area of rectangle
@@ -443,7 +441,7 @@ function gridRectangles(rect1, rect2) {
  * @param {number} [opts.isHole=false]        Treat this shape as a hole; reverse the points of the returned polygon
  * @returns {CutawayPolygon[]}
  */
-function cutaway(a, b, opts) { return CONFIG.GeometryLib.CutawayPolygon.cutawayBasicShape(this, a, b, opts); }
+function cutaway(a, b, opts) { return CutawayPolygon.cutawayBasicShape(this, a, b, opts); }
 
 /**
  * Rotate this rectangle around its center point.
@@ -463,8 +461,8 @@ function rotateAroundCenter(rotation = 0) {
   }
 
   // For all other rotations, translate center to 0,0, rotate, and then invert the translation.
-  const tMat = CONFIG.GeometryLib.Matrix.translation(-center.x, -center.y);
-  const rMat = CONFIG.GeometryLib.Matrix.rotationZ(Math.toRadians(rotation));
+  const tMat = Matrix.translation(-center.x, -center.y);
+  const rMat = Matrix.rotationZ(Math.toRadians(rotation));
   const M = tMat.multiply3x3(rMat).multiply3x3(tMat.invert);
   const pts = [...this.iteratePoints({ close: true })];
   const tPts = pts.map(pt => M.multiplyPoint2d(pt, pt));

@@ -1,11 +1,12 @@
 /* globals
-CONFIG,
-PIXI
+PIXI,
 */
 "use strict";
 
 import { GEOMETRY_CONFIG } from "../const.js";
-import { Polygon3d } from "./Polygon3d.js";
+import { Polygon3d, Circle3d } from "./Polygon3d.js";
+import { Point3d } from "./Point3d.js";
+import { MatrixFlat } from "../MatrixFlat.js";
 
 /* Sphere
 Represent a 3d sphere, with some functions to manipulate it.
@@ -34,12 +35,12 @@ export class Sphere {
   }
 
   /** @type {Point3d} */
-  center = new CONFIG.GeometryLib.threeD.Point3d();
+  center = new Point3d();
 
   /** @type {object<min: Point3d, max: Point3d>} */
   #aabb = {
-    min: new CONFIG.GeometryLib.threeD.Point3d(),
-    max: new CONFIG.GeometryLib.threeD.Point3d(),
+    min: new Point3d(),
+    max: new Point3d(),
   };
 
   get aabb() {
@@ -50,7 +51,7 @@ export class Sphere {
   }
 
   contains(pt, epsilon = 1e-06) {
-    return CONFIG.GeometryLib.threeD.Point3d.distanceSquaredBetween(pt, this.center) < (this.radiusSquared + epsilon);
+    return Point3d.distanceSquaredBetween(pt, this.center) < (this.radiusSquared + epsilon);
   }
 
   toCircle2d() { return new PIXI.Circle(this.x, this.y, this.radius); }
@@ -61,7 +62,7 @@ export class Sphere {
    * @returns {boolean}
    */
   overlapsPolygon3d(poly3d) {
-    if ( poly3d instanceof CONFIG.GeometryLib.threeD.Circle3d ) return this.overlapsCircle3d(poly3d);
+    if ( poly3d.objectOverlapsClassType("Circle3d") ) return this.overlapsCircle3d(poly3d);
     for ( const pt of poly3d.iteratePoints({ close: false }) ) {
       const inside = this.contains(pt);
       if ( inside ) return true;
@@ -78,7 +79,7 @@ export class Sphere {
 
     const sphereCircle = this.#planarCircle(circle3d.plane);
     if ( !sphereCircle ) return false;
-    if ( sphereCircle instanceof CONFIG.GeometryLib.threeD.Point3d ) return true;
+    if ( sphereCircle.inheritsClassType("Point3d") ) return true;
 
     // Project onto the circle plane and test for overlap.
     const circle2d = circle3d.toPlanarCircle();
@@ -88,10 +89,10 @@ export class Sphere {
   /**
    * Intersect this sphere with a planar polygon.
    * @param {Polygon3d} poly3d
-   * @returns {Polygon3d|Point3d|null}
+   * @returns {Polygon3d|Circle3d|Point3d|null}
    */
   intersectPolygon3d(poly3d) {
-    if ( poly3d instanceof CONFIG.GeometryLib.threeD.Circle3d ) return this.intersectCircle3d(poly3d);
+    if ( poly3d.objectOverlapsClassType("Circle3d") ) return this.intersectCircle3d(poly3d);
     let allInside = true;
     let allOutside = true;
     for ( const pt of poly3d.iteratePoints({ close: false }) ) {
@@ -108,8 +109,11 @@ export class Sphere {
     // Project the sphere to the plane.
     const sphereCircle = this.#planarCircle(poly3d.plane);
     if ( !sphereCircle ) return null;
-    if ( sphereCircle instanceof CONFIG.GeometryLib.threeD.Point3d ) return sphereCircle;
-    if ( allOutside ) return CONFIG.GeometryLib.threeD.Circle3d.fromPlanarCircle(sphereCircle, poly3d.plane);
+    if ( sphereCircle.radius.almostEquals(0) ) {
+      const circle3d = Circle3d.fromPlanarCircle(sphereCircle, poly3d.plane);
+      return circle3d.center;
+    }
+    if ( allOutside ) return Circle3d.fromPlanarCircle(sphereCircle, poly3d.plane);
     const poly2d = sphereCircle.intersectPolygon(poly3d.toPlanarPolygon());
     return Polygon3d.fromPlanarPolygon(poly2d, poly3d.plane);
   }
@@ -123,7 +127,10 @@ export class Sphere {
     // Determine the circle shape on the plane where the sphere intersects the plane.
     const sphereCircle = this.#planarCircle(circle3d.plane);
     if ( !sphereCircle ) return null;
-    if ( sphereCircle instanceof CONFIG.GeometryLib.threeD.Point3d ) return sphereCircle;
+    if ( sphereCircle.radius.almostEqual(0) ) {
+      const newCircle = Circle3d.fromPlanarCircle(sphereCircle, circle3d.plane);
+      return newCircle.center;
+    }
 
     // Intersect the two circles and return the resulting planar polygon.
     const poly2d = sphereCircle.intersectPolygon(circle3d.toPlanarCircle().toPolygon());
@@ -155,7 +162,7 @@ export class Sphere {
     // center is sphere's center plus the projection of ρ along the plane's normal vector
     // center + p * N.normalize()
     const radius2d = Math.sqrt(this.radiusSquared - (dist ** 2));
-    const center2d = new CONFIG.GeometryLib.threeD.Point3d();
+    const center2d = Point3d.tmp;
     center3d.add(plane.normal.multiplyScalar(dist, center2d), center2d);
     return new PIXI.Circle(center2d.x, center2d.y, radius2d);
   }
@@ -233,7 +240,7 @@ export class Sphere {
    */
   static fromTwoPoints(a, b) {
     const out = new this();
-    out.radius = CONFIG.GeometryLib.threeD.Point3d.distanceBetween(a, b) * 0.5;
+    out.radius = Point3d.distanceBetween(a, b) * 0.5;
     a.add(b, out.center).multiplyScalar(0.5, out.center); // Midpoint between a and b.
     return out;
   }
@@ -247,8 +254,6 @@ export class Sphere {
    * @returns {Sphere}
    */
   static fromThreePoints(a, b, c) {
-    const Point3d = CONFIG.GeometryLib.threeD.Point3d;
-
     // Check if an angle is obtuse.
     const cb = c.subtract(a);
     const ab = a.subtract(b);
@@ -312,9 +317,6 @@ export class Sphere {
    * @returns {Sphere}
    */
   static fromFourPoints(a, b, c, d) {
-    const MatrixFlat = CONFIG.GeometryLib.MatrixFlat;
-    const Point3d = CONFIG.GeometryLib.threeD.Point3d;
-
     // This involves solving a system of linear equations derived from the
     // equation of a sphere: (x-x0)^2 + (y-y0)^2 + (z-z0)^2 = r^2
     // The determinant of a matrix formed by the points' coordinates gives the center.

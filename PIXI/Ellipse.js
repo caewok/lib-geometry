@@ -1,5 +1,4 @@
 /* globals
-CONFIG,
 PIXI,
 WeilerAthertonClipper,
 */
@@ -8,7 +7,7 @@ WeilerAthertonClipper,
 export const PATCHES = {};
 PATCHES.PIXI = {};
 
-import { Ellipse } from "../Ellipse.js";
+import { CutawayPolygon } from "../CutawayPolygon.js";
 
 /** @type {number} */
 function majorRadius() { return Math.max(this.width, this.height); }
@@ -337,7 +336,7 @@ function intersectPolygon(polygon, { density, clipType, weilerAtherton=true, ...
  * @param {number} [opts.isHole=false]        Treat this shape as a hole; reverse the points of the returned polygon
  * @returns {PIXI.Polygon[]}
  */
-function cutaway(a, b, opts) { return CONFIG.GeometryLib.CutawayPolygon.cutawayBasicShape(this, a, b, opts); }
+function cutaway(a, b, opts) { return CutawayPolygon.cutawayBasicShape(this, a, b, opts); }
 
 /**
  * Does this ellipse equal another in position and size?

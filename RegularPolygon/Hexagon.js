@@ -6,6 +6,7 @@ canvas
 
 import { GEOMETRY_CONFIG } from "../const.js";
 import "./RegularPolygon.js";
+import { NULL_SET } from "../util.js";
 
 /**
  * "Column" hexagon with points at W and E

@@ -10,19 +10,6 @@ import { Point3d } from "../3d/Point3d.js";
 import { Polygon3d, Circle3d } from '../3d/Polygon3d.js';
 import { Plane } from '../3d/Plane.js';
 
-
-
-/*
-Draw = CONFIG.GeometryLib.Draw
-AABB2d = CONFIG.GeometryLib.AABB2d
-AABB3d = CONFIG.GeometryLib.threeD.AABB3d
-Point3d = CONFIG.GeometryLib.threeD.Point3d
-Plane = CONFIG.GeometryLib.threeD.Plane
-Polygon3d = CONFIG.GeometryLib.threeD.Polygon3d
-Circle3d = CONFIG.GeometryLib.threeD.Circle3d
-
-*/
-
 Hooks.on("quenchReady", (quench) => {
   quench.registerBatch(
     "libGeometry.AABB",
