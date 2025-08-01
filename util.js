@@ -33,7 +33,6 @@ export function registerFoundryUtilsMethods() {
     shortestRouteBetween3dLines,
     isOnSegment,
     categorizePointsInOutConvexPolygon,
-    lineLineIntersection,
     bresenhamLine,
     bresenhamLineIterator,
     bresenhamLine3d,
@@ -236,30 +235,7 @@ function convertFromElevationCutaway(cutawayPt) {
  * @param {number} places     Number of places past the decimal point to round
  * @returns {number}
  */
-function roundDecimals(number, places) { return Number(number.toFixed(places)); }
-
-// Just like foundry.utils.lineLineIntersection but with the typo in t1 calculation fixed.
-function lineLineIntersection(a, b, c, d, {t1=false}={}) {
-
-  // If either line is length 0, they cannot intersect
-  if (((a.x === b.x) && (a.y === b.y)) || ((c.x === d.x) && (c.y === d.y))) return null;
-
-  // Check denominator - avoid parallel lines where d = 0
-  const dnm = ((d.y - c.y) * (b.x - a.x) - (d.x - c.x) * (b.y - a.y));
-  if (dnm === 0) return null;
-
-  // Vector distances
-  const t0 = ((d.x - c.x) * (a.y - c.y) - (d.y - c.y) * (a.x - c.x)) / dnm;
-  t1 = t1 ? ((b.x - a.x) * (a.y - c.y) - (b.y - a.y) * (a.x - c.x)) / dnm : undefined;
-
-  // Return the point of intersection
-  return {
-    x: a.x + t0 * (b.x - a.x),
-    y: a.y + t0 * (b.y - a.y),
-    t0: t0,
-    t1: t1
-  };
-}
+export function roundDecimals(number, places) { return Number(number.toFixed(places)); }
 
 
 /**
@@ -272,7 +248,7 @@ function lineLineIntersection(a, b, c, d, {t1=false}={}) {
  * @param {epsilon}   Tolerance for near zero.
  * @returns {object} Object containing the points, with arrays of inside, on edge, outside points.
  */
-function categorizePointsInOutConvexPolygon(poly, points, epsilon = 1e-08) {
+export function categorizePointsInOutConvexPolygon(poly, points, epsilon = 1e-08) {
    const isOnSegment = isOnSegment;
 
   // Need to walk around the edges in clockwise order.
@@ -329,7 +305,7 @@ function categorizePointsInOutConvexPolygon(poly, points, epsilon = 1e-08) {
  * @param {epsilon}   Tolerance for near zero.
  * @returns {boolean}
  */
-function isOnSegment(a, b, c, epsilon = 1e-08) {
+export function isOnSegment(a, b, c, epsilon = 1e-08) {
   // Confirm point is with bounding box formed by A|B
   const minX = Math.min(a.x, b.x);
   const minY = Math.min(a.y, b.y);
@@ -360,7 +336,7 @@ function isOnSegment(a, b, c, epsilon = 1e-08) {
  * @param {number} epsilon  Consider this value or less to be zero
  * @returns {object|null} {A: Point3d, B: Point3d}
  */
-function shortestRouteBetween3dLines(a, b, c, d, epsilon = 1e-08) {
+export function shortestRouteBetween3dLines(a, b, c, d, epsilon = 1e-08) {
   const deltaDC = d.subtract(c);
   if ( Math.abs(deltaDC.x) < epsilon
     && Math.abs(deltaDC.y) < epsilon
@@ -411,7 +387,7 @@ Math.PI_1_2 = Math.PI * 0.5;
  * @param {Drawing} drawing
  * @returns {CenteredPolygonBase}
  */
-function centeredPolygonFromDrawing(drawing) {
+export function centeredPolygonFromDrawing(drawing) {
   switch ( drawing.document.shape.type ) {
     case Drawing.SHAPE_TYPES.RECTANGLE:
       return CenteredRectangle.fromDrawing(drawing);
@@ -438,7 +414,7 @@ function centeredPolygonFromDrawing(drawing) {
  * @return {Point} The point on line AB or null if a,b,c are collinear. Not
  *                 guaranteed to be within the line segment a|b.
  */
-function perpendicularPoint(a, b, c) {
+export function perpendicularPoint(a, b, c) {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const dab = Math.pow(dx, 2) + Math.pow(dy, 2);
@@ -475,7 +451,7 @@ export function pixelsToGridUnits(pixels) { return pixels / canvas.dimensions.di
  * @param {epsilon}   Tolerance for near zero.
  * @returns {boolean}                 Do the line segments cross?
  */
-function lineSegmentCrosses(a, b, c, d, epsilon = 1e-08) {
+export function lineSegmentCrosses(a, b, c, d, epsilon = 1e-08) {
   let xa = foundry.utils.orient2dFast(a, b, c);
   if ( xa.almostEqual(0, epsilon) ) return false;
 
@@ -509,7 +485,7 @@ function lineSegmentCrosses(a, b, c, d, epsilon = 1e-08) {
  * @returns {boolean} Does the line segment intersect the plane?
  * Note that if the segment is part of the plane, this returns false.
  */
-function lineSegment3dPlaneIntersects(a, b, c, d, e = { x: c.x, y: c.y, z: c.z + 1 }) {
+export function lineSegment3dPlaneIntersects(a, b, c, d, e = { x: c.x, y: c.y, z: c.z + 1 }) {
   // A and b must be on opposite sides.
   // Parallels the 2d case.
   const xa = orient3dFast(a, c, d, e);
@@ -529,7 +505,7 @@ function lineSegment3dPlaneIntersects(a, b, c, d, e = { x: c.x, y: c.y, z: c.z +
  *   - Returns a negative value if d lies below the plane.
  *   - Returns zero if the points are coplanar.
  */
-function orient3dFast(a, b, c, d) {
+export function orient3dFast(a, b, c, d) {
   const adx = a.x - d.x;
   const bdx = b.x - d.x;
   const cdx = c.x - d.x;
@@ -557,7 +533,7 @@ function orient3dFast(a, b, c, d) {
  * @param {number} radius       The radius of the circle
  * @param {number} [epsilon=0]  A small tolerance for floating point precision
  */
-function quadraticIntersection(p0, p1, center, radius, epsilon=0) {
+export function quadraticIntersection(p0, p1, center, radius, epsilon=0) {
   const dx = p1.x - p0.x;
   const dy = p1.y - p0.y;
 
@@ -610,7 +586,7 @@ function quadraticIntersection(p0, p1, center, radius, epsilon=0) {
  *
  * @returns {LineCircleIntersection}  The intersection of the segment AB with the circle
  */
-function lineCircleIntersection(a, b, center, radius, epsilon=1e-8) {
+export function lineCircleIntersection(a, b, center, radius, epsilon=1e-8) {
   const r2 = Math.pow(radius, 2);
   let intersections = [];
 
@@ -786,7 +762,7 @@ export function bresenhamLine3d_old(x1, y1, z1, x2, y2, z2) {
  * @param {object} end - Ending 3D coordinate {x, y, z}.
  * @returns {Array<{x: number, y: number, z: number}>} Array of 3D coordinates along the line.
  */
-function bresenhamLine3d(x1, y1, z1, x2, y2, z2) {
+export function bresenhamLine3d(x1, y1, z1, x2, y2, z2) {
   x1 = Math.round(x1);
   y1 = Math.round(y1);
   z1 = Math.round(z1);
@@ -1386,7 +1362,7 @@ export function endpointIntersection(a, b, c, d) {
  */
 export function segmentIntersection(a, b, c, d) {
   if ( !foundry.utils.lineSegmentIntersects(a, b, c, d) ) return null;
-  const ix = lineLineIntersection(a, b, c, d, { t1: true });
+  const ix = foundry.utils.lineLineIntersection(a, b, c, d, { t1: true });
   ix.pt = PIXI.Point.fromObject(ix);
   ix.type = IX_TYPES.NORMAL;
   return ix;
