@@ -6,7 +6,7 @@ foundry
 "use strict";
 
 import { Pool } from "../Pool.js";
-import { Point3d } from "./3d/Point3d.js";
+import { Point3d } from "../3d/Point3d.js";
 import { roundDecimals as roundDecimalsNumber } from "../util.js";
 
 export const PATCHES = {};

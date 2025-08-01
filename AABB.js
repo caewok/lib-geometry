@@ -6,7 +6,7 @@ PIXI,
 import { GEOMETRY_CONFIG } from "./const.js";
 import { Point3d } from "./3d/Point3d.js";
 import { Draw } from "./Draw.js";
-import { almostLessThan } from "./utils.js";
+import { almostLessThan } from "./util.js";
 
 const ptOnes = new Point3d(1, 1, 1);
 Object.freeze(ptOnes);
