@@ -13,7 +13,7 @@ import { Draw } from "./Draw.js";
  * That slice is generally a quadrilateral but can be further modified by replacing
  * an edge with a set of points.
  */
-class CutawayPolygon extends PIXI.Polygon {
+export class CutawayPolygon extends PIXI.Polygon {
   /** @type {Point3d} */
   start = new GEOMETRY_CONFIG.threeD.Point3d();
 
