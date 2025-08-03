@@ -1,5 +1,19 @@
-## 0.3.21
+## 0.4.0 (Formerly known as 0.3.21)
 Fix setting / getting wall elevation and simplify MODULE_KEYS structure.
+Misc. fixes.
+Fixes to MatrixFlat and added perspective code.
+Switch to handle v13 patches while keeping v12 compatibility.
+Added:
+• Clipper 2
+• LitTokenShape
+• Tentative unit testing approach
+• Pooling for PIXI.Point and Point3d in lieu of Point3d.tmp method.
+• Alternative to using instanceof for testing shapes
+• Polygon3d, Ellipse3d, Circle3d, Triangle3d, Quad3d, Polygons3d
+• Barycentric
+• Sphere
+• AABB
+Removed reliance on GEOMETRY_CONFIG; use imports instead.
 
 ## 0.3.20
 Update Bresenham alogorithms for speed, simplicity, and to fix skipping hex spaces.
