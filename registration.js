@@ -4,7 +4,7 @@ foundry
 */
 "use strict";
 
-const VERSION = "0.3.21";
+const VERSION = "0.4.0";
 
 // Foundry utils
 import { GEOMETRY_CONFIG } from "./const.js";
@@ -176,7 +176,7 @@ export function registerGeometryLibPatches() {
 
   // Create a new Patcher object and register the patches.
   CONFIG.GeometryLib.PATCHER = new Patcher();
-  CONFIG.GeometryLib.PATCHER.addPatchesFromRegistrationObject(PATCHES);
+  CONFIG.GeometryLib.PATCHER.addPatchesFromRegistrationObject(patches);
   CONFIG.GeometryLib.PATCHER.registerGroup("PIXI");
   CONFIG.GeometryLib.PATCHER.registerGroup("CONSTRAINED_TOKEN_BORDER");
   CONFIG.GeometryLib.PATCHER.registerGroup("CANVAS_EDGES");
