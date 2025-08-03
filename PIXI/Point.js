@@ -2,18 +2,22 @@
 PIXI,
 foundry
 */
+/* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import "../3d/Point3d.js";
+import { Pool } from "../Pool.js";
+import { roundDecimals as roundDecimalsNumber } from "../util.js";
 
 export const PATCHES = {};
 PATCHES.PIXI = {};
 
-// Temporary points that can be passed to PIXI.Point methods
-PIXI.Point._tmp = new PIXI.Point();
-PIXI.Point._tmp1 = new PIXI.Point();
-PIXI.Point._tmp2 = new PIXI.Point();
-PIXI.Point._tmp3 = new PIXI.Point();
+const pool = new Pool(_pool => new PIXI.Point()); // Instead of static #pool, just hide it here.
+
+function releaseStatic(...args) { args.forEach(arg => pool.release(arg)); }
+
+function release() { pool.release(this); }
+
+function getTmp() { return pool.acquire(); }
 
 /**
  * Invert a wall key to get the coordinates.
@@ -22,7 +26,7 @@ PIXI.Point._tmp3 = new PIXI.Point();
  * @returns {PIXI.Point} coordinates
  */
 function invertKey(key, outPoint) {
-  outPoint ??= new this();
+  outPoint ??= this.tmp;
   return outPoint.copyFrom(this._invertKey(key));
 }
 
@@ -38,8 +42,8 @@ function _invertKey(key) {
  * @returns {this}
  */
 function roundDecimals(places = 0) {
-  this.x = CONFIG.GeometryLib.utils.roundDecimals(this.x, places);
-  this.y = CONFIG.GeometryLib.utils.roundDecimals(this.y, places);
+  this.x = roundDecimalsNumber(this.x, places);
+  this.y = roundDecimalsNumber(this.y, places);
   return this;
 }
 
@@ -51,7 +55,7 @@ function roundDecimals(places = 0) {
 function fromObject(obj) {
   const x = obj.x ?? 0;
   const y = obj.y ?? 0;
-  return new this(x, y);
+  return this.tmp.set(x, y);
 }
 
 /**
@@ -67,13 +71,18 @@ function fromObject(obj) {
 function angleBetween(a, b, c, { clockwiseAngle = false } = {}) {
   // See https://mathsathome.com/angle-between-two-vectors/
   // Create new pixi points so that 2d distance works when passing 3d points.
-  const ba = new PIXI.Point(a.x - b.x, a.y - b.y);
-  const bc = new PIXI.Point(c.x - b.x, c.y - b.y);
+  const tmp0 = PIXI.Point.tmp;
+  const tmp1 = PIXI.Point.tmp;
+
+  const ba = a.subtract(b, tmp0);
+  const bc = c.subtract(b, tmp1);
   const dot = ba.dot(bc);
   const denom = ba.magnitude() * bc.magnitude();
 
   let angle = Math.acos(dot / denom);
   if ( clockwiseAngle && foundry.utils.orient2dFast(a, b, c) > 0 ) angle = (Math.PI * 2) - angle;
+  tmp0.release();
+  tmp1.release();
   return angle;
 }
 
@@ -143,7 +152,7 @@ function flatMapPoints(ptsArr, transformFn) {
 function fromAngleStatic(origin, radians, distance) {
   const dx = Math.cos(radians);
   const dy = Math.sin(radians);
-  return new this(origin.x + (dx * distance), origin.y + (dy * distance));
+  return this.tmp.set(origin.x + (dx * distance), origin.y + (dy * distance));
 }
 
 /**
@@ -155,7 +164,7 @@ function fromAngleStatic(origin, radians, distance) {
  * @returns {Point}  Coordinates of point that lies distance away from origin along angle.
  */
 function fromAngle(radians, distance, outPoint) {
-  outPoint ??= new this.constructor();
+  outPoint ??= this.constructor.tmp;
   const dx = Math.cos(radians);
   const dy = Math.sin(radians);
   outPoint.copyFrom({ x: dx, y: dy});
@@ -181,27 +190,13 @@ function copyPartial(p) {
  * @param {PIXI.Point} b
  * @returns {PIXI.Point}
  */
-function midPoint(a, b) {
+function midPoint(a, b, outPoint) {
+  outPoint ??= this.tmp;
   a.x ||= 0;
   a.y ||= 0;
   b.x ||= 0;
   b.y ||= 0;
-  return new this( a.x + ((b.x - a.x) / 2), a.y + ((b.y - a.y) / 2));
-}
-
-/**
- * Convert 2d point to 3d
- * @param [object] [options]    Choices that affect the axes used.
- * @param [string] [options.x]  What 2d axis to use for the 3d x axis
- * @param [string] [options.y]  What 2d axis to use for the 3d y axis
- * @param [string] [options.z]  What 2d axis to use for the 3d z axis
- * @returns {Point3d}
- */
-function to3d({ x = "x", y = "y", z} = {}) {
-  const x3d = x ? this[x] : 0;
-  const y3d = y ? this[y] : 0;
-  const z3d = z ? this[z] : 0;
-  return new CONFIG.GeometryLib.Point3d(x3d, y3d, z3d);
+  return outPoint.set( a.x + ((b.x - a.x) / 2), a.y + ((b.y - a.y) / 2));
 }
 
 /**
@@ -213,7 +208,7 @@ function to3d({ x = "x", y = "y", z} = {}) {
  * @returns {PIXI.Point}
  */
 function add(other, outPoint) {
-  outPoint ??= new this.constructor();
+  outPoint ??= this.constructor.tmp;
   outPoint.x = this.x + other.x;
   outPoint.y = this.y + other.y;
   return outPoint;
@@ -228,7 +223,7 @@ function add(other, outPoint) {
  * @returns {PIXI.Point}
  */
 function subtract(other, outPoint) {
-  outPoint ??= new this.constructor();
+  outPoint ??= this.constructor.tmp;
   outPoint.x = this.x - other.x;
   outPoint.y = this.y - other.y;
 
@@ -244,7 +239,7 @@ function subtract(other, outPoint) {
  * @returns {PIXI.Point}
  */
 function multiply(other, outPoint) {
-  outPoint ??= new this.constructor();
+  outPoint ??= this.constructor.tmp;
   outPoint.x = this.x * other.x;
   outPoint.y = this.y * other.y;
   return outPoint;
@@ -259,7 +254,7 @@ function multiply(other, outPoint) {
  * @returns {PIXI.Point}
  */
 function multiplyScalar(scalar, outPoint) {
-  outPoint ??= new this.constructor();
+  outPoint ??= this.constructor.tmp;
   outPoint.x = this.x * scalar;
   outPoint.y = this.y * scalar;
   return outPoint;
@@ -274,7 +269,7 @@ function multiplyScalar(scalar, outPoint) {
  * @returns {PIXI.Point}
  */
 function divide(other, outPoint) {
-  outPoint ??= new this.constructor();
+  outPoint ??= this.constructor.tmp;
   outPoint.x = this.x / other.x;
   outPoint.y = this.y / other.y;
   return outPoint;
@@ -288,7 +283,7 @@ function divide(other, outPoint) {
  * @returns {PIXI.Point}
  */
 function min(other, outPoint) {
-  outPoint ??= new this.constructor();
+  outPoint ??= this.constructor.tmp;
   outPoint.x = Math.min(this.x, other.x);
   outPoint.y = Math.min(this.y, other.y);
   return outPoint;
@@ -302,9 +297,22 @@ function min(other, outPoint) {
  * @returns {PIXI.Point}
  */
 function max(other, outPoint) {
-  outPoint ??= new this.constructor();
+  outPoint ??= this.constructor.tmp;
   outPoint.x = Math.max(this.x, other.x);
   outPoint.y = Math.max(this.y, other.y);
+  return outPoint;
+}
+
+/**
+ * Get the absolute of the coordinates.
+ * @param {PIXI.Point} [outPoint]    A point-like object in which to store the value.
+ *   (Will create new point if none provided.)
+ * @returns {PIXI.Point}
+ */
+function abs(outPoint) {
+  outPoint ??= this.constructor.tmp;
+  outPoint.x = Math.abs(this.x);
+  outPoint.y = Math.abs(this.y);
   return outPoint;
 }
 
@@ -365,7 +373,7 @@ function normalize(outPoint) {
  * @returns {Point3d|PIXI.Point}
  */
 function projectToward(other, t, outPoint) {
-  outPoint ??= new this.constructor();
+  outPoint ??= this.constructor.tmp;
   const delta = other.subtract(this, outPoint);
   this.add(delta.multiplyScalar(t, outPoint), outPoint);
   return outPoint;
@@ -378,7 +386,7 @@ function projectToward(other, t, outPoint) {
  * @returns {Point3d|PIXI.Point}
  */
 function towardsPoint(other, distance, outPoint) {
-  outPoint ??= new this.constructor();
+  outPoint ??= this.constructor.tmp;
   const delta = other.subtract(this, outPoint);
   const t = distance / delta.magnitude();
   this.add(delta.multiplyScalar(t, outPoint), outPoint);
@@ -392,7 +400,7 @@ function towardsPoint(other, distance, outPoint) {
  * @returns {Point3d|PIXI.Point}
  */
 function towardsPointSquared(other, distance2, outPoint) {
-  outPoint ??= new this.constructor();
+  outPoint ??= this.constructor.tmp;
   const delta = other.subtract(this, outPoint);
   const sign = Math.sign(distance2);
   const t = sign * Math.sqrt(Math.abs(distance2) / delta.magnitudeSquared());
@@ -411,7 +419,7 @@ function towardsPointSquared(other, distance2, outPoint) {
  *   Pass an outPoint if the actual point is desired.
  */
 function projectToAxisValue(other, value, coordinate, outPoint) {
-  outPoint ??= new this.constructor();
+  outPoint ??= this.constructor.tmp;
   coordinate ??= "x";
   other.subtract(this, outPoint);
   if ( outPoint[coordinate] === 0 ) return null; // Line is parallel to that coordinate axis.
@@ -428,7 +436,7 @@ function projectToAxisValue(other, value, coordinate, outPoint) {
  * @returns {Point} A new point
  */
 function rotate(angle, outPoint) {
-  outPoint ??= new this.constructor();
+  outPoint ??= this.constructor.tmp;
   const cAngle = Math.cos(angle);
   const sAngle = Math.sin(angle);
   const { x, y } = this; // Avoid accidentally using the outPoint values when calculating new y.
@@ -445,7 +453,7 @@ function rotate(angle, outPoint) {
  * @returns {Point} A new point
  */
 function translate(dx, dy, outPoint) {
-  outPoint ??= new this.constructor();
+  outPoint ??= this.constructor.tmp;
   outPoint.x = this.x + dx;
   outPoint.y = this.y + dy;
   return outPoint;
@@ -468,6 +476,13 @@ function sortKey() {
   return (MAX_TEXTURE_SIZE * x) + y;
 }
 
+// For parallel with Point3d.
+function to2d(_opts, outPoint) {
+  outPoint ??= this.constructor.tmp;
+  outPoint.copyFrom(this);
+  return outPoint;
+}
+
 /**
  * Iterator: x then y.
  */
@@ -487,7 +502,11 @@ PIXI.Point.prototype[Symbol.iterator] = function() {
 
 PATCHES.PIXI.GETTERS = {
   key,
-  sortKey
+  sortKey,
+};
+
+PATCHES.PIXI.STATIC_GETTERS = {
+  tmp: getTmp,
 };
 
 PATCHES.PIXI.STATIC_METHODS = {
@@ -499,7 +518,8 @@ PATCHES.PIXI.STATIC_METHODS = {
   flatMapPoints,
   fromObject,
   invertKey,
-  _invertKey
+  _invertKey,
+  release: releaseStatic,
 };
 
 PATCHES.PIXI.METHODS = {
@@ -511,12 +531,12 @@ PATCHES.PIXI.METHODS = {
   min,
   max,
   copyPartial,
+  abs,
   dot,
   magnitude,
   magnitudeSquared,
   almostEqual,
   normalize,
-  to3d,
   projectToward,
   towardsPoint,
   towardsPointSquared,
@@ -525,5 +545,6 @@ PATCHES.PIXI.METHODS = {
   rotate,
   roundDecimals,
   fromAngle,
-  to2d: function() { return this; } // For parallel with Point3d.
+  to2d,
+  release,
 };

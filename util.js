@@ -7,11 +7,8 @@ PIXI
 */
 "use strict";
 
-import "./CenteredPolygon/CenteredRectangle.js";
-import "./CenteredPolygon/CenteredPolygon.js";
-import "./Ellipse.js";
-import "./3d/Point3d.js";
 import { GEOMETRY_CONFIG } from "./const.js";
+import { extractPixels } from "./extract-pixels.js";
 
 // Functions that would go in foundry.utils if that object were extensible
 export function registerFoundryUtilsMethods() {
@@ -31,7 +28,6 @@ export function registerFoundryUtilsMethods() {
     shortestRouteBetween3dLines,
     isOnSegment,
     categorizePointsInOutConvexPolygon,
-    lineLineIntersection,
     bresenhamLine,
     bresenhamLineIterator,
     bresenhamLine3d,
@@ -42,6 +38,7 @@ export function registerFoundryUtilsMethods() {
     bresenhamHexLine3d,
     trimLineSegmentToPixelRectangle,
     doSegmentsOverlap,
+    pointsAreCollinear,
     findOverlappingPoints,
     IX_TYPES,
     segmentCollision,
@@ -49,14 +46,11 @@ export function registerFoundryUtilsMethods() {
     segmentIntersection,
     segmentOverlap,
     roundDecimals,
-    cutaway: {
-      to2d: to2dCutaway,
-      from2d: from2dCutaway,
-      convertToDistance: convertToDistanceCutaway,
-      convertToElevation: convertToElevationCutaway,
-      convertFromDistance: convertFromDistanceCutaway,
-      convertFromElevation: convertFromElevationCutaway
-    }
+    cutaway,
+    extractPixels,
+    almostLessThan,
+    almostGreaterThan,
+    almostBetween,
   };
 
 
@@ -70,6 +64,20 @@ export function registerFoundryUtilsMethods() {
   };
   CONFIG.GeometryLib.registered.add("utils");
 }
+
+const pt_0 = new PIXI.Point;
+
+/**
+ * Define a null set class and null set which always contains 0 elements.
+ * The class simply removes the add method.
+ */
+class NullSet extends Set {
+  add(value) {
+   console.error(`GeometryLib|Attempted to add ${value} to a NullSet.`, value);
+   return this;
+  }
+}
+export const NULL_SET = new NullSet();
 
 /**
  * Round numbers that are close to 0 or 1.
@@ -163,9 +171,11 @@ dist(end, currPt) < dist(start, currPt) && dist(currPt, start) > dist(start, end
  * @returns {RegionMovementWaypoint3d}
  */
 function from2dCutaway(cutawayPt, start, end, outPoint) {
-  outPoint ??= new CONFIG.GeometryLib.threeD.RegionMovementWaypoint3d();
+  outPoint ??= new GEOMETRY_CONFIG.threeD.RegionMovementWaypoint3d();
   // b/c outPoint is 3d, makes sure to get the 2d values.
-  const xy = start.to2d().towardsPointSquared(end, cutawayPt.x, PIXI.Point._tmp);
+  const xy =
+
+  start.to2d().towardsPointSquared(end, cutawayPt.x, pt_0);
   outPoint.x = xy.x;
   outPoint.y = xy.y;
   outPoint.z = cutawayPt.y;
@@ -220,30 +230,7 @@ function convertFromElevationCutaway(cutawayPt) {
  * @param {number} places     Number of places past the decimal point to round
  * @returns {number}
  */
-function roundDecimals(number, places) { return Number(number.toFixed(places)); }
-
-// Just like foundry.utils.lineLineIntersection but with the typo in t1 calculation fixed.
-function lineLineIntersection(a, b, c, d, {t1=false}={}) {
-
-  // If either line is length 0, they cannot intersect
-  if (((a.x === b.x) && (a.y === b.y)) || ((c.x === d.x) && (c.y === d.y))) return null;
-
-  // Check denominator - avoid parallel lines where d = 0
-  const dnm = ((d.y - c.y) * (b.x - a.x) - (d.x - c.x) * (b.y - a.y));
-  if (dnm === 0) return null;
-
-  // Vector distances
-  const t0 = ((d.x - c.x) * (a.y - c.y) - (d.y - c.y) * (a.x - c.x)) / dnm;
-  t1 = t1 ? ((b.x - a.x) * (a.y - c.y) - (b.y - a.y) * (a.x - c.x)) / dnm : undefined;
-
-  // Return the point of intersection
-  return {
-    x: a.x + t0 * (b.x - a.x),
-    y: a.y + t0 * (b.y - a.y),
-    t0: t0,
-    t1: t1
-  };
-}
+export function roundDecimals(number, places) { return Number(number.toFixed(places)); }
 
 
 /**
@@ -256,8 +243,8 @@ function lineLineIntersection(a, b, c, d, {t1=false}={}) {
  * @param {epsilon}   Tolerance for near zero.
  * @returns {object} Object containing the points, with arrays of inside, on edge, outside points.
  */
-function categorizePointsInOutConvexPolygon(poly, points, epsilon = 1e-08) {
-   const isOnSegment = CONFIG.GeometryLib.utils.isOnSegment;
+export function categorizePointsInOutConvexPolygon(poly, points, epsilon = 1e-08) {
+   const isOnSegment = isOnSegment;
 
   // Need to walk around the edges in clockwise order.
   if ( !poly.isClockwise ) poly.reverseOrientation();
@@ -293,6 +280,7 @@ function categorizePointsInOutConvexPolygon(poly, points, epsilon = 1e-08) {
         }
       }
     }
+    edge.A.release();
     if ( found === nPts ) return out;
   }
 
@@ -312,7 +300,7 @@ function categorizePointsInOutConvexPolygon(poly, points, epsilon = 1e-08) {
  * @param {epsilon}   Tolerance for near zero.
  * @returns {boolean}
  */
-function isOnSegment(a, b, c, epsilon = 1e-08) {
+export function isOnSegment(a, b, c, epsilon = 1e-08) {
   // Confirm point is with bounding box formed by A|B
   const minX = Math.min(a.x, b.x);
   const minY = Math.min(a.y, b.y);
@@ -343,7 +331,7 @@ function isOnSegment(a, b, c, epsilon = 1e-08) {
  * @param {number} epsilon  Consider this value or less to be zero
  * @returns {object|null} {A: Point3d, B: Point3d}
  */
-function shortestRouteBetween3dLines(a, b, c, d, epsilon = 1e-08) {
+export function shortestRouteBetween3dLines(a, b, c, d, epsilon = 1e-08) {
   const deltaDC = d.subtract(c);
   if ( Math.abs(deltaDC.x) < epsilon
     && Math.abs(deltaDC.y) < epsilon
@@ -394,14 +382,14 @@ Math.PI_1_2 = Math.PI * 0.5;
  * @param {Drawing} drawing
  * @returns {CenteredPolygonBase}
  */
-function centeredPolygonFromDrawing(drawing) {
+export function centeredPolygonFromDrawing(drawing) {
   switch ( drawing.document.shape.type ) {
     case Drawing.SHAPE_TYPES.RECTANGLE:
-      return CONFIG.GeometryLib.CenteredPolygons.CenteredRectangle.fromDrawing(drawing);
+      return GEOMETRY_CONFIG.threeD.CenteredRectangle.fromDrawing(drawing);
     case Drawing.SHAPE_TYPES.ELLIPSE:
-      return CONFIG.GeometryLib.Ellipse.fromDrawing(drawing);
+      return GEOMETRY_CONFIG.threeD.Ellipse.fromDrawing(drawing);
     case Drawing.SHAPE_TYPES.POLYGON:
-      return CONFIG.GeometryLib.CenteredPolygons.CenteredPolygon.fromDrawing(drawing);
+      return GEOMETRY_CONFIG.threeD.CenteredPolygon.fromDrawing(drawing);
     case Drawing.SHAPE_TYPES.CIRCLE: {
       const width = drawing.document.shape.width;
       return PIXI.Circle(drawing.document.x + width * 0.5, drawing.document.y + width * 0.5, width);
@@ -421,7 +409,7 @@ function centeredPolygonFromDrawing(drawing) {
  * @return {Point} The point on line AB or null if a,b,c are collinear. Not
  *                 guaranteed to be within the line segment a|b.
  */
-function perpendicularPoint(a, b, c) {
+export function perpendicularPoint(a, b, c) {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const dab = Math.pow(dx, 2) + Math.pow(dy, 2);
@@ -458,7 +446,7 @@ export function pixelsToGridUnits(pixels) { return pixels / canvas.dimensions.di
  * @param {epsilon}   Tolerance for near zero.
  * @returns {boolean}                 Do the line segments cross?
  */
-function lineSegmentCrosses(a, b, c, d, epsilon = 1e-08) {
+export function lineSegmentCrosses(a, b, c, d, epsilon = 1e-08) {
   let xa = foundry.utils.orient2dFast(a, b, c);
   if ( xa.almostEqual(0, epsilon) ) return false;
 
@@ -492,11 +480,11 @@ function lineSegmentCrosses(a, b, c, d, epsilon = 1e-08) {
  * @returns {boolean} Does the line segment intersect the plane?
  * Note that if the segment is part of the plane, this returns false.
  */
-function lineSegment3dPlaneIntersects(a, b, c, d, e = { x: c.x, y: c.y, z: c.z + 1 }) {
+export function lineSegment3dPlaneIntersects(a, b, c, d, e = { x: c.x, y: c.y, z: c.z + 1 }) {
   // A and b must be on opposite sides.
   // Parallels the 2d case.
-  const xa = CONFIG.GeometryLib.utils.orient3dFast(a, c, d, e);
-  const xb = CONFIG.GeometryLib.utils.orient3dFast(b, c, d, e);
+  const xa = orient3dFast(a, c, d, e);
+  const xb = orient3dFast(b, c, d, e);
   return xa * xb <= 0;
 }
 
@@ -512,7 +500,7 @@ function lineSegment3dPlaneIntersects(a, b, c, d, e = { x: c.x, y: c.y, z: c.z +
  *   - Returns a negative value if d lies below the plane.
  *   - Returns zero if the points are coplanar.
  */
-function orient3dFast(a, b, c, d) {
+export function orient3dFast(a, b, c, d) {
   const adx = a.x - d.x;
   const bdx = b.x - d.x;
   const cdx = c.x - d.x;
@@ -540,7 +528,7 @@ function orient3dFast(a, b, c, d) {
  * @param {number} radius       The radius of the circle
  * @param {number} [epsilon=0]  A small tolerance for floating point precision
  */
-function quadraticIntersection(p0, p1, center, radius, epsilon=0) {
+export function quadraticIntersection(p0, p1, center, radius, epsilon=0) {
   const dx = p1.x - p0.x;
   const dy = p1.y - p0.y;
 
@@ -593,7 +581,7 @@ function quadraticIntersection(p0, p1, center, radius, epsilon=0) {
  *
  * @returns {LineCircleIntersection}  The intersection of the segment AB with the circle
  */
-function lineCircleIntersection(a, b, center, radius, epsilon=1e-8) {
+export function lineCircleIntersection(a, b, center, radius, epsilon=1e-8) {
   const r2 = Math.pow(radius, 2);
   let intersections = [];
 
@@ -607,9 +595,7 @@ function lineCircleIntersection(a, b, center, radius, epsilon=1e-8) {
 
   // Find quadratic intersection points
   const contained = aInside && bInside;
-  if ( !contained ) {
-    intersections = CONFIG.GeometryLib.utils.quadraticIntersection(a, b, center, radius, epsilon);
-  }
+  if ( !contained ) intersections = quadraticIntersection(a, b, center, radius, epsilon);
 
   // Return the intersection data
   return {
@@ -771,7 +757,7 @@ export function bresenhamLine3d_old(x1, y1, z1, x2, y2, z2) {
  * @param {object} end - Ending 3D coordinate {x, y, z}.
  * @returns {Array<{x: number, y: number, z: number}>} Array of 3D coordinates along the line.
  */
-function bresenhamLine3d(x1, y1, z1, x2, y2, z2) {
+export function bresenhamLine3d(x1, y1, z1, x2, y2, z2) {
   x1 = Math.round(x1);
   y1 = Math.round(y1);
   z1 = Math.round(z1);
@@ -851,7 +837,7 @@ function bresenhamLine3d(x1, y1, z1, x2, y2, z2) {
  * @returns {Iterator<PIXI.Point>}
  */
 export function* bresenhamLineIterator(a, b) {
-  yield a.clone();
+  yield new PIXI.Point(a.x, a.y);
 
   let x1 = Math.round(a.x);
   let y1 = Math.round(a.y);
@@ -896,9 +882,8 @@ export function* bresenhamLineIterator(a, b) {
  * @testing
  */
 export function* bresenhamLine3dIterator(a, b) {
-  yield a.clone();
+  yield new PIXI.Point(a.x, a.y);
 
-  const Point3d = CONFIG.GeometryLib.threeD.Point3d;
   let x1 = Math.round(a.x);
   let y1 = Math.round(a.y);
   let z1 = Math.round(a.z);
@@ -937,7 +922,7 @@ export function* bresenhamLine3dIterator(a, b) {
       z1 += incZ;
 
       // Return the point.
-      yield new Point3d(Math.round(x1), Math.round(y1), Math.round(z1));
+      yield new GEOMETRY_CONFIG.threeD.Point3d(Math.round(x1), Math.round(y1), Math.round(z1));
     }
   } else {
     // Iterate through the line
@@ -948,7 +933,7 @@ export function* bresenhamLine3dIterator(a, b) {
       z1 += incZ;
 
       // Return the point.
-      yield new Point3d(Math.round(x1), Math.round(y1), Math.round(z1));
+      yield new GEOMETRY_CONFIG.threeD.Point3d(Math.round(x1), Math.round(y1), Math.round(z1));
     }
   }
 }
@@ -1245,6 +1230,21 @@ export function doSegmentsOverlap(a, b, c, d) {
   return pts.length;
 }
 
+export function pointsAreCollinear(a, b, c, epsilon = 1e-06) {
+  if ( Object.hasOwn(a, "z") ) return foundry.utils.orient2dFast(a, b, c).almostEqual(epsilon);
+
+  // Collinear 3d points form a degenerate triangle with zero area.
+  // Test the cross products.
+  const ab = b.subtract(a);
+  const bc = c.subtract(b);
+  const cross = ab.cross(bc);
+  const out = cross.almostEqual(0, epsilon);
+  ab.release();
+  bc.release();
+  cross.release();
+  return out;
+}
+
 /**
  * Find the points of overlap between two segments A|B and C|D.
  * @param {PIXI.Point} a   Endpoint of segment A|B
@@ -1357,7 +1357,7 @@ export function endpointIntersection(a, b, c, d) {
  */
 export function segmentIntersection(a, b, c, d) {
   if ( !foundry.utils.lineSegmentIntersects(a, b, c, d) ) return null;
-  const ix = CONFIG.GeometryLib.utils.lineLineIntersection(a, b, c, d, { t1: true });
+  const ix = foundry.utils.lineLineIntersection(a, b, c, d, { t1: true });
   ix.pt = PIXI.Point.fromObject(ix);
   ix.type = IX_TYPES.NORMAL;
   return ix;
@@ -1413,3 +1413,21 @@ export function segmentOverlap(a, b, c, d) {
 
   return res;
 }
+
+export function almostLessThan(a, b, epsilon = 1e-06) { return a < b || a.almostEqual(b, epsilon); }
+
+export function almostGreaterThan(a, b, epsilon = 1e-06) { return a > b || a.almostEqual(b, epsilon); }
+
+export function almostBetween(value, min, max, epsilon = 1e-06) {
+  return almostLessThan(value, max, epsilon) && almostGreaterThan(value, min, epsilon);
+}
+
+export const cutaway = {
+  to2d: to2dCutaway,
+  from2d: from2dCutaway,
+  convertToDistance: convertToDistanceCutaway,
+  convertToElevation: convertToElevationCutaway,
+  convertFromDistance: convertFromDistanceCutaway,
+  convertFromElevation: convertFromElevationCutaway
+};
+

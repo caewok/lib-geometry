@@ -1,4 +1,5 @@
 /* globals
+canvas,
 ClockwiseSweepPolygon,
 foundry,
 PIXI
@@ -6,12 +7,17 @@ PIXI
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
+import { ClipperPaths } from "./ClipperPaths.js";
+import { Clipper2Paths } from "./Clipper2Paths.js";
+
 export const PATCHES = {};
 PATCHES.CONSTRAINED_TOKEN_BORDER = {};
 
 // ----- NOTE: Hooks ----- //
 
-function canvasInit() { ConstrainedTokenBorder._wallsID++; }
+function canvasInit() {
+  ConstrainedTokenBorder._wallsID++;
+}
 
 PATCHES.CONSTRAINED_TOKEN_BORDER.HOOKS = { canvasInit };
 
@@ -33,17 +39,104 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
    * @param {string} type   Corresponds to wall restriction: sight, sound, light, move
    */
   static get(token) {
-    let polygon = this._cache.get(token);
-    if ( !polygon ) this._cache.set(token, polygon = new this());
-    polygon.initialize(token);
-    polygon.compute();
+    if ( !this._cache.has(token) ) {
+      const polygon = new this();
+      polygon._token = token;
+      this._cache.set(token, polygon);
+    }
+    const polygon = this._cache.get(token);
+
+    // Try to limit token movement test.
+    let tokenMoved;
+    polygon.dirtyConstrainedShape = polygon.wallsChanged || (tokenMoved = polygon.tokenMoved());
+    polygon.dirtyLitShape = polygon.wallsChanged || polygon.lightsChanged || (tokenMoved ??= polygon.tokenMoved());
     return polygon;
   }
 
-  /** Indicator of wall/edge changes
+  _updateConstrainedShape() {
+    this.initialize(this._token);
+    this.compute();
+    // console.log(`Updating constrained border shape for ${this._token.name}`, this.points);
+    this.#wallsID = ConstrainedTokenBorder._wallsID;
+    this.#updateTokenMovementProperties();
+  }
+
+  _updateLitShape() {
+    this.#litShape = this.constructor.constructLitTokenShape(this._token);
+    this.#brightLitShape = this.constructor.constructBrightLitTokenShape(this._token);
+    this.#lightsID = ConstrainedTokenBorder._lightsID;
+  }
+
+  _updateSoundShape() {
+    this.#soundShape = this.constructor.constructSoundTokenShape(this._token);
+    // console.log(`Updating sound border shape for ${this._token.name}`, [...this.#soundShape.iteratePoints({closed: false})]);
+    this.#soundsID = ConstrainedTokenBorder._soundsID;
+  }
+
+  /**
+   * Return either a polygon or the underlying token border if possible.
+   * Does not return this b/c we don't want this modified unexpectedly.
+   * @returns {PIXI.Polygon|PIXI.Rectangle}
+   */
+  constrainedBorder() {
+    if ( this.#dirtyConstrainedShape ) {
+      this._updateConstrainedShape();
+      this.#dirtyConstrainedShape = !canvas.ready; // Avoid caching values until edges loaded.
+    }
+    if ( !this._unrestricted && this.points.length >= 3 ) return new PIXI.Polygon(this.points);
+    return this._token.tokenBorder;
+  }
+
+  #litShape;
+
+  #brightLitShape;
+
+  #soundShape;
+
+  /**
+   * Get the lit token shape.
+   */
+  litShape() {
+    if ( this.#dirtyLitShape ) {
+      this._updateLitShape();
+      this.#dirtyLitShape = !canvas.ready; // Avoid caching values until edges loaded.
+    }
+    return this.#litShape;
+  }
+
+  brightLitShape() {
+    if ( this.#dirtyLitShape ) {
+      this._updateLitShape();
+      this.#dirtyLitShape = !canvas.ready; // Avoid caching values until edges loaded.
+    }
+    return this.#brightLitShape;
+  }
+
+  soundShape() {
+    if ( this.#dirtySoundShape ) {
+      this._updateSoundShape();
+      this.#dirtyLitShape = !canvas.ready; // Avoid caching values until edges loaded.
+    }
+    return this.#soundShape;
+  }
+
+  /**
+   * Indicator of wall/edge changes.
    * @type {number}
    */
   static _wallsID = 0;
+
+  /**
+   * Indicator of light changes.
+   * @type {number}
+   */
+  static _lightsID = 0;
+
+  /**
+   * Indicator of sound changes.
+   * @type {number}
+   */
+  static _soundsID = 0;
 
   /**
    * Properties to test if relevant token characterics have changed.
@@ -71,6 +164,18 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
   /** @type {number} */
   #wallsID = -1;
 
+  get wallsChanged() { return this.#wallsID !== ConstrainedTokenBorder._wallsID; }
+
+  /** @type {number} */
+  #lightsID = -1;
+
+  get lightsChanged() { return this.#lightsID !== ConstrainedTokenBorder._lightsID; }
+
+  /** @type {number} */
+  #soundsID = -1;
+
+  get soundsChanged() { return this.#soundsID !== ConstrainedTokenBorder._soundsID; }
+
   /**
    * If true, no walls constrain token.
    * @type {boolean}
@@ -78,54 +183,48 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
   _unrestricted = true;
 
   /** @type {boolean} */
-  #dirty = true;
+  #dirtyConstrainedShape = true;
+
+  set dirtyConstrainedShape(value) { this.#dirtyConstrainedShape ||= value; }
+
+  #dirtyLitShape = true;
+
+  set dirtyLitShape(value) { this.#dirtyLitShape ||= value; }
+
+  #dirtySoundShape = true;
+
+  set dirtySoundShape(value) { this.#dirtySoundShape ||= value; }
+
+//   #clearUpdateFlags() {
+//     this.#lightsID = ConstrainedTokenBorder._lightsID;
+//     this.#wallsID = ConstrainedTokenBorder._wallsID;
+//     this.#soundsID = ConstrainedTokenBorder._soundsID;
+//     this.#updateTokenMovementProperties();
+//   }
 
   /** @override */
   initialize(token) {
-    this._token = token;
-    const { _tokenProperties, _tokenDocumentProperties } = this;
-
-    // Determine if the token has changed.
-    // Could use getProperty/setProperty, but may be a bit slow and unnecessary, given
-    // that all properties are either on the token or the document.
-    let tokenMoved = false;
-    for ( const key of Object.keys(_tokenProperties) ) {
-      const value = token[key];
-      tokenMoved ||= _tokenProperties[key] !== value;
-      _tokenProperties[key] = value;
-    }
-    const doc = token.document;
-    for ( const key of Object.keys(_tokenDocumentProperties) ) {
-      const value = doc[key];
-      tokenMoved ||= _tokenDocumentProperties[key] !== value;
-      _tokenDocumentProperties[key] = value;
-    }
-
-    if ( tokenMoved ||  this.#wallsID !== ConstrainedTokenBorder._wallsID ) {
-      this.#wallsID = ConstrainedTokenBorder._wallsID;
-      this.#dirty = true;
-      const config = {
-        source: token.vision,
-        type: "move",
-        boundaryShapes: [token.tokenBorder] // [_token.tokenBorder.toPolygon()] }; // Avoid WeilerAtherton.
-      };
-      super.initialize(token.center, config);
-    }
+    const config = {
+      source: token.vision,
+      type: "move",
+      boundaryShapes: [token.tokenBorder] // [_token.tokenBorder.toPolygon()] }; // Avoid WeilerAtherton.
+    };
+    super.initialize(token.center, config);
   }
 
   /** @override */
-  getBounds() {
-    return this._token.bounds;
-  }
+  getBounds() { return this._token.bounds; }
 
   /** @override */
   compute() {
-    // Avoid caching values until edges loaded.
-    // Falls back on _unrestricted = true.
-    if ( this.#dirty && canvas.edges.size ) {
-      this.#dirty = false;
-      super.compute();
+    // Clockwise sweep refuses to compute outside the scene border.
+    const { x, y } = this._token.center;
+    if ( !canvas.dimensions.sceneRect.contains(x, y) ) {
+      this._unrestricted = true;
+      return;
     }
+    super.compute();
+
   }
 
   /** @override */
@@ -178,9 +277,17 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
   #edgeIsCollinearToBoundary(edge) {
     const boundary = this.config.boundaryShapes[0]; // Always a single shape b/c set in initialize.
     if ( boundary instanceof PIXI.Rectangle ) {
-      const delta = edge.b.subtract(edge.a, PIXI.Point._tmp);
-      if ( !delta.x && (edge.a.x.almostEqual(boundary.left) || edge.a.x.almostEqual(boundary.right)) ) return true;
-      if ( !delta.y && (edge.a.y.almostEqual(boundary.top) || edge.a.y.almostEqual(boundary.bottom)) ) return true;
+      const delta = PIXI.Point.tmp;
+      edge.b.subtract(edge.a, delta);
+      if ( !delta.x && (edge.a.x.almostEqual(boundary.left) || edge.a.x.almostEqual(boundary.right)) ) {
+        delta.release();
+        return true;
+      }
+      if ( !delta.y && (edge.a.y.almostEqual(boundary.top) || edge.a.y.almostEqual(boundary.bottom)) ) {
+        delta.release();
+        return true;
+      }
+      delta.release();
     } else if ( boundary instanceof PIXI.Polygon ) {
       const orient2d = foundry.utils.orient2dFast;
       for ( const boundaryEdge of boundary.iterateEdges() ) {
@@ -216,13 +323,189 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
     return PIXI.Polygon.prototype.contains.call(this, x, y);
   }
 
+  tokenMoved() {
+    const { _tokenProperties, _tokenDocumentProperties } = this;
+
+    // Determine if the token has changed.
+    // Could use getProperty/setProperty, but may be a bit slow and unnecessary, given
+    // that all properties are either on the token or the document.
+    for ( const key of Object.keys(_tokenProperties) ) {
+      const value = this._token[key];
+      if ( _tokenProperties[key] !== value ) return true;
+    }
+    const doc = this._token.document;
+    for ( const key of Object.keys(_tokenDocumentProperties) ) {
+      const value = doc[key];
+      if ( _tokenDocumentProperties[key] !== value ) return true;
+    }
+    return false;
+  }
+
+  #updateTokenMovementProperties() {
+    const { _tokenProperties, _tokenDocumentProperties, _token } = this;
+
+    // Determine if the token has changed.
+    // Could use getProperty/setProperty, but may be a bit slow and unnecessary, given
+    // that all properties are either on the token or the document.
+    for ( const key of Object.keys(_tokenProperties) ) {
+      const value = _token[key];
+      _tokenProperties[key] = value;
+    }
+    const doc = _token.document;
+    for ( const key of Object.keys(_tokenDocumentProperties) ) {
+      const value = doc[key];
+      _tokenDocumentProperties[key] = value;
+    }
+  }
+
   /**
-   * Return either a polygon or the underlying token border if possible.
-   * Does not return this b/c we don't want this modified unexpectedly.
-   * @returns {PIXI.Polygon|PIXI.Rectangle}
+   * Use the lights that overlap the target shape to construct the shape.
+   * @param {Token} token
+   * @returns {PIXI.Polygon|PIXI.Rectangle|undefined}
+   *   If 2+ lights create holes or multiple polygons, the convex hull is returned.
+   *   (Because cannot currently handle 2+ distinct target shapes.)
    */
-  constrainedBorder() {
-    return this._unrestricted ? this._token.tokenBorder : new PIXI.Polygon(this.points);
+  static constructLitTokenShape(token) {
+    const shape = this.constrainTokenShapeWithLights(token);
+    const poly = this.clipperShapeToPolygon(shape);
+    if ( !poly || poly.points < 6 ) return undefined;
+    return poly;
+  }
+
+  static constructBrightLitTokenShape(token) {
+    const shape = this.constrainTokenShapeWithBrightLights(token);
+    const poly = this.clipperShapeToPolygon(shape);
+    if ( !poly || poly.points < 6 ) return undefined;
+    return poly;
+  }
+
+  static constructSoundTokenShape(token) {
+    const shape = this.constrainTokenShapeWithSounds(token);
+    const poly = this.clipperShapeToPolygon(shape);
+    if ( !poly || poly.points < 6 ) return undefined;
+    return poly;
+  }
+
+
+  /**
+   * @param {ClipperPaths|Clipper2Paths} shape
+   * @returns {PIXI.Polygon|undefined}
+   */
+  static clipperShapeToPolygon(shape) {
+    if ( !(shape instanceof ClipperPaths
+        || shape instanceof Clipper2Paths) ) return shape;
+
+    // Multiple polygons present. Ignore holes. Return remaining polygon or
+    // construct one from convex hull of remaining polygons.
+    const polys = shape.toPolygons().filter(poly => !poly.isHole);
+    if ( polys.length === 0 ) return undefined;
+    if ( polys.length === 1 ) return polys[0];
+
+    // Construct convex hull.
+    const pts = [];
+    for ( const poly of polys ) pts.push(...poly.iteratePoints({ close: false }));
+    return PIXI.Polygon.convexHull(pts);
+  }
+
+  /**
+   * Take a token and intersects it with a set of lights.
+   * @param {Token} token
+   * @returns {PIXI.Polygon|PIXI.Rectangle|ClipperPaths|undefined}
+   */
+  static constrainTokenShapeWithLights(token) {
+    const tokenBorder = token.constrainedTokenBorder;
+
+    // If the global light source is present, then we can use the whole token.
+    if ( canvas.environment.globalLightSource.active ) return tokenBorder;
+
+    // Cannot really use quadtree b/c it doesn't contain all light sources.
+    const lightShapes = [];
+    for ( const light of canvas.effects.lightSources.values() ) {
+      const lightShape = light.shape;
+      if ( !light.active || lightShape.points < 6 ) continue; // Avoid disabled or broken lights.
+
+      // If a light envelops the token shape, then we can use the entire token shape.
+      if ( lightShape.envelops(tokenBorder) ) return tokenBorder;
+
+      // If the token overlaps the light, then we may need to intersect the shape.
+      if ( tokenBorder.overlaps(lightShape) ) lightShapes.push(lightShape);
+    }
+    if ( !lightShapes.length ) return undefined;
+
+    const combined = ClipperPaths.fromPolygons(lightShapes)
+      .combine()
+      .intersectPaths(ClipperPaths.fromPolygons([tokenBorder.toPolygon()]))
+      .clean()
+      .simplify();
+    return combined;
+  }
+
+  /**
+   * Take a token and intersects it with a set of bright lights.
+   * Determined by intersecting each light shape with its bright radius.
+   * @param {Token} token
+   * @returns {PIXI.Polygon|PIXI.Rectangle|ClipperPaths|undefined}
+   */
+  static constrainTokenShapeWithBrightLights(token) {
+    const tokenBorder = token.constrainedTokenBorder;
+
+    // If the global light source is present, then we can use the whole token.
+    if ( canvas.environment.globalLightSource.active ) return tokenBorder;
+
+    // Cannot really use quadtree b/c it doesn't contain all light sources.
+    const lightShapes = [];
+    for ( const light of canvas.effects.lightSources.values() ) {
+      const lightShape = light.shape;
+      if ( !light.active || lightShape.points < 6 ) continue; // Avoid disabled or broken lights.
+
+      // Intersect with the bright radius to get the bright light shape.
+      if ( !light.brightRadius ) continue;
+      const brightLightShape = lightShape.intersectCircle(new PIXI.Circle(light.x, light.y, light.brightRadius));
+
+      // If a light envelops the token shape, then we can use the entire token shape.
+      if ( brightLightShape.envelops(tokenBorder) ) return tokenBorder;
+
+      // If the token overlaps the light, then we may need to intersect the shape.
+      if ( tokenBorder.overlaps(brightLightShape) ) lightShapes.push(brightLightShape);
+    }
+    if ( !lightShapes.length ) return undefined;
+
+    const combined = ClipperPaths.fromPolygons(lightShapes)
+      .combine()
+      .intersectPaths(ClipperPaths.fromPolygons([tokenBorder.toPolygon()]))
+      .clean()
+      .simplify();
+    return combined;
+  }
+
+  /**
+   * Take a token and intersects it with a set of lights.
+   * @param {Token} token
+   * @returns {PIXI.Polygon|PIXI.Rectangle|ClipperPaths|undefined}
+   */
+  static constrainTokenShapeWithSounds(token) {
+    const tokenBorder = token.constrainedTokenBorder;
+
+    // Cannot really use quadtree b/c it doesn't contain all sound sources.
+    const soundShapes = [];
+    for ( const sound of canvas.sounds.placeables ) {
+      const soundShape = sound.shape;
+      if ( !sound.active || soundShape.points < 6 ) continue; // Avoid disabled or broken lights.
+
+      // If a light envelops the token shape, then we can use the entire token shape.
+      if ( soundShape.envelops(tokenBorder) ) return tokenBorder;
+
+      // If the token overlaps the light, then we may need to intersect the shape.
+      if ( tokenBorder.overlaps(soundShape) ) soundShapes.push(soundShape);
+    }
+    if ( !soundShapes.length ) return undefined;
+
+    const combined = ClipperPaths.fromPolygons(soundShapes)
+      .combine()
+      .intersectPaths(ClipperPaths.fromPolygons([tokenBorder.toPolygon()]))
+      .clean()
+      .simplify();
+    return combined;
   }
 }
 

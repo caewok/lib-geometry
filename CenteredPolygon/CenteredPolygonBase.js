@@ -1,11 +1,11 @@
 /* globals
-PIXI
+PIXI,
 */
 "use strict";
 
 import { GEOMETRY_CONFIG } from "../const.js";
-CONFIG.GeometryLib ??= {};
-CONFIG.GeometryLib.CenteredPolygons ??= {};
+GEOMETRY_CONFIG.CenteredPolygons ??= {};
+import { NULL_SET } from "../util.js";
 
 /**
  * Base class to be extended by others.
@@ -14,6 +14,29 @@ CONFIG.GeometryLib.CenteredPolygons ??= {};
  * Polygon is treated as closed.
  */
 export class CenteredPolygonBase extends PIXI.Polygon {
+
+  static classTypes = new Set([this.name], "Centered", "Polygon"); // Alternative to instanceof
+
+  inheritsClassType(type) {
+    let proto = this;
+    let classTypes = proto.constructor.classTypes;
+    do {
+      if ( classTypes.has(type) ) return true;
+      proto = Object.getPrototypeOf(proto);
+      classTypes = proto?.constructor?.classTypes;
+
+    } while ( classTypes );
+    return false;
+  }
+
+  objectMatchesClassType(obj) {
+    return this.constructor.classTypes.equals(obj.constructor.classTypes || NULL_SET);
+  }
+
+  objectOverlapsClassType(obj) {
+    return this.constructor.classTypes.intersects(obj.constructor.classTypes || NULL_SET);
+  }
+
   /** @type {PIXI.Point} */
   origin = new PIXI.Point();
 
@@ -137,7 +160,6 @@ export class CenteredPolygonBase extends PIXI.Polygon {
    */
   fromCartesianCoords(a, outPoint) {
     outPoint ??= new PIXI.Point;
-    a = PIXI.Point._tmp.copyFrom(a);
     a.translate(-this.x, -this.y, outPoint).rotate(-this.radians, outPoint);
     return outPoint;
   }
@@ -150,7 +172,6 @@ export class CenteredPolygonBase extends PIXI.Polygon {
    */
   toCartesianCoords(a, outPoint) {
     outPoint ??= new PIXI.Point;
-    a = PIXI.Point._tmp.copyFrom(a);
     a.rotate(this.radians, outPoint).translate(this.x, this.y, outPoint);
     return outPoint;
   }

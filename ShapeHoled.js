@@ -1,10 +1,12 @@
 /* globals
-PIXI
+CONFIG,
+PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import "./ClipperPaths.js";
+import { ClipperPaths } from "./ClipperPaths.js";
+import { Clipper2Paths} from "./Clipper2Paths.js";
 import { GEOMETRY_CONFIG } from "./const.js";
 
 /**
@@ -122,7 +124,8 @@ export class ShapeHoled {
     });
 
     const polygons = [...this.shapes, ...this.holes].map(s => s.toPolygon())
-    return CONFIG.GeometryLib.ClipperPaths.fromPolygons(polygons);
+    const cl = CONFIG.GeometryLib.clipperVersion === 2 ? Clipper2Paths : ClipperPaths;
+    return cl.fromPolygons(polygons);
   }
 
   /**

@@ -1,10 +1,11 @@
 /* globals
 PIXI,
-WeilerAthertonClipper
 */
 "use strict";
 
 import { GEOMETRY_CONFIG } from "./const.js";
+import { Draw } from "./Draw.js";
+import { NULL_SET } from "./util.js";
 
 /* Testing
 api = game.modules.get('tokenvisibility').api;
@@ -50,6 +51,29 @@ drawing.drawShape(bounds)
  * - rotation
  */
 export class Ellipse extends PIXI.Ellipse {
+  static classTypes = new Set([this.name]); // Alternative to instanceof
+
+  inheritsClassType(type) {
+    let proto = this;
+    let classTypes = proto.constructor.classTypes;
+    do {
+      if ( classTypes.has(type) ) return true;
+      proto = Object.getPrototypeOf(proto);
+      classTypes = proto?.constructor?.classTypes;
+
+    } while ( classTypes );
+    return false;
+  }
+
+  objectMatchesClassType(obj) {
+    return this.constructor.classTypes.equals(obj.constructor.classTypes || NULL_SET);
+  }
+
+  objectOverlapsClassType(obj) {
+    return this.constructor.classTypes.intersects(obj.constructor.classTypes || NULL_SET);
+  }
+
+
   /**
    * Default representation has the major axis horizontal (halfWidth), minor axis vertical (halfHeight)
    *
@@ -62,13 +86,32 @@ export class Ellipse extends PIXI.Ellipse {
    */
   constructor(x, y, halfWidth, halfHeight, { rotation = 0 } = {}) {
     super(x, y, halfWidth, halfHeight);
-    this.rotation = Math.normalizeDegrees(rotation);
-    this.radians = Math.toRadians(this.rotation);
+    this.rotation = rotation;
+  }
 
-    this.major = Math.max(halfWidth, halfHeight);
-    this.minor = Math.min(halfWidth, halfHeight);
-    this.ratio = halfWidth / halfHeight;
-    this.ratioInv = 1 / this.ratio;
+  clone() {
+    const out = super.clone();
+    out.rotation = this.rotation;
+    return out;
+  }
+
+  // Link rotation and radians.
+  #rotation = 0;
+
+  #radians = 0;
+
+  get rotation() { return this.#rotation; }
+
+  set rotation(value) {
+    this.#rotation = Math.normalizeDegrees(value);
+    this.#radians = Math.toRadians(value);
+  }
+
+  get radians() { return this.#radians; }
+
+  set radians(value) {
+    this.#radians = Math.normalizeRadians(value);
+    this.#rotation = Math.toDegrees(this.#radians);
   }
 
   /**
@@ -86,31 +129,7 @@ export class Ellipse extends PIXI.Ellipse {
     const centeredY = y + halfHeight;
 
     const out = new this(centeredX, centeredY, halfWidth, halfHeight, { rotation });
-    out._drawing = drawing; // For debugging
     return out;
-  }
-
-  /**
-   * Center of the ellipse
-   * @type {Point}
-   */
-  get center() { return { x: this.x, y: this.y }; }
-
-  /**
-   * Area of the ellipse
-   * @type {number}
-   */
-  get area() { return Math.PI * this.width * this.height; }
-
-  /**
-   * Area that matches clipper measurements, so it can be compared with Clipper Polygon versions.
-   * Used to match what Clipper would measure as area, by scaling the points.
-   * @param {object} [options]
-   * @param {number} [scalingFactor]  Scale like with PIXI.Polygon.prototype.toClipperPoints.
-   * @returns {number}  Positive if clockwise. (b/c y-axis is reversed in Foundry)
-   */
-  scaledArea({scalingFactor = 1} = {}) {
-    return this.toPolygon().scaledArea({scalingFactor});
   }
 
   /**
@@ -119,10 +138,9 @@ export class Ellipse extends PIXI.Ellipse {
    * @param {PIXI.Point} [outPoint] A point-like object to store the result.
    * @returns {PIXI.Point}
    */
-  fromCartesianCoords(a, outPoint) {
+  _fromCartesianCoords(a, outPoint) {
     outPoint ??= new PIXI.Point();
     a = PIXI.Point.fromObject(a);
-
     a.translate(-this.x, -this.y, outPoint).rotate(-this.radians, outPoint);
     return outPoint;
   }
@@ -133,38 +151,20 @@ export class Ellipse extends PIXI.Ellipse {
    * @param {PIXI.Point} [outPoint] A point-like object to store the result.
    * @returns {Point}
    */
-  toCartesianCoords(a, outPoint) {
+  _toCartesianCoords(a, outPoint) {
     outPoint ??= new PIXI.Point();
     a = PIXI.Point.fromObject(a);
-
     a.rotate(this.radians, outPoint).translate(this.x, this.y, outPoint);
     return outPoint;
   }
-
-  toCircleCoords(a, outPoint) {
-    outPoint ??= new PIXI.Point();
-
-    outPoint.x = a.x * this.ratioInv;
-    outPoint.y = a.y;
-    return outPoint;
-  }
-
-  fromCircleCoords(a, outPoint) {
-    outPoint ??= new PIXI.Point();
-
-    outPoint.x = a.x * this.ratio;
-    outPoint.y = a.y;
-
-    return outPoint;
-  }
-
-  _toCircle() { return new PIXI.Circle(0, 0, this.height); }
 
   /**
    * Bounding box of the ellipse
    * @return {PIXI.Rectangle}
    */
   getBounds() {
+    if ( !this.rotation ) return super.getBounds();
+
     // Bounds rectangle measured from top left corner. x, y, width, height
     switch ( this.rotation ) {
       case 0:
@@ -177,208 +177,93 @@ export class Ellipse extends PIXI.Ellipse {
     }
 
     // Default to bounding box of the radius circle
-    return new PIXI.Rectangle(this.x - this.major, this.y - this.major, this.major * 2, this.major * 2);
+    const major = this.majorRadius;
+    return new PIXI.Rectangle(this.x - major, this.y - major, major * 2, major * 2);
   }
 
   /**
-   * Test whether the ellipse contains a given point {x,y}.
-   * @param {number} x
-   * @param {number} y
-   * @return {Boolean}
+   * Does this ellipse overlap something else?
+   * @param {PIXI.Rectangle|PIXI.Circle|PIXI.Polygon|PIXI.Ellipse} other
+   * @returns {boolean}
    */
-  contains(x, y) {
-    const { width, height } = this;
-    if ( width <= 0 || height <= 0 ) return false;
+  overlaps(other) {
+    if ( other instanceof PIXI.Ellipse ) return this._overlapsEllipse(other);
+    if ( other instanceof PIXI.Circle ) return this._overlapsCircle(other);
 
-    // Move point to Ellipse-space
-    const pt = new PIXI.Point(x, y);
-    this.fromCartesianCoords(pt, pt);
-
-    // Reject if x is outside the bounds
-    if ( pt.x < -width
-      || pt.x > width
-      || pt.y < -height
-      || pt.y > height ) return false;
-
-    // Just like PIXI.Ellipse.prototype.contains but we are already at 0, 0
-    // Normalize the coords to an ellipse
-    let normx = (pt.x / width);
-    let normy = (pt.y / height);
-    normx *= normx;
-    normy *= normy;
-
-    return (normx + normy <= 1);
+    // Conversion to circle space may rotate the rectangle, so use polygon.
+    if ( other instanceof PIXI.Rectangle ) return this._overlapsPolygon(other.toPolygon());
+    if ( other instanceof PIXI.Polygon ) return this._overlapsPolygon(other);
+    if ( other.toPolygon ) return this._overlapsPolygon(other.toPolygon());
+    console.warn("overlaps|shape not recognized.", other);
+    return false;
   }
 
-  /**
-   * Determine if the point is on or nearly on this polygon.
-   * @param {Point} point     Point to test
-   * @param {number} epsilon  Tolerated margin of error
-   * @returns {boolean}       Is the point on the circle within the allowed tolerance?
-   */
-  pointIsOn(point, epsilon = 1e-08) {
-    const { width, height } = this;
-    if ( width <= 0 || height <= 0 ) return false;
+  _overlapsEllipse(other) {
+    // Simple test based on centers and shortest radius.
+    const r2 = Math.pow(this.minorRadius + other.minorRadius, 2); // Sum the two minor axis radii.
+    const d2 = PIXI.Point.distanceSquaredBetween(this.center, other.center);
+    if ( d2 < r2 ) return true;
 
-    // Move point to Ellipse-space
-    const pt = PIXI.Point.fromObject(point);
-    this.fromCartesianCoords(pt, pt);
-
-    // Reject if x is outside the bounds
-    if ( pt.x < -width
-      || pt.x > width
-      || pt.y < -height
-      || pt.y > height ) return false;
-
-    // Just like PIXI.Ellipse.prototype.contains but we are already at 0, 0
-    // Normalize the coords to an ellipse
-    let normx = (pt.x / width);
-    let normy = (pt.y / height);
-    normx *= normx;
-    normy *= normy;
-    return (normx + normy).almostEqual(1, epsilon);
-  }
-
-
-  /**
-   * Convert to a polygon
-   * @return {PIXI.Polygon}
-   */
-  toPolygon({ density } = {}) {
-    // Default to the larger radius for density
-    density ??= PIXI.Circle.approximateVertexDensity(this.major);
-
-    // Translate to a circle to get the circle polygon
-    const cirPoly = this._toCircle().toPolygon({ density });
-
-    // Translate back to ellipse coordinates
-    const cirPts = cirPoly.points;
-    const ln = cirPts.length;
-    const pts = Array(ln);
-    for ( let i = 0; i < ln; i += 2 ) {
-      const cirPt = new PIXI.Point(cirPts[i], cirPts[i + 1]);
-      const ePt = new PIXI.Point();
-
-      this.fromCircleCoords(cirPt, ePt);
-      this.toCartesianCoords(ePt, ePt);
-
-      pts[i] = ePt.x;
-      pts[i+1] = ePt.y;
+    // If aligned to an axis, use the quick test.
+    // Check if the distance between the centers of the two ellipses
+    // is less than the sum of their effective radii along the line
+    // connecting their centers.
+    const otherRot = other.rotation || 0; // In case other is a PIXI.Ellipse.
+    if ( this.rotation % 90 === 0 && otherRot % 90 === 0 ) {
+      // (x2 - x1)² / (a1 + a2)² + (y2 - y1)² / (b1 + b2)² <= 1
+      const thisIsVertical = this.rotation === 90 || this.rotation === 270;
+      const otherIsVertical = otherRot === 90 || otherRot === 270;
+      const [thisWidth, thisHeight] = thisIsVertical ? [this.height, this.width] : [this.width, this.height];
+      const [otherWidth, otherHeight] = otherIsVertical ? [other.height, other.width] : [other.width, other.height];
+      return this.constructor.quickEllipsesOverlapTest(
+        this.x, this.y, thisWidth, thisHeight,
+        other.x, other.y, otherWidth, otherHeight
+      );
     }
 
-    cirPoly.points = pts;
-    return cirPoly;
-  }
-
-  /**
-   * Get all the intersection points for a segment A|B
-   * Intersections must be sorted from A to B
-   * @param {Point} a
-   * @param {Point} b
-   * @returns {Point[]}
-   */
-  segmentIntersections(a, b) {
-    // Translate to a circle.
-    const cir = this._toCircle();
-
+    // Convert to this ellipse's circle space and test circle-ellipse overlap.
     // Move to ellipse coordinates and then to circle coordinates.
-    a = this.toCircleCoords(this.fromCartesianCoords(a));
-    b = this.toCircleCoords(this.fromCartesianCoords(b));
+    // Use the major-minor points to determine height and width of the converted ellipse.
+    const otherCtr = PIXI.Point.tmp.set(other.x, other.y);
+    const otherV = otherCtr.fromAngle(other.radians, other.width, PIXI.Point.tmp);
+    const otherCV = otherCtr.fromAngle(other.radians + Math.PI_1_2, other.height, PIXI.Point.tmp);
 
-    // Get the intersection points and convert back to cartesian coords.
-    // Add t0 to indicate distance from a, to match other segmentIntersection functions.
-    const dist2 = PIXI.Point.distanceSquaredBetween(a, b);
-    return cir.segmentIntersections(a, b).map(ix => {
-      const newIx = this.toCartesianCoords(this.fromCircleCoords(ix));
-      newIx.t0 =  Math.sqrt(PIXI.Point.distanceSquaredBetween(a, ix) / dist2);
-      return newIx;
-    });
+    const c = this._toCircleCoords(this._fromCartesianCoords(otherCtr));
+    const v = this._toCircleCoords(this._fromCartesianCoords(otherV));
+    const cv = this._toCircleCoords(this._fromCartesianCoords(otherCV));
+    PIXI.Point.release(otherCtr, otherV, otherCV);
+
+    const w = PIXI.Point.distanceBetween(c, v);
+    const h = PIXI.Point.distanceBetween(c, cv);
+    const ellipse = new Ellipse(c.x, c.y, w, h, { rotation: otherRot });
+    return ellipse._overlapsCircle(this._toCircle());
   }
 
-  /**
-   * Does the segment a|b intersect this ellipse?
-   * @param {Point} a
-   * @param {Point} b
-   * @returns {boolean} True if intersection occurs
-   */
-  lineSegmentIntersects(a, b) {
-    // Translate to a circle.
-    const cir = this._toCircle();
+  _overlapsCircle(circle) {
+    if ( circle.contains(this.x, this.y) ) return true;
 
-    // Move to ellipse coordinates and then to circle coordinates.
-    a = this.toCircleCoords(this.fromCartesianCoords(a));
-    b = this.toCircleCoords(this.fromCartesianCoords(b));
+    // Simple test based on radius.
+    const r2 = Math.pow(circle.radius + this.minorRadius, 2);
+    const d2 = PIXI.Point.distanceSquaredBetween(this.center, circle.center);
+    if ( d2 < r2 ) return true;
 
-    // Test for intersection on the circle.
-    return cir.lineSegmentIntersects(a, b);
+    // Align this ellipse to the axis at 0,0 and rotate to 0º.
+    // I.e, move the circle and then rotate it.
+    const cirCtr = PIXI.Point.tmp;
+    circle.center.translate(-this.x, -this.y, cirCtr).rotate(-this.radians, cirCtr);
+    const out = this.constructor.quickEllipsesOverlapTest(
+      0, 0, this.majorRadius, this.minorRadius,
+      cirCtr.x, cirCtr.y, circle.radius, circle.radius
+    );
+    cirCtr.release();
+    return out;
   }
 
-  /**
-   * Get all the points for a polygon approximation of a circle between two points on the circle.
-   * Points are clockwise from a to b.
-   * @param { Point } a
-   * @param { Point } b
-   * @return { Point[]}
-   */
-  pointsBetween(a, b, { density } = {}) {
-    // Default to the larger radius for density
-    density ??= PIXI.Circle.approximateVertexDensity(this.major);
-
-    // Translate to a circle
-    const cir = this._toCircle();
-
-    // Move to ellipse coordinates and then to circle coordinates
-    a = this.toCircleCoords(this.fromCartesianCoords(a));
-    b = this.toCircleCoords(this.fromCartesianCoords(b));
-
-    // Get the points and translate back to cartesian coordinates
-    const pts = cir.pointsBetween(a, b, { density });
-    return pts.map(pt => this.toCartesianCoords(this.fromCircleCoords(pt)));
+  draw(drawTool, opts = {}) {
+    drawTool ??= Draw;
+    const shape = this.rotation ? this.toPolygon() : this;
+    drawTool.shape(shape, opts);
   }
-
-  /**
-   * Intersect this shape with a PIXI.Polygon.
-   * Use WeilerAtherton to perform precise intersect.
-   * @param {PIXI.Polygon} polygon      A PIXI.Polygon
-   * @param {object} [options]          Options which configure how the intersection is computed
-   * @param {number} [options.density]              The number of points which defines the density of approximation
-   * @param {number} [options.clipType]             The clipper clip type
-   * @param {string} [options.weilerAtherton=true]  Use the Weiler-Atherton algorithm. Otherwise, use Clipper.
-   * @returns {PIXI.Polygon|null}       The intersected polygon or null if no solution was present
-   */
-  intersectPolygon(polygon, { density, clipType, weilerAtherton=true, ...options } = {}) {
-    if ( !this.major || !this.minor ) return new PIXI.Polygon([]);
-
-    // Default to the larger radius for density
-    density ??= PIXI.Circle.approximateVertexDensity(this.major);
-    clipType ??= WeilerAthertonClipper.CLIP_TYPES.INTERSECT;
-
-    // Use Weiler-Atherton for efficient intersection or union.
-    if ( weilerAtherton && polygon._isPositive ) {
-      const res = WeilerAthertonClipper.combine(polygon, this, { clipType, density, ...options });
-      if ( !res.length ) return new PIXI.Polygon([]);
-      return res[0];
-    }
-
-    // Otherwise, use Clipper polygon intersection.
-    const approx = this.toPolygon({ density });
-    return polygon.intersectPolygon(approx, options);
-  }
-
-  /**
-   * Return a quadrangle cutaway for this ellipse
-   * @param {Point3d} a       Starting endpoint for the segment
-   * @param {Point3d} b       Ending endpoint for the segment
-   * @param {object} [opts]
-   * @param {Point3d} [opts.start]              Starting endpoint for the segment
-   * @param {Point3d} [opts.end]                Ending endpoint for the segment
-   * @param {function} [opts.topElevationFn]    Function to calculate the top elevation for a position
-   * @param {function} [opts.bottomElevationFn] Function to calculate the bottom elevation for a position
-   * @param {function} [opts.cutPointsFn]       Function that returns the steps along the a|b segment top
-   * @param {number} [opts.isHole=false]        Treat this shape as a hole; reverse the points of the returned polygon
-   * @returns {PIXI.Polygon[]}
-   */
-  cutaway(a, b, opts) { return CONFIG.GeometryLib.CutawayPolygon.cutawayBasicShape(this, a, b, opts); }
 }
 
 GEOMETRY_CONFIG.Ellipse ??= Ellipse;

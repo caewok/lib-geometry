@@ -7,6 +7,7 @@ WeilerAthertonClipper
 "use strict";
 
 import { GEOMETRY_CONFIG } from "../const.js";
+import { NULL_SET } from "../util.js";
 
 /* Define a set of Regular Polygon shapes
 Each should extend PIXI.Polygon like LimitedAnglePolygon does.
@@ -19,6 +20,29 @@ Each can be intersected quickly using WA
 */
 
 export class RegularPolygon extends PIXI.Polygon {
+
+  static classTypes = new Set([this.name], "Polygon", "Regular"); // Alternative to instanceof
+
+  inheritsClassType(type) {
+    let proto = this;
+    let classTypes = proto.constructor.classTypes;
+    do {
+      if ( classTypes.has(type) ) return true;
+      proto = Object.getPrototypeOf(proto);
+      classTypes = proto?.constructor?.classTypes;
+
+    } while ( classTypes );
+    return false;
+  }
+
+  objectMatchesClassType(obj) {
+    return this.constructor.classTypes.equals(obj.constructor.classTypes || NULL_SET);
+  }
+
+  objectOverlapsClassType(obj) {
+    return this.constructor.classTypes.intersects(obj.constructor.classTypes || NULL_SET);
+  }
+
 
   /**
    * Vertices when the polygon is centered on 0,0.
@@ -76,7 +100,7 @@ export class RegularPolygon extends PIXI.Polygon {
 
   get y() { return this.origin.y; }
 
-  set y(value) { return this.origin.y = value; }
+  set y(value) { this.origin.y = value; }
 
   get center() { return { x: this.x, y: this.y }; }
 
@@ -200,7 +224,6 @@ export class RegularPolygon extends PIXI.Polygon {
   fromCartesianCoords(a, outPoint) {
     const { x, y } = this.origin;
     outPoint ??= new PIXI.Point;
-    a = PIXI.Point._tmp.copyFrom(a);
     a.translate(-x, -y, outPoint).rotate(-this.radians, outPoint);
     return outPoint;
   }
@@ -214,7 +237,6 @@ export class RegularPolygon extends PIXI.Polygon {
   toCartesianCoords(a, outPoint) {
     const { x, y } = this.origin;
     outPoint ??= new PIXI.Point;
-    a = PIXI.Point._tmp.copyFrom(a);
     a.rotate(this.radians, outPoint).translate(x, y, outPoint);
     return outPoint;
   }

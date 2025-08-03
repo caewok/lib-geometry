@@ -5,6 +5,8 @@ PIXI
 
 import { GEOMETRY_CONFIG } from "../const.js";
 import "./CenteredPolygonBase.js";
+import { NULL_SET } from "../util.js";
+import { CenteredPolygonBase } from "./CenteredPolygonBase.js";
 
 /* Testing
 api = game.modules.get('tokenvisibility').api;
@@ -57,7 +59,30 @@ drawing.drawShape(bounds)
  * Follows the approach of polygon Drawing and RegularPolygon class.
  * Holds a set of points that can be rotated.
  */
-export class CenteredPolygon extends GEOMETRY_CONFIG.CenteredPolygons.CenteredPolygonBase {
+export class CenteredPolygon extends CenteredPolygonBase {
+
+  static classTypes = new Set([this.name]); // Alternative to instanceof
+
+  inheritsClassType(type) {
+    let proto = this;
+    let classTypes = proto.constructor.classTypes;
+    do {
+      if ( classTypes.has(type) ) return true;
+      proto = Object.getPrototypeOf(proto);
+      classTypes = proto?.constructor?.classTypes;
+
+    } while ( classTypes );
+    return false;
+  }
+
+  objectMatchesClassType(obj) {
+    return this.constructor.classTypes.equals(obj.constructor.classTypes || NULL_SET);
+  }
+
+  objectOverlapsClassType(obj) {
+    return this.constructor.classTypes.intersects(obj.constructor.classTypes || NULL_SET);
+  }
+
 
   /**
    * @param {Point} origin    Center point of the polygon.

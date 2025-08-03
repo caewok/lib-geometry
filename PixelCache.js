@@ -1,17 +1,17 @@
 /* globals
-PIXI,
 canvas,
 foundry,
+PIXI,
+Ray,
 TextureLoader,
-Ray
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
 import { extractPixels } from "./extract-pixels.js";
 import { roundFastPositive, bresenhamLine, bresenhamLineIterator, trimLineSegmentToPixelRectangle } from "./util.js";
-import "./Draw.js";
-import "./Matrix.js";
+import { Draw } from "./Draw.js";
+import { MatrixFlat as Matrix } from "./MatrixFlat.js";
 import { GEOMETRY_CONFIG } from "./const.js";
 
 
@@ -122,11 +122,11 @@ export class PixelCache extends PIXI.Rectangle {
    * @returns {Matrix}
    */
   _calculateToLocalTransform() {
-    const mTranslate = CONFIG.GeometryLib.Matrix.translation(-this.scale.x, -this.scale.y)
+    const mTranslate = Matrix.translation(-this.scale.x, -this.scale.y)
 
     // Scale based on resolution.
     const resolution = this.scale.resolution;
-    const mRes = CONFIG.GeometryLib.Matrix.scale(resolution, resolution);
+    const mRes = Matrix.scale(resolution, resolution);
     return mTranslate.multiply3x3(mRes);
   }
 
@@ -359,8 +359,10 @@ export class PixelCache extends PIXI.Rectangle {
    */
   _canvasAtIndex(i, outPoint) {
     outPoint ??= new PIXI.Point();
-    const local = this._localAtIndex(i, PIXI.Point._tmp);
-    return this._toCanvasCoordinates(local.x, local.y, outPoint);
+    const local = this._localAtIndex(i, PIXI.Point.tmp);
+    const out = this._toCanvasCoordinates(local.x, local.y, outPoint);
+    local.release();
+    return out;
   }
 
   /**
@@ -452,9 +454,12 @@ export class PixelCache extends PIXI.Rectangle {
     const origin = this._fromCanvasCoordinates(circle.x, circle.y);
 
     // For radius, use two points of equivalent distance to compare.
-    const radius = this._fromCanvasCoordinates(circle.radius, 0, PIXI.Point._tmp2).x
-      - this._fromCanvasCoordinates(0, 0, PIXI.Point._tmp3).x;
-    return new PIXI.Circle(origin.x, origin.y, radius);
+    const local = this._fromCanvasCoordinates(circle.radius, 0, PIXI.Point.tmp);
+    const local0 = this._fromCanvasCoordinates(0, 0, PIXI.Point.tmp);
+    const radius = local.x - local0.x;
+    const out = new PIXI.Circle(origin.x, origin.y, radius);
+    PIXI.Point.release(local, local0);
+    return out;
   }
 
   /**
@@ -463,14 +468,18 @@ export class PixelCache extends PIXI.Rectangle {
    * @returns {PIXI.Ellipse}
    */
   _ellipseToLocalCoordinates(ellipse) {
-    const origin = this._fromCanvasCoordinates(ellipse.x, ellipse.y, PIXI.Point._tmp);
+    const origin = this._fromCanvasCoordinates(ellipse.x, ellipse.y, PIXI.Point.tmp);
 
     // For halfWidth and halfHeight, use two points of equivalent distance to compare.
-    const halfWidth = this._fromCanvasCoordinates(ellipse.halfWidth, 0, PIXI.Point._tmp2).x
-      - this._fromCanvasCoordinates(0, 0, PIXI.Point._tmp3).x;
-    const halfHeight = this._fromCanvasCoordinates(ellipse.halfHeight, 0, PIXI.Point._tmp2).x
-      - this._fromCanvasCoordinates(0, 0, PIXI.Point._tmp3).x;
-    return new PIXI.Ellipse(origin.x, origin.y, halfWidth, halfHeight);
+    const localDim = this._fromCanvasCoordinates(ellipse.halfWidth, 0, PIXI.Point.tmp);
+    const local0 = this._fromCanvasCoordinates(0, 0, PIXI.Point.tmp);
+    const halfWidth = localDim.x - local0.x;
+
+    this._fromCanvasCoordinates(ellipse.halfHeight, 0, localDim);
+    const halfHeight = localDim.x - local0.x;
+    const out = new PIXI.Ellipse(origin.x, origin.y, halfWidth, halfHeight);
+    PIXI.Point.release(localDim, local0);
+    return out;
   }
 
   /**
@@ -479,9 +488,11 @@ export class PixelCache extends PIXI.Rectangle {
    * @returns {PIXI.Rectangle}
    */
   _rectangleToLocalCoordinates(rect) {
-    const TL = this._fromCanvasCoordinates(rect.left, rect.top, PIXI.Point._tmp2);
-    const BR = this._fromCanvasCoordinates(rect.right, rect.bottom, PIXI.Point._tmp3);
-    return new PIXI.Rectangle(TL.x, TL.y, BR.x - TL.x, BR.y - TL.y);
+    const TL = this._fromCanvasCoordinates(rect.left, rect.top, PIXI.Point.tmp);
+    const BR = this._fromCanvasCoordinates(rect.right, rect.bottom, PIXI.Point.tmp);
+    rect = new PIXI.Rectangle(TL.x, TL.y, BR.x - TL.x, BR.y - TL.y);
+    PIXI.Point.release(TL, BR);
+    return rect;
   }
 
   /**
@@ -493,13 +504,15 @@ export class PixelCache extends PIXI.Rectangle {
     const points = poly.points;
     const ln = points.length;
     const newPoints = Array(ln);
+    const local = PIXI.Point.tmp;
     for ( let i = 0; i < ln; i += 2 ) {
       const x = points[i];
       const y = points[i + 1];
-      const local = this._fromCanvasCoordinates(x, y, PIXI.Point._tmp);
+      this._fromCanvasCoordinates(x, y, local);
       newPoints[i] = local.x;
       newPoints[i + 1] = local.y;
     }
+    local.release();
     return new PIXI.Polygon(newPoints);
   }
 
@@ -781,8 +794,10 @@ export class PixelCache extends PIXI.Rectangle {
    */
   pixelsForRelativePointsFromCanvas(x, y, canvasOffsets, localOffsets) {
     localOffsets ??= this.convertCanvasOffsetGridToLocal(canvasOffsets);
-    const pt = this._fromCanvasCoordinates(x, y, PIXI.Point._tmp);
-    return this._pixelsForRelativePointsFromLocal(pt.x, pt.y, localOffsets);
+    const pt = this._fromCanvasCoordinates(x, y, PIXI.Point.tmp);
+    const out = this._pixelsForRelativePointsFromLocal(pt.x, pt.y, localOffsets);
+    pt.release();
+    return out;
   }
 
   // ----- NOTE: Aggregators ----- //
@@ -1357,7 +1372,7 @@ export class PixelCache extends PIXI.Rectangle {
    * Draw a representation of this pixel cache on the canvas, where alpha channel is used
    * to represent values. For debugging.
    */
-  draw({color = CONFIG.GeometryLib.Draw.COLORS.blue, gammaCorrect = false, local = false, skip = 10, radius = 1 } = {}) {
+  draw({color = Draw.COLORS.blue, gammaCorrect = false, local = false, skip = 10, radius = 1 } = {}) {
     const ln = this.pixels.length;
     const coordFn = local ? this._localAtIndex : this._canvasAtIndex;
     const gammaExp = gammaCorrect ? 1 / 2.2 : 1;
@@ -1366,8 +1381,8 @@ export class PixelCache extends PIXI.Rectangle {
       const value = this.pixels[i];
       if ( !value ) continue;
       const alpha = Math.pow(value / this.maximumPixelValue, gammaExp);
-      const pt = coordFn.call(this, i, PIXI.Point._tmp);
-      CONFIG.GeometryLib.Draw.point(pt, { color, alpha, radius });
+      const pt = coordFn.call(this, i);
+      Draw.point(pt, { color, alpha, radius });
     }
   }
 
@@ -1375,18 +1390,18 @@ export class PixelCache extends PIXI.Rectangle {
    * For debugging, to test coordinate conversion.
    * Use `pixelAtLocal` or `pixelAtCanvas` to get the value. Unlike `draw`, which iterates from the pixel indices directly.
    */
-  drawFromCoords({color = CONFIG.GeometryLib.Draw.COLORS.blue, gammaCorrect = false, skip = 10, radius = 1, local = false } = {}) {
+  drawFromCoords({color = Draw.COLORS.blue, gammaCorrect = false, skip = 10, radius = 1, local = false } = {}) {
     const gammaExp = gammaCorrect ? 1 / 2.2 : 1;
     const { right, left, top, bottom } = this;
     let coordFn;
     let valueFn;
     if ( local ) {
-      coordFn = (localX, localY) => PIXI.Point._tmp.set(localX, localY);
+      coordFn = (localX, localY) => new PIXI.Point(localX, localY);
       valueFn = this._pixelAtLocal;
     } else {
-      coordFn = (localX, localY) => this._toCanvasCoordinates(localX, localY, PIXI.Point._tmp);
+      coordFn = (localX, localY) => this._toCanvasCoordinates(localX, localY);
       valueFn = (localX, localY) => {
-        const canvasPt = this._toCanvasCoordinates(localX, localY, PIXI.Point._tmp);
+        const canvasPt = this._toCanvasCoordinates(localX, localY);
         return this.pixelAtCanvas(canvasPt.x, canvasPt.y);
       }
     }
@@ -1398,7 +1413,7 @@ export class PixelCache extends PIXI.Rectangle {
         if ( !value ) continue;
         const alpha = Math.pow(value / 255, gammaExp);
         const pt = coordFn.call(this, localX, localY);
-        CONFIG.GeometryLib.Draw.point(pt, { color, alpha, radius });
+        Draw.point(pt, { color, alpha, radius });
       }
     }
   }
@@ -1499,11 +1514,8 @@ export class TrimmedPixelCache extends PixelCache {
    */
   _calculateToLocalTransform() {
     // Translate to account for the trimmed border.
-    const mTranslate = CONFIG.GeometryLib.Matrix.translation(this.#fullLocalBounds.x, this.#fullLocalBounds.y);
+    const mTranslate = Matrix.translation(this.#fullLocalBounds.x, this.#fullLocalBounds.y);
     return super._calculateToLocalTransform().multiply3x3(mTranslate);
-
-    //const mTranslate = CONFIG.GeometryLib.Matrix.translation(this.#fullLocalBounds.x, this.#fullLocalBounds.y);
-    //return mTranslate.multiply3x3(super._calculateToLocalTransform());
   }
 
   /**
@@ -1528,9 +1540,10 @@ export class TrimmedPixelCache extends PixelCache {
     const idx = this._indexAtCanvas(x, y);
     if ( idx ) return this.pixels[idx];
 
-    const localPt = this._fromCanvasCoordinates(x, y, PIXI.Point._tmp);
-    if ( this.#fullLocalBounds.contains(localPt.x, localPt.y) ) return 0;
-    return null;
+    const localPt = this._fromCanvasCoordinates(x, y, PIXI.Point.tmp);
+    const out = this.#fullLocalBounds.contains(localPt.x, localPt.y) ? 0 : null;
+    localPt.release();
+    return out;
   }
 }
 
@@ -1604,28 +1617,28 @@ export class TilePixelCache extends TrimmedPixelCache {
     // 1. Clear the rotation
     // Translate so the center is 0,0
     const { x, y, width, height } = this.tile.document;
-    const mCenterTranslate = CONFIG.GeometryLib.Matrix.translation(-(width * 0.5) - x, -(height * 0.5) - y);
+    const mCenterTranslate = Matrix.translation(-(width * 0.5) - x, -(height * 0.5) - y);
 
     // Rotate around the Z axis
     // (The center must be 0,0 for this to work properly.)
     const rotation = -this.rotation;
-    const mRot = CONFIG.GeometryLib.Matrix.rotationZ(rotation, false);
+    const mRot = Matrix.rotationZ(rotation, false);
 
     // 2. Clear the scale
     // (The center must be 0,0 for this to work properly.)
     const { scaleX, scaleY } = this;
-    const mScale = CONFIG.GeometryLib.Matrix.scale(1 / scaleX, 1 / scaleY);
+    const mScale = Matrix.scale(1 / scaleX, 1 / scaleY);
 
     // 3. Clear the width/height
     // Translate so top corner is 0,0
     const { textureWidth, textureHeight, proportionalWidth, proportionalHeight } = this;
     const currWidth = textureWidth * proportionalWidth;
     const currHeight = textureHeight * proportionalHeight;
-    const mCornerTranslate = CONFIG.GeometryLib.Matrix.translation(currWidth * 0.5, currHeight * 0.5);
+    const mCornerTranslate = Matrix.translation(currWidth * 0.5, currHeight * 0.5);
 
     // Scale the canvas width/height back to texture width/height, if not 1:1.
     // (Must have top left corner at 0,0 for this to work properly.)
-    const mProportion = CONFIG.GeometryLib.Matrix.scale(1 / proportionalWidth, 1 / proportionalHeight);
+    const mProportion = Matrix.scale(1 / proportionalWidth, 1 / proportionalHeight);
 
     // 4. Scale based on resolution of the underlying pixel data
     const mRes = super._calculateToLocalTransform();
@@ -1700,12 +1713,13 @@ export class TilePixelCache extends TrimmedPixelCache {
       case 270: {
         // Rotation will change the TL and BR points; adjust accordingly.
         const { left, right, top, bottom } = rect;
-        const TL = this._fromCanvasCoordinates(left, top, PIXI.Point._tmp);
-        const TR = this._fromCanvasCoordinates(right, top, PIXI.Point._tmp2);
-        const BR = this._fromCanvasCoordinates(right, bottom, PIXI.Point._tmp3);
-        const BL = this._fromCanvasCoordinates(left, bottom);
+        const TL = this._fromCanvasCoordinates(left, top, PIXI.Point.tmp);
+        const TR = this._fromCanvasCoordinates(right, top, PIXI.Point.tmp);
+        const BR = this._fromCanvasCoordinates(right, bottom, PIXI.Point.tmp);
+        const BL = this._fromCanvasCoordinates(left, bottom, PIXI.Point.tmp);
         const localX = Math.minMax(TL.x, TR.x, BR.x, BL.x);
         const localY = Math.minMax(TL.y, TR.y, BR.y, BL.y);
+        PIXI.Point.release(TL, TR, BR, BL);
         return new PIXI.Rectangle(localX.min, localY.min, localX.max - localX.min, localY.max - localY.min);
       }
       default: {

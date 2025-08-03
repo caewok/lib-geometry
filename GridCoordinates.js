@@ -1,15 +1,12 @@
 /* globals
 canvas,
-CONFIG,
-PIXI
+PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import "./3d/GridCoordinates3d.js";
-import { GEOMETRY_CONFIG } from "./const.js";
+import { GEOMETRY_CONFIG, GRID_DIAGONALS } from "./const.js";
 import {
-  GRID_DIAGONALS,
   gridDistanceBetween,
   alternatingGridDistance,
   getOffsetDistanceFn } from "./grid_distance.js";
@@ -126,12 +123,6 @@ export class GridCoordinates extends PIXI.Point {
   to2d() { return this; }
 
   /**
-   * Convert to 3d.
-   * @returns {GridCoordinates3d}
-   */
-  to3d() { return CONFIG.GeometryLib.threeD.GridCoordinates3d.fromObject(this); }
-
-  /**
    * Test if this offset is equal to another
    * @param {GridOffset} other
    * @returns {boolean}
@@ -214,7 +205,7 @@ export class GridCoordinates extends PIXI.Point {
    *   - @prop {number} numDiagonal       Number of diagonals between the offsets if square or hex elevation
    */
   static gridMeasurementForSegment(a, b, opts) {
-    return CONFIG.GeometryLib.threeD.gridMeasurementForSegment(a, b, opts);
+    return GridCoordinates3d.gridMeasurementForSegment(a, b, opts);
   }
 
   /**

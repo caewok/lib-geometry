@@ -62,7 +62,7 @@ function precision(n, digits = 2) {
   */
 export async function QBenchmarkLoop(iterations, thisArg, fn_name, ...args) {
   const name = `${thisArg.name || thisArg.constructor.name}.${fn_name}`;
-  const fn = (...args) => thisArg[fn_name](...args);
+  const fn = async (...args) => thisArg[fn_name](...args);
   return await QBenchmarkLoopFn(iterations, fn, name, ...args);
 }
 
@@ -79,12 +79,37 @@ export async function QBenchmarkLoop(iterations, thisArg, fn_name, ...args) {
 export async function QBenchmarkLoopFn(iterations, fn, name, ...args) {
   const timings = [];
   const num_warmups = Math.ceil(iterations * .05);
-
   for (let i = -num_warmups; i < iterations; i += 1) {
+    performance.now();
     const t0 = performance.now();
     await fn(...args);
     const t1 = performance.now();
     if (i >= 0) { timings.push(t1 - t0); }
+  }
+
+  const sum = timings.reduce((prev, curr) => prev + curr);
+  const q = quantile(timings, [.1, .5, .9]);
+
+  console.log(`${name} | ${iterations} iterations | ${precision(sum, 4)}ms | ${precision(sum / iterations, 4)}ms per | 10/50/90: ${precision(q[.1], 6)} / ${precision(q[.5], 6)} / ${precision(q[.9], 6)}`);
+
+  return timings;
+}
+
+export async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+export async function QBenchmarkLoopFnWithSleep(iterations, fn, name, ...args) {
+  const timings = [];
+  const num_warmups = Math.ceil(iterations * .05);
+  for (let i = -num_warmups; i < iterations; i += 1) {
+    performance.now();
+    const t0 = performance.now();
+    await fn(...args);
+    const t1 = performance.now();
+    if (i >= 0) {
+      timings.push(t1 - t0);
+      // await sleep(Math.random() * 100);
+      await sleep(0);
+    }
   }
 
   const sum = timings.reduce((prev, curr) => prev + curr);
@@ -111,10 +136,36 @@ export async function QBenchmarkLoopWithSetupFn(iterations, setupFn, fn, name, .
 
   for (let i = -num_warmups; i < iterations; i += 1) {
     const args = setupFn(...setupArgs);
+    performance.now();
     const t0 = performance.now();
     await fn(...args);
     const t1 = performance.now();
     if (i >= 0) { timings.push(t1 - t0); }
+  }
+
+  const sum = timings.reduce((prev, curr) => prev + curr);
+  const q = quantile(timings, [.1, .5, .9]);
+
+  console.log(`${name} | ${iterations} iterations | ${precision(sum, 4)}ms | ${precision(sum / iterations, 4)}ms per | 10/50/90: ${precision(q[.1], 6)} / ${precision(q[.5], 6)} / ${precision(q[.9], 6)}`);
+
+  return timings;
+}
+
+export async function QBenchmarkLoopWithSetupFnWithSleep(iterations, setupFn, fn, name, ...setupArgs) {
+  const timings = [];
+  const num_warmups = Math.ceil(iterations * .05);
+
+  for (let i = -num_warmups; i < iterations; i += 1) {
+    const args = setupFn(...setupArgs);
+    performance.now();
+    const t0 = performance.now();
+    await fn(...args);
+    const t1 = performance.now();
+    if (i >= 0) {
+      timings.push(t1 - t0);
+      // await sleep(Math.random() * 100);
+      await sleep(0);
+    }
   }
 
   const sum = timings.reduce((prev, curr) => prev + curr);
@@ -160,5 +211,8 @@ GEOMETRY_CONFIG.bench ??= {
   QBenchmarkLoop,
   QBenchmarkLoopFn,
   QBenchmarkLoopWithSetupFn,
+  QBenchmarkLoopFnWithSleep,
+  QBenchmarkLoopWithSetupFnWithSleep,
+  sleep,
   quantile
 };

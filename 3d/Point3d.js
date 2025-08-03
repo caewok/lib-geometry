@@ -1,8 +1,8 @@
 /* globals
 canvas,
-CONFIG,
 PIXI
 */
+/* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
 /**
@@ -33,13 +33,39 @@ PIXI
  * @property {Point3d} br
  */
 import { GEOMETRY_CONFIG } from "../const.js";
-import "../Matrix.js";
+import { Pool } from "../Pool.js";
+import { MatrixFlat } from "../MatrixFlat.js";
+import { NULL_SET, gridUnitsToPixels, roundDecimals } from "../util.js";
 
 /**
  * 3-D version of PIXI.Point
  * See https://pixijs.download/dev/docs/packages_math_src_Point.ts.html
  */
 export class Point3d extends PIXI.Point {
+  toJSON() { return { ...this }; }
+
+  static classTypes = new Set([this.name]); // Alternative to instanceof
+
+  inheritsClassType(type) {
+    let proto = this;
+    let classTypes = proto.constructor.classTypes;
+    do {
+      if ( classTypes.has(type) ) return true;
+      proto = Object.getPrototypeOf(proto);
+      classTypes = proto?.constructor?.classTypes;
+
+    } while ( classTypes );
+    return false;
+  }
+
+  objectMatchesClassType(obj) {
+    return this.constructor.classTypes.equals(obj.constructor.classTypes || NULL_SET);
+  }
+
+  objectOverlapsClassType(obj) {
+    return this.constructor.classTypes.intersects(obj.constructor.classTypes || NULL_SET);
+  }
+
   /**
    * @param {number} [x=0] - position of the point on the x axis
    * @param {number} [y=0] - position of the point on the y axis
@@ -49,6 +75,17 @@ export class Point3d extends PIXI.Point {
     super(x, y);
     this.z = z;
   }
+
+  static #pool = new Pool(_pool => new Point3d());
+
+  static release(...args) { args.forEach(arg => this.#pool.release(arg)); }
+
+  release() {
+    // No need to clear the object, as no cache used.
+    this.constructor.release(this);
+  }
+
+  static get tmp() { return this.#pool.acquire(); }
 
   /**
    * Iterator: x then y.
@@ -66,6 +103,7 @@ export class Point3d extends PIXI.Point {
       }
     };
   }
+
   /**
    * Construct a Point3d from any object that has x and y and z properties.
    * Recognizes elevationZ and elevation as potential z properties.
@@ -74,7 +112,7 @@ export class Point3d extends PIXI.Point {
    */
   static fromObject(obj) {
     const pt = super.fromObject(obj);
-    pt.z = obj.z ?? obj.elevationZ ?? (CONFIG.GeometryLib.utils.gridUnitsToPixels(obj.elevation) || 0); // gridUnitsToPixels(undefined) = NaN. Use || b/c NaN || 0 returns 0.
+    pt.z = obj.z ?? obj.elevationZ ?? (gridUnitsToPixels(obj.elevation) || 0); // gridUnitsToPixels(undefined) = NaN. Use || b/c NaN || 0 returns 0.
     return pt;
   }
 
@@ -100,11 +138,12 @@ export class Point3d extends PIXI.Point {
    *   negative: CW (right-handed system, incl. Foundry)
    */
   static orient(a, b, c) {
-    const dBA = b.subtract(a);
-    const dCB = c.subtract(b);
-    const crossProduct = dBA.cross(dCB);
-
-    return -crossProduct.z;
+    // Calculate cross product components directly without creating temporary vectors
+    const bax = b.x - a.x;
+    const bay = b.y - a.y;
+    const cbx = c.x - b.x;
+    const cby = c.y - b.y;
+    return (bax * cby) - (bay * cbx);
   }
 
   /**
@@ -145,7 +184,7 @@ export class Point3d extends PIXI.Point {
     const dx = (b.x - a.x) || 0; // In case x is undefined.
     const dy = (b.y - a.y) || 0;
     const dz = (b.z - a.z) || 0;
-    return Math.hypot(dx, dy, dz);
+    return Math.sqrt(dx * dx + dy * dy + dz * dz);
   }
 
   /**
@@ -158,7 +197,7 @@ export class Point3d extends PIXI.Point {
     const dx = (b.x - a.x) || 0; // In case x is undefined.
     const dy = (b.y - a.y) || 0;
     const dz = (b.z - a.z) || 0;
-    return Math.pow(dx, 2) + Math.pow(dy, 2) + Math.pow(dz, 2);
+    return dx * dx + dy * dy + dz * dz;
   }
 
   /**
@@ -169,7 +208,7 @@ export class Point3d extends PIXI.Point {
    * @returns {Point3d}
    */
   static fromPointSource(source, outPoint) {
-    outPoint ??= new this();
+    outPoint ??= this.tmp;
     const { x, y, elevationZ } = source;
     outPoint.set(
       x ?? source.object.center.x, // Vision sources have no x, y.
@@ -186,8 +225,8 @@ export class Point3d extends PIXI.Point {
   static fromToken(token) {
     const { x, y } = token.center;
     return {
-      top: new this(x, y, token.topZ),
-      bottom: new this(x, y, token.bottomZ)
+      top: this.tmp.set(x, y, token.topZ),
+      bottom: this.tmp.set(x, y, token.bottomZ)
     };
   }
 
@@ -200,7 +239,7 @@ export class Point3d extends PIXI.Point {
    * @returns {Point3d}
    */
   static fromTokenCenter(token, outPoint) {
-    outPoint ??= new this();
+    outPoint ??= this.tmp;
     const { center, bottomZ, topZ } = token;
     const z = bottomZ + ((topZ - bottomZ) * 0.5);
     outPoint.set(center.x, center.y, z);
@@ -215,7 +254,7 @@ export class Point3d extends PIXI.Point {
    * @returns {Point3d}
    */
   static fromTokenVisionHeight(token, outPoint) {
-    outPoint ??= new this();
+    outPoint ??= this.tmp;
     const { center, visionZ } = token;
     outPoint.set(center.x, center.y, visionZ);
     return outPoint;
@@ -241,12 +280,12 @@ export class Point3d extends PIXI.Point {
 
     return {
       A: {
-        top: new this(edge.a.x, edge.a.y, top),
-        bottom: new this(edge.a.x, edge.a.y, bottom)
+        top: this.tmp.set(edge.a.x, edge.a.y, top),
+        bottom: this.tmp.set(edge.a.x, edge.a.y, bottom)
       },
       B: {
-        top: new this(edge.b.x, edge.b.y, top),
-        bottom: new this(edge.b.x, edge.b.y, bottom)
+        top: this.tmp(edge.b.x, edge.b.y, top),
+        bottom: this.tmp(edge.b.x, edge.b.y, bottom)
       }
     };
   }
@@ -266,21 +305,21 @@ export class Point3d extends PIXI.Point {
     const w1_2 = width * scaleX * 0.5;
     const h1_2 = height * scaleY * 0.5;
     const pts = [
-      new Point3d(-w1_2, -h1_2, 0), // TL
-      new Point3d(w1_2, -h1_2, 0),  // TR
-      new Point3d(w1_2, h1_2, 0),   // BL
-      new Point3d(-w1_2, h1_2, 0)   // BR
+      Point3d.tmp.set(-w1_2, -h1_2, 0), // TL
+      Point3d.tmp.set(w1_2, -h1_2, 0),  // TR
+      Point3d.tmp.set(w1_2, h1_2, 0),   // BL
+      Point3d.tmp.set(-w1_2, h1_2, 0)   // BR
     ];
 
     // Rotate points to match tile rotation.
     if ( rotation ) {
-      const rotZ = CONFIG.GeometryLib.Matrix.rotationZ(Math.toRadians(rotation));
+      const rotZ = MatrixFlat.rotationZ(Math.toRadians(rotation));
       pts.forEach(pt => rotZ.multiplyPoint3d(pt, pt));
     }
 
     // Translate to canvas position.
     const center = bounds.center;
-    const trM = CONFIG.GeometryLib.Matrix.translation(center.x + offsetX, center.y + offsetY, elevationZ);
+    const trM = MatrixFlat.translation(center.x + offsetX, center.y + offsetY, elevationZ);
     pts.forEach(pt => trM.multiplyPoint3d(pt, pt));
 
     return {
@@ -301,10 +340,14 @@ export class Point3d extends PIXI.Point {
    * @returns {number}  Angle, in radians
    */
   static angleBetween(a, b, c) {
-    const ba = a.subtract(b);
-    const bc = c.subtract(b);
+    const tmp0 = this.tmp;
+    const tmp1 = this.tmp;
+    const ba = a.subtract(b, tmp0);
+    const bc = c.subtract(b, tmp1);
     const dot = ba.dot(bc);
     const denom = ba.magnitude() * bc.magnitude();
+    tmp0.release();
+    tmp1.release();
     return Math.acos(dot / denom);
   }
 
@@ -319,6 +362,51 @@ export class Point3d extends PIXI.Point {
     return (BigInt(key2d) << 32n) ^ BigInt(z);
   }
 
+//   get key() {
+//
+//     (MAX_TEXTURE_SIZE2 * z) + (MAX_TEXTURE_SIZE * x) + y;
+//
+//   }
+//
+//   function key(pt) {
+//     const z = Math.round(pt.z)
+//     const key2d = pt.to2d().key
+//     return (BigInt(MAX_TEXTURE_SIZE2) * BigInt(pt.z)) + BigInt(key2d);
+//   }
+//   key = key(new Point3d(1, 2, 3))
+//
+//   function invertKey(pt) {
+//     const z = key / BigInt(MAX_TEXTURE_SIZE * MAX_TEXTURE_SIZE)
+//     const x = key - (BigInt(MAX_TEXTURE_SIZE * MAX_TEXTURE_SIZE) * z);
+//     const y = key - (BigInt(MAX_TEXTURE_SIZE * MAX_TEXTURE_SIZE) * z) - (BigInt(MAX_TEXTURE_SIZE) * x);
+//     return { x, y, z }
+//   }
+//   invertKey(key)
+//
+//   const MAX_TEXTURE_SIZE = Math.pow(2, 16);
+//   const MAX_TEXTURE_SIZE2 = MAX_TEXTURE_SIZE * MAX_TEXTURE_SIZE
+// const MAX_TEXTURE_SIZE_INV = 1 / MAX_TEXTURE_SIZE;
+// const MAX_TEXTURE_SIZE_INV2 = 1 / (MAX_TEXTURE_SIZE * MAX_TEXTURE_SIZE)
+//
+//
+//
+//   function _invertKey(key) {
+//   const z = Math.floor(key * MAX_TEXTURE_SIZE_INV2)
+//   const x = Math.floor(key - (MAX_TEXTURE_SIZE * MAX_TEXTURE_SIZE * z));
+//   const y = key - (MAX_TEXTURE_SIZE * MAX_TEXTURE_SIZE * z) - (MAX_TEXTURE_SIZE * x);
+//   return { x, y };
+// }
+//
+//   function _invertKey(key) {
+//     key ^
+//     key2d = a >> 32n;
+//
+//
+//     const x = Math.floor(key * MAX_TEXTURE_SIZE_INV);
+//     const y = key - (MAX_TEXTURE_SIZE * x);
+//     return { x, y };
+//   }
+
   /**
    * Sort key. If z values are equal, will arrange points from north-west to south-east along z plane.
    * @returns {number}
@@ -331,13 +419,26 @@ export class Point3d extends PIXI.Point {
 
   /**
    * Drop the z dimension; return a new PIXI.Point
-   * @param [object] [options]    Options that affect which axes are used
-   * @param [string] [options.x]  Which 3d axis to use for the x axis
-   * @param [string] [options.y]  Which 3d axis to use for the y axis
+   * @param {object} [opts]    Options that affect which axes are used
+   * @param {string} [opts.x]  Which 3d axis to use for the x axis
+   * @param {string} [opts.y]  Which 3d axis to use for the y axis
+   * @param {boolean} [opts.homogeous] Whether to divde by the third ("z") axis
    * @returns {PIXI.Point}
    */
-  to2d({x = "x", y = "y"} = {}) {
-    return new PIXI.Point(this[x], this[y]);
+  to2d({x = "x", y = "y", homogenous = false} = {}, outPoint) {
+    outPoint ??= PIXI.Point.tmp;
+
+    if ( homogenous ) {
+      let z = "z"
+      if ( !(x === "x" && y === "y") ) { // In rare case when homogenous along another dimension.
+        const coords = new Set(["x", "y", "z"]);
+        coords.delete(x);
+        coords.delete(y);
+        z = coords.first();
+      }
+      return outPoint.set(this[x] / this[z], this[y] / this[z]);
+    }
+    return outPoint.set(this[x], this[y]);
   }
 
   /**
@@ -352,7 +453,7 @@ export class Point3d extends PIXI.Point {
    * @returns A clone of this point
    */
   clone() {
-    return new this.constructor(this.x, this.y, this.z);
+    return this.constructor.tmp.set(this.x, this.y, this.z);
   }
 
   /**
@@ -417,7 +518,7 @@ export class Point3d extends PIXI.Point {
    */
   roundDecimals(places = 0) {
     super.roundDecimals(places);
-    this.z = CONFIG.GeometryLib.utils.roundDecimals(this.z, places);
+    this.z = roundDecimals(this.z, places);
     return this;
   }
 
@@ -430,7 +531,7 @@ export class Point3d extends PIXI.Point {
    * @returns {Point3d}
    */
   add(other, outPoint) {
-    outPoint ??= new this.constructor();
+    outPoint ??= this.constructor.tmp;
     super.add(other, outPoint);
     outPoint.z = this.z + (other.z || 0);
 
@@ -446,7 +547,7 @@ export class Point3d extends PIXI.Point {
    * @returns {Point3d}
    */
   subtract(other, outPoint) {
-    outPoint ??= new this.constructor();
+    outPoint ??= this.constructor.tmp;
     super.subtract(other, outPoint);
     outPoint.z = this.z - (other.z || 0);
 
@@ -462,7 +563,7 @@ export class Point3d extends PIXI.Point {
    * @returns {Point3d}
    */
   multiply(other, outPoint) {
-    outPoint ??= new this.constructor();
+    outPoint ??= this.constructor.tmp;
     super.multiply(other, outPoint);
     outPoint.z = this.z * (other.z || 0);
 
@@ -478,7 +579,7 @@ export class Point3d extends PIXI.Point {
    * @returns {Point3d}
    */
   divide(other, outPoint) {
-    outPoint ??= new this.constructor();
+    outPoint ??= this.constructor.tmp;
     super.divide(other, outPoint);
     outPoint.z = this.z / other.z;
 
@@ -494,7 +595,7 @@ export class Point3d extends PIXI.Point {
    * @returns {Point3d}
    */
   multiplyScalar(scalar, outPoint) {
-    outPoint ??= new this.constructor();
+    outPoint ??= this.constructor.tmp;
     super.multiplyScalar(scalar, outPoint);
     outPoint.z = this.z * scalar;
 
@@ -509,7 +610,7 @@ export class Point3d extends PIXI.Point {
    * @returns {Point3d}
    */
   min(other, outPoint) {
-    outPoint ??= new this.constructor();
+    outPoint ??= this.constructor.tmp;
     super.min(other, outPoint);
     outPoint.z = Math.min(this.z, other.z);
     return outPoint;
@@ -523,9 +624,22 @@ export class Point3d extends PIXI.Point {
    * @returns {Point3d}
    */
   max(other, outPoint) {
-    outPoint ??= new this.constructor();
+    outPoint ??= this.constructor.tmp;
     super.max(other, outPoint);
     outPoint.z = Math.max(this.z, other.z);
+    return outPoint;
+  }
+
+  /**
+   * Get the absolute of the coordinates.
+   * @param {PIXI.Point} [outPoint]    A point-like object in which to store the value.
+   *   (Will create new point if none provided.)
+   * @returns {PIXI.Point}
+   */
+  abs(outPoint) {
+    outPoint ??= this.constructor.tmp;
+    super.abs(outPoint);
+    outPoint.z = Math.abs(this.z);
     return outPoint;
   }
 
@@ -574,8 +688,10 @@ export class Point3d extends PIXI.Point {
    * @returns {boolean}
    */
   equalXY(other) {
-    const pt2d = PIXI.Point._tmp.set(this.x, this.y);
-    return pt2d.equals(other);
+    const pt2d = PIXI.Point.tmp.set(this.x, this.y);
+    const out = pt2d.equals(other);
+    pt2d.release();
+    return out;
   }
 
   /**
@@ -585,8 +701,10 @@ export class Point3d extends PIXI.Point {
    * @returns {boolean}
    */
   almostEqualXY(other, epsilon) {
-    const pt2d = PIXI.Point._tmp.set(this.x, this.y);
-    return pt2d.almostEqual(other, epsilon);
+    const pt2d = PIXI.Point.tmp.set(this.x, this.y);
+    const out = pt2d.almostEqual(other, epsilon);
+    pt2d.release();
+    return out;
   }
 
   /**
@@ -596,10 +714,14 @@ export class Point3d extends PIXI.Point {
    * @returns {Point3d}
    */
   cross(other, outPoint) {
-    outPoint ??= new this.constructor();
-    outPoint.x = (this.y * other.z) - (this.z * other.y);
-    outPoint.y = (this.z * other.x) - (this.x * other.z);
+    outPoint ??= this.constructor.tmp;
+
+    // Avoid overwriting other incase it is outPoint.
+    const x = (this.y * other.z) - (this.z * other.y);
+    const y = (this.z * other.x) - (this.x * other.z);
     outPoint.z = (this.x * other.y) - (this.y * other.x);
+    outPoint.x = x;
+    outPoint.y = y;
 
     return outPoint;
   }
@@ -610,15 +732,10 @@ export class Point3d extends PIXI.Point {
    *   (Will create new point if none provided.)
    * @returns {Point3d}
    */
-  normalize(outPoint = new Point3d()) {
+  normalize(outPoint) {
+    outPoint ??= this.constructor.tmp;
     return super.normalize(outPoint);
   }
-
-  // Temporary points that can be passed to PIXI.Point methods
-  static _tmp = new this();
-  static _tmp1 = new this();
-  static _tmp2 = new this();
-  static _tmp3 = new this();
 }
 
 /**
@@ -639,5 +756,10 @@ const MAX_TEXTURE_SIZE2 = Math.pow(MAX_TEXTURE_SIZE, 2);
 export function numPositiveDigits(n) {
   return (Math.log(n) * Math.LOG10E) + 1 | 0;
 }
+
+Point3d.prototype.toString = function() { return `{x: ${this.x}, y: ${this.y}, z: ${this.z}}`};
+
+Point3d.ZERO = new Point3d(0, 0, 0);
+Object.freeze(Point3d.ZERO);
 
 GEOMETRY_CONFIG.threeD.Point3d ??= Point3d;

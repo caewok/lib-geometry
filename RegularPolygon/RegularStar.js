@@ -4,8 +4,9 @@ PIXI
 */
 "use strict";
 
-import "./RegularPolygon.js";
+import { RegularPolygon } from "./RegularPolygon.js";
 import { GEOMETRY_CONFIG } from "../const.js";
+import { NULL_SET } from "../util.js";
 
 /**
  * A regular star is a polygon built from a regular polygon by
@@ -17,7 +18,30 @@ import { GEOMETRY_CONFIG } from "../const.js";
  *
  * See https://martiancraft.com/blog/2017/03/geometry-of-stars/
  */
-export class RegularStar extends GEOMETRY_CONFIG.RegularPolygons.RegularPolygon {
+export class RegularStar extends RegularPolygon {
+
+  static classTypes = new Set([this.name], "Star"); // Alternative to instanceof
+
+  inheritsClassType(type) {
+    let proto = this;
+    let classTypes = proto.constructor.classTypes;
+    do {
+      if ( classTypes.has(type) ) return true;
+      proto = Object.getPrototypeOf(proto);
+      classTypes = proto?.constructor?.classTypes;
+
+    } while ( classTypes );
+    return false;
+  }
+
+  objectMatchesClassType(obj) {
+    return this.constructor.classTypes.equals(obj.constructor.classTypes || NULL_SET);
+  }
+
+  objectOverlapsClassType(obj) {
+    return this.constructor.classTypes.intersects(obj.constructor.classTypes || NULL_SET);
+  }
+
 
   /** @type {PIXI.Point[]} */
   _outerPoints;
