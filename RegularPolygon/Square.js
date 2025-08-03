@@ -3,8 +3,9 @@ PIXI
 */
 "use strict";
 
-import "./RegularPolygon.js";
+import { RegularPolygon } from "./RegularPolygon.js";
 import { GEOMETRY_CONFIG } from "../const.js";
+import { NULL_SET } from "../util.js";
 
 const squareRotations = new Set([45, 135, 225, 315]); // Oriented []
 const diagonalRotations = new Set([0, 90, 180, 270]); // Oriented [] turned 45º
@@ -18,7 +19,28 @@ const diagonalRotations = new Set([0, 90, 180, 270]); // Oriented [] turned 45º
  * @param {number} [options.rotation]   Rotation in degrees
  * @param {number} [options.width]      Alternative specification when skipping radius
  */
-export class Square extends GEOMETRY_CONFIG.RegularPolygons.RegularPolygon {
+export class Square extends RegularPolygon {
+  static classTypes = new Set([this.name]); // Alternative to instanceof
+
+  inheritsClassType(type) {
+    let proto = this;
+    let classTypes = proto.constructor.classTypes;
+    do {
+      if ( classTypes.has(type) ) return true;
+      proto = Object.getPrototypeOf(proto);
+      classTypes = proto?.constructor?.classTypes;
+
+    } while ( classTypes );
+    return false;
+  }
+
+  objectMatchesClassType(obj) {
+    return this.constructor.classTypes.equals(obj.constructor.classTypes || NULL_SET);
+  }
+
+  objectOverlapsClassType(obj) {
+    return this.constructor.classTypes.intersects(obj.constructor.classTypes || NULL_SET);
+  }
 
   constructor(origin, radius, {rotation = 0, width} = {}) {
     if ( !radius && !width ) {

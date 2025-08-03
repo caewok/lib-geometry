@@ -1,10 +1,10 @@
 /* globals
-CONFIG,
-PIXI
+PIXI,
 */
 "use strict";
 
 import { GEOMETRY_CONFIG } from "./const.js";
+import { Point3d } from "./3d/Point3d.js";
 
 // Basic matrix operations
 // May eventually replace with math.js (when installed, call "math" to get functions)
@@ -156,7 +156,7 @@ export class MatrixFlat {
   static from2dArray(arr, outMatrix) {
     const nrow = arr.length;
     const ncol = arr[0].length;
-    outMatrix ??= new this.empty(nrow, ncol);
+    outMatrix ??= this.empty(nrow, ncol);
     outMatrix.setElements((elem, r, c) => arr[r][c]);
     return outMatrix;
   }
@@ -182,9 +182,22 @@ export class MatrixFlat {
       console.error("Rows or columns incorrectly specified.");
       return undefined;
     }
-    const mat = new this.empty(rows, cols);
+    const mat = this.empty(rows, cols);
     mat._setElements((elem, i) => arr[i]);
     return mat;
+  }
+
+  /**
+   * Copy the values of this array to a new array, in column-major format.
+   * @param {Array|TypedArray} arr
+   * @returns {Array|TypedArray} arr or a new array.
+   */
+  toColumnMajorArray(arr) {
+    arr ??= this.constructor.arrayIsTyped
+      ? new this.constructor.arrayClass(this.arr.length) : new Array(this.arr.length);
+    // Taken from transpose method.
+    this.forEach((elem, r, c) => arr[this._idx(c, r)] = elem);
+    return arr;
   }
 
   // ----- NOTE: Simple matrix construction ----- //
@@ -231,7 +244,7 @@ export class MatrixFlat {
    * @returns {Matrix}
    */
   static random(rows, cols) {
-    const mat = new this.empty(rows, cols);
+    const mat = this.empty(rows, cols);
     mat._setElements(() => Math.random());
     return mat;
   }
@@ -262,6 +275,23 @@ export class MatrixFlat {
     if ( homogenous ) mat.arr[2] = 1;
     return mat;
   }
+
+ /**
+  * Set every element to 0.
+  * @returns {this} For convenience.
+  */
+ zero() { this.arr.fill(0); return this; }
+
+ /**
+  * Set diagonal to a constant.
+  * @param {number} [c=1]     Constant to use
+  * @returns {this} For convenience
+  */
+ setConstantDiagonal(c = 1) {
+   const ln = Math.min(this.nrow, this.ncol);
+   for ( let i = 0; i < ln; i += 1 ) this.setIndex(i, i, c);
+   return this;
+ }
 
  /**
    * Convert matrix to a PIXI.Point.
@@ -298,7 +328,7 @@ export class MatrixFlat {
    * @param {Point3d} [options.outPoint]    Placeholder for the new Point3d.
    * @returns {PIXI.Point}
    */
-  toPoint3d({ xIndex = 0, yIndex = 1, zIndex = 2, homogenous = true, outPoint = new CONFIG.GeometryLib.threeD.Point3d() } = {}) {
+  toPoint3d({ xIndex = 0, yIndex = 1, zIndex = 2, homogenous = true, outPoint = new Point3d() } = {}) {
     const arr = this.arr;
     outPoint.x = arr[xIndex];
     outPoint.y = arr[yIndex];
@@ -318,16 +348,66 @@ export class MatrixFlat {
    * @returns {Matrix}
    */
   clone(outMatrix) {
-    outMatrix ??= new this.constructor.empty(this.nrow, this.ncol);
+    outMatrix ??= this.constructor.empty(this.nrow, this.ncol);
     outMatrix._setElements((elem, i) => this.arr[i]);
     return outMatrix;
   }
 
   // ----- NOTE: Transformation ----- //
 
+  /**
+   * Specifies an orthogonal viewing matrix.
+   */
+  static orthogonal(left, right, top, bottom, near, far, M) {
+    const lr = 1 / (left - right);
+    const bt = 1 / (bottom - top);
+    const nf = 1 / (near - far);
+
+    if ( M ) M.zero();
+    else M = this.zeroes(4, 4);
+
+    // Diagonals.
+    M.setIndex(0, 0, -2 * lr);
+    M.setIndex(1, 1, -2 * bt);
+    M.setIndex(2, 2, 2 * nf);
+    M.setIndex(3, 3, 1);
+
+    // Bottom row.
+    M.setIndex(3, 0, (left + right) * lr);
+    M.setIndex(3, 1, (top + bottom) * bt);
+    M.setIndex(3, 2, (far + near) * nf);
+
+    /*
+    2/(r - l),    0,          0,    0,
+    0,    2/(t - b),          0,    0,
+    0,            0,  2/(n - f),    0,
+    (l + r)/(l - r), (b + t)/(b - t), (n + f)/(n - f), 1,
+    */
+  }
+
+ /**
+  * Specifies an orthogonal viewing matrix.
+  * Used for WebGPU, where near/far clip planes correspond to a normalized device coordinate Z range of [0, 1].
+  */
+  static orthogonalZO(left, right, top, bottom, near, far, M) {
+    this.orthogonal(left, right, top, bottom, near, far, M);
+
+    // Modify for ZO matrix.
+    const nf = 1 / (near - far);
+    M.setIndex(2, 2, nf);
+    M.setIndex(3, 2, near * nf)
+
+    /*
+    2/(r - l),    0,          0,    0,
+    0,    2/(t - b),          0,    0,
+    0,            0,  1/(n - f),    0,
+    (l + r)/(l - r), (b + t)/(b - t), n/(n - f), 1,
+    */
+
+  }
 
   /**
-   * Specifies a viewing frustum in the world coordinate system.
+   * Specifies a viewing frustum (perspective projection matrix) in the world coordinate system.
    * See
    * https://registry.khronos.org/OpenGL-Refpages/gl2.1/xhtml/gluPerspective.xml
    * https://gamedev.stackexchange.com/questions/12726/understanding-the-perspective-projection-matrix-in-opengl
@@ -338,21 +418,68 @@ export class MatrixFlat {
    * @param {number} fovRadians     Field of view angle, in radians, in the y direction
    * @param {number} aspect   Aspect ratio that determines fov in the x direction. Ratio of x (width) to y (height).
    * @param {number} zNear    Distance from the viewer to the near clipping plane (always positive)
-   * @param {number} zFar     Distance from the viewer to the far clipping plane (always positive)
+   * @param {number|Infinity} zFar     Distance from the viewer to the far clipping plane (always positive)
    * @returns {Matrix} 4x4 Matrix, in row-major format
    */
-  static perspective(fovRadians, aspect, zNear, zFar) {
+  static perspective(fovRadians, aspect, zNear, zFar, M) {
     const f = Math.tan((Math.PI * 0.5) - (0.5 * fovRadians));
-    const rangeInv = 1.0 / (zNear - zFar);
-    const DIAG0 = f / aspect;
-    const DIAG2 = (zNear + zFar) * rangeInv;
-    const A = zNear * zFar * rangeInv * 2;
-    return this.fromRowMajorArray([
+
+    if ( M ) M.zero();
+    else M = this.zeroes(4, 4);
+    M.setIndex(0, 0, f / aspect); // DIAG0
+    M.setIndex(1, 1, f);          // f
+    M.setIndex(2, 3, -1);         // -1
+
+    if ( zFar !== Infinity ) {
+      const rangeInv = 1.0 / (zNear - zFar);
+      M.setIndex(2, 2, (zNear + zFar) * rangeInv);    // DIAG2
+      M.setIndex(3, 2, 2 * zNear * zFar * rangeInv);  // A
+    } else {
+      M.setIndex(2, 2, -1);         // DIAG2
+      M.setIndex(3, 2, -2 * zNear); // A
+    }
+
+    /*
       DIAG0,   0,    0,      0,
       0,       f,    0,      0,
       0,       0,    DIAG2,  -1,
       0,       0,    A,      0
-    ], 4, 4);
+    */
+  }
+
+  /**
+   * Specifies a viewing frustum (perspective projection matrix) in the world coordinate system.
+   * Used for WebGPU, where near/far clip planes correspond to a normalized device coordinate Z range of [0, 1].
+   * @param {number} fovRadians     Field of view angle, in radians, in the y direction
+   * @param {number} aspect   Aspect ratio that determines fov in the x direction. Ratio of x (width) to y (height).
+   * @param {number} zNear    Distance from the viewer to the near clipping plane (always positive)
+   * @param {number|Infinity} zFar     Distance from the viewer to the far clipping plane (always positive); Pass Infinity for infinite projection matrix.
+   * @returns {Matrix} 4x4 Matrix, in row-major format
+   */
+  static perspectiveZO(fovRadians, aspect, zNear, zFar, M) {
+    const f = Math.tan((Math.PI * 0.5) - (0.5 * fovRadians));
+
+    if ( M ) M.zero();
+    else M = this.zeroes(4, 4);
+    M.setIndex(0, 0, f / aspect); // DIAG1
+    M.setIndex(1, 1, f);          // f
+    M.setIndex(2, 3, -1);         // -1
+
+    if ( zFar !== Infinity ) {
+      const rangeInv = 1.0 / (zNear - zFar);
+      M.setIndex(2, 2, zFar * rangeInv);              // DIAG2
+      M.setIndex(3, 2, zNear * zFar * rangeInv);      // A
+    } else {
+      M.setIndex(2, 2, -1);         // DIAG2
+      M.setIndex(3, 2, -zNear);     // A
+    }
+
+    /*
+      DIAG0,   0,    0,      0,
+      0,       f,    0,      0,
+      0,       0,    DIAG2,  -1,
+      0,       0,    A,      0
+    */
   }
 
   static perspectiveDegrees(fovDegrees, aspect, zNear, zFar) {
@@ -370,20 +497,33 @@ export class MatrixFlat {
    * @param {number} top    Coordinate for the top horizontal clipping plane
    * @param {number} zNear    Distance from the viewer to the near clipping plane (always positive)
    * @param {number} zFar     Distance from the viewer to the far clipping plane (always positive)
-   * @returns {Matrix} 4x4 Matrix, in row-major format
+   * @param {FlatMatrix} M      Out matrix to use
+   * @returns {FlatMatrix} 4x4 Matrix, in row-major format
    */
-  static frustrum(left, right, bottom, top, zNear, zFar) {
+  static frustum(left, right, bottom, top, zNear, zFar, M) {
     const A = (right + left) / (right - left);
     const B = (top + bottom) / (top - bottom);
     const C = -((zFar + zNear) / (zFar - zNear));
     const D = -((2 * zFar * zNear) / (zFar - zNear));
 
-    return this.fromRowMajorArray([
+    if ( M ) M.zero();
+    else M = this.zeroes(4, 4);
+
+    M.setIndex(0, 0, (2 * zNear) / (right - left));
+    M.setIndex(1, 1, (2 * zNear) / (top - bottom));
+    M.setIndex(0, 2, A);
+    M.setIndex(1, 2, B);
+    M.setIndex(2, 2, C);
+    M.setIndex(3, 2, -1);
+    M.setIndex(2, 3, D);
+    return M;
+
+    /*
       (2 * zNear) / (right - left),  0,                            A,  0,
       0,                             (2 * zNear) / (top - bottom), B,  0,
       0,                             0,                            C,  D,
       0,                             0,                            -1, 0
-    ], 4, 4);
+    */
   }
 
   /**
@@ -400,41 +540,89 @@ export class MatrixFlat {
    * @param {Point3d} up
    * @returns {Matrix} 4x4 matrix
    */
-  static lookAt(cameraPosition, targetPosition, up = new CONFIG.GeometryLib.threeD.Point3d(0, -1, 1)) {
+  static lookAt(cameraPosition, targetPosition, up, M, Minv) {
+    const Point3d = Point3d;
+
     // NOTE: Foundry uses a left-hand coordinate system, with y reversed.
+    const zAxis = Point3d.tmp;
+    cameraPosition.subtract(targetPosition, zAxis); // ZAxis = forward
+    if ( zAxis.almostEqual(Point3d.ZERO) ) {
+      zAxis.release();
+      return { M: this.identity(4), Minv: this.identity(4) };
+    }
+    zAxis.normalize(zAxis);
 
-    const zAxis = cameraPosition.subtract(targetPosition); // ZAxis = forward
-    if ( zAxis.magnitudeSquared ) zAxis.normalize(zAxis); // Don't normalize if 0, 0, 0
-
-    const xAxis = new CONFIG.GeometryLib.threeD.Point3d(1, 0, 0);
-    const yAxis = new CONFIG.GeometryLib.threeD.Point3d(0, 1, 0);
+    const xAxis = Point3d.tmp.set(1, 0, 0);
+    const yAxis = Point3d.tmp.set(0, 1, 0);
     if ( zAxis.x || zAxis.y ) {
-      up.cross(zAxis, xAxis); // XAxis = right
+      const tmpUp = up ? Point3d.tmp.copyFrom(up) : Point3d.tmp.set(0, -1, 1);
+      tmpUp.cross(zAxis, xAxis); // XAxis = right
       if ( xAxis.magnitudeSquared() ) xAxis.normalize(xAxis); // Don't normalize if 0, 0, 0
       zAxis.cross(xAxis, yAxis); // YAxis = up
-
-    } else {
-      console.warn("lookAt zAxis.x and y are zero.");
-      // Camera either directly overhead or directly below
-      // Overhead if zAxis.z is positive
-      // xAxis = new CONFIG.GeometryLib.threeD.Point3d(1, 0, 0);
-      // yAxis = new CONFIG.GeometryLib.threeD.Point3d(0, 1, 0);
-
+      tmpUp.release();
     }
+    // Otherwise camera either directly overhead or directly below
+    // Overhead if zAxis.z is positive
+    // xAxis = new Point3d(1, 0, 0);
+    // yAxis = new Point3d(0, 1, 0);
 
-    const M = this.fromRowMajorArray([
+
+
+    if ( M ) M.zero();
+    else M = this.zeroes(4, 4);
+    if ( Minv ) Minv.zero();
+    else Minv = this.zeroes(4, 4);
+
+    M.setIndex(0, 0, xAxis.x);
+    M.setIndex(0, 1, xAxis.y);
+    M.setIndex(0, 2, xAxis.z);
+
+    M.setIndex(1, 0, yAxis.x);
+    M.setIndex(1, 1, yAxis.y);
+    M.setIndex(1, 2, yAxis.z);
+
+    M.setIndex(2, 0, zAxis.x);
+    M.setIndex(2, 1, zAxis.y);
+    M.setIndex(2, 2, zAxis.z);
+
+    M.setIndex(3, 0, cameraPosition.x);
+    M.setIndex(3, 1, cameraPosition.y);
+    M.setIndex(3, 2, cameraPosition.z);
+    M.setIndex(3, 3, 1);
+
+    Minv.setIndex(0, 0, xAxis.x);
+    Minv.setIndex(0, 1, yAxis.x);
+    Minv.setIndex(0, 2, zAxis.x);
+
+    Minv.setIndex(1, 0, xAxis.y);
+    Minv.setIndex(1, 1, yAxis.y);
+    Minv.setIndex(1, 2, zAxis.y);
+
+    Minv.setIndex(2, 0, xAxis.z);
+    Minv.setIndex(2, 1, yAxis.z);
+    Minv.setIndex(2, 2, zAxis.z);
+
+    Minv.setIndex(3, 0, -(xAxis.dot(cameraPosition)));
+    Minv.setIndex(3, 1, -(yAxis.dot(cameraPosition)));
+    Minv.setIndex(3, 2, -(zAxis.dot(cameraPosition)));
+    Minv.setIndex(3, 3, 1);
+
+    /* M
       xAxis.x, xAxis.y, xAxis.z, 0,
       yAxis.x, yAxis.y, yAxis.z, 0,
       zAxis.x, zAxis.y, zAxis.z, 0,
       cameraPosition.x, cameraPosition.y, cameraPosition.z, 1
-    ], 4, 4);
-
-    const Minv = this.fromRowMajorArray([
+    */
+    /* Minv
       xAxis.x, yAxis.x, zAxis.x, 0,
       xAxis.y, yAxis.y, zAxis.y, 0,
       xAxis.z, yAxis.z, zAxis.z, 0,
       -(xAxis.dot(cameraPosition)), -(yAxis.dot(cameraPosition)), -(zAxis.dot(cameraPosition)), 1
-    ], 4, 4);
+    */
+
+    xAxis.release();
+    yAxis.release();
+    zAxis.release();
 
     return { M, Minv };
   }
@@ -590,7 +778,7 @@ export class MatrixFlat {
     const r = n - 1;
     outMatrix.setIndex(r, 0, x);
     outMatrix.setIndex(r, 1, y);
-    outMatrix.setIndex(r, 2, z);
+    if ( typeof z !== "undefined" ) outMatrix.setIndex(r, 2, z);
     return outMatrix;
   }
 
@@ -694,10 +882,7 @@ export class MatrixFlat {
    */
   transpose(outMatrix) {
     outMatrix ??= this.constructor.empty(this.nrow, this.ncol);
-    this.forEach((elem, r, c) => {
-      if ( r === c ) outMatrix.setIndex(r, c, elem);
-      else outMatrix.setIndex(c, r, elem);
-    });
+    this.forEach((elem, r, c) => outMatrix.setIndex(c, r, elem));
     return outMatrix;
   }
 
@@ -882,7 +1067,7 @@ export class MatrixFlat {
    * @param {Point3d} outPoint Optional point in which to store the result.
    * @returns {Point3d}
    */
-  multiplyPoint3d(point, outPoint = new CONFIG.GeometryLib.threeD.Point3d()) {
+  multiplyPoint3d(point, outPoint = new Point3d()) {
 
     // For speed, assume _idx is (col * this.nrow) + row
     // Array organized col0, row0, row1, row2, ... col1, row0, row1, ...
@@ -1037,14 +1222,14 @@ export class MatrixFlat {
     outMatrix.arr[2] = m6 + m7 + m9 + m10 + m14 + m16 + m18;
 
     // Row 1
-    outMatrix.arr[4] = m2 + m3 + m4 + m6 + m14 + m16 + m17;
-    outMatrix.arr[5] = m2 + m4 + m5 + m6 + m20;
-    outMatrix.arr[6] = m14 + m16 + m17 + m18 + m21;
+    outMatrix.arr[3] = m2 + m3 + m4 + m6 + m14 + m16 + m17;
+    outMatrix.arr[4] = m2 + m4 + m5 + m6 + m20;
+    outMatrix.arr[5] = m14 + m16 + m17 + m18 + m21;
 
     // Row 2
-    outMatrix.arr[7] = m6 + m7 + m8 + m11 + m12 + m13 + m14;
-    outMatrix.arr[8] = m12 + m13 + m14 + m15 + m22;
-    outMatrix.arr[9] = m6 + m7 + m8 + m9 + m23;
+    outMatrix.arr[6] = m6 + m7 + m8 + m11 + m12 + m13 + m14;
+    outMatrix.arr[7] = m12 + m13 + m14 + m15 + m22;
+    outMatrix.arr[8] = m6 + m7 + m8 + m9 + m23;
 
     return outMatrix;
   }
@@ -1152,6 +1337,7 @@ export class MatrixFlat {
    */
   invert(outMatrix) {
     outMatrix ??= this.constructor.empty(this.nrow, this.ncol);
+    if ( this === outMatrix ) console.error("Must supply a distinct matrix to store the inversion.");
 
     if ( this.nrow < 2 || this.nrow !== this.ncol ) {
       console.error("Cannot use invert on a non-square matrix.");
@@ -1162,7 +1348,7 @@ export class MatrixFlat {
     const x = Array.fromRange(n);
     const y = Array.fromRange(n);
     const k = {};
-    let det = this.optimizedNDet(n, this, x, y, k);
+    let det = this.constructor.optimizedNDet(n, this, x, y, k);
     if ( !det ) throw new Error("Matrix is not invertible");
 
     det = 1 / det;
@@ -1179,7 +1365,7 @@ export class MatrixFlat {
           const plus = (ix + iy) % 2 === 0 ? 1 : -1;
           const xf = x.filter(e => e !== ix);
           const yf = y.filter(e => e !== iy);
-          const der = this.optimizedNDet(n - 1, this, yf, xf, k);
+          const der = this.constructor.optimizedNDet(n - 1, this, yf, xf, k);
           outMatrix.setIndex(iy, ix, det * plus * der);
         }
       }
@@ -1200,7 +1386,7 @@ export class MatrixFlat {
     const x = Array.fromRange(n);
     const y = Array.fromRange(n);
     const k = {};
-    return this.optimizedNDet(n, this, x, y, k);
+    return this.constructor.optimizedNDet(n, this, x, y, k);
   }
 
   /**
@@ -1212,7 +1398,7 @@ export class MatrixFlat {
    * @param {{string: number}} k
    * @returns {number}
    */
-  optimizedNDet(n, m, x, y, k) {
+  static optimizedNDet(n, m, x, y, k) {
     const mk = x.join("") + y.join("");
     if ( !k[mk] ) {
       if ( n > 2 ) {
@@ -1242,13 +1428,18 @@ export class MatrixFlat {
 
   // ----- NOTE: Debugging ----- //
 
-  print() {
+  print({ startR, startC, endR, endC } = {}) {
+    startR ??= 0;
+    startC ??= 0;
+    endR ??= this.nrow;
+    endC ??= this.ncol;
+
     // console.table prints arrays of arrays nicely.
-    const out = new Array(this.nrow);
-    for ( let r = 0; r < this.nrow; r += 1 ) out[r] = new Array(this.ncol);
-    for ( let r = 0; r < this.nrow; r += 1 ) {
+    const out = new Array(endR - startR);
+    for ( let r = startR; r < endR; r += 1 ) out[r] = new Array(endC - startC);
+    for ( let r = startR; r < endR; r += 1 ) {
       const arrR = out[r];
-      for ( let c = 0; c < this.ncol; c += 1 ) arrR[c] = this.getIndex(r, c);
+      for ( let c = startC; c < endC; c += 1 ) arrR[c] = this.getIndex(r, c);
     }
     console.table(out);
   }
@@ -1257,21 +1448,22 @@ export class MatrixFlat {
 }
 
 // For backwards compatibility.
-MatrixFlat.fromFlatArray = MatrixFlat.fromFlatArrayByColumns;
+MatrixFlat.fromFlatArray = MatrixFlat.fromRowMajorArray;
 MatrixFlat.prototype.copyTo = MatrixFlat.prototype.clone;
 
 GEOMETRY_CONFIG.MatrixFlat ??= MatrixFlat;
 
 
 // Example typed class
-/*
-class MatrixTyped extends MatrixFlat {
+
+export class MatrixFloat32 extends MatrixFlat {
   static arrayClass = Float32Array;
 
   static arrayIsTyped = true;
 
 }
-*/
+GEOMETRY_CONFIG.MatrixFloat32 ??= MatrixFloat32;
+
 
 /* Tests
 Matrix = CONFIG.GeometryLib.Matrix

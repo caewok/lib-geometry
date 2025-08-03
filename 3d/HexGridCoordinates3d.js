@@ -1,17 +1,15 @@
 /* globals
 canvas,
-CONFIG,
 CONST,
 game
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import "./RegionMovementWaypoint3d.js";
-import "../GridCoordinates.js";
 import { GEOMETRY_CONFIG } from "../const.js";
-import { roundNearWhole } from "../util.js";
+import { roundNearWhole, bresenhamHexLine3d, NULL_SET } from "../util.js";
 import { getOffsetDistanceFn } from "../grid_distance.js";
+import { GridCoordinates3d } from "./GridCoordinates3d.js";
 
 /**
  * Cube coordinates in a hexagonal grid. q + r + s = 0.
@@ -33,7 +31,29 @@ import { getOffsetDistanceFn } from "../grid_distance.js";
  * A 3d point that can also represent a 4d hex coordinate (q, r, s, k).
  * Links z to the elevation property.
  */
-export class HexGridCoordinates3d extends GEOMETRY_CONFIG.threeD.GridCoordinates3d {
+export class HexGridCoordinates3d extends GridCoordinates3d {
+
+  static classTypes = new Set([this.name]); // Alternative to instanceof
+
+  inheritsClassType(type) {
+    let proto = this;
+    let classTypes = proto.constructor.classTypes;
+    do {
+      if ( classTypes.has(type) ) return true;
+      proto = Object.getPrototypeOf(proto);
+      classTypes = proto?.constructor?.classTypes;
+
+    } while ( classTypes );
+    return false;
+  }
+
+  objectMatchesClassType(obj) {
+    return this.constructor.classTypes.equals(obj.constructor.classTypes || NULL_SET);
+  }
+
+  objectOverlapsClassType(obj) {
+    return this.constructor.classTypes.intersects(obj.constructor.classTypes || NULL_SET);
+  }
 
   /**
    * Create this point from hex coordinates plus optional elevation.
@@ -199,7 +219,7 @@ function directPath3dHex(start, end) {
   start = HexGridCoordinates3d.fromObject(start);
   end = HexGridCoordinates3d.fromObject(end);
   if ( start.offsetsEqual(end) ) return [start, end];
-  const points = CONFIG.GeometryLib.utils.bresenhamHexLine3d(start, end);
+  const points = bresenhamHexLine3d(start, end);
   const path3d = [start];
   // Convert points to GridCoordinates3d. Start and end repeat; skip.
   for ( let i = 4, n = points.length - 4; i < n; i += 4 ) path3d.push(HexGridCoordinates3d.fromHexCube({

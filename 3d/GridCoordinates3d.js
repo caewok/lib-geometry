@@ -1,18 +1,16 @@
 /* globals
 canvas,
-CONFIG,
 CONST,
 game
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { roundNearWhole } from "../util.js";
-import "./RegionMovementWaypoint3d.js";
-import "../GridCoordinates.js";
-import { GEOMETRY_CONFIG } from "../const.js";
+import { roundNearWhole, pixelsToGridUnits, gridUnitsToPixels, bresenhamLine3d, NULL_SET } from "../util.js";
+import { RegionMovementWaypoint3d } from "./RegionMovementWaypoint3d.js";
+import { GridCoordinates } from "../GridCoordinates.js";
+import { GEOMETRY_CONFIG, GRID_DIAGONALS } from "../const.js";
 import {
-  GRID_DIAGONALS,
   gridDistanceBetween,
   alternatingGridDistance,
   getDirectPath,
@@ -48,7 +46,30 @@ import {
  * A 3d point that can function as Point3d|GridOffset3d|RegionMovementWaypoint.
  * Links z to the elevation property.
  */
-export class GridCoordinates3d extends GEOMETRY_CONFIG.threeD.RegionMovementWaypoint3d {
+export class GridCoordinates3d extends RegionMovementWaypoint3d {
+
+  static classTypes = new Set([this.name]); // Alternative to instanceof
+
+  inheritsClassType(type) {
+    let proto = this;
+    let classTypes = proto.constructor.classTypes;
+    do {
+      if ( classTypes.has(type) ) return true;
+      proto = Object.getPrototypeOf(proto);
+      classTypes = proto?.constructor?.classTypes;
+
+    } while ( classTypes );
+    return false;
+  }
+
+  objectMatchesClassType(obj) {
+    return this.constructor.classTypes.equals(obj.constructor.classTypes || NULL_SET);
+  }
+
+  objectOverlapsClassType(obj) {
+    return this.constructor.classTypes.intersects(obj.constructor.classTypes || NULL_SET);
+  }
+
   static GRID_DIAGONALS = GRID_DIAGONALS;
 
   /**
@@ -98,7 +119,7 @@ export class GridCoordinates3d extends GEOMETRY_CONFIG.threeD.RegionMovementWayp
   get j() { return canvas.grid.getOffset({ x: this.x, y: this.y }).j }
 
   /** @type {number} */
-  get k() { return this.constructor.unitElevation(CONFIG.GeometryLib.utils.pixelsToGridUnits(this.z)); }
+  get k() { return this.constructor.unitElevation(pixelsToGridUnits(this.z)); }
 
   /** @type {number} */
   set i(value) { this.y = canvas.grid.getCenterPoint({ i: value, j: this.j }).y; }
@@ -126,7 +147,7 @@ export class GridCoordinates3d extends GEOMETRY_CONFIG.threeD.RegionMovementWayp
    */
   get topLeft() {
     const tl = this.constructor.fromObject(canvas.grid.getTopLeftPoint({ x: this.x, y: this.y }));
-    tl.z = CONFIG.GeometryLib.utils.gridUnitsToPixels(this.constructor.elevationForUnit(this.k));
+    tl.z = gridUnitsToPixels(this.constructor.elevationForUnit(this.k));
     return tl;
   }
 
@@ -137,7 +158,7 @@ export class GridCoordinates3d extends GEOMETRY_CONFIG.threeD.RegionMovementWayp
    */
   get center() {
     const center = this.constructor.fromObject(canvas.grid.getCenterPoint({ x: this.x, y: this.y }));
-    center.z = CONFIG.GeometryLib.utils.gridUnitsToPixels(this.constructor.elevationForUnit(this.k));
+    center.z = gridUnitsToPixels(this.constructor.elevationForUnit(this.k));
     return center;
   }
 
@@ -145,7 +166,7 @@ export class GridCoordinates3d extends GEOMETRY_CONFIG.threeD.RegionMovementWayp
    * Convert this point to a RegionMovementWaypoint.
    * @returns {RegionMovementWaypoint3d}
    */
-  toWaypoint() { return CONFIG.GeometryLib.threeD.RegionMovementWaypoint3d.fromObject(this); }
+  toWaypoint() { return RegionMovementWaypoint3d.fromObject(this); }
 
   /**
    * Change this point to a specific offset value.
@@ -181,7 +202,7 @@ export class GridCoordinates3d extends GEOMETRY_CONFIG.threeD.RegionMovementWayp
    * Conversion to 2d.
    * @returns {GridCoordinates}
    */
-  to2d() { return CONFIG.GeometryLib.GridCoordinates.fromObject(this); }
+  to2d() { return GridCoordinates.fromObject(this); }
 
   /**
    * @returns {this}
@@ -423,7 +444,7 @@ function directPath3dSquare(start, end) {
   start = GridCoordinates3d.fromObject(start);
   end = GridCoordinates3d.fromObject(end);
   if ( start.offsetsEqual(end) ) return [start, end];
-  const points = CONFIG.GeometryLib.utils.bresenhamLine3d(start.i, start.j, start.k, end.i, end.j, end.k);
+  const points = bresenhamLine3d(start.i, start.j, start.k, end.i, end.j, end.k);
   const path3d = [start];
   // Convert points to GridCoordinates3d. Start and end repeat; skip.
   for ( let i = 3, n = points.length - 3; i < n; i += 3 ) path3d.push(GridCoordinates3d.fromOffset({

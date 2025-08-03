@@ -1,3 +1,14 @@
+## 0.3.21
+Fix setting / getting wall elevation and simplify MODULE_KEYS structure.
+
+## 0.3.20
+Update Bresenham alogorithms for speed, simplicity, and to fix skipping hex spaces.
+Remove constructor from ConstrainedTokenBorder so it will function like expected for Polygon methods that create new polygons.
+Add MatrixFlag as future Matrix replacement.
+Add min/max PIXI.Point methods.
+Add divide method to PIXI.Point.
+Add iterator to PIXI.Point.
+
 ## 0.3.19
 Fix for Elevation Ruler #227: diagonals not measured properly. Correct how `_singleOffsetDistanceFn` tallies grid offsets.
 

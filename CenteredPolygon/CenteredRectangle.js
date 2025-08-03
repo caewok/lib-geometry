@@ -4,7 +4,8 @@ PIXI
 "use strict";
 
 import { GEOMETRY_CONFIG } from "../const.js";
-import "./CenteredPolygonBase.js";
+import { CenteredPolygonBase } from "./CenteredPolygonBase.js";
+import { NULL_SET } from "../util.js";
 
 /* Testing
 api = game.modules.get('tokenvisibility').api;
@@ -42,7 +43,30 @@ drawing.drawShape(bounds)
  * Comparable to RegularPolygon and PIXI.Rectangle class, where
  * the Platonic shape is stored at the origin 0, 0 and translated.
  */
-export class CenteredRectangle extends GEOMETRY_CONFIG.CenteredPolygons.CenteredPolygonBase {
+export class CenteredRectangle extends CenteredPolygonBase {
+
+  static classTypes = new Set([this.name], "Rectangle"); // Alternative to instanceof
+
+  inheritsClassType(type) {
+    let proto = this;
+    let classTypes = proto.constructor.classTypes;
+    do {
+      if ( classTypes.has(type) ) return true;
+      proto = Object.getPrototypeOf(proto);
+      classTypes = proto?.constructor?.classTypes;
+
+    } while ( classTypes );
+    return false;
+  }
+
+  objectMatchesClassType(obj) {
+    return this.constructor.classTypes.equals(obj.constructor.classTypes || NULL_SET);
+  }
+
+  objectOverlapsClassType(obj) {
+    return this.constructor.classTypes.intersects(obj.constructor.classTypes || NULL_SET);
+  }
+
 
   /**
    * @param {Point} origin   Center point of the rectangle. Can be left undefined if leftCorner is provided.

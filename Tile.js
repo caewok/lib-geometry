@@ -5,7 +5,7 @@ CONFIG
 
 // Update tile pixel cache and add getter.
 // Pixel cache stored at _evPixelCache; getter uses evPixelCache
-import "./PixelCache.js";
+import { TilePixelCache } from "./PixelCache.js";
 
 export const PATCHES = {};
 PATCHES.PIXEL_CACHE = {};
@@ -56,7 +56,7 @@ PATCHES.PIXEL_CACHE.HOOKS = { updateTile };
  */
 function evPixelCache() {
   return this._evPixelCache
-    || (this._evPixelCache = CONFIG.GeometryLib.TilePixelCache.fromOverheadTileAlpha(this, CONFIG.GeometryLib.pixelCacheResolution ?? 1)); // 1/4 resolution.
+    || (this._evPixelCache = TilePixelCache.fromOverheadTileAlpha(this, CONFIG.GeometryLib.pixelCacheResolution ?? 1)); // 1/4 resolution.
 }
 
 PATCHES.PIXEL_CACHE.GETTERS = { evPixelCache };

@@ -4,11 +4,13 @@ foundry
 */
 "use strict";
 
-const VERSION = "0.3.20";
+const VERSION = "0.3.21";
 
 // Foundry utils
 import { GEOMETRY_CONFIG } from "./const.js";
 import { registerFoundryUtilsMethods } from "./util.js";
+
+// Import all the files so GEOMETRY_CONFIG is populated.
 
 // Regular Polygons
 import "./RegularPolygon/RegularPolygon.js";
@@ -29,6 +31,12 @@ import "./ShapeHoled.js";
 import "./3d/Plane.js";
 import "./3d/Point3d.js";
 import "./3d/Ray3d.js";
+import "./3d/Sphere.js";
+import "./3d/Polygon3d.js";
+import "./3d/Barycentric.js";
+
+// AABB
+import "./AABB.js";
 
 // Draw
 import "./Draw.js";
@@ -45,6 +53,7 @@ import "./Shadow.js";
 
 // ClipperPaths
 import "./ClipperPaths.js";
+import "./Clipper2Paths.js";
 
 // Graph
 import "./Graph.js";
@@ -60,6 +69,7 @@ import { PATCHES as PATCHES_Circle } from "./PIXI/Circle.js";
 import { PATCHES as PATCHES_Point } from "./PIXI/Point.js";
 import { PATCHES as PATCHES_Polygon } from "./PIXI/Polygon.js";
 import { PATCHES as PATCHES_Rectangle } from "./PIXI/Rectangle.js";
+import { PATCHES as PATCHES_Ellipse } from "./PIXI/Ellipse.js";
 
 // Elevation
 import { PATCHES as PATCHES_ELEVATION } from "./elevation.js";
@@ -69,6 +79,8 @@ import { PATCHES as PATCHES_Token } from "./Token.js";
 import { PATCHES as PATCHES_CanvasEdges } from "./CanvasEdges.js";
 import { PATCHES as PATCHES_ConstrainedTokenBorder } from "./ConstrainedTokenBorder.js";
 import { PATCHES as PATCHES_Edge } from "./Edge.js";
+import { PATCHES as PATCHES_AmbientLight } from "./AmbientLight.js";
+import { PATCHES as PATCHES_AmbientSound } from "./AmbientSound.js";
 
 // PixelCache
 import "./PixelCache.js";
@@ -83,11 +95,12 @@ import "./3d/HexGridCoordinates3d.js";
 // Cutaway
 import "./CutawayPolygon.js";
 
-const PATCHES = {
+const PATCHES_V12 = {
   "PIXI.Circle": PATCHES_Circle,
   "PIXI.Point": PATCHES_Point,
   "PIXI.Polygon": PATCHES_Polygon,
   "PIXI.Rectangle": PATCHES_Rectangle,
+  "PIXI.Ellipse": PATCHES_Ellipse,
 
   // PixelCache
   "Tile": PATCHES_Tile,
@@ -97,12 +110,41 @@ const PATCHES = {
   "foundry.canvas.sources.PointVisionSource": PATCHES_ELEVATION.VisionSource,
   "PlaceableObject": PATCHES_ELEVATION.PlaceableObject,
   "Wall": PATCHES_ELEVATION.Wall,
+  "Region": PATCHES_ELEVATION.Region,
 
   // Elevation and Constrained Token patches
   "Token": foundry.utils.mergeObject(PATCHES_ELEVATION.Token, PATCHES_Token),
   "foundry.canvas.edges.CanvasEdges": PATCHES_CanvasEdges,
   "foundry.canvas.edges.Edge": PATCHES_Edge,
-  "ConstrainedTokenBorder": PATCHES_ConstrainedTokenBorder
+  "ConstrainedTokenBorder": PATCHES_ConstrainedTokenBorder,
+  "foundry.documents.BaseAmbientLight": PATCHES_AmbientLight,
+  "foundry.documents.BaseAmbientSound": PATCHES_AmbientSound,
+}
+
+const PATCHES_V13 = {
+  "PIXI.Circle": PATCHES_Circle,
+  "PIXI.Point": PATCHES_Point,
+  "PIXI.Polygon": PATCHES_Polygon,
+  "PIXI.Rectangle": PATCHES_Rectangle,
+  "PIXI.Ellipse": PATCHES_Ellipse,
+
+  // PixelCache
+  "Tile": PATCHES_Tile,
+
+  // Elevation patches.
+  "foundry.canvas.sources.BaseEffectSource": PATCHES_ELEVATION.PointSource,
+  "foundry.canvas.sources.PointVisionSource": PATCHES_ELEVATION.VisionSource,
+  "foundry.canvas.placeables.PlaceableObject": PATCHES_ELEVATION.PlaceableObject,
+  "foundry.canvas.placeables.Wall": PATCHES_ELEVATION.Wall,
+  "foundry.canvas.placeables.Region": PATCHES_ELEVATION.Region,
+
+  // Elevation and Constrained Token patches
+  "foundry.canvas.placeables.Token": foundry.utils.mergeObject(PATCHES_ELEVATION.Token, PATCHES_Token),
+  "foundry.canvas.geometry.edges.CanvasEdges": PATCHES_CanvasEdges,
+  "foundry.canvas.geometry.edges.Edge": PATCHES_Edge,
+  "ConstrainedTokenBorder": PATCHES_ConstrainedTokenBorder,
+  "foundry.documents.BaseAmbientLight": PATCHES_AmbientLight,
+  "foundry.documents.BaseAmbientSound": PATCHES_AmbientSound,
 }
 
 export function registerGeometry() {
@@ -128,6 +170,9 @@ export function registerGeometryLibConstants() {
 export function registerGeometryLibPatches() {
   // If older PATCHER is present, deregister it and remove it.
   if ( CONFIG.GeometryLib.PATCHER ) deRegister();
+
+  // Use different names for v13.
+  const patches = foundry.utils.isNewerVersion(game.version, "13") ? PATCHES_V13 : PATCHES_V12;
 
   // Create a new Patcher object and register the patches.
   CONFIG.GeometryLib.PATCHER = new Patcher();

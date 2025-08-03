@@ -2,26 +2,47 @@
 PIXI,
 ClipperLib,
 canvas,
-CONFIG
 */
 "use strict";
 
 import { GEOMETRY_CONFIG } from "./const.js";
-import "./Draw.js";
+import { Draw } from "./Draw.js";
 
 /**
  * Class to manage ClipperPaths for multiple polygons.
  */
 export class ClipperPaths {
-  scalingFactor = 1;
-
   /**
    * @param paths {ClipperLib.Path[]|Set<ClipperLib.Path>|Map<ClipperLib.Path>}
    * @returns {ClipperPaths}
    */
   constructor(paths = [], { scalingFactor = 1 } = {}) {
     this.paths = [...paths]; // Ensure these are arrays
-    this.scalingFactor = scalingFactor;
+    this.#scalingFactor = scalingFactor;
+  }
+
+  /** @type {number} */
+  #scalingFactor = 1;
+
+  get scalingFactor() { return this.#scalingFactor; }
+
+  /**
+   * Multiplies each value by the scaling factor, accounting for any previous scaling factor set.
+   * So if value is 5 and #scalingFactor is 1, each point is multiplied by 5.
+   * If value is 5 and #scalingFactor is 2, each points is divided by 2 and then multiplied by 5.
+   */
+  set scalingFactor(value) {
+    if ( !value || value < 0 ) throw("ClipperPaths|Scaling factor cannot be 0 or negative.");
+    if ( value === this.#scalingFactor ) return;
+
+    const mult = value / this.#scalingFactor;
+    for ( const path of this.paths ) {
+      for ( const pt of path ) {
+        pt.X *= mult;
+        pt.Y *= mult;
+      }
+    }
+    this.#scalingFactor = value;
   }
 
   /**
@@ -31,9 +52,9 @@ export class ClipperPaths {
    *   or ClipperPaths depending on paths.
    */
   static processPaths(paths) {
-    if (paths.length > 1) return ClipperPaths(paths);
+    if (paths.length > 1) return new this(paths);
 
-    return ClipperPaths.polygonToRectangle(paths[0]);
+    return this.polygonToRectangle(paths[0]);
   }
 
   /**
@@ -42,7 +63,7 @@ export class ClipperPaths {
    * @returns {ClipperPaths}
    */
   static fromPolygons(polygons, { scalingFactor = 1 } = {}) {
-    const out = new ClipperPaths(polygons.map(p => p.toClipperPoints({scalingFactor})), { scalingFactor });
+    const out = new this(polygons.map(p => p.toClipperPoints({scalingFactor})), { scalingFactor });
     return out;
   }
 
@@ -105,19 +126,21 @@ export class ClipperPaths {
       holes: [],
       dimensions: 2
     };
-
     const paths = this.paths;
     const nPaths = paths.length;
-    if ( nPaths === 0 ) return out;
+    if ( !nPaths ) return out;
 
-    out.vertices = ClipperPaths.flattenPath(paths[0]);
-    for ( let i = 1; i < nPaths; i += 1 ) {
-      const path = paths[i];
-      const isHole = !ClipperLib.Clipper.Orientation(path);
-      if ( !isHole ) console.warn("Earcut may fail with multiple outer polygons.");
-      const category = isHole ? out.holes : out.vertices;
-      category.push(ClipperPaths.flattenPath(path));
-    }
+    let numBasePolys = 0;
+    this.toPolygons().forEach(poly => {
+      if ( poly.isHole ) out.holes.push(poly.points);
+      else {
+        out.vertices.push(...poly.points);
+        numBasePolys += 1;
+      }
+    });
+    // If poly -- hole -- poly, could be fine if second poly encompassed by hole.
+    // But multiple independent polys could be an issue.
+    if ( numBasePolys > 1 ) console.warn("Earcut may fail with multiple outer polygons.");
 
     // Concatenate holes and add indices
     const nHoles = out.holes.length;
@@ -133,7 +156,6 @@ export class ClipperPaths {
       }
       out.holes = indices;
     }
-
     return out;
   }
 
@@ -169,7 +191,18 @@ export class ClipperPaths {
   earcut() {
     const coords = this.toEarcutCoordinates();
     const res = PIXI.utils.earcut(coords.vertices, coords.holes, coords.dimensions);
-    return ClipperPaths.fromEarcutCoordinates(coords.vertices, res, coords.dimensions);
+    return this.constructor.fromEarcutCoordinates(coords.vertices, res, coords.dimensions);
+  }
+
+  /**
+   * Remove paths that have a small area.
+   * @param {number} area     Area in pixels^2.
+   * @returns {ClipperPaths} New paths object
+   */
+  trimByArea(area = 1) {
+    const scalingFactor = this.scalingFactor;
+    const trimmedPaths = this.paths.filter(path => Math.abs(ClipperLib.JS.AreaOfPolygon(path, scalingFactor)) >= area);
+    return new this.constructor(trimmedPaths, { scalingFactor });
   }
 
   /**
@@ -178,7 +211,7 @@ export class ClipperPaths {
    * @returns {number}
    */
   get area() {
-    return ClipperLib.JS.AreaOfPolygons(this.paths) / Math.pow(this.scalingFactor, 2);
+    return ClipperLib.JS.AreaOfPolygons(this.paths, this.scalingFactor);
   }
 
   /**
@@ -200,7 +233,7 @@ export class ClipperPaths {
   simplify() {
     if ( this.paths.length > 1 ) return this;
     if ( this.paths.length === 0 ) return new PIXI.Polygon();
-    return ClipperPaths.polygonToRectangle(this.toPolygons()[0]);
+    return this.constructor.polygonToRectangle(this.toPolygons()[0]);
   }
 
   /**
@@ -211,6 +244,9 @@ export class ClipperPaths {
     return this.paths.map(pts => {
       const poly = PIXI.Polygon.fromClipperPoints(pts, {scalingFactor: this.scalingFactor});
       poly.isHole = !ClipperLib.Clipper.Orientation(pts);
+
+      // Could use reverseSolution but not guaranteed control over that parameter.
+      if ( poly.isHole ^ poly.isClockwise ) poly.reverseOrientation();
       return poly;
     });
   }
@@ -218,11 +254,12 @@ export class ClipperPaths {
   /**
    * Run CleanPolygons on the paths
    * @param {number} cleanDelta   Value, multiplied by scalingFactor, passed to CleanPolygons.
-   * @returns {ClipperPaths}  This object.
+   * @returns {ClipperPaths}  A new object.
    */
   clean(cleanDelta = 0.1) {
-    ClipperLib.Clipper.CleanPolygons(this.paths, cleanDelta * this.scalingFactor);
-    return this;
+    const scalingFactor = this.scalingFactor;
+    const cleanedPaths = ClipperLib.Clipper.CleanPolygons(this.paths, scalingFactor * cleanDelta);
+    return new this.constructor(cleanedPaths, { scalingFactor });
   }
 
   /**
@@ -238,18 +275,16 @@ export class ClipperPaths {
     subjFillType = ClipperLib.PolyFillType.pftEvenOdd,
     clipFillType = ClipperLib.PolyFillType.pftEvenOdd } = {}) {
 
+    const scalingFactor = this.scalingFactor;
     const c = new ClipperLib.Clipper();
-    const solution = new ClipperPaths();
-    solution.scalingFactor = this.scalingFactor;
+    const solution = new this.constructor(undefined, { scalingFactor });
 
-    c.AddPath(polygon.toClipperPoints({ scalingFactor: this.scalingFactor }), ClipperLib.PolyType.ptSubject, true);
+    c.AddPath(polygon.toClipperPoints({ scalingFactor }), ClipperLib.PolyType.ptSubject, true);
     c.AddPaths(this.paths, ClipperLib.PolyType.ptClip, true);
     c.Execute(type, solution.paths, subjFillType, clipFillType);
 
     return solution;
   }
-
-
 
   /**
    * Intersect this set of paths with a polygon as subject.
@@ -281,9 +316,9 @@ export class ClipperPaths {
     const subjFillType = ClipperLib.PolyFillType.pftEvenOdd;
     const clipFillType = ClipperLib.PolyFillType.pftEvenOdd;
 
+    const scalingFactor = this.scalingFactor;
     const c = new ClipperLib.Clipper();
-    const solution = new ClipperPaths();
-    solution.scalingFactor = this.scalingFactor;
+    const solution = new this.constructor(undefined, { scalingFactor });
 
     c.AddPaths(other.paths, ClipperLib.PolyType.ptSubject, true);
     c.AddPaths(this.paths, ClipperLib.PolyType.ptClip, true);
@@ -302,9 +337,9 @@ export class ClipperPaths {
     const subjFillType = ClipperLib.PolyFillType.pftEvenOdd;
     const clipFillType = ClipperLib.PolyFillType.pftEvenOdd;
 
+    const scalingFactor = this.scalingFactor;
     const c = new ClipperLib.Clipper();
-    const solution = new ClipperPaths();
-    solution.scalingFactor = this.scalingFactor;
+    const solution = new this.constructor(undefined, { scalingFactor });
 
     c.AddPaths(other.paths, ClipperLib.PolyType.ptSubject, true);
     c.AddPaths(this.paths, ClipperLib.PolyType.ptClip, true);
@@ -329,8 +364,8 @@ export class ClipperPaths {
   union() {
     if ( this.paths.length === 1 ) return this;
     const c = new ClipperLib.Clipper();
-    const union = new ClipperPaths();
-    union.scalingFactor = this.scalingFactor;
+    const scalingFactor = this.scalingFactor;
+    const union = new this.constructor(undefined, { scalingFactor });
     c.AddPaths(this.paths, ClipperLib.PolyType.ptSubject, true);
     c.Execute(ClipperLib.ClipType.ctUnion,
       union.paths,
@@ -348,9 +383,9 @@ export class ClipperPaths {
   combine() {
     if ( this.paths.length === 1 ) return this;
 
+    const scalingFactor = this.scalingFactor;
     const c = new ClipperLib.Clipper();
-    const combined = new ClipperPaths();
-    combined.scalingFactor = this.scalingFactor;
+    const combined = new this.constructor(undefined, { scalingFactor });
 
     c.AddPaths(this.paths, ClipperLib.PolyType.ptSubject, true);
 
@@ -375,8 +410,8 @@ export class ClipperPaths {
     const firstPath = pathsArr[0];
     if ( ln === 1 ) return firstPath;
 
-    const cPaths = new ClipperPaths(firstPath.paths);
-    cPaths.scalingFactor = firstPath.scalingFactor;
+    const scalingFactor = firstPath.scalingFactor;
+    const cPaths = new this(firstPath.paths, { scalingFactor });
 
     for ( let i = 1; i < ln; i += 1 ) {
       const obj = pathsArr[i];
@@ -413,9 +448,9 @@ export class ClipperPaths {
     subjFillType = ClipperLib.PolyFillType.pftEvenOdd,
     clipFillType = ClipperLib.PolyFillType.pftEvenOdd } = {}) {
 
+    const scalingFactor = subject.scalingFactor;
     const c = new ClipperLib.Clipper();
-    const solution = new this();
-    solution.scalingFactor = subject.scalingFactor;
+    const solution = new this(undefined, { scalingFactor });
     c.AddPaths(subject.paths, ClipperLib.PolyType.ptSubject, true);
     c.AddPaths(clip.paths, ClipperLib.PolyType.ptClip, true);
     c.Execute(clipType, solution.paths, subjFillType, clipFillType);
@@ -425,7 +460,7 @@ export class ClipperPaths {
   /**
    * Draw the clipper paths, to the extent possible
    */
-  draw({ graphics = canvas.controls.debug, color = CONFIG.GeometryLib.Draw.COLORS.black, width = 1, fill, fillAlpha = 1 } = {}) {
+  draw({ graphics = canvas.controls.debug, color = Draw.COLORS.black, width = 1, fill, fillAlpha = 1 } = {}) {
     if ( !fill ) fill = color;
     const polys = this.toPolygons();
 

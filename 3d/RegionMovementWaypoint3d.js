@@ -1,13 +1,13 @@
 /* globals
 canvas,
-CONFIG
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import "./Point3d.js";
-import { elevationForUnit, unitElevation } from "../util.js";
+import { elevationForUnit, unitElevation, roundNearWhole, pixelsToGridUnits, gridUnitsToPixels, NULL_SET } from "../util.js";
 import { GEOMETRY_CONFIG } from "../const.js";
+import { Pool } from "../Pool.js";
+import { Point3d } from "./Point3d.js";
 
 // ----- NOTE: 3d versions of Foundry typedefs ----- //
 
@@ -24,12 +24,42 @@ import { GEOMETRY_CONFIG } from "../const.js";
  * Does not handle GridOffset3d so that it can be passed to 2d Foundry functions that
  * treat objects with {i,j} parameters differently.
  */
-export class RegionMovementWaypoint3d extends GEOMETRY_CONFIG.threeD.Point3d {
-  /** @type {number<grid units>} */
-  get elevation() { return CONFIG.GeometryLib.utils.pixelsToGridUnits(this.z); }
+export class RegionMovementWaypoint3d extends Point3d {
+
+  static classTypes = new Set([this.name]); // Alternative to instanceof
+
+  inheritsClassType(type) {
+    let proto = this;
+    let classTypes = proto.constructor.classTypes;
+    do {
+      if ( classTypes.has(type) ) return true;
+      proto = Object.getPrototypeOf(proto);
+      classTypes = proto?.constructor?.classTypes;
+
+    } while ( classTypes );
+    return false;
+  }
+
+  objectMatchesClassType(obj) {
+    return this.constructor.classTypes.equals(obj.constructor.classTypes || NULL_SET);
+  }
+
+  objectOverlapsClassType(obj) {
+    return this.constructor.classTypes.intersects(obj.constructor.classTypes || NULL_SET);
+  }
+
+
+  static #pool = new Pool(_pool => new RegionMovementWaypoint3d());
+
+  static release(...args) { args.forEach(arg => this.#pool.release(arg)); }
+
+  static get tmp() { return this.#pool.acquire(); }
 
   /** @type {number<grid units>} */
-  set elevation(value) { this.z = CONFIG.GeometryLib.utils.gridUnitsToPixels(value); }
+  get elevation() { return pixelsToGridUnits(this.z); }
+
+  /** @type {number<grid units>} */
+  set elevation(value) { this.z = gridUnitsToPixels(value); }
 
   /**
    * Factory function to convert a generic point object to a RegionMovementWaypoint3d.
@@ -94,11 +124,6 @@ export class RegionMovementWaypoint3d extends GEOMETRY_CONFIG.threeD.Point3d {
     outPoint.elevation = elevationForUnit(unitElevation(this.elevation));
     return outPoint;
   }
-
-  // Temporary points that can be passed to RegionMovementWaypoint3d methods
-  static _tmp = new this();
-  static _tmp2 = new this();
-  static _tmp3 = new this();
 }
 
 GEOMETRY_CONFIG.threeD.RegionMovementWaypoint3d ??= RegionMovementWaypoint3d;

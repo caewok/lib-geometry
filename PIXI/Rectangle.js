@@ -1,9 +1,10 @@
 /* globals
-PIXI
+PIXI,
 */
 "use strict";
 
-import "../Matrix.js";
+import { MatrixFlat as Matrix } from "../MatrixFlat.js";
+import { CutawayPolygon } from "../CutawayPolygon.js";
 
 export const PATCHES = {};
 PATCHES.PIXI = {};
@@ -17,18 +18,45 @@ function area() {
 }
 
 /**
+ * Does this rectangle equal another in position and size?
+ * @param {PIXI.Rectangle} other
+ * @returns {boolean}
+ */
+function equals(other) {
+  if ( !(other instanceof PIXI.Rectangle) ) return false;
+  return this.x === other.x
+    && this.y === other.y
+    && this.width === other.width
+    && this.height === other.height;
+}
+
+/**
+ * Does this rectangle almost equal another in position and size?
+ * @param {PIXI.Rectangle} other
+ * @param {number} [epsilon=1e-08]    Count as equal if at least this close
+ * @returns {boolean}
+ */
+function almostEqual(other, epsilon = 1e-08) {
+  if ( !(other instanceof PIXI.Circle) ) return false;
+  return this.x.almostEqual(other.x, epsilon)
+    && this.y.almostEqual(other.y, epsilon)
+    && this.width.almostEqual(other.width, epsilon)
+    && this.height.almostEqual(other.height, epsilon);
+}
+
+
+/**
  * Iterate over the rectangles's {x, y} points in order.
  * @param {object} [options]
  * @param {boolean} [options.close]   If close, include the first point again.
  * @returns {x, y} PIXI.Point
  */
 function* iteratePoints({close = true} = {}) {
-  const A = new PIXI.Point(this.x, this.y);
-  yield A;
-  yield new PIXI.Point(this.x + this.width, this.y);
-  yield new PIXI.Point(this.x + this.width, this.y + this.height);
-  yield new PIXI.Point(this.x, this.y + this.height);
-  if ( close ) yield A;
+  yield PIXI.Point.tmp.set(this.x, this.y);
+  yield PIXI.Point.tmp.set(this.x + this.width, this.y);
+  yield PIXI.Point.tmp.set(this.x + this.width, this.y + this.height);
+  yield PIXI.Point.tmp.set(this.x, this.y + this.height);
+  if ( close ) yield PIXI.Point.tmp.set(this.x, this.y); // A again.
 }
 
 /**
@@ -40,14 +68,14 @@ function* iteratePoints({close = true} = {}) {
  * Edges link, such that edge0.B === edge.1.A.
  */
 function* iterateEdges({close = true} = {}) {
-  const A = new PIXI.Point(this.x, this.y);
-  const B = new PIXI.Point(this.x + this.width, this.y);
+  const A = PIXI.Point.tmp.set(this.x, this.y);
+  const B = PIXI.Point.tmp.set(this.x + this.width, this.y);
   yield { A, B };
 
-  const C = new PIXI.Point(this.x + this.width, this.y + this.height);
+  const C = PIXI.Point.tmp.set(this.x + this.width, this.y + this.height);
   yield { A: B, B: C };
 
-  const D = new PIXI.Point(this.x, this.y + this.height);
+  const D = PIXI.Point.tmp.set(this.x, this.y + this.height);
   yield { A: C, B: D };
   if ( close ) yield { A: D, B: A };
 }
@@ -61,6 +89,7 @@ function overlaps(shape) {
   if ( shape instanceof PIXI.Polygon ) { return this._overlapsPolygon(shape); }
   if ( shape instanceof PIXI.Circle ) { return this._overlapsCircle(shape); }
   if ( shape instanceof PIXI.Rectangle ) { return this._overlapsRectangle(shape); }
+  if ( shape instanceof PIXI.Ellipse ) return shape._overlapsRectangle(this);
   if ( shape.toPolygon) return this._overlapsPolygon(shape.toPolygon());
   console.warn("overlaps|shape not recognized.", shape);
   return false;
@@ -112,13 +141,15 @@ function _overlapsPolygon(poly) {
 
   const pts = poly.iteratePoints({ close: true });
   let a = pts.next().value;
-  if ( this.contains(a.x, a.y) ) return true;
+  if ( !a ) { a.release(); return false; }
+  if ( this.contains(a.x, a.y) ) { a.release(); return true; }
 
   for ( const b of pts ) {
     if ( this.lineSegmentIntersects(a, b) || this.contains(b.x, b.y) ) return true;
+    a.release();
     a = b;
   }
-
+  a.release();
   return false;
 }
 
@@ -179,6 +210,7 @@ function _envelopsPolygon(poly) {
   const iter = poly.iteratePoints({ close: false });
   for ( const pt of iter ) {
     if ( !this.contains(pt.x, pt.y) ) return false;
+    pt.release();
   }
   return true;
 }
@@ -409,7 +441,7 @@ function gridRectangles(rect1, rect2) {
  * @param {number} [opts.isHole=false]        Treat this shape as a hole; reverse the points of the returned polygon
  * @returns {CutawayPolygon[]}
  */
-function cutaway(a, b, opts) { return CONFIG.GeometryLib.CutawayPolygon.cutawayBasicShape(this, a, b, opts); }
+function cutaway(a, b, opts) { return CutawayPolygon.cutawayBasicShape(this, a, b, opts); }
 
 /**
  * Rotate this rectangle around its center point.
@@ -429,12 +461,14 @@ function rotateAroundCenter(rotation = 0) {
   }
 
   // For all other rotations, translate center to 0,0, rotate, and then invert the translation.
-  const tMat = CONFIG.GeometryLib.Matrix.translation(-center.x, -center.y);
-  const rMat = CONFIG.GeometryLib.Matrix.rotationZ(Math.toRadians(rotation));
+  const tMat = Matrix.translation(-center.x, -center.y);
+  const rMat = Matrix.rotationZ(Math.toRadians(rotation));
   const M = tMat.multiply3x3(rMat).multiply3x3(tMat.invert);
   const pts = [...this.iteratePoints({ close: true })];
-  const tPts = pts.map(pt => M.multiplyPoint2d(pt));
-  return new PIXI.Polygon(...tPts);
+  const tPts = pts.map(pt => M.multiplyPoint2d(pt, pt));
+  const out = new PIXI.Polygon(...tPts);
+  PIXI.Point.release(...tPts);
+  return out;
 }
 
 /**
@@ -456,6 +490,10 @@ PATCHES.PIXI.METHODS = {
   // Iterators
   iteratePoints,
   iterateEdges,
+
+  // Equality
+  equals,
+  almostEqual,
 
   // Other methods
   union,
