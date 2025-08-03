@@ -103,6 +103,7 @@ export class Point3d extends PIXI.Point {
       }
     };
   }
+
   /**
    * Construct a Point3d from any object that has x and y and z properties.
    * Recognizes elevationZ and elevation as potential z properties.
