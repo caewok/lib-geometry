@@ -718,7 +718,7 @@ export class Point3d extends PIXI.Point {
 
     // Avoid overwriting other incase it is outPoint.
     const x = (this.y * other.z) - (this.z * other.y);
-    const y = (this.x * other.z) - (this.z * other.x);
+    const y = (this.z * other.x) - (this.x * other.z);
     outPoint.z = (this.x * other.y) - (this.y * other.x);
     outPoint.x = x;
     outPoint.y = y;
