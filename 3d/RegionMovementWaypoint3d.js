@@ -40,18 +40,18 @@ export class RegionMovementWaypoint3d extends Point3d {
     return false;
   }
 
-  objectMatchesClassType(obj) {
-    return this.constructor.classTypes.equals(obj.constructor.classTypes || NULL_SET);
+  matchesClass(cl) {
+    return this.constructor.classTypes.equals(cl.classTypes || NULL_SET);
   }
 
-  objectOverlapsClassType(obj) {
-    return this.constructor.classTypes.intersects(obj.constructor.classTypes || NULL_SET);
+  overlapsClass(cl) {
+    return this.constructor.classTypes.intersects(cl.classTypes || NULL_SET);
   }
 
 
-  static #pool = new Pool(_pool => new RegionMovementWaypoint3d());
+  static #pool = new Pool(this);
 
-  static release(...args) { args.forEach(arg => this.#pool.release(arg)); }
+  static releaseObj(obj) { this.#pool.release(obj); }
 
   static get tmp() { return this.#pool.acquire(); }
 
