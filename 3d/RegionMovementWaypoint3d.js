@@ -4,7 +4,7 @@ canvas,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { elevationForUnit, unitElevation, roundNearWhole, pixelsToGridUnits, gridUnitsToPixels, NULL_SET } from "../util.js";
+import { elevationForUnit, unitElevation, roundNearWhole, pixelsToGridUnits, gridUnitsToPixels } from "../util.js";
 import { GEOMETRY_CONFIG } from "../const.js";
 import { Pool } from "../Pool.js";
 import { Point3d } from "./Point3d.js";

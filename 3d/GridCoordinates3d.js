@@ -6,7 +6,7 @@ game
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { roundNearWhole, pixelsToGridUnits, gridUnitsToPixels, bresenhamLine3d, NULL_SET } from "../util.js";
+import { roundNearWhole, pixelsToGridUnits, gridUnitsToPixels, bresenhamLine3d } from "../util.js";
 import { RegionMovementWaypoint3d } from "./RegionMovementWaypoint3d.js";
 import { GridCoordinates } from "../GridCoordinates.js";
 import { GEOMETRY_CONFIG, GRID_DIAGONALS } from "../const.js";
@@ -15,7 +15,7 @@ import {
   alternatingGridDistance,
   getDirectPath,
   getOffsetDistanceFn } from "../grid_distance.js";
-
+import { Pool } from "../Pool.js";
 
 // ----- NOTE: 3d versions of Foundry typedefs ----- //
 

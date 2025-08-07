@@ -7,9 +7,10 @@ game
 "use strict";
 
 import { GEOMETRY_CONFIG } from "../const.js";
-import { roundNearWhole, bresenhamHexLine3d, NULL_SET } from "../util.js";
+import { roundNearWhole, bresenhamHexLine3d } from "../util.js";
 import { getOffsetDistanceFn } from "../grid_distance.js";
 import { GridCoordinates3d } from "./GridCoordinates3d.js";
+import { Pool } from "../Pool.js";
 
 /**
  * Cube coordinates in a hexagonal grid. q + r + s = 0.

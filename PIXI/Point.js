@@ -15,7 +15,7 @@ const pool = new Pool(PIXI.Point); // Instead of static #pool, just hide it here
 
 function releaseStatic(...args) { args.forEach(arg => pool.release(arg)); }
 
-function releaseObj(...args) {  pool.release(this); }
+function releaseObj(obj) {  pool.release(obj); }
 
 function release() { this.constructor.releaseObj(this); }
 
