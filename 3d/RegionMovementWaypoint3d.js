@@ -34,13 +34,6 @@ export class RegionMovementWaypoint3d extends Point3d {
 
   static get tmp() { return this.#pool.acquire(); }
 
-
-  static #pool = new Pool(this);
-
-  static releaseObj(obj) { this.#pool.release(obj); }
-
-  static get tmp() { return this.#pool.acquire(); }
-
   /** @type {number<grid units>} */
   get elevation() { return pixelsToGridUnits(this.z); }
 
