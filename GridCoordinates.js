@@ -32,6 +32,12 @@ import {
  * A 2d point that can function as Point|GridOffset. For just a point, use PIXI.Point.
  */
 export class GridCoordinates extends PIXI.Point {
+  static #pool = new Pool(this);
+
+  static releaseObj(obj) { this.#pool.release(obj); }
+
+  static get tmp() { return this.#pool.acquire(); }
+
   static GRID_DIAGONALS = GRID_DIAGONALS;
 
   /**

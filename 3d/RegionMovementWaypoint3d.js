@@ -28,25 +28,11 @@ export class RegionMovementWaypoint3d extends Point3d {
 
   static classTypes = new Set([this.name]); // Alternative to instanceof
 
-  inheritsClassType(type) {
-    let proto = this;
-    let classTypes = proto.constructor.classTypes;
-    do {
-      if ( classTypes.has(type) ) return true;
-      proto = Object.getPrototypeOf(proto);
-      classTypes = proto?.constructor?.classTypes;
+  static #pool = new Pool(this);
 
-    } while ( classTypes );
-    return false;
-  }
+  static releaseObj(obj) { this.#pool.release(obj); }
 
-  matchesClass(cl) {
-    return this.constructor.classTypes.equals(cl.classTypes || NULL_SET);
-  }
-
-  overlapsClass(cl) {
-    return this.constructor.classTypes.intersects(cl.classTypes || NULL_SET);
-  }
+  static get tmp() { return this.#pool.acquire(); }
 
 
   static #pool = new Pool(this);
