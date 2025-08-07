@@ -1,5 +1,6 @@
 /* globals
 canvas,
+CONFIG,
 PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
@@ -10,7 +11,7 @@ import {
   gridDistanceBetween,
   alternatingGridDistance,
   getOffsetDistanceFn } from "./grid_distance.js";
-
+import { Pool } from "../Pool.js";
 
 // ----- NOTE: Foundry typedefs  ----- //
 
