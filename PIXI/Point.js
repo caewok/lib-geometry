@@ -11,11 +11,19 @@ import { roundDecimals as roundDecimalsNumber } from "../util.js";
 export const PATCHES = {};
 PATCHES.PIXI = {};
 
-const pool = new Pool(_pool => new PIXI.Point()); // Instead of static #pool, just hide it here.
+const pool = new Pool(PIXI.Point); // Instead of static #pool, just hide it here.
 
 function releaseStatic(...args) { args.forEach(arg => pool.release(arg)); }
 
-function release() { pool.release(this); }
+function releaseObj(...args) {  pool.release(this); }
+
+function release() { this.constructor.releaseObj(this); }
+
+function buildNObjects(n = 1) {
+  const out = Array(n);
+  for ( let i = 0; i < n; i += 1 ) out[i] = new this();
+  return out;
+}
 
 function getTmp() { return pool.acquire(); }
 
@@ -520,6 +528,8 @@ PATCHES.PIXI.STATIC_METHODS = {
   invertKey,
   _invertKey,
   release: releaseStatic,
+  releaseObj,
+  buildNObjects,
 };
 
 PATCHES.PIXI.METHODS = {

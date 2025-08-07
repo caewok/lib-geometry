@@ -1,6 +1,7 @@
 /* globals
 CONFIG,
-foundry
+foundry,
+game,
 */
 "use strict";
 

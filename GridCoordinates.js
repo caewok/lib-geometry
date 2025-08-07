@@ -205,7 +205,7 @@ export class GridCoordinates extends PIXI.Point {
    *   - @prop {number} numDiagonal       Number of diagonals between the offsets if square or hex elevation
    */
   static gridMeasurementForSegment(a, b, opts) {
-    return GridCoordinates3d.gridMeasurementForSegment(a, b, opts);
+    return CONFIG.GeometryLib.threeD.GridCoordinates3d.gridMeasurementForSegment(a, b, opts);
   }
 
   /**
