@@ -33,16 +33,15 @@ function getTmp() { return pool.acquire(); }
  * @param {number} key      Integer key
  * @returns {PIXI.Point} coordinates
  */
-function invertKey(key, outPoint) {
+function pointFromKey(key, outPoint) {
   outPoint ??= this.tmp;
-  return outPoint.copyFrom(this._invertKey(key));
-}
-
-function _invertKey(key) {
   const x = Math.floor(key * MAX_TEXTURE_SIZE_INV);
   const y = key - (MAX_TEXTURE_SIZE * x);
-  return { x, y };
+  outPoint.set(x, y);
+  return outPoint;
 }
+
+
 
 /**
  * Use roundDecimals to round the point coordinates to a certain number of decimals
@@ -525,8 +524,8 @@ PATCHES.PIXI.STATIC_METHODS = {
   angleBetween,
   flatMapPoints,
   fromObject,
-  invertKey,
-  _invertKey,
+  pointFromKey,
+  invertKey: pointFromKey,  // Alias for backward compatibility.
   release: releaseStatic,
   releaseObj,
   buildNObjects,
