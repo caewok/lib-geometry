@@ -5,7 +5,7 @@
 
   initialSize = 100;
 
-  pool = new Set();
+  #pool = new Set();
 
   cl;
 
@@ -19,7 +19,7 @@
 
   increasePool(n = this.initialSize) {
     const objs = this.cl.buildNObjects(n);
-    for ( let i = 0; i < n; i += 1 ) this.pool.add(objs[i]);
+    for ( let i = 0; i < n; i += 1 ) this.#pool.add(objs[i]);
   }
 
   /**
@@ -27,11 +27,11 @@
    */
   acquire() {
     // If empty, add objects to the pool.
-    if ( !this.pool.size ) this.increasePool();
+    if ( !this.#pool.size ) this.increasePool();
 
     // Retrieve an object from the pool and remove it from the pool.
-    const obj = this.pool.first();
-    this.pool.delete(obj);
+    const obj = this.#pool.first();
+    this.#pool.delete(obj);
     return obj;
   }
 
@@ -42,14 +42,12 @@
   release(obj) {
     // Basic test that the object belongs.
     const cl = this.cl;
-    const isValid = cl.classTypes
-      ? obj.objectMatchesClassType(cl.name) // TODO: Make sure this works.
-      : obj instanceof cl;
+    const isValid = cl.classTypes ? obj.matchesClass(cl) : obj instanceof cl;
     if ( !isValid) {
       console.warn("Pool object does not match other instance in the pool.", { cl, obj });
       return;
     }
-    this.pool.add(obj);
+    this.#pool.add(obj);
   }
 }
 
@@ -549,6 +547,35 @@ class HPoint2d {
     return this._componentAdd(other, outPoint);
   }
 
+  addFast(other, outPoint) {
+    outPoint ??= this.constructor.tmp;
+    const a = this.arr;
+    const b = other.arr;
+    const o = outPoint.arr;
+    const iMax = this.constructor.DIMS + 1;
+    for ( let i = 0; i < iMax; i += 1 ) o[i] = a[i] + b[i];
+    return outPoint;
+  }
+
+  subtractFast(other, outPoint) {
+    outPoint ??= this.constructor.tmp;
+    const aw = this.w;
+    const bw = other.w;
+    if ( aw && bw && aw !== bw ) {
+      // Subtract two points to get a vector
+      // We need the two points to have same w so a vector is returned.
+      // Scale in place b/c it does not change the actual values. Effectively uses GCD.
+      this._componentMultiplyScalar(bw);
+      other._componentMultiplyScalar(aw);
+    }
+    const a = this.arr;
+    const b = other.arr;
+    const o = outPoint.arr;
+    const iMax = this.constructor.DIMS + 1;
+    for ( let i = 0; i < iMax; i += 1 ) o[i] = a[i] - b[i];
+    return outPoint;
+  }
+
   /**
    * Subtract two points to get a displacement vector, subtract two vectors, or subtract a vector from a point.
    * Unlike addition, two points are allowed.
@@ -559,7 +586,7 @@ class HPoint2d {
   subtract(other, outPoint) {
     const aw = this.w;
     const bw = other.w;
-    if ( !(this.isVector && other.isVector && aw !== bw) ) {
+    if ( !(this.isVector || other.isVector) && aw !== bw ) {
       // Subtract two points to get a vector
       // We need the two points to have same w so a vector is returned.
       // Scale in place b/c it does not change the actual values. Effectively uses GCD.
@@ -1335,7 +1362,7 @@ class HLine3d {
   static fromPlanes(x, y) {
     // See https://en.wikipedia.org/wiki/Pl%C3%BCcker_coordinates
     // Flipped.
-    const out = new this.tmp;
+    const out = this.tmp;
     const arr = out.arr;
     x = x.arr;
     y = y.arr;
@@ -1473,81 +1500,56 @@ class Triangle3dH {
     this.a.release();
     this.b.release();
     this.c.release();
+    if ( this.#plane ) this.#plane.release();
+    if ( this.#ixVars ) {
+      this.#ixVars.ab.delta.release();
+      this.#ixVars.ab.cross.release();
+      this.#ixVars.bc.delta.release();
+      this.#ixVars.bc.cross.release();
+      this.#ixVars.ca.delta.release();
+      this.#ixVars.ca.cross.release();
+    }
+    this.#plane = undefined;
+    this.#ixVars = undefined;
   }
 
-  get plane() { return HPlane.from3Points(this.a, this.b, this.c); }
+  /** @type {HPlane} */
+  #plane;
 
-  /**
-   * @param {HLine3d} r
-   * @returns {HPoint3d|null}
-   */
-  rayIntersection(r1, r2) {
-    // See https://graphics.stanford.edu/courses/cs348b-05/rayhomo.pdf
-
-    // Ray determinant gives |P1 P2 R1 R2|. Negate for different combination.
-    // r is R1R2
-    const R1R2 = HLine3d.fromPoints(r1, r2);
-    const P1P2 = HLine3d.fromPoints(this.a, this.b);
-    const P2P3 = HLine3d.fromPoints(this.b, this.c);
-    const P3R2 = HLine3d.fromPoints(this.c, r2);
-    const P1R1 = HLine3d.fromPoints(this.a, r1);
-    const P3P1 = HLine3d.fromPoints(this.c, this.a);
-
-    //
-    const s1 = P1P2._rayDeterminant(P3R2); // |P1P2P3R2|
-    const s2 = -P2P3._rayDeterminant(P1R1); // |P3P2P1R1| = -|P2P3P1R1|
-
-    const u1 = R1R2._rayDeterminant(P2P3);
-    const u2 = R1R2._rayDeterminant(P3P1);
-    const u3 = R1R2._rayDeterminant(P1P2);
-
-    if ( u1 < 0 || u2 < 0 || u3 < 0 ) return null;
-    if ( s1 < 0 || s2 < 0 ) return null;
-    return r1.multiplyScalar(s1).add(r2.multiplyScalar(s2));
+  get plane() {
+    if ( !this.#plane ) this.#plane = HPlane.from3Points(this.a, this.b, this.c);
+    return this.#plane;
   }
 
-  // https://en.wikipedia.org/wiki/Plücker_coordinates#Uses
+  // Cache key calculations to determine the ray intersection.
+  #ixVars;
 
-  rayIntersectionV2(rayOrigin, rayDirection) {
+  get ixVars() {
+    if ( !this.#ixVars ) {
+      const { a, b, c } = this;
+      const ixVarsFn = (b, c) => {
+        const out = {
+          delta: b.subtract(c),
+          cross: null,
+        };
+        const bVec = b.vectorize();
+        const cVec = c.vectorize();
+        out.cross = bVec.cross(cVec);
+        bVec.release();
+        cVec.release();
+        return out;
+      };
+      this.#ixVars = {
+        ab: ixVarsFn(a, b),
+        bc: ixVarsFn(b, c),
+        ca: ixVarsFn(c, a),
+      };
+    }
+    return this.#ixVars;
+  }
+
     // https://realtimecollisiondetection.net/blog/?p=13
     // ABC is clockwise when viewed in front.
-    const A = HPoint3d.tmp;
-    const B = HPoint3d.tmp;
-    const C = HPoint3d.tmp;
-
-
-    // Translate so that r1 (P) lies at the origin.
-    // Or Q = r2.subtract(r1)
-    const Q = rayDirection;
-    this.a.subtract(rayOrigin, A);
-    this.b.subtract(rayOrigin, B);
-    this.c.subtract(rayOrigin, C);
-
-    // Test if the ray lies inside the triangle face.
-    // Ray lies clockwise of each face. Each [] is a scalar triple.
-    // [Q A B] ≥ 0 && [Q B C] ≥ 0 && [Q C A] ≥ 0
-    // TODO: Store A x B, B x C , C x A to improve speed? Would have to fix the translation issue.
-    if ( Q.scalarTriple(A, B) < 0 ) return null;
-    if ( Q.scalarTriple(B, C) < 0 ) return null;
-    if ( Q.scalarTriple(C, A) < 0 ) return null;
-
-    // Determine intersection point.
-    // See https://en.wikipedia.org/wiki/Plücker_coordinates#Uses
-    // x:          a1*p01 + a2*p02 + a3*p03
-    // y: a0*p10 +          a2*p12 + a3*p13
-    // z: a0*p20 + a1*p21 +          a3*p23
-    // w: a0*p30 + a1*p31 + a2*p32
-    // https://math.stackexchange.com/questions/400268/equation-for-a-line-through-a-plane-in-homogeneous-coordinates#:~:text=In%20a%20similar%20vein%20to,Add%20a%20comment
-    // https://faculty.sites.iastate.edu/jia/files/inline-files/homogeneous-coords.pdf
-
-    // Or, more simply, use the existing plane information.
-    // Better to do this first?
-    // scalarTriple requires two subtractions (A, B), cross, dot.
-    // rayIx requires two dots, float negation, float division. But rayIx only null if ray is parallel, which is unlikely.
-    //
-    return this.plane.rayIntersection(rayOrigin, rayDirection);
-
-
     // Can we test the ray without the translation? Or with it later, so the cross can be stored?
     // triple is a • (b x c)
     // rayDir • ((b - o) x (c - o))
@@ -1578,100 +1580,31 @@ class Triangle3dH {
      y: b.z*c.x - b.x*c.z (cross.y) + o.z(b.x - c.x) - o.x(b.z - c.z)
      z: b.x*c.y - b.y*c.x (cross.z) + o.x(b.y - c.y) - o.y(b.x - c.x)
     */
-  }
 
-  rayIntersectionV3(rayOrigin, rayDirection) {
+
+  rayIntersection(rayOrigin, rayDirection) {
     // https://realtimecollisiondetection.net/blog/?p=13
     // ABC is clockwise when viewed in front.
-
-    // Translate so that r1 (P) lies at the origin.
-    // Or Q = r2.subtract(r1)
-    /*
-
-
-    const translatedCross = (b, c, o) => {
-      const tmp = HPoint3d.tmp;
-      b = b.vectorize();
-      c = c.vectorize();
-      o = o.vectorize()
-      b = b.arr
-      c = c.arr
-      o = o.arr
-
-
-      tmp.arr[0] = b[1]*c[2] - b[2]*c[1] + o[1]*(b[2] - c[2]) - o[2]*(b[1] - c[1]);
-      tmp.arr[1] = b[2]*c[0] - b[0]*c[2] + o[2]*(b[0] - c[0]) - o[0]*(b[2] - c[2]);
-      tmp.arr[2] = b[0]*c[1] - b[1]*c[0] + o[0]*(b[1] - c[1]) - o[1]*(b[0] - c[0]);
-      tmp.arr[3] = 0;
-      return tmp;
-    }
-
-    translatedCross2 = (b, c, o) => {
-      const deltaBC = b.subtract(c);
-      b = b.vectorize();
-      c = c.vectorize();
-      o = o.vectorize()
-
-      const cross = b.cross(c);
-      const oCross = o.cross(deltaBC);
-      return cross.add(oCross);
-    }
-
-    translatedCross(tri.a, tri.b, rayOrigin)
-    translatedCross(tri.b, tri.c, rayOrigin)
-    translatedCross(tri.c, tri.a, rayOrigin)
-
-    translatedCross2(tri.a, tri.b, rayOrigin)
-    translatedCross2(tri.b, tri.c, rayOrigin)
-    translatedCross2(tri.c, tri.a, rayOrigin)
-
-
-    const A = HPoint3d.tmp;
-    const B = HPoint3d.tmp;
-    const C = HPoint3d.tmp;
-    tri.a.subtract(rayOrigin, A);
-    tri.b.subtract(rayOrigin, B);
-    tri.c.subtract(rayOrigin, C);
-
-
-    A.cross(B)
-    B.cross(C)
-    C.cross(A)
-
-    // Compare to cachedScalarTripleFn:
-    // Q.scalarTriple(A, B)
-    // Q.scalarTriple(B, C)
-    // Q.scalarTriple(C, A)
-
-    */
-
-    // Can cache this.
-    const tri = this;
-    const ixVarsFn = (b, c) => {
-      return {
-        delta: b.subtract(c),
-        cross: b.vectorize().cross(c.vectorize()),
-      };
-    };
-    const abIXVars = ixVarsFn(tri.a, tri.b);
-    const bcIXVars = ixVarsFn(tri.b, tri.c);
-    const caIXVars = ixVarsFn(tri.c, tri.a);
-
-    // Need ray to calculate the following.
     const oVec = rayOrigin.vectorize();
-    const cachedScalarTripleFn = (ixVars, oVec, Q) => {
-      // o = o.vectorize()
-      const oCross = oVec.cross(ixVars.delta);
-      const ixCross = ixVars.cross.add(oCross);
-      return Q.dot(ixCross);
-    };
-
-    if ( cachedScalarTripleFn(abIXVars, oVec, rayDirection) < 0 ) return null;
-    if ( cachedScalarTripleFn(bcIXVars, oVec, rayDirection) < 0 ) return null;
-    if ( cachedScalarTripleFn(caIXVars, oVec, rayDirection) < 0 ) return null;
+    if ( this.constructor._cachedScalarTripleFn(this.ixVars.ab, oVec, rayDirection) < 0 ) return null;
+    if ( this.constructor._cachedScalarTripleFn(this.ixVars.bc, oVec, rayDirection) < 0 ) return null;
+    if ( this.constructor._cachedScalarTripleFn(this.ixVars.ca, oVec, rayDirection) < 0 ) return null;
     return this.plane.rayIntersection(rayOrigin, rayDirection);
   }
+
+  static _cachedScalarTripleFn(ixVars, oVec, Q) {
+    // o = o.vectorize()
+    const oCross = HPoint3d.tmp;
+    oVec.cross(ixVars.delta, oCross);
+    ixVars.cross.add(oCross, oCross);
+    const out = Q.dot(oCross);
+    oCross.release();
+    return out;
+  }
+
 }
+
+
 
 
 
@@ -1888,12 +1821,12 @@ function benchFn(cl) {
   pt.set(Math.random(), Math.random(), 1);
   pt2.set(Math.random(), Math.random(), 1);
   pt
+    .subtract(pt2, outPoint)
     .multiplyScalar(2, outPoint)
     .add(pt2, outPoint)
-    .subtract(pt2, outPoint)
-    .multiply(pt2, outPoint)
-    .divide(pt2, outPoint)
-    .normalize(outPoint);
+//     .multiply(pt2, outPoint)
+//     .divide(pt2, outPoint)
+  pt.subtract(pt2).normalize(outPoint);
   cl.release(pt, pt2);
   return outPoint
 }
@@ -1908,9 +1841,166 @@ benchFn(HPoint3d).arr
 
 QBenchmarkLoopFn = CONFIG.GeometryLib.bench.QBenchmarkLoopFn
 N = 10000
+await QBenchmarkLoopFn(N, benchFn, "HPoint2d", HPoint2d)
+await QBenchmarkLoopFn(N, benchFn, "HPoint3d", HPoint3d)
 await QBenchmarkLoopFn(N, benchFn, "PIXI.Point", PIXI.Point)
 await QBenchmarkLoopFn(N, benchFn, "Point3d", Point3d)
 await QBenchmarkLoopFn(N, benchFn, "Point2dTyped", Point2dTyped)
 await QBenchmarkLoopFn(N, benchFn, "Point3dTyped", Point3dTyped)
 await QBenchmarkLoopFn(N, benchFn, "HPoint2d", HPoint2d)
 await QBenchmarkLoopFn(N, benchFn, "HPoint3d", HPoint3d)
+
+function benchCreationFn(cl) {
+  const tmp = cl.tmp;
+  tmp.set(Math.random(), Math.random());
+  return tmp
+}
+N = 10000
+await QBenchmarkLoopFn(N, benchCreationFn, "HPoint2d", HPoint2d)
+await QBenchmarkLoopFn(N, benchCreationFn, "HPoint3d", HPoint3d)
+await QBenchmarkLoopFn(N, benchCreationFn, "PIXI.Point", PIXI.Point)
+await QBenchmarkLoopFn(N, benchCreationFn, "Point3d", Point3d)
+await QBenchmarkLoopFn(N, benchCreationFn, "Point2dTyped", Point2dTyped)
+await QBenchmarkLoopFn(N, benchCreationFn, "Point3dTyped", Point3dTyped)
+await QBenchmarkLoopFn(N, benchCreationFn, "HPoint2d", HPoint2d)
+await QBenchmarkLoopFn(N, benchCreationFn, "HPoint3d", HPoint3d)
+
+function benchSubtractAddFn(tmp, out) {
+  tmp.set(Math.random(), Math.random()); // pt
+  out.set(Math.random(), Math.random()); // vec
+  tmp.subtract(out, out).add(out, tmp).subtract(tmp, out).add(tmp, tmp);
+  return out;
+}
+function benchSubtractAdd2Fn(tmp, out) {
+  tmp.set(Math.random(), Math.random());
+  out.set(Math.random(), Math.random());
+  tmp.subtractFast(out, out).addFast(out, tmp).subtractFast(tmp, out).addFast(tmp, tmp);
+  return out;
+}
+
+N = 10000
+await QBenchmarkLoopFn(N, benchSubtractAdd2Fn, "HPoint2d Fast", HPoint2d.tmp, HPoint2d.tmp)
+await QBenchmarkLoopFn(N, benchSubtractAdd2Fn, "HPoint3d Fast", HPoint3d.tmp, HPoint3d.tmp)
+await QBenchmarkLoopFn(N, benchSubtractAddFn, "HPoint2d", HPoint2d.tmp, HPoint2d.tmp)
+await QBenchmarkLoopFn(N, benchSubtractAddFn, "HPoint3d", HPoint3d.tmp, HPoint3d.tmp)
+await QBenchmarkLoopFn(N, benchSubtractAddFn, "PIXI.Point", PIXI.Point.tmp, PIXI.Point.tmp)
+await QBenchmarkLoopFn(N, benchSubtractAddFn, "Point3d", Point3d.tmp, Point3d.tmp)
+await QBenchmarkLoopFn(N, benchSubtractAddFn, "Point2dTyped", Point2dTyped.tmp, Point2dTyped.tmp)
+await QBenchmarkLoopFn(N, benchSubtractAddFn, "Point3dTyped", Point3dTyped.tmp, Point3dTyped.tmp)
+await QBenchmarkLoopFn(N, benchSubtractAddFn, "Point3d", Point3d.tmp, Point3d.tmp)
+await QBenchmarkLoopFn(N, benchSubtractAddFn, "PIXI.Point", PIXI.Point.tmp, PIXI.Point.tmp)
+await QBenchmarkLoopFn(N, benchSubtractAddFn, "HPoint2d", HPoint2d.tmp, HPoint2d.tmp)
+await QBenchmarkLoopFn(N, benchSubtractAddFn, "HPoint3d", HPoint3d.tmp, HPoint3d.tmp)
+await QBenchmarkLoopFn(N, benchSubtractAdd2Fn, "HPoint2d Fast", HPoint2d.tmp, HPoint2d.tmp)
+await QBenchmarkLoopFn(N, benchSubtractAdd2Fn, "HPoint3d Fast", HPoint3d.tmp, HPoint3d.tmp)
+
+
+
+
+// Bench intersecting a triangle with a ray.
+Point3d = CONFIG.GeometryLib.threeD.Point3d
+Triangle3d = CONFIG.GeometryLib.threeD.Triangle3d
+Triangle3d.prototype.rayIntersection = Triangle3d.prototype.intersectionT
+
+a = HPoint3d.createPoint(5, 0, 0)
+b = HPoint3d.createPoint(5, 50, 0)
+c = HPoint3d.createPoint(5, 0, 100)
+tri = new Triangle3dH(a, b, c);
+triOrig = Triangle3d.from3Points(Point3d.tmp.set(...a), Point3d.tmp.set(...b), Point3d.tmp.set(...c))
+
+rayOrigins = [
+  [0, 10, 0],
+  [0, -10, 0],
+  [10, 20, 0],
+  [3, 2, 20],
+  [-10, 30, 100],
+  [-10, 30, 20],
+]
+rayDirections = [
+  [2, 0, 0],
+  [3, 0, 0],
+  [5, 2, 1],
+  [2, 1, 5],
+  [0, 0, 10],
+  [1, 1, 1],
+]
+
+log = []
+for ( let i = 0; i < rayOrigins.length; i += 1 ) {
+  const o = rayOrigins[i];
+  const d = rayDirections[i];
+  const rayOrigin = HPoint3d.createPoint(...o);
+  const rayDirection = HPoint3d.createVector(...d);
+  const t = tri.rayIntersection(rayOrigin, rayDirection)
+
+  const rayOriginOrig = Point3d.tmp.set(...o);
+  const rayDirectionOrig = Point3d.tmp.set(...d);
+  const tOrig = triOrig.intersectionT(rayOriginOrig, rayDirectionOrig);
+  log.push({ origin: rayOriginOrig.toString(), direction: rayDirectionOrig.toString(), t, tOrig })
+}
+console.table(log)
+
+function benchFn(rayOrigins, rayDirections, tri) {
+  const nRays = rayOrigins.length;
+  const indices = Array.fromRange(100).map(elem => Math.floor(Math.random() * nRays));
+
+  const ts = Array(indices.length);
+  const cl = tri.a.constructor;
+  const rayOrigin = cl.tmp;
+  const rayDirection = cl.tmp
+
+  let j = 0;
+  for ( const i of indices ) {
+    const o = rayOrigins[i];
+    const d = rayDirections[i];
+    rayOrigin.set(...o); // Point
+    rayDirection.set(...d, 0); // Vector
+    ts[j++] = tri.rayIntersection(rayOrigin, rayDirection);
+  }
+  rayOrigin.release();
+  rayDirection.release();
+  return ts;
+}
+
+benchFn(rayOrigins, rayDirections, triOrig)
+benchFn(rayOrigins, rayDirections, tri)
+
+N = 10000
+await QBenchmarkLoopFn(N, benchFn, "Original", rayOrigins, rayDirections, triOrig)
+await QBenchmarkLoopFn(N, benchFn, "Homogenous", rayOrigins, rayDirections, tri)
+
+function benchFn(rayOrigins, rayDirections, plane, cl = Point3d, method = "rayIntersection") {
+  const nRays = rayOrigins.length;
+  const indices = Array.fromRange(nRays);
+  // const indices = Array.fromRange(100).map(elem => Math.floor(Math.random() * nRays));
+  const ts = Array(indices.length);
+  const rayOrigin = cl.tmp;
+  const rayDirection = cl.tmp
+
+  let j = 0;
+  for ( const i of indices ) {
+    const o = rayOrigins[i];
+    const d = rayDirections[i];
+    rayOrigin.set(...o); // Point
+    rayDirection.set(...d, 0); // Vector
+    ts[j++] = plane[method](rayOrigin, rayDirection)
+  }
+  return ts;
+}
+
+triOrig.plane.rayIntersection(rayOrigin, rayDirection)
+triOrig.plane.lineIntersection(rayOrigin, rayDirection)
+triOrig.plane.rayIntersectionEisemann(rayOrigin, rayDirection)
+tri.plane.rayIntersection(rayOrigin, rayDirection)
+
+benchFn(rayOrigins, rayDirections, triOrig.plane)
+benchFn(rayOrigins, rayDirections, triOrig.plane, Point3d , "lineIntersection")
+benchFn(rayOrigins, rayDirections, triOrig.plane, Point3d , "rayIntersectionEisemann")
+benchFn(rayOrigins, rayDirections, tri.plane, HPoint3d)
+
+N = 10000
+await QBenchmarkLoopFn(N, benchFn, "Original", rayOrigins, rayDirections, triOrig.plane)
+await QBenchmarkLoopFn(N, benchFn, "Original lineIx", rayOrigins, rayDirections, triOrig.plane, Point3d, "lineIntersection")
+await QBenchmarkLoopFn(N, benchFn, "Original lineIx", rayOrigins, rayDirections, triOrig.plane, Point3d, "rayIntersectionEisemann")
+await QBenchmarkLoopFn(N, benchFn, "Original lineIx", rayOrigins, rayDirections, triOrig.plane, HPoint3d)
+
