@@ -11,7 +11,7 @@ import {
   gridDistanceBetween,
   alternatingGridDistance,
   getOffsetDistanceFn } from "./grid_distance.js";
-import { Pool } from "../Pool.js";
+import { Pool } from "./Pool.js";
 
 // ----- NOTE: Foundry typedefs  ----- //
 
