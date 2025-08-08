@@ -58,12 +58,12 @@ export class Point3d extends PIXI.Point {
     return false;
   }
 
-  objectMatchesClassType(obj) {
-    return this.constructor.classTypes.equals(obj.constructor.classTypes || NULL_SET);
+  matchesClass(cl) {
+    return this.constructor.classTypes.equals(cl.classTypes || NULL_SET);
   }
 
-  objectOverlapsClassType(obj) {
-    return this.constructor.classTypes.intersects(obj.constructor.classTypes || NULL_SET);
+  overlapsClass(cl) {
+    return this.constructor.classTypes.intersects(cl.classTypes || NULL_SET);
   }
 
   /**
@@ -76,14 +76,20 @@ export class Point3d extends PIXI.Point {
     this.z = z;
   }
 
-  static #pool = new Pool(_pool => new Point3d());
+  static #pool = new Pool(this);
 
-  static release(...args) { args.forEach(arg => this.#pool.release(arg)); }
+  static releaseObj(obj) { this.#pool.release(obj); }
 
-  release() {
-    // No need to clear the object, as no cache used.
-    this.constructor.release(this);
+  static release(...args) { args.forEach(arg => arg.release()); }
+
+  static buildNObjects(n = 1) {
+    const out = Array(n);
+    for ( let i = 0; i < n; i += 1 ) out[i] = new this();
+    return out;
   }
+
+   // No need to clear the object, as no cache used.
+  release() { this.constructor.releaseObj(this); }
 
   static get tmp() { return this.#pool.acquire(); }
 

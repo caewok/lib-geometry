@@ -4,7 +4,7 @@ canvas,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { elevationForUnit, unitElevation, roundNearWhole, pixelsToGridUnits, gridUnitsToPixels, NULL_SET } from "../util.js";
+import { elevationForUnit, unitElevation, roundNearWhole, pixelsToGridUnits, gridUnitsToPixels } from "../util.js";
 import { GEOMETRY_CONFIG } from "../const.js";
 import { Pool } from "../Pool.js";
 import { Point3d } from "./Point3d.js";
@@ -28,30 +28,9 @@ export class RegionMovementWaypoint3d extends Point3d {
 
   static classTypes = new Set([this.name]); // Alternative to instanceof
 
-  inheritsClassType(type) {
-    let proto = this;
-    let classTypes = proto.constructor.classTypes;
-    do {
-      if ( classTypes.has(type) ) return true;
-      proto = Object.getPrototypeOf(proto);
-      classTypes = proto?.constructor?.classTypes;
+  static #pool = new Pool(this);
 
-    } while ( classTypes );
-    return false;
-  }
-
-  objectMatchesClassType(obj) {
-    return this.constructor.classTypes.equals(obj.constructor.classTypes || NULL_SET);
-  }
-
-  objectOverlapsClassType(obj) {
-    return this.constructor.classTypes.intersects(obj.constructor.classTypes || NULL_SET);
-  }
-
-
-  static #pool = new Pool(_pool => new RegionMovementWaypoint3d());
-
-  static release(...args) { args.forEach(arg => this.#pool.release(arg)); }
+  static releaseObj(obj) { this.#pool.release(obj); }
 
   static get tmp() { return this.#pool.acquire(); }
 

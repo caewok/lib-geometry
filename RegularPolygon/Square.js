@@ -34,12 +34,12 @@ export class Square extends RegularPolygon {
     return false;
   }
 
-  objectMatchesClassType(obj) {
-    return this.constructor.classTypes.equals(obj.constructor.classTypes || NULL_SET);
+  matchesClass(cl) {
+    return this.constructor.classTypes.equals(cl.classTypes || NULL_SET);
   }
 
-  objectOverlapsClassType(obj) {
-    return this.constructor.classTypes.intersects(obj.constructor.classTypes || NULL_SET);
+  overlapsClass(cl) {
+    return this.constructor.classTypes.intersects(cl.classTypes || NULL_SET);
   }
 
   constructor(origin, radius, {rotation = 0, width} = {}) {

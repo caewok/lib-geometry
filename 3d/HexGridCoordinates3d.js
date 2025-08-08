@@ -7,9 +7,10 @@ game
 "use strict";
 
 import { GEOMETRY_CONFIG } from "../const.js";
-import { roundNearWhole, bresenhamHexLine3d, NULL_SET } from "../util.js";
+import { roundNearWhole, bresenhamHexLine3d } from "../util.js";
 import { getOffsetDistanceFn } from "../grid_distance.js";
 import { GridCoordinates3d } from "./GridCoordinates3d.js";
+import { Pool } from "../Pool.js";
 
 /**
  * Cube coordinates in a hexagonal grid. q + r + s = 0.
@@ -35,25 +36,11 @@ export class HexGridCoordinates3d extends GridCoordinates3d {
 
   static classTypes = new Set([this.name]); // Alternative to instanceof
 
-  inheritsClassType(type) {
-    let proto = this;
-    let classTypes = proto.constructor.classTypes;
-    do {
-      if ( classTypes.has(type) ) return true;
-      proto = Object.getPrototypeOf(proto);
-      classTypes = proto?.constructor?.classTypes;
+  static #pool = new Pool(this);
 
-    } while ( classTypes );
-    return false;
-  }
+  static releaseObj(obj) { this.#pool.release(obj); }
 
-  objectMatchesClassType(obj) {
-    return this.constructor.classTypes.equals(obj.constructor.classTypes || NULL_SET);
-  }
-
-  objectOverlapsClassType(obj) {
-    return this.constructor.classTypes.intersects(obj.constructor.classTypes || NULL_SET);
-  }
+  static get tmp() { return this.#pool.acquire(); }
 
   /**
    * Create this point from hex coordinates plus optional elevation.

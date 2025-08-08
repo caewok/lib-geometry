@@ -6,7 +6,7 @@ PIXI,
 
 import { GEOMETRY_CONFIG } from "../const.js";
 import { Point3d } from "./Point3d.js";
-import { NULL_SET } from "../util.js";
+import { Pool } from "../Pool.js";
 
 export class BaryTriangleData {
 
@@ -58,25 +58,11 @@ export class BarycentricPoint extends Point3d {
 
   static classTypes = new Set([this.name]); // Alternative to instanceof
 
-  inheritsClassType(type) {
-    let proto = this;
-    let classTypes = proto.constructor.classTypes;
-    do {
-      if ( classTypes.has(type) ) return true;
-      proto = Object.getPrototypeOf(proto);
-      classTypes = proto?.constructor?.classTypes;
+  static #pool = new Pool(this);
 
-    } while ( classTypes );
-    return false;
-  }
+  static releaseObj(obj) { this.#pool.release(obj); }
 
-  objectMatchesClassType(obj) {
-    return this.constructor.classTypes.equals(obj.constructor.classTypes || NULL_SET);
-  }
-
-  objectOverlapsClassType(obj) {
-    return this.constructor.classTypes.intersects(obj.constructor.classTypes || NULL_SET);
-  }
+  static get tmp() { return this.#pool.acquire(); }
 
 
   get u() { return this.x; }

@@ -8,23 +8,26 @@ Used to store temporary objects, such as points. Allows for returning objects to
 */
 export class Pool {
 
+  /** @type {number} */
   initialSize = 10;
 
-  pool = new Set();
+  /** @type {Set<object>} */
+  #pool = new Set();
 
-  objConstructor;
+  /** @type {class} */
+  cl;
 
   /**
-   * @param {function} objConstructor     Function that can construct a blank object.
-   *   Given this pool when constructed. Should return a blank, initialized object.
+   * @param {class} cl     Class that has a buildNObjects static method that takes a number
+   *                       and returns an array with that many new objects
    */
-  constructor(objConstructor) {
-    this.objConstructor = objConstructor;
-    this.increasePool();
+  constructor(cl) {
+    this.cl = cl;
   }
 
   increasePool(n = this.initialSize) {
-    for ( let i = 0; i < n; i += 1 ) this.pool.add(this.objConstructor(this));
+    const objs = this.cl.buildNObjects(n);
+    for ( let i = 0; i < n; i += 1 ) this.#pool.add(objs[i]);
   }
 
   /**
@@ -32,11 +35,11 @@ export class Pool {
    */
   acquire() {
     // If empty, add objects to the pool.
-    if ( !this.pool.size ) this.increasePool();
+    if ( !this.#pool.size ) this.increasePool();
 
-    // Retrieve an object from the pool and remove it from the pool.
-    const obj = this.pool.first();
-    this.pool.delete(obj);
+    // Pop an object from the pool.
+    const obj = this.#pool.first();
+    this.#pool.delete(obj);
     return obj;
   }
 
@@ -46,16 +49,12 @@ export class Pool {
    */
   release(obj) {
     // Basic test that the object belongs.
-    if ( !this.pool.size ) this.increasePool();
-
-    const testObj = this.pool.first();
-    const isValid = testObj.constructor.classTypes
-      ? testObj.objectMatchesClassType(obj)
-      : obj instanceof testObj.constructor;
+    const cl = this.cl;
+    const isValid = cl.classTypes ? obj.matchesClass(cl) : obj instanceof cl;
     if ( !isValid) {
-      console.warn("Pool object does not match other instance in the pool.", { testObj, obj });
+      console.warn("Pool object does not match other instance in the pool.", { cl, obj });
       return;
     }
-    this.pool.add(obj);
+    this.#pool.add(obj);
   }
 }
