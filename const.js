@@ -1,4 +1,5 @@
 /* globals
+CONST,
 game,
 Hooks
 */

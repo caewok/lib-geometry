@@ -11,11 +11,19 @@ import { roundDecimals as roundDecimalsNumber } from "../util.js";
 export const PATCHES = {};
 PATCHES.PIXI = {};
 
-const pool = new Pool(_pool => new PIXI.Point()); // Instead of static #pool, just hide it here.
+const pool = new Pool(PIXI.Point); // Instead of static #pool, just hide it here.
 
 function releaseStatic(...args) { args.forEach(arg => pool.release(arg)); }
 
-function release() { pool.release(this); }
+function releaseObj(obj) {  pool.release(obj); }
+
+function release() { this.constructor.releaseObj(this); }
+
+function buildNObjects(n = 1) {
+  const out = Array(n);
+  for ( let i = 0; i < n; i += 1 ) out[i] = new this();
+  return out;
+}
 
 function getTmp() { return pool.acquire(); }
 
@@ -25,16 +33,15 @@ function getTmp() { return pool.acquire(); }
  * @param {number} key      Integer key
  * @returns {PIXI.Point} coordinates
  */
-function invertKey(key, outPoint) {
+function pointFromKey(key, outPoint) {
   outPoint ??= this.tmp;
-  return outPoint.copyFrom(this._invertKey(key));
-}
-
-function _invertKey(key) {
   const x = Math.floor(key * MAX_TEXTURE_SIZE_INV);
   const y = key - (MAX_TEXTURE_SIZE * x);
-  return { x, y };
+  outPoint.set(x, y);
+  return outPoint;
 }
+
+
 
 /**
  * Use roundDecimals to round the point coordinates to a certain number of decimals
@@ -517,9 +524,11 @@ PATCHES.PIXI.STATIC_METHODS = {
   angleBetween,
   flatMapPoints,
   fromObject,
-  invertKey,
-  _invertKey,
+  pointFromKey,
+  invertKey: pointFromKey,  // Alias for backward compatibility.
   release: releaseStatic,
+  releaseObj,
+  buildNObjects,
 };
 
 PATCHES.PIXI.METHODS = {

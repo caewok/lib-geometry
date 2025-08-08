@@ -1,5 +1,6 @@
 /* globals
 canvas,
+CONFIG,
 PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
@@ -10,7 +11,7 @@ import {
   gridDistanceBetween,
   alternatingGridDistance,
   getOffsetDistanceFn } from "./grid_distance.js";
-
+import { Pool } from "./Pool.js";
 
 // ----- NOTE: Foundry typedefs  ----- //
 
@@ -32,6 +33,12 @@ import {
  * A 2d point that can function as Point|GridOffset. For just a point, use PIXI.Point.
  */
 export class GridCoordinates extends PIXI.Point {
+  static #pool = new Pool(this);
+
+  static releaseObj(obj) { this.#pool.release(obj); }
+
+  static get tmp() { return this.#pool.acquire(); }
+
   static GRID_DIAGONALS = GRID_DIAGONALS;
 
   /**
@@ -205,7 +212,7 @@ export class GridCoordinates extends PIXI.Point {
    *   - @prop {number} numDiagonal       Number of diagonals between the offsets if square or hex elevation
    */
   static gridMeasurementForSegment(a, b, opts) {
-    return GridCoordinates3d.gridMeasurementForSegment(a, b, opts);
+    return CONFIG.GeometryLib.threeD.GridCoordinates3d.gridMeasurementForSegment(a, b, opts);
   }
 
   /**
