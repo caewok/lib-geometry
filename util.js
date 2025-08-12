@@ -51,6 +51,7 @@ export function registerFoundryUtilsMethods() {
     almostLessThan,
     almostGreaterThan,
     almostBetween,
+    instanceOrTypeOf,
   };
 
 
@@ -1412,6 +1413,20 @@ export function segmentOverlap(a, b, c, d) {
   }
 
   return res;
+}
+
+/**
+ * Is an object an instance of a class or a class type.
+ * First check for "classTypes". If not present, fall back on instanceof.
+ * @param {object} obj1
+ * @param {object} obj2
+ * @return {boolean} True if the two objects share a class / parent class.
+ */
+export function instanceOrTypeOf(obj1, cl) {
+  const types1 = obj1.constructor.classTypes;
+  const types2 = cl.classTypes;
+  if ( types1 && types2 ) return types2.some(type => obj1.inheritsClassType(type));
+  return obj1 instanceof cl;
 }
 
 export function almostLessThan(a, b, epsilon = 1e-06) { return a < b || a.almostEqual(b, epsilon); }
