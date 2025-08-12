@@ -8,7 +8,6 @@ PIXI
 "use strict";
 
 import { ClipperPaths } from "./ClipperPaths.js";
-import { Clipper2Paths } from "./Clipper2Paths.js";
 
 export const PATCHES = {};
 PATCHES.CONSTRAINED_TOKEN_BORDER = {};

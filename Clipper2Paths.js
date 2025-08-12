@@ -6,6 +6,8 @@ canvas,
 
 import { GEOMETRY_CONFIG } from "./const.js";
 import { Draw } from "./Draw.js";
+import { NULL_SET } from "./util.js";
+
 
 // See https://www.npmjs.com/package/clipper2-js
 import * as Clipper2 from "./clipper2_esm2020/clipper2-js.mjs";
