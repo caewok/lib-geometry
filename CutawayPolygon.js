@@ -158,7 +158,7 @@ export class CutawayPolygon extends PIXI.Polygon {
     const ixs = shape.segmentIntersections(a, b);
     if ( ixs.length === 0 ) return [this.quadCutaway(a, b, opts)];
     if ( ixs.length === 1 ) {
-      const ix0 = Point3d.Point3d.fromObject(ixs[0]);
+      const ix0 = Point3d.fromObject(ixs[0]);
       ix0.t0 = ixs[0].t0;
       const a2 = a.to2d();
       const b2 = b.to2d();
