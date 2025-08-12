@@ -392,8 +392,7 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
    * @returns {PIXI.Polygon|undefined}
    */
   static clipperShapeToPolygon(shape) {
-    if ( !(shape instanceof ClipperPaths
-        || shape instanceof Clipper2Paths) ) return shape;
+    if ( !(shape.constructor.classTypes && shape.inheritsClassType("Clipper")) ) return shape; // ClipperPaths and Clipper2Paths share "Clipper" type.
 
     // Multiple polygons present. Ignore holes. Return remaining polygon or
     // construct one from convex hull of remaining polygons.
