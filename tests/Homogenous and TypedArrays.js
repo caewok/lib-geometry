@@ -438,14 +438,14 @@ class HPoint2d {
 
   _componentDivide(other, outPoint) { return this.#processByComponent(other.arr, outPoint, this.constructor._divideComponentsFn); }
 
-  /**
-   * Component multiply scalar does not change the value of a homogenous point, so done in place.
-   */
-  _componentMultiplyScalar(scalar) {
-    const a = this.arr;
+  _componentMultiplyScalar(scalar, outPoint) {
+    // Pull out this.#processByComponent for speed, b/c this is used in subtract.
+    outPoint ??= this.constructor.tmp;
+    const o = outPoint.arr;
+    o.set(this.arr);
     const wIdx = this.constructor.DIMS;
-    for ( let i = 0, iMax = wIdx + 1; i < iMax; i += 1 ) a[i] *= scalar;
-    return this;
+    for ( let i = 0, iMax = wIdx + 1; i < iMax; i += 1 ) o[i] *= scalar;
+    return outPoint;
   }
 
   // ----- NOTE: Cartesian math ----- //
@@ -574,20 +574,26 @@ class HPoint2d {
 
   subtract(other, outPoint) {
     outPoint ??= this.constructor.tmp;
+    const aPoint = this.constructor.tmp;
+    const bPoint = this.constructor.tmp;
+    const a = aPoint.arr;
+    const b = bPoint.arr;
+    a.set(this.arr);
+    b.set(other.arr);
     const aw = this.w;
     const bw = other.w;
     if ( aw && bw && aw !== bw ) {
       // Subtract two points to get a vector
       // We need the two points to have same w so a vector is returned.
-      // Scale in place b/c it does not change the actual values. Effectively uses GCD.
-      this._componentMultiplyScalar(bw);
-      other._componentMultiplyScalar(aw);
+      // Use GCD. Don't scale in place b/c repeated uses can result in infinities.
+      this._componentMultiplyScalar(bw, aPoint);
+      other._componentMultiplyScalar(aw, bPoint);
     }
-    const a = this.arr;
-    const b = other.arr;
     const o = outPoint.arr;
     const iMax = this.constructor.DIMS + 1;
     for ( let i = 0; i < iMax; i += 1 ) o[i] = a[i] - b[i];
+    aPoint.release();
+    bPoint.release();
     return outPoint;
   }
 
@@ -737,6 +743,30 @@ class HPoint2d {
     return out;
   }
 
+
+    // 2d cross product indicates orientation of a vector: ax*by - ay*bx
+    // • C > 0: b is "left", CCW
+    // • C < 0: b is "right", CW
+    // • C = 0: vectors are parallel, antiparallel, or orthogonal
+    // If C = 0, dot product distinguishes parallel from anti-parallel: D = ax*bx + ay*by
+    // • D > 0: vectors are parallel; point in the same general direction
+    // • D < 0: vectors are anti-parallel; point in opposite directions
+    // • D = 0: vectors are perpendicular
+    // angle between is cos-1(a•b / |a|•|b|) where || is magnitude
+
+  static orientOrig(a, b, c) { return foundry.utils.orient2dFast(a, b, c); }
+
+  static orientDet(a, b, c) {
+    const mat = new CONFIG.GeometryLib.MatrixFlat([
+      a.x, a.y, 1,
+      b.x, b.y, 1,
+      c.x, c.y, 1,
+    ], 3, 3)
+
+    // Via testing, if aw and bw don't share a sign, the result is reversed.
+    return mat.determinant() * Math.sign(a.w * c.w);
+  }
+
   /**
    * Orientation of three points
    * @param {HPoint2d} a
@@ -745,25 +775,86 @@ class HPoint2d {
    * @returns {number} Positive if ccw; negative if cw.
    */
   static orient(a, b, c) {
-    // Orient is
+    const ac = a._cartesianSubtract(c);
+    const bc = b._cartesianSubtract(c);
     // ac.y * bc.x - ac.x * bc.y, where ac = a - c and bc = b - c
-    // ac.y / ac.w * b.x / bc.w - ac.x/ac.w * bc.y /bc.w =
-    // (ac.y * bc.x - ac.x * bc.y) / (ac.w * bc.w)
-
-    const ac = a.subtract(c);
-    const bc = b.subtract(c);
-    const acArr = ac.arr;
-    const bcArr = b.carr;
-    const out = ((acArr[1] * bcArr[0]) - (acArr[0] * bcArr[1])) / (acArr[2] * bcArr[2]);
+    // cross2d(ac, bc, 1, 0) after dividing by w.
+    const out = (ac.y * bc.x) - (ac.x * bc.y);
     ac.release();
     bc.release();
     return out;
   }
 
-  static orientV2(a,b,c) {
-    const l = b.cross(a);
-    return l.dot(c);
+  static orientV2(a, b, c) {
+    // Orient is
+    // ac.y * bc.x - ac.x * bc.y, where ac = a - c and bc = b - c
+    // (ac.y / ac.w * bc.x / bc.w) - (ac.x/ac.w * bc.y /bc.w) =
+    // ((ac.y * bc.x) / (ac.w * bc.w)) - ((ac.x*bc.y) / (ac.w * bc.w))
+    // (ac.y * bc.x) - (ac.x * bc.y) / (ac.w * bc.w)
+
+    // a - c: a.x/a.w - c.x/c.w => a.x*c.w - c.x*a.w, w = c.w * a.w
+
+    const deltaAC = a._cartesianSubtract(c);
+    const deltaBC = b._cartesianSubtract(c);
+    const ac = deltaAC.arr;
+    const bc = deltaBC.arr;
+    const cw = c.w;
+    const out = ((ac[1] * bc[0]) - (ac[0] * bc[1])) / (ac[2] * bc[2])
+    deltaAC.release();
+    deltaBC.release();
+    return out;
   }
+
+  static orientV3(a,b,c) {
+    // a-c: a.x*c.w - c.x*a.w, a.y*c.w - c.y*a.w, a.w*c.w
+    // b-c: b.x*c.w - c.x*b.w, b.y*c.w - c.y*b.w, b.w*c.w
+    // cross2d: ac.y * bc.x - ac.x * bc.y; w = ac.w * bc.w
+    // w = (a.w*c.w) * (b.w*c.w)
+    // ((a.y*c.w - c.y*a.w) * (b.x*c.w - c.x*b.w)) - ((a.x*c.w - c.x*a.w)*(b.y*c.w - c.y*b.w))
+
+    // Use the determinant of the 3x3 matrix
+    // a.x(b.y*c.w - c.y*b.w) - a.y(b.x*c.w - c.x*b.w) + a.w(b.x*c.y - c.x*b.y);
+    const cross12 = cross2d(b, c, 1, 2);
+    const cross02 = cross2d(b, c, 0, 1);
+    const cross01 = cross2d(b, c, 0, 1);
+
+    // Via testing, if aw and bw don't share a sign, the result is reversed.
+    const s =  Math.sign(a.w * c.w);
+    a = a.arr;
+    return (a[0]*cross12 - a[1]*cross02 + a[2]*cross01) * s;
+  }
+
+  static orientV4(a, b, c) {
+    // Use determinant directly. Same sign, larger value.
+    const mat = new CONFIG.GeometryLib.MatrixFlat([
+      ...a.arr,
+      ...b.arr,
+      ...c.arr,
+    ], 3, 3)
+
+    // Via testing, if aw and bw don't share a sign, the result is reversed.
+    return mat.determinant() * Math.sign(a.w * c.w);;
+  }
+
+  static orientV5(a, b, c) {
+    const ab = b.subtract(a);
+    const bc = c.subtract(b);
+    const out = bc.cross(ab).w * Math.sign(a.w * c.w); // Via testing, if aw and bw don't share a sign, the result is reversed.
+    ac.release();
+    bc.release();
+    return out;
+  }
+
+  static orientV6(a, b, c) {
+    const ab = b.subtract(a);
+    const bc = c.subtract(b);
+    const out = cross2d(bc, ab, 0, 1) * Math.sign(a.w * c.w); // Via testing, if aw and bw don't share a sign, the result is reversed.
+    ac.release();
+    bc.release();
+    return out;
+  }
+
+
 
   /**
    * Angle between this and another vector.
@@ -2157,3 +2248,79 @@ await QBenchmarkLoopFn(N, benchPlaneHomogenousFn, "Homogenous rayIntersection", 
 await QBenchmarkLoopFn(N, benchTriFn, "Original rayIntersection", rayOrigins, rayDirections, triOrig, "rayIntersection")
 await QBenchmarkLoopFn(N, benchTriHomogenousFn, "Homogenous rayIntersection", rayOrigins, rayDirections, tri, "rayIntersection")
 await QBenchmarkLoopFn(N, benchTriHomogenousFn, "Homogenous rayIntersectionMT", rayOrigins, rayDirections, tri, "rayIntersectionMT")
+
+
+QBenchmarkLoopFn = CONFIG.GeometryLib.bench.QBenchmarkLoopFn
+N = 100000
+await QBenchmarkLoopFn(N, foundry.utils.orient2dFast, "orient Foundry", a, b, c)
+await QBenchmarkLoopFn(N, HPoint2d.orientOrig, "orientOrig", a, b, c)
+await QBenchmarkLoopFn(N, HPoint2d.orientDet, "orientDet", a, b, c)
+await QBenchmarkLoopFn(N, HPoint2d.orient, "orient", a, b, c)
+await QBenchmarkLoopFn(N, HPoint2d.orientV2, "orientV2", a, b, c)
+await QBenchmarkLoopFn(N, HPoint2d.orientV3, "orientV3", a, b, c)
+await QBenchmarkLoopFn(N, HPoint2d.orientV4, "orientV4", a, b, c)
+
+
+function orientBench(fn) {
+  r = () => (Math.random() - 0.5) * 5000;
+  a = HPoint2d.tmp.set(r(), r(), r());
+  b = HPoint2d.tmp.set(r(), r(), r())
+  c = HPoint2d.tmp.set(r(), r(), r())
+  const out = fn(a, b, c);
+  a.release();
+  b.release();
+  c.release();
+  return out;
+}
+await QBenchmarkLoopFn(N, orientBench, "orient Foundry", foundry.utils.orient2dFast)
+await QBenchmarkLoopFn(N, orientBench, "orientOrig", HPoint2d.orientOrig)
+await QBenchmarkLoopFn(N, orientBench, "orientDet", HPoint2d.orientDet)
+await QBenchmarkLoopFn(N, orientBench, "orient", HPoint2d.orient)
+await QBenchmarkLoopFn(N, orientBench, "orientV2", HPoint2d.orientV2)
+await QBenchmarkLoopFn(N, orientBench, "orientV3", HPoint2d.orientV3)
+await QBenchmarkLoopFn(N, orientBench, "orientV4", HPoint2d.orientV4)
+await QBenchmarkLoopFn(N, orientBench, "orientV5", HPoint2d.orientV5)
+
+function sameSign(fn1, fn2) {
+  r = () => (Math.random() - 0.5) * 5000;
+  a = HPoint2d.tmp.set(r(), r(), r());
+  b = HPoint2d.tmp.set(r(), r(), r())
+  c = HPoint2d.tmp.set(r(), r(), r())
+  const out1 = fn1(a, b, c);
+  const out2 = fn2(a, b, c);
+  const out = Math.sign(out1) === Math.sign(out2)
+  a.release();
+  b.release();
+  c.release();
+  return out;
+}
+
+Array.fromRange(100).every(elem => sameSign(foundry.utils.orient2dFast, HPoint3d.orientOrig)) // √
+Array.fromRange(100).every(elem => sameSign(foundry.utils.orient2dFast, HPoint3d.orientDet))
+Array.fromRange(100).every(elem => sameSign(foundry.utils.orient2dFast, HPoint3d.orient)) // √
+Array.fromRange(100).every(elem => sameSign(foundry.utils.orient2dFast, HPoint3d.orientV2)) // √
+Array.fromRange(100).every(elem => sameSign(foundry.utils.orient2dFast, HPoint3d.orientV3))
+Array.fromRange(100).every(elem => sameSign(foundry.utils.orient2dFast, HPoint3d.orientV4))
+Array.fromRange(100).map(elem => sameSign(foundry.utils.orient2dFast, HPoint3d.orientV5))
+
+Array.fromRange(100).map(elem => sameSign(foundry.utils.orient2dFast, orientV5))
+Array.fromRange(100).map(elem => sameSign(foundry.utils.orient2dFast, orientV6))
+
+a   b   c         Num -     a ^ c
++   +   +     √       0     +
++   +   -     x       1     -
++   -   +     √       1     +
++   -   -     x       2     -
+
+-   +   +     x       1     -
+-   -   +     x       2     -
+-   +   -     √       2     +
+-   -   -     √       3     +
+
+
+Math.sign(a.w * c.w)
+a+, b+, c+: √
+a-, b+, c
+
+foundry.utils.orient2dFast(a, b, c)
+orientV6(a, b, c)
