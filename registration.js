@@ -123,6 +123,9 @@ const PATCHES_V12 = {
 }
 
 const PATCHES_V13 = {
+  // Don't need CanvasEdges b/c quadtree already in v13.
+  // Do need
+
   "PIXI.Circle": PATCHES_Circle,
   "PIXI.Point": PATCHES_Point,
   "PIXI.Polygon": PATCHES_Polygon,
@@ -141,7 +144,7 @@ const PATCHES_V13 = {
 
   // Elevation and Constrained Token patches
   "foundry.canvas.placeables.Token": foundry.utils.mergeObject(PATCHES_ELEVATION.Token, PATCHES_Token),
-  "foundry.canvas.geometry.edges.CanvasEdges": PATCHES_CanvasEdges,
+  "foundry.canvas.edges.CanvasEdges": PATCHES_CanvasEdges,
   "foundry.canvas.geometry.edges.Edge": PATCHES_Edge,
   "ConstrainedTokenBorder": PATCHES_ConstrainedTokenBorder,
   "foundry.documents.BaseAmbientLight": PATCHES_AmbientLight,
@@ -180,9 +183,15 @@ export function registerGeometryLibPatches() {
   CONFIG.GeometryLib.PATCHER.addPatchesFromRegistrationObject(patches);
   CONFIG.GeometryLib.PATCHER.registerGroup("PIXI");
   CONFIG.GeometryLib.PATCHER.registerGroup("CONSTRAINED_TOKEN_BORDER");
-  CONFIG.GeometryLib.PATCHER.registerGroup("CANVAS_EDGES");
+
   CONFIG.GeometryLib.PATCHER.registerGroup("PIXEL_CACHE");
   CONFIG.GeometryLib.PATCHER.registerGroup("ELEVATION");
+
+  if ( foundry.utils.isNewerVersion(game.version, "13") ) {
+    CONFIG.GeometryLib.PATCHER.registerGroup("CANVAS_EDGES_V13");
+  } else {
+    CONFIG.GeometryLib.PATCHER.registerGroup("CANVAS_EDGES");
+  }
 }
 
 function deRegister() {
@@ -191,5 +200,6 @@ function deRegister() {
   CONFIG.GeometryLib.PATCHER.deregisterGroup("PIXI");
   CONFIG.GeometryLib.PATCHER.deregisterGroup("PIXEL_CACHE");
   CONFIG.GeometryLib.PATCHER.deregisterGroup("CANVAS_EDGES");
+  CONFIG.GeometryLib.PATCHER.deregisterGroup("CANVAS_EDGES_V13");
   CONFIG.GeometryLib.PATCHER.deregisterGroup("CONSTRAINED_TOKEN_BORDER");
 }

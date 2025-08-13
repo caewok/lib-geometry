@@ -9,6 +9,7 @@ import { ConstrainedTokenBorder } from "./ConstrainedTokenBorder.js";
 // Patches for the CanvasEdges class.
 export const PATCHES = {};
 PATCHES.CANVAS_EDGES = {};
+PATCHES.CANVAS_EDGES_V13 = {};
 
 // ----- Wraps ----- //
 
@@ -57,4 +58,15 @@ function refresh(wrapped) {
   for ( const edge of this.values() ) this.quadtree.update({ r: edge.bounds, t: edge });
 }
 
+/**
+ * Wrap Edges.refresh to update the constrained token border id.
+ * Foundry v13.
+ */
+function refreshV13(wrapped) {
+  ConstrainedTokenBorder._wallsID++;
+  wrapped();
+}
+
 PATCHES.CANVAS_EDGES.WRAPS = { initialize, set: edgesSet, delete: edgesDelete, clear, refresh };
+PATCHES.CANVAS_EDGES_V13.WRAPS = { refresh: refreshV13 };
+
