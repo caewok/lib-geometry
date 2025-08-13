@@ -144,7 +144,7 @@ const PATCHES_V13 = {
 
   // Elevation and Constrained Token patches
   "foundry.canvas.placeables.Token": foundry.utils.mergeObject(PATCHES_ELEVATION.Token, PATCHES_Token),
-  "foundry.canvas.edges.CanvasEdges": PATCHES_CanvasEdges,
+  "foundry.canvas.geometry.edges.CanvasEdges": PATCHES_CanvasEdges,
   "foundry.canvas.geometry.edges.Edge": PATCHES_Edge,
   "ConstrainedTokenBorder": PATCHES_ConstrainedTokenBorder,
   "foundry.documents.BaseAmbientLight": PATCHES_AmbientLight,
