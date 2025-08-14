@@ -281,10 +281,10 @@ class HPoint2d {
   }
 
   toString() {
-    let str = "";
+    let str = [];
     const d = this.constructor.DIMS + 1;
-    for ( let i = 0; i < d; i += 1 ) str += `${this.arr[i]}`;
-    return `{${str}}`;
+    for ( let i = 0; i < d; i += 1 ) str.push(`${this.arr[i]}`);
+    return str.join(", ");
   }
 
   /**
@@ -764,11 +764,12 @@ class HPoint2d {
     ], 3, 3)
 
     // Via testing, if aw and bw don't share a sign, the result is reversed.
-    return mat.determinant() * Math.sign(a.w * c.w);
+    return - mat.determinant() * Math.sign(a.w * b.w * c.w)
   }
 
   /**
-   * Orientation of three points
+   * Orientation of three points.
+   * If w is positive, it is the determinant of the 3x3 matrix formed by the points.
    * @param {HPoint2d} a
    * @param {HPoint2d} b
    * @param {HPoint2d} c
@@ -805,6 +806,18 @@ class HPoint2d {
     return out;
   }
 
+  static orientV7(a, b, c) {
+    // ac: a - c: a.x*c.w - c.x*a.w, a.y*c.w - c.y*a.w, a.w*c.w
+    // bc: b - c: b.x*c.w - c.x*b.w, b.y*c.w - c.y*b.w, b.w*c.w
+    // cross2d: ac.y * bc.x - ac.x * bc.y; w = ac.w * bc.w
+    // (a.y⋅c.w−c.y⋅a.w)(b.x⋅c.w−c.x⋅b.w)−(a.x⋅c.w−c.x⋅a.w)(b.y⋅c.w−c.y⋅b.w)
+    const ac12 = cross2d(a, c, 1, 2);
+    const bc02 = cross2d(b, c, 0, 2);
+    const ac02 = cross2d(a, c, 0, 2);
+    const bc12 = cross2d(b, c, 1, 2);
+    return ((ac12 * bc02) - (ac02 * bc12)) / (a.w * b.w * c.w * c.w);
+  }
+
   static orientV3(a,b,c) {
     // a-c: a.x*c.w - c.x*a.w, a.y*c.w - c.y*a.w, a.w*c.w
     // b-c: b.x*c.w - c.x*b.w, b.y*c.w - c.y*b.w, b.w*c.w
@@ -819,9 +832,7 @@ class HPoint2d {
     const cross01 = cross2d(b, c, 0, 1);
 
     // Via testing, if aw and bw don't share a sign, the result is reversed.
-    const s =  Math.sign(a.w * c.w);
-    a = a.arr;
-    return (a[0]*cross12 - a[1]*cross02 + a[2]*cross01) * s;
+    return -(a.arr[0]*cross12 - a.arr[1]*cross02 + a.arr[2]*cross01) / (a.w * b.w * c.w);
   }
 
   static orientV4(a, b, c) {
@@ -833,14 +844,14 @@ class HPoint2d {
     ], 3, 3)
 
     // Via testing, if aw and bw don't share a sign, the result is reversed.
-    return mat.determinant() * Math.sign(a.w * c.w);;
+    return - mat.determinant() / (a.w * b.w * c.w);
   }
 
   static orientV5(a, b, c) {
     const ab = b.subtract(a);
     const bc = c.subtract(b);
-    const out = bc.cross(ab).w * Math.sign(a.w * c.w); // Via testing, if aw and bw don't share a sign, the result is reversed.
-    ac.release();
+    const out = bc.cross(ab).w / (a.w * b.w * c.w);
+    ab.release();
     bc.release();
     return out;
   }
@@ -848,8 +859,8 @@ class HPoint2d {
   static orientV6(a, b, c) {
     const ab = b.subtract(a);
     const bc = c.subtract(b);
-    const out = cross2d(bc, ab, 0, 1) * Math.sign(a.w * c.w); // Via testing, if aw and bw don't share a sign, the result is reversed.
-    ac.release();
+    const out = cross2d(bc, ab, 0, 1) / (a.w * b.w * c.w);
+    ab.release();
     bc.release();
     return out;
   }
@@ -2280,6 +2291,8 @@ await QBenchmarkLoopFn(N, orientBench, "orientV2", HPoint2d.orientV2)
 await QBenchmarkLoopFn(N, orientBench, "orientV3", HPoint2d.orientV3)
 await QBenchmarkLoopFn(N, orientBench, "orientV4", HPoint2d.orientV4)
 await QBenchmarkLoopFn(N, orientBench, "orientV5", HPoint2d.orientV5)
+await QBenchmarkLoopFn(N, orientBench, "orientV6", HPoint2d.orientV6)
+await QBenchmarkLoopFn(N, orientBench, "orientV7", HPoint2d.orientV7)
 
 function sameSign(fn1, fn2) {
   r = () => (Math.random() - 0.5) * 5000;
@@ -2301,7 +2314,8 @@ Array.fromRange(100).every(elem => sameSign(foundry.utils.orient2dFast, HPoint3d
 Array.fromRange(100).every(elem => sameSign(foundry.utils.orient2dFast, HPoint3d.orientV2)) // √
 Array.fromRange(100).every(elem => sameSign(foundry.utils.orient2dFast, HPoint3d.orientV3))
 Array.fromRange(100).every(elem => sameSign(foundry.utils.orient2dFast, HPoint3d.orientV4))
-Array.fromRange(100).map(elem => sameSign(foundry.utils.orient2dFast, HPoint3d.orientV5))
+Array.fromRange(100).every(elem => sameSign(foundry.utils.orient2dFast, HPoint3d.orientV5))
+Array.fromRange(100).every(elem => sameSign(foundry.utils.orient2dFast, HPoint3d.orientV6))
 
 Array.fromRange(100).map(elem => sameSign(foundry.utils.orient2dFast, orientV5))
 Array.fromRange(100).map(elem => sameSign(foundry.utils.orient2dFast, orientV6))
@@ -2317,10 +2331,44 @@ a   b   c         Num -     a ^ c
 -   +   -     √       2     +
 -   -   -     √       3     +
 
+res = [];
+setSign = (elem, dir) => { if ( Math.sign(elem) !== dir ) elem.w *= -1; }
+for ( const i of [-1, 1] ) {
+  setSign(a, i);
+  for ( const j of [-1, 1] ) {
+    setSign(b, j);
+    for ( const k of [-1, 1] ) {
+      setSign(c, k)
+      const res1 = foundry.utils.orient2dFast(a, b, c);
+      const res2 = HPoint2d.orientV3(a, b, c);
+      res.push({ aw: a.w, bw: b.w, cw: c.w, a: i, b: j, c: k, correct: Math.sign(res1) === Math.sign(res2) })
+    }
+  }
+}
+console.table(res)
 
-Math.sign(a.w * c.w)
-a+, b+, c+: √
-a-, b+, c
+orientV3 x
+orientV5 x
 
-foundry.utils.orient2dFast(a, b, c)
-orientV6(a, b, c)
+
+// Same
+res = [];
+target = foundry.utils.orient2dFast(a, b, c)
+for ( const fnName of ["orientOrig", "orientDet", "orient", "orientV2", "orientV3", "orientV4", "orientV5", "orientV6", "orientV7"]) {
+  const value = HPoint2d[fnName](a, b, c);
+  res.push({ fnName, a: a.toString(), b: b.toString(), c: c.toString(), value, equal: target.almostEqual(value) });
+}
+console.table(res)
+
+            Equal   Small Diff    Sign only   Amount and Sign   Amount only
+orientOrig  √
+orientDet                         √
+orient              √
+*orientV2           √
+*orientV3                                      √
+orientV4    √
+orientV5                                                        √
+orientV6                                      √
+*orientV7    √
+
+*Fastest
