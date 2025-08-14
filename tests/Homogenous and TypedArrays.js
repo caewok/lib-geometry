@@ -744,69 +744,17 @@ class HPoint2d {
   }
 
 
-    // 2d cross product indicates orientation of a vector: ax*by - ay*bx
-    // • C > 0: b is "left", CCW
-    // • C < 0: b is "right", CW
-    // • C = 0: vectors are parallel, antiparallel, or orthogonal
-    // If C = 0, dot product distinguishes parallel from anti-parallel: D = ax*bx + ay*by
-    // • D > 0: vectors are parallel; point in the same general direction
-    // • D < 0: vectors are anti-parallel; point in opposite directions
-    // • D = 0: vectors are perpendicular
-    // angle between is cos-1(a•b / |a|•|b|) where || is magnitude
+  // 2d cross product indicates orientation of a vector: ax*by - ay*bx
+  // • C > 0: b is "left", CCW
+  // • C < 0: b is "right", CW
+  // • C = 0: vectors are parallel, antiparallel, or orthogonal
+  // If C = 0, dot product distinguishes parallel from anti-parallel: D = ax*bx + ay*by
+  // • D > 0: vectors are parallel; point in the same general direction
+  // • D < 0: vectors are anti-parallel; point in opposite directions
+  // • D = 0: vectors are perpendicular
+  // angle between is cos-1(a•b / |a|•|b|) where || is magnitude
 
-  static orientOrig(a, b, c) { return foundry.utils.orient2dFast(a, b, c); }
-
-  static orientDet(a, b, c) {
-    const mat = new CONFIG.GeometryLib.MatrixFlat([
-      a.x, a.y, 1,
-      b.x, b.y, 1,
-      c.x, c.y, 1,
-    ], 3, 3)
-
-    // Via testing, if aw and bw don't share a sign, the result is reversed.
-    return - mat.determinant() * Math.sign(a.w * b.w * c.w)
-  }
-
-  /**
-   * Orientation of three points.
-   * If w is positive, it is the determinant of the 3x3 matrix formed by the points.
-   * @param {HPoint2d} a
-   * @param {HPoint2d} b
-   * @param {HPoint2d} c
-   * @returns {number} Positive if ccw; negative if cw.
-   */
   static orient(a, b, c) {
-    const ac = a._cartesianSubtract(c);
-    const bc = b._cartesianSubtract(c);
-    // ac.y * bc.x - ac.x * bc.y, where ac = a - c and bc = b - c
-    // cross2d(ac, bc, 1, 0) after dividing by w.
-    const out = (ac.y * bc.x) - (ac.x * bc.y);
-    ac.release();
-    bc.release();
-    return out;
-  }
-
-  static orientV2(a, b, c) {
-    // Orient is
-    // ac.y * bc.x - ac.x * bc.y, where ac = a - c and bc = b - c
-    // (ac.y / ac.w * bc.x / bc.w) - (ac.x/ac.w * bc.y /bc.w) =
-    // ((ac.y * bc.x) / (ac.w * bc.w)) - ((ac.x*bc.y) / (ac.w * bc.w))
-    // (ac.y * bc.x) - (ac.x * bc.y) / (ac.w * bc.w)
-
-    // a - c: a.x/a.w - c.x/c.w => a.x*c.w - c.x*a.w, w = c.w * a.w
-
-    const deltaAC = a._cartesianSubtract(c);
-    const deltaBC = b._cartesianSubtract(c);
-    const ac = deltaAC.arr;
-    const bc = deltaBC.arr;
-    const cw = c.w;
-    const out = ((ac[1] * bc[0]) - (ac[0] * bc[1])) / (ac[2] * bc[2])
-    deltaAC.release();
-    deltaBC.release();
-    return out;
-  }
-
-  static orientV7(a, b, c) {
     // ac: a - c: a.x*c.w - c.x*a.w, a.y*c.w - c.y*a.w, a.w*c.w
     // bc: b - c: b.x*c.w - c.x*b.w, b.y*c.w - c.y*b.w, b.w*c.w
     // cross2d: ac.y * bc.x - ac.x * bc.y; w = ac.w * bc.w
@@ -815,57 +763,9 @@ class HPoint2d {
     const bc02 = cross2d(b, c, 0, 2);
     const ac02 = cross2d(a, c, 0, 2);
     const bc12 = cross2d(b, c, 1, 2);
-    return ((ac12 * bc02) - (ac02 * bc12)) / (a.w * b.w * c.w * c.w);
+    const cw = c.w;
+    return ((ac12 * bc02) - (ac02 * bc12)) / (a.w * b.w * cw * cw);
   }
-
-  static orientV3(a,b,c) {
-    // a-c: a.x*c.w - c.x*a.w, a.y*c.w - c.y*a.w, a.w*c.w
-    // b-c: b.x*c.w - c.x*b.w, b.y*c.w - c.y*b.w, b.w*c.w
-    // cross2d: ac.y * bc.x - ac.x * bc.y; w = ac.w * bc.w
-    // w = (a.w*c.w) * (b.w*c.w)
-    // ((a.y*c.w - c.y*a.w) * (b.x*c.w - c.x*b.w)) - ((a.x*c.w - c.x*a.w)*(b.y*c.w - c.y*b.w))
-
-    // Use the determinant of the 3x3 matrix
-    // a.x(b.y*c.w - c.y*b.w) - a.y(b.x*c.w - c.x*b.w) + a.w(b.x*c.y - c.x*b.y);
-    const cross12 = cross2d(b, c, 1, 2);
-    const cross02 = cross2d(b, c, 0, 1);
-    const cross01 = cross2d(b, c, 0, 1);
-
-    // Via testing, if aw and bw don't share a sign, the result is reversed.
-    return -(a.arr[0]*cross12 - a.arr[1]*cross02 + a.arr[2]*cross01) / (a.w * b.w * c.w);
-  }
-
-  static orientV4(a, b, c) {
-    // Use determinant directly. Same sign, larger value.
-    const mat = new CONFIG.GeometryLib.MatrixFlat([
-      ...a.arr,
-      ...b.arr,
-      ...c.arr,
-    ], 3, 3)
-
-    // Via testing, if aw and bw don't share a sign, the result is reversed.
-    return - mat.determinant() / (a.w * b.w * c.w);
-  }
-
-  static orientV5(a, b, c) {
-    const ab = b.subtract(a);
-    const bc = c.subtract(b);
-    const out = bc.cross(ab).w / (a.w * b.w * c.w);
-    ab.release();
-    bc.release();
-    return out;
-  }
-
-  static orientV6(a, b, c) {
-    const ab = b.subtract(a);
-    const bc = c.subtract(b);
-    const out = cross2d(bc, ab, 0, 1) / (a.w * b.w * c.w);
-    ab.release();
-    bc.release();
-    return out;
-  }
-
-
 
   /**
    * Angle between this and another vector.
