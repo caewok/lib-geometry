@@ -721,10 +721,10 @@ class HPoint2d {
     // Use 0, 1, 2 here so this works when calling from HPoint3d.
     const x = cross2d(this, other, 1, 2);
     const y = cross2d(this, other, 2, 0);
-    const z = cross2d(this, other, 0, 1);
+    const w = cross2d(this, other, 0, 1);
     outPoint.arr[0] = x;
     outPoint.arr[1] = y;
-    outPoint.arr[2] = z;
+    outPoint.arr[2] = w;
     return outPoint;
   }
 
@@ -754,6 +754,19 @@ class HPoint2d {
   // • D = 0: vectors are perpendicular
   // angle between is cos-1(a•b / |a|•|b|) where || is magnitude
 
+  /**
+   * Determine the relative orientation of three points in two-dimensional space.
+   * The result is also an approximation of twice the signed area of the triangle defined by the three points.
+   * This method is fast - but not robust against issues of floating point precision. Best used with integer coordinates.
+   * Adapted from https://github.com/mourner/robust-predicates.
+   * @param {HPoint2d} a     An endpoint of segment AB, relative to which point C is tested
+   * @param {HPoint2d} b     An endpoint of segment AB, relative to which point C is tested
+   * @param {HPoint2d} c     A point that is tested relative to segment AB
+   * @returns {number}    The relative orientation of points A, B, and C
+   *                      A positive value if the points are in counter-clockwise order (C lies to the left of AB)
+   *                      A negative value if the points are in clockwise order (C lies to the right of AB)
+   *                      Zero if the points A, B, and C are collinear.
+   */
   static orient(a, b, c) {
     // ac: a - c: a.x*c.w - c.x*a.w, a.y*c.w - c.y*a.w, a.w*c.w
     // bc: b - c: b.x*c.w - c.x*b.w, b.y*c.w - c.y*b.w, b.w*c.w
@@ -765,6 +778,58 @@ class HPoint2d {
     const bc12 = cross2d(b, c, 1, 2);
     const cw = c.w;
     return ((ac12 * bc02) - (ac02 * bc12)) / (a.w * b.w * cw * cw);
+  }
+
+  /**
+   * Quickly test whether the line segment AB intersects with the line segment CD.
+   * This method does not determine the point of intersection, for that use lineLineIntersection.
+   * @param {HPoint2d} a                   The first endpoint of segment AB
+   * @param {HPoint2d} b                   The second endpoint of segment AB
+   * @param {HPoint2d} c                   The first endpoint of segment CD
+   * @param {HPoint2d} d                   The second endpoint of segment CD
+   * @returns {boolean}                 Do the line segments intersect?
+   */
+  static lineSegmentIntersects(a, b, c, d) {
+    // First test the orientation of A and B with respect to CD to reject collinear cases
+    const xa = this.orient(a, b, c);
+    const xb = this.orient(a, b, d);
+    if ( !(xa || xb) ) return false;
+    const xab = (xa * xb) <= 0;
+
+    // Also require an intersection of CD with respect to AB
+    const xcd = (this.orient(c, d, a) * this.orient(c, d, b)) <= 0;
+    return xab && xcd;
+  }
+
+  static lineSegmentIntersectsV2(a, b, c, d) {
+    const ab = HLine2d.fromPoints(a, b);
+    const xa = ab.orient(c);
+    const xb = ab.orient(d);
+    ab.release;
+    if ( !(xa || xb) ) return false;
+    const xab = (xa * xb) <= 0;
+
+    const cd = HLine2d.fromPoints(c, d);
+    const xcd = (cd.orient(a) * cd.orient(b)) <= 0;
+    cd.release();
+    return xab && xcd;
+  }
+
+  static lineLineIntersection(a, b, c, d, outPoint) {
+    const ab = HLine2d.fromPoints(a, b);
+    const cd = HLine2d.fromPoints(c, d);
+    outPoint ??= this.constructor.tmp;
+    ab.intersection(cd, outPoint);
+    ab.release();
+    cd.release();
+    return outPoint;
+  }
+
+  static lineSegmentIntersection(a, b, c, d, outPoint, epsilon = 1e-08) {
+    if ( !this.lineSegmentIntersects(a, b, c, d) ) return null;
+    const ix = this.lineLineIntersection(a, b, c, d, outPoint);
+    if ( !ix.w ) return null;
+    return ix;
   }
 
   /**
@@ -839,7 +904,7 @@ class HLine2d extends HPoint2d {
    * @returns {HLine2d}
    */
   static fromPoints(a, b) {
-    const out = this.construtor.tmp;
+    const out = this.constructor.tmp;
     return b.cross(a, out);
   }
 
@@ -926,16 +991,28 @@ class HLine2d extends HPoint2d {
 
   /**
    * Intersection of this line with another in 2d space.
-   * @param {HPoint2d} other
-   * @param {HPoint2d} [outPoint]
-   * @returns {HPoint2d}
+   * @param {HLine2d} other
+   * @param {HLine2d} [outPoint]
+   * @returns {HPoint2d} If w is 0, the lines are parallel.
    */
   intersection(other, outPoint) { return other.cross(this, outPoint); }
 
   /**
+   * Test whether this line intersects another.
+   * If the intersection is needed it is likely faster to just use the intersection method
+   * and test w for 0.
+   * @param {HLine2d} other
+   * @returns {boolean}
+   */
+  intersects(other) {
+    // See how cross method calculates w.
+    return cross2d(this, other, 0, 1) === 0;
+  }
+
+  /**
    * For a line defined as b.cross(a), where a --> b are two points,
    * return the value equivalent to orient2d(a, b, pt).
-   * @param {HPoint2d} pt
+   * @param {HLine2d} pt
    * @returns {number} Positive if ccw; negative if cw.
    */
   orient(pt) { return this.dot(pt); }
@@ -2272,3 +2349,8 @@ orientV6                                      √
 *orientV7    √
 
 *Fastest
+
+
+l = b.cross(a);
+
+cross2d(a.subtract(c), b.subtract(c))
