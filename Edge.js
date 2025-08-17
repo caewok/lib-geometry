@@ -9,7 +9,7 @@ import { MODULE_KEYS } from "./const.js";
 // Modify CanvasEdges class to add a quadtree and track adding and removing edges.
 // Patches for the CanvasEdges class.
 export const PATCHES = {};
-PATCHES.CANVAS_EDGES_V13 = {};
+PATCHES.CANVAS_EDGES = {};
 PATCHES.CANVAS_EDGES_V13 = {};
 
 // ----- Getters ----- //
