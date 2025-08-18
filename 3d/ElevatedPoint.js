@@ -74,7 +74,7 @@ export class ElevatedPoint extends Point3d {
    * @returns {ElevatedPoint}
    */
   static fromLocationWithElevation(location, elevation = 0) {
-    const pt = this.constructor.tmp(location.x, location.y, 0)
+    const pt = this.tmp.set(location.x, location.y, 0)
     pt.elevation = elevation;
     return pt;
   }
