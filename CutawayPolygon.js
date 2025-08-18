@@ -72,7 +72,7 @@ export class CutawayPolygon extends PIXI.Polygon {
   /**
    * Convert x,y to 3d position
    * @param {Point} {x, y}
-   * @returns {RegionMovementWaypoint3d}
+   * @returns {ElevatedPoint}
    */
   _from2d(pt2d) { return cutaway.from2d(pt2d, this.start, this.end); }
 

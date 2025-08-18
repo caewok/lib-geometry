@@ -125,8 +125,8 @@ export class HexGridCoordinates3d extends GridCoordinates3d {
    * Constructs a direct path for a hex grid, accounting for elevation and diagonal elevation.
    * Spreads out the elevation moves over the course of the path.
    * For a hex grid, there is no "double diagonal" to worry about.
-   * @param {RegionMovementWaypoint3d} start
-   * @param {RegionMovementWaypoint3d} end
+   * @param {ElevatedPoint} start
+   * @param {ElevatedPoint} end
    * @param {GridOffset[]} [path2d]             Optional path2d for the start and end waypoints.
    * @returns {HexGridCoordinates3d[]}
    */
@@ -197,8 +197,8 @@ export class HexGridCoordinates3d extends GridCoordinates3d {
  * Constructs a direct path for a hex grid, accounting for elevation and diagonal elevation.
  * Spreads out the elevation moves over the course of the path.
  * For a hex grid, there is no "double diagonal" to worry about.
- * @param {RegionMovementWaypoint3d} start
- * @param {RegionMovementWaypoint3d} end
+ * @param {ElevatedPoint} start
+ * @param {ElevatedPoint} end
  * @param {GridOffset[]} [path2d]             Optional path2d for the start and end waypoints.
  * @returns {HexGridCoordinates3d[]}
  */

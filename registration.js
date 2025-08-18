@@ -90,7 +90,7 @@ import { PATCHES as PATCHES_Tile } from "./Tile.js";
 // Grid measurement
 import "./GridCoordinates.js";
 import "./3d/GridCoordinates3d.js";
-import "./3d/RegionMovementWaypoint3d.js";
+import "./3d/ElevatedPoint.js";
 import "./3d/HexGridCoordinates3d.js";
 
 // Cutaway
