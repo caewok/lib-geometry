@@ -312,6 +312,8 @@ function lineIntersections(a, b, { indices = false } = {}) {
   const ixs = [];
   edges.forEach((edge, i) => {
     const ix = foundry.utils.lineLineIntersection(a, b, edge.A, edge.B);
+    if ( !ix ) continue;
+
     // Could be a singleton; tangent to vertex but never moving into the edge.
     // Happens if for edges A --> B --> C, orient(a, b, A) is same side as orient(a, b, C) for B edge
     if ( ix.almostEqual(edge.A) ) {
@@ -328,8 +330,7 @@ function lineIntersections(a, b, { indices = false } = {}) {
     ixs.push(ix);
     ixIndices.push(i);
   });
-  if ( indices ) return ixIndices;
-  return ixs;
+  return indices ? ixIndices : ixs;
 }
 
 /**
