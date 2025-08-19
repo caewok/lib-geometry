@@ -1697,13 +1697,13 @@ export class Polygons3d extends Polygon3d {
   }
 
   /**
-   * Intersect this Polygons3d against a plane, accounting for holes.
+   * Intersect this Polygons3d against a plane, noting holes.
    * @param {Plane} plane
-   * @returns {null|Point3d[]|Segment3d[]}
+   * @returns {Segment3d[]} May be empty if no intersecting segments.
    */
-  intersectPlane(plane) {
+  intersectPlane(plane, { tangents = true } = {}) {
     const res = this.plane.intersectPlane(plane);
-    if ( !res ) return null;
+    if ( !res ) return [];
 
     // Convert the intersecting ray to 2d values on this plane.
     const to2dM = this.plane.conversion2dMatrix
@@ -1713,109 +1713,20 @@ export class Polygons3d extends Polygon3d {
     const b = to2dM.multiplyPoint3d(b3d, tmpPt3d).to2d();
 
     // Locate the 2d intersecting segments for each polygon on the plane.
-    const polys = [];
-    const holes = [];
-    const allSegments = [];
-    this.polygons.forEach(poly => poly.isHole ? holes.push(poly) : polys.push(poly));
-    for ( const poly3d of polys ) {
-      const poly2d = new PIXI.Polygon(poly3d.planarPoints);
-      allSegments.push(...this.#intersectingSegmentsForPolygon(poly2d, a, b));
-    }
-
-    // Combine overlapping segments (rare).
-    // Sort so can test linearly.
-    allSegments.sort((s0, s1) => s0.a.t0 - s1.a.t0);
-    const combinedSegments = [];
-    let s0 = allSegments[0];
-    for ( let i = 1, iMax = allSegments.length; i < iMax; i += 1 ) {
-      // Overlaps if s0.b.t0 is later than s1.a.t0.
-      const s1 = allSegments[i];
-      if ( s0.b.t0 < s1.a.t0 ) {
-        combinedSegments.push(s0);
-        s0 = s1;
-      } else s0.b = s1.b; // Grow segment 0 to include all of segment one.
-    }
-    combinedSegments.push(s0);
-
-    // Remove holes.
-    const allSegmentHoles = [];
-    for ( const poly3d of holes ) {
-      const poly2d = new PIXI.Polygon(poly3d.planarPoints);
-      allSegmentHoles.push(...this.#intersectingSegmentsForPolygon(poly2d, a, b));
-    }
-    allSegmentHoles.sort((s0, s1) => s0.a.t0 - s1.a.t0);
-
-    let hIdx = 0; // Because the holes are sorted, no need to revisit; move along the a-->b line.
-    const finalSegments = [];
-    const nHoles = allSegmentHoles.length;
-    for ( const segment of combinedSegments ) {
-      for ( let h = hIdx; h < nHoles; ) {
-        const hole = allSegmentHoles[hIdx];
-        // Case 1: hole runs into segment.a:  h.a --- s.a --- h.b --- s.b
-        if ( hole.b.t0.between(segment.a.t0, segment.b.t0, false) ) { segment.a = hole.b; hIdx++; }
-
-        // Case 2: hole runs into segment.b: s.a --- h.a --- s.b --- h.b
-        else if ( segment.b.t0.between(hole.a.t0, hole.b.t0, false) ) segment.b = hole.a;
-
-        // Case 3: hole contained by segment: s.a --- h.a --- h.b --- s.b
-        else if ( hole.a.t0 > segment.a.t0 && hole.b.t0 < segment.b.t0 ) {
-          finalSegments.push({ a: segment.a, b: hole.a });
-          segment.a = hole.b;
-          hIdx++;
-        }
-
-        // Case 4: hole contains segment: h.a --- s.a --- s.b --- h.b
-        else if ( segment.a.t0 > hole.a.t0 && segment.b.t0 < hole.b.t0 ) break;
-
-        // Case 5: hole is before or at the segment:  h.a --- h.b | s.a --- s.b
-        else if ( hole.b.t0 <= segment.a.t0 ) hIdx++;
-
-        // Case 5: no overlap; hole must be after segment.
-        else {
-          finalSegments.push(segment);
-          break;
-        }
-      }
+    const nPolys = this.polygons.length;
+    const out = Array();
+    for ( let i = 0; i < nPolys; i += 1 ) {
+      const poly2d = new PIXI.Polygon(this.polygons[i].planarPoints);
+      const ixs = poly2d.lineIntersections(a, b, { tangents });
+      out[i] = { ixs, isPositive: poly2d.isPositive };
     }
 
     // Convert back to 3d.
     const from2dM = this.plane.conversion2dMatrixInverse;
-    const out = finalSegments.forEach(s => {
-      return {
-        a: from2dM.multiplyPoint3d(tmpPt3d.set(s.a.x, s.a.y, 0)),
-        b: from2dM.multiplyPoint3d(tmpPt3d.set(s.b.x, s.b.y, 0)),
-      };
-    });
-
-    a.release();
-    b.release();
+    out.forEach(elem => elem.ixs.pt3d = from2dM.multiplyPoint3d(tmpPt3d.set(elem.ixs.x, elem.ixs.y, 0)));
     tmpPt3d.release();
-    allSegments.forEach(s => { s.a.release(); s.b.release(); });
-    combinedSegments.forEach(s => { s.a.release(); s.b.release(); });
-    finalSegments.forEach(s => { s.a.release(); s.b.release(); });
-    allSegmentHoles.forEach(s => { s.a.release(); s.b.release(); });
     return out;
   }
-
-  /**
-   * Retrieve all intersecting segments of a 2d polygon, sorted by t0, for a given line segment.
-   * @param {PIXI.Polygon} poly2d     The 2d polygon to test
-   * @param {PIXI.Point} a            Endpoint a of segment A|B
-   * @param {PIXI.Point} b            Endpoint b of segment A|B
-   * @returns {object<a: PIXI.Point, b: PIXI.Point>[]} Object with two endpoints and t0 labeled for each
-   */
-  #intersectingSegmentsForPolygon(poly2d, a, b) {
-    const ixs = poly2d.lineIntersections(a, b);
-    ixs.sort((a, b) => a.t0 - b.t0);
-
-    // Intersecting poly with a plane, so the first intersection must be outside --> inside.
-    // so ix0 -- ix1, ix1 -- ix2 (hole), ix2 --- ix3, ix3 --- ix4 (hole), ix4 --- ix5, ...
-    const nIxs = ixs.length;
-    const segments = Array(Math.floor(nIxs * 0.5)); // If nIxs is 1, will be [].
-    for ( let i = 1, j = 0; i < nIxs; i += 2 ) segments[j++] = { a: ixs[i - 1], b: ixs[i] };
-    return segments;
-  }
-
 
   clipPlanePoints(...args) { this.#applyMethodToAllWithReturn("clipPlanePoints", ...args); }
 

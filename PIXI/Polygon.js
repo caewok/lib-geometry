@@ -281,18 +281,23 @@ function lineSegmentIntersects(a, b, { inside = false } = {}) {
  * @returns {Point[]} Array of intersections or empty.
  *   If intersections returned, the t of each intersection is the distance along the a|b segment.
  */
-function segmentIntersections(a, b, { indices = false } = {}) {
+function segmentIntersections(a, b, { indices = false, tangents = true } = {}) {
   const edges = this.pixiEdges();
   const ixIndices = [];
-  edges.forEach((e, i) => {
-    if ( foundry.utils.lineSegmentIntersects(a, b, e.A, e.B) ) ixIndices.push(i);
+  const ixs = [];
+  edges.forEach((edge, i) => {
+     if ( !foundry.utils.lineSegmentIntersects(a, b, edge.A, edge.B) ) return;
+     if ( indices && tangents ) {
+       ixIndices.push(i);
+       return;
+     }
+     const ix = foundry.utils.lineLineIntersection(a, b, edge.A, edge.B);
+     if ( !ix ) return; // Shouldn't happen, but...
+     if ( !tangents && _isTangentIntersection(a, b, edges, ix, i) ) return;
+     ixIndices.push(i);
+     ixs.push(ix);
   });
-  if ( indices ) return ixIndices;
-
-  return ixIndices.map(i => {
-    const edge = edges[i];
-    return foundry.utils.lineLineIntersection(a, b, edge.A, edge.B);
-  });
+ return indices ? ixIndices : ixs;
 }
 
 /**
@@ -306,32 +311,44 @@ function segmentIntersections(a, b, { indices = false } = {}) {
  * @returns {Point[]} Array of intersections or empty.
  *   If intersections returned, the t of each intersection is the distance along the a|b segment.
  */
-function lineIntersections(a, b, { indices = false } = {}) {
+function lineIntersections(a, b, { indices = false, tangents = true } = {}) {
   const edges = this.pixiEdges();
   const ixIndices = [];
   const ixs = [];
   edges.forEach((edge, i) => {
     const ix = foundry.utils.lineLineIntersection(a, b, edge.A, edge.B);
     if ( !ix ) return;
-
-    // Could be a singleton; tangent to vertex but never moving into the edge.
-    // Happens if for edges A --> B --> C, orient(a, b, A) is same side as orient(a, b, C) for B edge
-    if ( edge.A.almostEqual(ix) ) {
-      const idx = (i - edges.length - 1) % edges.length;
-      const priorEdge = edges[idx];
-      if ( foundry.utils.orient2dFast(a, b, priorEdge.A) * foundry.utils.orient2dFast(a, b, edge.B) > 0 ) return; // Same side
-
-    } else if ( edge.B.almostEqual(ix) ) {
-      const idx = (i - edges.length + 1) % edges.length;
-      const nextEdge = edges[idx];
-      if ( foundry.utils.orient2dFast(a, b, nextEdge.B) * foundry.utils.orient2dFast(a, b, edge.A) > 0 ) return; // Same side
-
-    }
+    if ( !tangents && _isTangentIntersection(a, b, edges, ix, i) ) return;
     ixs.push(ix);
     ixIndices.push(i);
   });
   return indices ? ixIndices : ixs;
 }
+
+/**
+ * Is this intersection of the polygon vertex tangent, such that the line does not go inside the
+ * V formed by the polygon edges?
+ * @param {Edges} edges
+ * @param {object} ix
+ * @param {number} i
+ */
+function _isTangentIntersection(a, b, edges, ix, i) {
+  // Could be a singleton; tangent to vertex but never moving into the edge.
+  // Happens if for edges A --> B --> C, orient(a, b, A) is same side as orient(a, b, C) for B edge
+  const edge = edges[i];
+  if ( edge.A.almostEqual(ix) ) {
+    const idx = (i - edges.length - 1) % edges.length;
+    const priorEdge = edges[idx];
+    if ( foundry.utils.orient2dFast(a, b, priorEdge.A) * foundry.utils.orient2dFast(a, b, edge.B) > 0 ) return true; // Same side
+
+  } else if ( edge.B.almostEqual(ix) ) {
+    const idx = (i - edges.length + 1) % edges.length;
+    const nextEdge = edges[idx];
+    if ( foundry.utils.orient2dFast(a, b, nextEdge.B) * foundry.utils.orient2dFast(a, b, edge.A) > 0 ) return true; // Same side
+  }
+  return false;
+}
+
 
 /**
  * Get all the points for this polygon between two points on the polygon
@@ -1190,4 +1207,8 @@ PATCHES.PIXI.METHODS = {
 PATCHES.PIXI.STATIC_METHODS = {
   convexHull
 };
+
+
+
+
 
