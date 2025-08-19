@@ -316,12 +316,12 @@ function lineIntersections(a, b, { indices = false } = {}) {
 
     // Could be a singleton; tangent to vertex but never moving into the edge.
     // Happens if for edges A --> B --> C, orient(a, b, A) is same side as orient(a, b, C) for B edge
-    if ( ix.almostEqual(edge.A) ) {
+    if ( edge.A.almostEqual(ix) ) {
       const idx = (i - edges.length - 1) % edges.length;
       const priorEdge = edges[idx];
       if ( foundry.utils.orient2dFast(a, b, priorEdge.A) * foundry.utils.orient2dFast(a, b, edge.B) > 0 ) return; // Same side
 
-    } else if ( ix.almostEqual(edge.B) ) {
+    } else if ( edge.B.almostEqual(ix) ) {
       const idx = (i - edges.length + 1) % edges.length;
       const nextEdge = edges[idx];
       if ( foundry.utils.orient2dFast(a, b, nextEdge.B) * foundry.utils.orient2dFast(a, b, edge.A) > 0 ) return; // Same side
