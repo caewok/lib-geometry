@@ -297,6 +297,7 @@ function segmentIntersections(a, b, { indices = false } = {}) {
 
 /**
  * Get all intersection points for a line that goes through A|B
+ * Ignores singleton tangents: intersects of vertex without penetrating the polygon.
  * @param {Point} a   Endpoint A of the segment
  * @param {Point} b   Endpoint B of the segment
  * @param {object} [options]    Optional parameters
@@ -311,8 +312,21 @@ function lineIntersections(a, b, { indices = false } = {}) {
   const ixs = [];
   edges.forEach((edge, i) => {
     const ix = foundry.utils.lineLineIntersection(a, b, edge.A, edge.B);
-    if ( indices ) { ixIndices.push(i); return; }
-    if ( ix.t0.between(0, 1) || ix.almostEqual(edge.A) || ix.almostEqual(edge.B) ) ixs.push(ix);
+    // Could be a singleton; tangent to vertex but never moving into the edge.
+    // Happens if for edges A --> B --> C, orient(a, b, A) is same side as orient(a, b, C) for B edge
+    if ( ix.almostEqual(edge.A) ) {
+      const idx = (i - edges.length - 1) % edges.length;
+      const priorEdge = edges[idx];
+      if ( foundry.utils.orient2dFast(a, b, priorEdge.A) * foundry.utils.orient2dFast(a, b, edge.B) > 0 ) return; // Same side
+
+    } else if ( ix.almostEqual(edge.B) ) {
+      const idx = (i - edges.length + 1) % edges.length;
+      const nextEdge = edges[idx];
+      if ( foundry.utils.orient2dFast(a, b, nextEdge.B) * foundry.utils.orient2dFast(a, b, edge.A) > 0 ) return; // Same side
+
+    } else if ( !ix.t0.between(0, 1) ) return; // No intersection.
+    ixs.push(ix);
+    ixIndices.push(i);
   });
   if ( indices ) return ixIndices;
   return ixs;
