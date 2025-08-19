@@ -326,7 +326,7 @@ function lineIntersections(a, b, { indices = false } = {}) {
       const nextEdge = edges[idx];
       if ( foundry.utils.orient2dFast(a, b, nextEdge.B) * foundry.utils.orient2dFast(a, b, edge.A) > 0 ) return; // Same side
 
-    } else if ( !ix.t0.between(0, 1) ) return; // No intersection.
+    }
     ixs.push(ix);
     ixIndices.push(i);
   });
