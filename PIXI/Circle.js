@@ -210,6 +210,204 @@ function almostEqual(other, epsilon = 1e-08) {
 }
 
 
+/**
+ * Return the t0 values from the Foundry quadratic intersection.
+ * ----
+ * Determine the points of intersection between a line segment (p0,p1) and a circle.
+ * There will be zero, one, or two intersections
+ * See https://math.stackexchange.com/a/311956.
+ * @param {Point} p0            The initial point of the line segment
+ * @param {Point} p1            The terminal point of the line segment
+ * @param {Point} center        The center of the circle
+ * @param {number} radius       The radius of the circle
+ * @param {number} [epsilon=0]  A small tolerance for floating point precision
+ */
+function quadraticIntersection(p0, p1, center, radius, epsilon=0) {
+  const dx = p1.x - p0.x;
+  const dy = p1.y - p0.y;
+
+  // Quadratic terms where at^2 + bt + c = 0
+  const a = Math.pow(dx, 2) + Math.pow(dy, 2);
+  const b = (2 * dx * (p0.x - center.x)) + (2 * dy * (p0.y - center.y));
+  const c = Math.pow(p0.x - center.x, 2) + Math.pow(p0.y - center.y, 2) - Math.pow(radius, 2);
+
+  // Discriminant
+  let disc2 = Math.pow(b, 2) - (4 * a * c);
+  if ( disc2.almostEqual(0) ) disc2 = 0; // segment endpoint touches the circle; 1 intersection
+  else if ( disc2 < 0 ) return []; // no intersections
+
+  // Roots
+  const disc = Math.sqrt(disc2);
+  const t1 = (-b - disc) / (2 * a);
+
+  // If t1 hits (between 0 and 1) it indicates an "entry"
+  const intersections = [];
+  if ( t1.between(0-epsilon, 1+epsilon) ) {
+    intersections.push({
+      x: p0.x + (dx * t1),
+      y: p0.y + (dy * t1),
+      t0: t1,
+    });
+  }
+  if ( !disc2 ) return intersections; // 1 intersection
+
+  // If t2 hits (between 0 and 1) it indicates an "exit"
+  const t2 = (-b + disc) / (2 * a);
+  if ( t2.between(0-epsilon, 1+epsilon) ) {
+    intersections.push({
+      x: p0.x + (dx * t2),
+      y: p0.y + (dy * t2),
+      t0: t2,
+    });
+  }
+  return intersections;
+}
+
+/**
+ * Get all intersection points on this circle for a segment A|B
+ * Intersections are sorted from A to B.
+ * @param {Point} a             The first endpoint on segment A|B
+ * @param {Point} b             The second endpoint on segment A|B
+ * @returns {Point[]}           Points where the segment A|B intersects the circle
+ */
+function segmentIntersections(a, b) {
+  const ixs = lineCircleIntersection(a, b, this, this.radius);
+  return ixs.intersections;
+};
+
+/**
+ * Determine the intersection between a line segment and a circle.
+ * @param {Point} a                   The first vertex of the segment
+ * @param {Point} b                   The second vertex of the segment
+ * @param {Point} center              The center of the circle
+ * @param {number} radius             The radius of the circle
+ * @param {number} epsilon            A small tolerance for floating point precision
+ * @returns {LineCircleIntersection}  The intersection of the segment AB with the circle
+ */
+function lineCircleIntersection(a, b, center, radius, epsilon=1e-8) {
+  const r2 = Math.pow(radius, 2);
+  let intersections = [];
+
+  // Test whether endpoint A is contained
+  const ar2 = Math.pow(a.x - center.x, 2) + Math.pow(a.y - center.y, 2);
+  const aInside = ar2 < r2 - epsilon;
+
+  // Test whether endpoint B is contained
+  const br2 = Math.pow(b.x - center.x, 2) + Math.pow(b.y - center.y, 2);
+  const bInside = br2 < r2 - epsilon;
+
+  // Find quadratic intersection points
+  const contained = aInside && bInside;
+  if ( !contained ) intersections = quadraticIntersection(a, b, center, radius, epsilon);
+
+  // Return the intersection data
+  return {
+    aInside,
+    bInside,
+    contained,
+    outside: !contained && !intersections.length,
+    tangent: !aInside && !bInside && intersections.length === 1,
+    intersections
+  };
+}
+
+/**
+ * Calculates the intersection points of a line segment and a circle using a geometric approach.
+ *
+ * @param {PIXI.Point} a - The first point of the line segment.
+ * @param {PIXI.Point} b - The second point of the line segment.
+ * @param {PIXI.Point} center - The center of the circle.
+ * @param {number} radius - The radius of the circle.
+ * @returns {Array<{x: number, y: number}>} An array of intersection points. The array will be empty if there are no intersections.
+ */
+function segmentIntersectionsGeometric(a, b) {
+  const { radius, center } = this;
+  const intersections = [];
+
+  // Vector representing the line segment
+  const delta = b.subtract(a);
+
+  // Squared length of the segment.
+  const len2 = delta.magnitudeSquared();
+
+  // Handle the case of a zero-length segment (a single point).
+  if ( !len2 ) {
+    const dist2 = PIXI.Point.distanceSquaredBetween(a, center);
+
+    // Check if the point is on the circle's circumference
+    if ( Math.abs(dist2 - (radius * radius)) < 1e-6 ) {
+      delta.release();
+      return [{ x: a.x, y: a.y, t0: 0 }];
+    }
+    return [];
+  }
+
+  // Find the projection of the vector (center - a) onto the line segment vector (d).
+  // The parameter 't' represents how far along the infinite line the closest point is from 'a'.
+  const ca = center.subtract(a);
+  const t = ca.dot(a) / len2;
+
+  // This is the closest point on the infinite line to the circle's center.
+  const closestPoint = PIXI.Point.tmp;
+  a.add(delta.multiplyScalar(t, closestPoint), closestPoint);
+
+  // Calculate the squared distance from the circle center to this closest point.
+  const dist2 = PIXI.Point.distanceSquared(center, closestPoint);
+
+  // If this distance is greater than the radius, the line doesn't intersect the circle.
+  if (dist2 > radius * radius) {
+    delta.release();
+    closestPoint.release();
+    return [];
+  }
+
+
+  // The line intersects the circle. Now we find the intersection points.
+  // We have a right triangle formed by:
+  // 1. The circle's center
+  // 2. The closest point on the line
+  // 3. The intersection point
+  // The hypotenuse is the radius. We can use the Pythagorean theorem.
+  // radius^2 = dist^2 + half_chord_length^2
+  const halfChordDist2 = (radius * radius) - dist2;
+  const halfChordDist = Math.sqrt(halfChordDist2);
+
+  // The distance from the 'closestPoint' to each intersection point along the line.
+  // We calculate this as a fraction of the segment's length.
+  const offset = halfChordDist / Math.sqrt(len2);
+
+  // The two potential intersection points are at parameter values t +/- offset.
+  const t1 = t - offset;
+  const t2 = t + offset;
+
+  // Check if the first intersection point lies on the segment [a, b].
+  // The parameter 't' must be between 0 and 1 for the point to be on the segment.
+  if (t1 >= 0 && t1 <= 1) {
+    intersections.push({
+      x: a.x + t1 * delta.x,
+      y: a.y + t1 * delta.y,
+      t0: t1,
+    });
+  }
+
+  // Check the second intersection point.
+  if (t2 >= 0 && t2 <= 1) {
+    // Avoid adding the same point twice if the line is tangent to the circle.
+    if (Math.abs(t1 - t2) > 1e-6) {
+      intersections.push({
+        x: a.x + t2 * delta.x,
+        y: a.y + t2 * delta.y,
+        t0: t2,
+      });
+    }
+  }
+  delta.release();
+  closestPoint.release();
+  return intersections;
+}
+
+
+
 PATCHES.PIXI.GETTERS = { area };
 
 PATCHES.PIXI.METHODS = {
@@ -217,6 +415,8 @@ PATCHES.PIXI.METHODS = {
   translate,
   scaledArea,
   lineSegmentIntersects,
+  segmentIntersectionsGeometric,
+  segmentIntersections,
 
   // Equality
   equals,
@@ -234,3 +434,5 @@ PATCHES.PIXI.METHODS = {
 
   cutaway
 };
+
+
