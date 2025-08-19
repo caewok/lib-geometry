@@ -312,7 +312,7 @@ function lineIntersections(a, b, { indices = false } = {}) {
   const ixs = [];
   edges.forEach((edge, i) => {
     const ix = foundry.utils.lineLineIntersection(a, b, edge.A, edge.B);
-    if ( !ix ) continue;
+    if ( !ix ) return;
 
     // Could be a singleton; tangent to vertex but never moving into the edge.
     // Happens if for edges A --> B --> C, orient(a, b, A) is same side as orient(a, b, C) for B edge
