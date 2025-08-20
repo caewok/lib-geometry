@@ -345,7 +345,7 @@ function segmentIntersectionsGeometric(a, b) {
   // Find the projection of the vector (center - a) onto the line segment vector (d).
   // The parameter 't' represents how far along the infinite line the closest point is from 'a'.
   const ca = center.subtract(a);
-  const t = ca.dot(a) / len2;
+  const t = ca.dot(delta) / len2;
 
   // This is the closest point on the infinite line to the circle's center.
   const closestPoint = PIXI.Point.tmp;
@@ -356,6 +356,7 @@ function segmentIntersectionsGeometric(a, b) {
 
   // If this distance is greater than the radius, the line doesn't intersect the circle.
   if (dist2 > radius * radius) {
+    ca.release();
     delta.release();
     closestPoint.release();
     return [];
@@ -401,6 +402,7 @@ function segmentIntersectionsGeometric(a, b) {
       });
     }
   }
+  ca.release();
   delta.release();
   closestPoint.release();
   return intersections;
