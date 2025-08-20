@@ -114,7 +114,7 @@ function distanceBetween(a, b) {
 function distanceSquaredBetween(a, b) {
   const dx = (b.x - a.x) || 0; // In case x is undefined.
   const dy = (b.y - a.y) || 0;
-  return Math.pow(dx, 2) + Math.pow(dy, 2);
+  return (dx ** 2) + (dy ** 2);
 }
 
 /**
@@ -349,7 +349,7 @@ function magnitude() {
  * @returns {number}
  */
 function magnitudeSquared() {
-  return Math.pow(this.x, 2) + Math.pow(this.y, 2);
+  return (this.x ** 2) + (this.y ** 2);
 }
 
 /**
