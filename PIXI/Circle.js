@@ -352,7 +352,7 @@ function segmentIntersectionsGeometric(a, b) {
   a.add(delta.multiplyScalar(t, closestPoint), closestPoint);
 
   // Calculate the squared distance from the circle center to this closest point.
-  const dist2 = PIXI.Point.distanceSquared(center, closestPoint);
+  const dist2 = PIXI.Point.distanceSquaredBetween(center, closestPoint);
 
   // If this distance is greater than the radius, the line doesn't intersect the circle.
   if (dist2 > radius * radius) {
