@@ -249,7 +249,7 @@ export class AABB2d {
     if ( !b.classType || !b.inheritsClassType("Point3d") ) b = Point3d.tmp.set(b.x, b.y, b.z || 0);
 
     // See https://jacco.ompf2.com/2022/04/13/how-to-build-a-bvh-part-1-basics/
-    const { min, max } = this.aabb;
+    const { min, max } = this;
     const rayOrigin = a;
     const rayDirection = b.subtract(a, rayDirection);
     const invDirection = ptOnes.divide(rayDirection);
@@ -287,7 +287,7 @@ export class AABB2d {
     if ( this.containsPoint(sphere.center) ) return true;
 
     // https://stackoverflow.com/questions/28343716/sphere-intersection-test-of-aabb
-    const { min, max } = this.aabb;
+    const { min, max } = this;
     let dmin = 0;
     for ( const axis of this.constructor.axes ) {
       const c = sphere.center[axis];
