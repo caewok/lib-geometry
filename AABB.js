@@ -198,9 +198,10 @@ export class AABB2d {
    * Does this bounding box contain the point?
    * @param {PIXI.Point} p
    */
-  containsPoint(p) {
+  containsPoint(p, axes) {
+    axes ??= this.constructor.axes;
     const { min, max } = this;
-    for ( const axis of this.constructor.axes ) {
+    for ( const axis of axes ) {
       if ( !p[axis].between(min[axis], max[axis]) ) return false
     }
     return true;
@@ -237,30 +238,39 @@ export class AABB2d {
 
   /**
    * Does the segment cross the aabb bounds or is contained within?
-   * @param {Point3d} a
-   * @param {Point3d} b
+   * @param {PIXI.Point|Point3d} a
+   * @param {PIXI.Point|Point3d} b
+   * @param {boolean} [axes]            Which axes to test? Usually used to limit to "x" and "y"
    * @returns {boolean}
    */
-  overlapsSegment(a, b) {
+  overlapsSegment(a, b, axes) {
+    axes ??= this.constructor.axes;
+    if ( !a.classType || !a.inheritsClassType("Point3d") ) a = Point3d.tmp.set(a.x, a.y, a.z || 0);
+    if ( !b.classType || !b.inheritsClassType("Point3d") ) b = Point3d.tmp.set(b.x, b.y, b.z || 0);
+
     // See https://jacco.ompf2.com/2022/04/13/how-to-build-a-bvh-part-1-basics/
     const { min, max } = this.aabb;
     const rayOrigin = a;
-    const rayDirection = b.subtract(a);
+    const rayDirection = b.subtract(a, rayDirection);
     const invDirection = ptOnes.divide(rayDirection);
-    const t1 = Point3d.tmp;
-    const t2 = Point3d.tmp;
+    const t1 = Point3d.tmp.set(0,0,0); // In case we are operating in less than 3d, set all axes to 0.
+    const t2 = Point3d.tmp.set(0,0,0);
 
     min.subtract(rayOrigin, t1).multiply(invDirection, t1);
     max.subtract(rayOrigin, t2).multiply(invDirection, t2);
-    const xMinMax = Math.minMax(t1.x, t2.x);
-    const yMinMax = Math.minMax(t1.y, t2.y);
-    const zMinMax = Math.minMax(t1.z, t2.z);
-    Point3d.release(t1, t2);
-    const tmax = Math.min(xMinMax.max, yMinMax.max, zMinMax.max);
+    const minMax = { };
+    let tmax = Number.POSITIVE_INFINITY;
+    axes.forEach(axis => {
+      const mm = minMax[axis] = Math.minMax(t1[axis], t2[axis])
+      tmax = Math.min(tmax, mm.max);
+    });
+    t1.release();
+    t2.release();
 
     let out = false;
     if ( tmax > 0 ) {
-      const tmin = Math.max(xMinMax.min, yMinMax.min, zMinMax.min);
+      let tmin = Number.NEGATIVE_INFINITY;
+      axes.forEach(axis => tmin = Math.max(tmin, minMax[axis].min));
       out = tmax >= tmin && (tmin * tmin) < rayDirection.dot(rayDirection);
     }
     rayDirection.release();
