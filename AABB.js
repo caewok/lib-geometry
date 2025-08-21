@@ -251,7 +251,7 @@ export class AABB2d {
     // See https://jacco.ompf2.com/2022/04/13/how-to-build-a-bvh-part-1-basics/
     const { min, max } = this;
     const rayOrigin = a;
-    const rayDirection = b.subtract(a, rayDirection);
+    const rayDirection = b.subtract(a);
     const invDirection = ptOnes.divide(rayDirection);
     const t1 = Point3d.tmp.set(0,0,0); // In case we are operating in less than 3d, set all axes to 0.
     const t2 = Point3d.tmp.set(0,0,0);
