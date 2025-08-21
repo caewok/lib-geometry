@@ -490,6 +490,8 @@ function to2d(_opts, outPoint) {
   return outPoint;
 }
 
+PIXI.Point.prototype.t0 = 0; // Solely for storing intersections to avoid rebuilding the class.
+
 /**
  * Iterator: x then y.
  */

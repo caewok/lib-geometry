@@ -66,6 +66,10 @@ export class Point3d extends PIXI.Point {
     return this.constructor.classTypes.intersects(cl.classTypes || NULL_SET);
   }
 
+  z = 0;
+
+  t0 = 0; // Solely for storing intersection distances.
+
   /**
    * @param {number} [x=0] - position of the point on the x axis
    * @param {number} [y=0] - position of the point on the y axis
