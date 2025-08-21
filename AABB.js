@@ -6,7 +6,7 @@ PIXI,
 import { GEOMETRY_CONFIG } from "./const.js";
 import { Point3d } from "./3d/Point3d.js";
 import { Draw } from "./Draw.js";
-import { almostLessThan } from "./util.js";
+import { almostLessThan, almostGreaterThan } from "./util.js";
 
 const ptOnes = new Point3d(1, 1, 1);
 Object.freeze(ptOnes);
@@ -245,38 +245,56 @@ export class AABB2d {
    */
   overlapsSegment(a, b, axes) {
     axes ??= this.constructor.axes;
-    if ( !a.classType || !a.inheritsClassType("Point3d") ) a = Point3d.tmp.set(a.x, a.y, a.z || 0);
-    if ( !b.classType || !b.inheritsClassType("Point3d") ) b = Point3d.tmp.set(b.x, b.y, b.z || 0);
-
-    // See https://jacco.ompf2.com/2022/04/13/how-to-build-a-bvh-part-1-basics/
-    const { min, max } = this;
-    const rayOrigin = a;
     const rayDirection = b.subtract(a);
-    const invDirection = ptOnes.divide(rayDirection);
-    const t1 = Point3d.tmp.set(0,0,0); // In case we are operating in less than 3d, set all axes to 0.
-    const t2 = Point3d.tmp.set(0,0,0);
+    const epsilon = 1e-06;
 
-    min.subtract(rayOrigin, t1).multiply(invDirection, t1);
-    max.subtract(rayOrigin, t2).multiply(invDirection, t2);
-    const minMax = { };
-    let tmax = Number.POSITIVE_INFINITY;
-    axes.forEach(axis => {
-      const mm = minMax[axis] = Math.minMax(t1[axis], t2[axis])
-      tmax = Math.min(tmax, mm.max);
-    });
-    t1.release();
-    t2.release();
+    // Initialize t-interval for the infinite line's intersection with the AABB.
+    let tmin = -Infinity;
+    let tmax = Infinity;
 
-    let out = false;
-    if ( tmax > 0 ) {
-      let tmin = Number.NEGATIVE_INFINITY;
-      axes.forEach(axis => tmin = Math.max(tmin, minMax[axis].min));
-      out = tmax >= tmin && (tmin * tmin) < rayDirection.dot(rayDirection);
+    for ( const axis of axes ) {
+      const min = this.min[axis];
+      const max = this.max[axis];
+      const p0 = a[axis];
+
+      if ( Math.abs(rayDirection[axis]) < epsilon ) {
+        // Segment is parallel to the slab for this axis.
+        // If segment origin is outside the slab, it can never intersect.
+        if ( p0 < min || p0 > max ) {
+          rayDirection.release();
+          return false;
+        }
+        // Otherwise, the infinite line is always within this slab. Proceed to next axis.
+      }
+
+      // Segment is not parallel.
+      const invD = 1.0 / rayDirection[axis];
+      let t1 = (min - p0) * invD;
+      let t2 = (max - p0) * invD;
+
+      // Ensure t1 is the intersection with the "near" plane and t2 with the "far" plane.
+      if ( t1 > t2 ) [t1, t2] = [t2, t1]; // Swap.
+
+      // Update the overall intersection interval [tmin, tmax].
+      tmin = Math.max(tmin, t1);
+      tmax = Math.min(tmax, t2);
+
+      // If the intersection interval becomes invalid, the line misses the box.
+      if ( tmin > tmax ) {
+        rayDirection.release();
+        return false;
+      }
     }
+
+    // After checking all axes, [tmin, tmax] is the interval where the infinite
+    // line intersects the AABB. The final step is to check if this interval
+    // overlaps with the segment's own interval, which is [0, 1].
+    // Two intervals [a, b] and [c, d] overlap if a <= d and b >= c.
     rayDirection.release();
-    invDirection.release();
-    return out;
+    return almostGreaterThan(1.0, tmin) && almostLessThan(0.0, tmax);
+    // return tmin <= 1.0 && tmax >= 0.0;
   }
+
 
   /**
    * Does a sphere overlap the bounds?
