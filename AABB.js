@@ -352,7 +352,7 @@ export class AABB3d extends AABB2d {
    * @param {number} [elevationZ=0]         Intended elevation in the z axis
    * @returns {AABB3d}
    */
-  static fromCircle(circle, out, { maxZ = 0, minZ = maxZ } = {}) {
+  static fromCircle(circle, maxZ = 0, minZ = maxZ, out) {
     out = super.fromCircle(circle, out);
     out.min.z = minZ;
     out.max.z = maxZ;
@@ -364,7 +364,7 @@ export class AABB3d extends AABB2d {
    * @param {number} [elevationZ=0]         Intended elevation in the z axis
    * @returns {AABB3d}
    */
-  static fromEllipse(ellipse, out, { maxZ = 0, minZ = maxZ } = {}) {
+  static fromEllipse(ellipse, maxZ = 0, minZ = maxZ, out) {
     out = super.fromEllipse(ellipse, out);
     out.min.z = minZ;
     out.max.z = maxZ;
@@ -376,7 +376,7 @@ export class AABB3d extends AABB2d {
    * @param {number} [elevationZ=0]         Intended elevation in the z axis
    * @returns {AABB3d}
    */
-  static fromRectangle(rect, out, { maxZ = 0, minZ = maxZ } = {}) {
+  static fromRectangle(rect, maxZ = 0, minZ = maxZ, out) {
     out = super.fromRectangle(rect, out);
     out.min.z = minZ;
     out.max.z = maxZ;
@@ -389,7 +389,7 @@ export class AABB3d extends AABB2d {
    * @returns {AABB3d}
    */
 
-  static fromPolygon(poly, out, { maxZ = 0, minZ = maxZ } = {}) {
+  static fromPolygon(poly, maxZ = 0, minZ = maxZ, out) {
     out = super.fromPolygon(poly, out);
     out.min.z = minZ;
     out.max.z = maxZ;
