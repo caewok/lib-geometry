@@ -118,6 +118,7 @@ export class CutawayPolygon extends PIXI.Polygon {
     const ixs = this.segmentIntersections(a2d, b2d).map(ix => {
       const out = PIXI.Point.fromObject(ix);
       out.t0 = ix.t0;
+      return out;
     });
     if ( !ixs.length ) return ixs;
 
