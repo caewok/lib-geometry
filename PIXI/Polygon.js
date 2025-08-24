@@ -293,6 +293,7 @@ function segmentIntersections(a, b, { indices = false, tangents = true } = {}) {
      }
      const ix = foundry.utils.lineLineIntersection(a, b, edge.A, edge.B);
      if ( !ix ) return; // Shouldn't happen, but...
+     if ( ix.almostEqual(edge.B) ) return; // Get on the next iteration so endpoint intersections are not repeated.
      if ( !tangents && _isTangentIntersection(a, b, edges, ix, i) ) return;
      ixIndices.push(i);
      ixs.push(ix);
@@ -337,12 +338,12 @@ function _isTangentIntersection(a, b, edges, ix, i) {
   // Happens if for edges A --> B --> C, orient(a, b, A) is same side as orient(a, b, C) for B edge
   const edge = edges[i];
   if ( edge.A.almostEqual(ix) ) {
-    const idx = (i - edges.length - 1) % edges.length;
+    const idx = (edges.length + i - 1) % edges.length;
     const priorEdge = edges[idx];
     if ( foundry.utils.orient2dFast(a, b, priorEdge.A) * foundry.utils.orient2dFast(a, b, edge.B) > 0 ) return true; // Same side
 
   } else if ( edge.B.almostEqual(ix) ) {
-    const idx = (i - edges.length + 1) % edges.length;
+    const idx = (edges.length + i + 1) % edges.length;
     const nextEdge = edges[idx];
     if ( foundry.utils.orient2dFast(a, b, nextEdge.B) * foundry.utils.orient2dFast(a, b, edge.A) > 0 ) return true; // Same side
   }
