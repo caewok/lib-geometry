@@ -293,7 +293,7 @@ function segmentIntersections(a, b, { indices = false, tangents = true } = {}) {
      }
      const ix = foundry.utils.lineLineIntersection(a, b, edge.A, edge.B);
      if ( !ix ) return; // Shouldn't happen, but...
-     if ( ix.almostEqual(edge.B) ) return; // Get on the next iteration so endpoint intersections are not repeated.
+     if ( edge.B.almostEqual(ix) ) return; // Get on the next iteration so endpoint intersections are not repeated.
      if ( !tangents && _isTangentIntersection(a, b, edges, ix, i) ) return;
      ixIndices.push(i);
      ixs.push(ix);
