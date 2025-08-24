@@ -99,10 +99,19 @@ export class CutawayPolygon extends PIXI.Polygon {
     const TR3d = this._from2d(TR);
     const steps = stepsFn(TL3d, TR3d);
     const steps2d = steps.map(step => this._to2d(step));
-    if ( isHole ) this.points.slice(2, 0, ...steps2d.flatMap(step => [step.x, step.y]))
-    else {
+    if ( isHole ) {
+      // Remove duplicates. Remember points are flat arrays.
+      if ( this.points[0] === stepPts[0].x && this.points[1] === stepPts[0].y ) stepPts.shift();
+      if ( this.points[2] === stepPts.at(-1).x && this.points.at(3) === stepPts.at(-1).y ) stepPts.pop();
+      const stepPts = steps2d.flatMap(step => [step.x, step.y]);
+      this.points = [this.points.slice(0, 2), ...stepPts, this.points.slice(2)]
+    } else {
       steps2d.reverse();
-      this.points.push(...steps2d.flatMap(step => [step.x, step.y]));
+      // Remove duplicates. Remember these are flat arrays.
+      if ( this.points.at(-2) === stepPts[0].x && this.points.at(-1) === stepPts[0].y ) stepPts.shift();
+      if ( this.points[0] === stepPts.at(-1).x && this.points.at(1) === stepPts.at(-1).y ) stepPts.pop();
+      const stepPts = steps2d.flatMap(step => [step.x, step.y]);
+      this.points.push(...stepPts);
     }
   }
 
@@ -221,7 +230,7 @@ export class CutawayPolygon extends PIXI.Polygon {
    * @param {function} [opts.topElevationFn]    Function to calculate the top elevation for a position
    * @param {function} [opts.bottomElevationFn] Function to calculate the bottom elevation for a position
    * @param {boolean} [opts.isHole=false]       Is this polygon a hole? If so, reverse points and use max/min elevations.
-   * @returns {CutawayPolygon}
+   * @returns {CutawayPolygon} Returns points such that a is on the left, b is on the right,
    */
   static quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, isHole = false } = {}) {
     const to2d = cutaway.to2d;

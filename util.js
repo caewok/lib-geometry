@@ -174,9 +174,8 @@ dist(end, currPt) < dist(start, currPt) && dist(currPt, start) > dist(start, end
 function from2dCutaway(cutawayPt, start, end, outPoint) {
   outPoint ??= new GEOMETRY_CONFIG.threeD.ElevatedPoint();
   // b/c outPoint is 3d, makes sure to get the 2d values.
-  const xy =
 
-  start.to2d().towardsPointSquared(end, cutawayPt.x, pt_0);
+  const xy = start.to2d().towardsPointSquared(end, cutawayPt.x, pt_0);
   outPoint.x = xy.x;
   outPoint.y = xy.y;
   outPoint.z = cutawayPt.y;
