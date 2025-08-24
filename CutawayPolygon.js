@@ -115,7 +115,10 @@ export class CutawayPolygon extends PIXI.Polygon {
   intersectSegment3d(a, b) {
     const a2d = this._to2d(a);
     const b2d = this._to2d(b);
-    const ixs = this.segmentIntersections(a2d, b2d).map(ix => PIXI.Point.fromObject(ix));
+    const ixs = this.segmentIntersections(a2d, b2d).map(ix => {
+      const out = PIXI.Point.fromObject(ix);
+      out.t0 = ix.t0;
+    });
     if ( !ixs.length ) return ixs;
 
     // Shoelace in case the polygon is not simple. Right now, only b/c of steps.
