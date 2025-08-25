@@ -27,7 +27,7 @@ Object.freeze(axes.z);
 export class AABB2d {
   static POINT_CLASS = PIXI.Point;
 
-  static axes = ["x", "y", "z"];
+  static axes = ["x", "y"];
 
   /** @type {PIXI.Point} */
   min = new this.constructor.POINT_CLASS(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY);
@@ -345,6 +345,8 @@ export class AABB2d {
 export class AABB3d extends AABB2d {
 
   static POINT_CLASS = Point3d;
+
+  static axes = ["x", "y", "z"];
 
   /** @type {Point3d} */
   min = new this.constructor.POINT_CLASS(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY);
