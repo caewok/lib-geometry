@@ -53,11 +53,12 @@ export class AABB2d {
 
   /**
    * Union multiple bounds.
-   * @param {AABB2d} ....bounds
+   * @param {AABB2d[]} bounds
+   * @param {AABB2d} out
    * @returns {AABB2d}
    */
-  static union(...bounds) {
-    const out = new this();
+  static union(bounds, out) {
+    out ??= new this();
     const { min, max } = out;
     for ( const axis of this.axes ) {
       const boundsMin = bounds.map(b => b.min[axis]);
