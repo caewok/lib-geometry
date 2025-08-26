@@ -247,7 +247,23 @@ function linesCross(lines) {
       edge.A.release(); // B will later be set to A, so don't release it.
     }
   }
+  return false;
+}
 
+/**
+ * Test whether line segment AB crosses a polygon edge.
+ * @param {Point} a                       The first endpoint of segment AB
+ * @param {Point} b                       The second endpoint of segment AB
+ * @param {object} [options]              Options affecting the intersect test.
+ * @param {boolean} [options.inside]      If true, a line contained within the rectangle will
+ *                                        return true.
+ * @returns {boolean} True if intersects.
+ */
+function lineSegmentCrosses(a, b, { inside = false } = {}) {
+  if ( this.contains(a.x, a.y) && this.contains(b.x, b.y) ) return inside;
+  for ( const edge of this.pixiEdges() ) {
+    if ( foundry.utils.lineSegmentCrosses(a, b, edge.A, edge.B) ) return true;
+  }
   return false;
 }
 
@@ -262,11 +278,10 @@ function linesCross(lines) {
  * @returns {boolean} True if intersects.
  */
 function lineSegmentIntersects(a, b, { inside = false } = {}) {
-  if (this.contains(a.x, a.y) && this.contains(b.x, b.y) ) return inside;
-  for ( const edge of this.pixiEdges()  ) {
+  if ( this.contains(a.x, a.y) && this.contains(b.x, b.y) ) return inside;
+  for ( const edge of this.pixiEdges() ) {
     if ( foundry.utils.lineSegmentIntersects(a, b, edge.A, edge.B) ) return true;
   }
-
   return false;
 }
 
@@ -1184,6 +1199,7 @@ PATCHES.PIXI.METHODS = {
   isSegmentEnclosed,
   linesCross,
   lineSegmentIntersects,
+  lineSegmentCrosses,
   pad,
   lineIntersections,
   segmentIntersections,
