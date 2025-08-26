@@ -259,10 +259,10 @@ function linesCross(lines) {
  *                                        return true.
  * @returns {boolean} True if intersects.
  */
-function lineSegmentCrosses(a, b, { inside = false } = {}) {
+function lineSegmentCrossesPolygon(a, b, { inside = false } = {}) {
   if ( this.contains(a.x, a.y) && this.contains(b.x, b.y) ) return inside;
   for ( const edge of this.pixiEdges() ) {
-    if ( foundry.utils.lineSegmentCrosses(a, b, edge.A, edge.B) ) return true;
+    if ( lineSegmentCrosses(a, b, edge.A, edge.B) ) return true;
   }
   return false;
 }
@@ -1199,7 +1199,7 @@ PATCHES.PIXI.METHODS = {
   isSegmentEnclosed,
   linesCross,
   lineSegmentIntersects,
-  lineSegmentCrosses,
+  lineSegmentCrosses: lineSegmentCrossesPolygon,
   pad,
   lineIntersections,
   segmentIntersections,
