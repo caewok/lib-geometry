@@ -86,7 +86,7 @@ export class CutawayPolygon extends PIXI.Polygon {
       if ( this.points[0] === steps2d[0].x && this.points[1] === steps2d[0].y ) steps2d.shift();
       if ( this.points[2] === steps2d.at(-1).x && this.points.at(3) === steps2d.at(-1).y ) steps2d.pop();
       const stepPts = steps2d.flatMap(step => [step.x, step.y]);
-      this.points = [this.points.slice(0, 2), ...stepPts, this.points.slice(2)]
+      this.points = [...this.points.slice(0, 2), ...stepPts, ...this.points.slice(2)]
     }
   }
 
