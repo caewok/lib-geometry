@@ -394,6 +394,7 @@ function projectToward(other, t, outPoint) {
  */
 function towardsPoint(other, distance, outPoint) {
   outPoint ??= this.constructor.tmp;
+  if ( !distance ) return outPoint.copyFrom(this);
   const delta = other.subtract(this, outPoint);
   const t = distance / delta.magnitude();
   this.add(delta.multiplyScalar(t, outPoint), outPoint);
@@ -408,6 +409,7 @@ function towardsPoint(other, distance, outPoint) {
  */
 function towardsPointSquared(other, distance2, outPoint) {
   outPoint ??= this.constructor.tmp;
+  if ( !distance2 ) return outPoint.copyFrom(this);
   const delta = other.subtract(this, outPoint);
   const sign = Math.sign(distance2);
   const t = sign * Math.sqrt(Math.abs(distance2) / delta.magnitudeSquared());

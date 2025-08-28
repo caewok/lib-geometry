@@ -66,8 +66,6 @@ export function registerFoundryUtilsMethods() {
   CONFIG.GeometryLib.registered.add("utils");
 }
 
-const pt_0 = new PIXI.Point;
-
 /**
  * Define a null set class and null set which always contains 0 elements.
  * The class simply removes the add method.
@@ -173,12 +171,11 @@ dist(end, currPt) < dist(start, currPt) && dist(currPt, start) > dist(start, end
  */
 function from2dCutaway(cutawayPt, start, end, outPoint) {
   outPoint ??= new GEOMETRY_CONFIG.threeD.ElevatedPoint();
-  // b/c outPoint is 3d, makes sure to get the 2d values.
-
-  const xy = start.to2d().towardsPointSquared(end, cutawayPt.x, pt_0);
-  outPoint.x = xy.x;
-  outPoint.y = xy.y;
-  outPoint.z = cutawayPt.y;
+  // b/c outPoint is 3d, makes sure to temporarily store the 2d values.
+  const xy = PIXI.Point.tmp;
+  start.to2d(xy).towardsPointSquared(end, cutawayPt.x, xy);
+  outPoint.set(xy.x, xy.y, cutawayPt.y);
+  xy.release();
   return outPoint;
 }
 
