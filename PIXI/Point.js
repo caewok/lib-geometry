@@ -397,7 +397,7 @@ function towardsPoint(other, distance, outPoint) {
   if ( !distance ) return outPoint.copyFrom(this);
   const delta = other.subtract(this);
   const t = distance / delta.magnitude();
-  this.add(delta.multiplyScalar(t, outPoint), outPoint);
+  this.add(delta.multiplyScalar(t, delta), outPoint); // Note: this might equal other or outPoint.
   delta.release();
   return outPoint;
 }
@@ -414,7 +414,7 @@ function towardsPointSquared(other, distance2, outPoint) {
   const delta = other.subtract(this);
   const sign = Math.sign(distance2);
   const t = sign * Math.sqrt(Math.abs(distance2) / delta.magnitudeSquared());
-  this.add(delta.multiplyScalar(t, outPoint), outPoint);
+  this.add(delta.multiplyScalar(t, delta), outPoint); // Note: this might equal other or outPoint.
   delta.release();
   return outPoint;
 }
