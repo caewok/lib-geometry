@@ -172,8 +172,8 @@ dist(end, currPt) < dist(start, currPt) && dist(currPt, start) > dist(start, end
 function from2dCutaway(cutawayPt, start, end, outPoint) {
   outPoint ??= new GEOMETRY_CONFIG.threeD.ElevatedPoint();
   // b/c outPoint is 3d, makes sure to temporarily store the 2d values.
-  const xy = PIXI.Point.tmp;
-  start.to2d(xy).towardsPointSquared(end, cutawayPt.x, xy);
+  const xy = start.to2d();
+  xy.towardsPointSquared(end, cutawayPt.x, xy);
   outPoint.set(xy.x, xy.y, cutawayPt.y);
   xy.release();
   return outPoint;
