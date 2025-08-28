@@ -57,40 +57,6 @@ export class CutawayPolygon extends PIXI.Polygon {
   _to2d(pt3d) { return cutaway.to2d(pt3d, this.start, this.end); }
 
   /**
-   * Insert steps along the top of this cutaway.
-   * @param {function} stepsFn
-   *   - @param {Point3d} a
-   *   - @param {Point3d} b
-   *   - @returns {Point3d[]} The cutpoints in 3d space
-   */
-  insertTopSteps(stepsFn) {
-    const isHole = this.isHole;
-    const pts = this.pixiPoints();
-    const TL = pts[0];
-    const TR = isHole ? pts[1] : pts[3];
-    const TL3d = this._from2d(TL);
-    const TR3d = this._from2d(TR);
-    const steps = stepsFn(TL3d, TR3d);
-    const steps2d = steps.map(step => this._to2d(step));
-
-    // y-up clockwise unless hole.
-    // Steps are from a -> b.
-    // Remove duplicates at start and end of steps. Remember points are flat arrays.
-    if ( isHole ) {
-      steps2d.reverse();
-      if ( this.points.at(-2) === steps2d[0].x && this.points.at(-1) === steps2d[0].y ) steps2d.shift();
-      if ( this.points[0] === steps2d.at(-1).x && this.points.at(1) === steps2d.at(-1).y ) steps2d.pop();
-      const stepPts = steps2d.flatMap(step => [step.x, step.y]);
-      this.points.push(...stepPts);
-    } else {
-      if ( this.points[0] === steps2d[0].x && this.points[1] === steps2d[0].y ) steps2d.shift();
-      if ( this.points[2] === steps2d.at(-1).x && this.points.at(3) === steps2d.at(-1).y ) steps2d.pop();
-      const stepPts = steps2d.flatMap(step => [step.x, step.y]);
-      this.points = [...this.points.slice(0, 2), ...stepPts, ...this.points.slice(2)]
-    }
-  }
-
-  /**
    * Intersect this cutaway quad based on a 3d segment.
    * @param {Point3d} a       Starting endpoint for the segment
    * @param {Point3d} b       Ending endpoint for the segment
