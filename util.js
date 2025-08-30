@@ -66,8 +66,6 @@ export function registerFoundryUtilsMethods() {
   CONFIG.GeometryLib.registered.add("utils");
 }
 
-const pt_0 = new PIXI.Point;
-
 /**
  * Define a null set class and null set which always contains 0 elements.
  * The class simply removes the add method.
@@ -131,9 +129,9 @@ export function elevationForUnit(k) { return roundNearWhole(k * canvas.scene.dim
  * Convert a point on a line to a coordinate representing the line direction in the x direction
  * and the elevation in the y direction.
  *
- * @param {RegionMovementWaypoint3d} currPt      A point on the line start|end
- * @param {RegionMovementWaypoint3d} start       Beginning endpoint of the line segment
- * @param {RegionMovementWaypoint3d} [end]       End of the line segment; required only if the current point is before start
+ * @param {ElevatedPoint} currPt      A point on the line start|end
+ * @param {ElevatedPoint} start       Beginning endpoint of the line segment
+ * @param {ElevatedPoint} [end]       End of the line segment; required only if the current point is before start
  * @param {PIXI.Point} [outPoint]
  * @returns {CutawayPoint} X value is 0 at start, negative if further from end than start.
  *  - x: Distance-squared from start, in direction of end.
@@ -166,20 +164,20 @@ dist(end, currPt) < dist(start, currPt) && dist(currPt, start) > dist(start, end
 /**
  * Convert a cutaway point to its respective position on the line start|end.
  * @param {CutawayPoint} cutawayPt      2d cutaway point created from _to2dCutaway
- * @param {RegionMovementWaypoint3d} start             Beginning endpoint of the line segment
- * @param {RegionMovementWaypoint3d} end               End of the line segment
- * @param {RegionMovementWaypoint3d} [outPoint]
- * @returns {RegionMovementWaypoint3d}
+ * @param {ElevatedPoint} start             Beginning endpoint of the line segment
+ * @param {ElevatedPoint} end               End of the line segment
+ * @param {ElevatedPoint} [outPoint]
+ * @returns {ElevatedPoint}
  */
 function from2dCutaway(cutawayPt, start, end, outPoint) {
-  outPoint ??= new GEOMETRY_CONFIG.threeD.RegionMovementWaypoint3d();
-  // b/c outPoint is 3d, makes sure to get the 2d values.
-  const xy =
-
-  start.to2d().towardsPointSquared(end, cutawayPt.x, pt_0);
-  outPoint.x = xy.x;
-  outPoint.y = xy.y;
+  outPoint ??= GEOMETRY_CONFIG.threeD.ElevatedPoint.tmp;
+  // b/c outPoint is 3d, makes sure to temporarily store the 2d values.
+  const start2d = start.to2d();
+  const end2d = end.to2d();
+  start2d.towardsPointSquared(end2d, cutawayPt.x, outPoint);
   outPoint.z = cutawayPt.y;
+  start2d.release();
+  end2d.release();
   return outPoint;
 }
 

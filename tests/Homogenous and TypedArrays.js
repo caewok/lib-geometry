@@ -281,10 +281,10 @@ class HPoint2d {
   }
 
   toString() {
-    let str = "";
+    let str = [];
     const d = this.constructor.DIMS + 1;
-    for ( let i = 0; i < d; i += 1 ) str += `${this.arr[i]}`;
-    return `{${str}}`;
+    for ( let i = 0; i < d; i += 1 ) str.push(`${this.arr[i]}`);
+    return str.join(", ");
   }
 
   /**
@@ -721,10 +721,10 @@ class HPoint2d {
     // Use 0, 1, 2 here so this works when calling from HPoint3d.
     const x = cross2d(this, other, 1, 2);
     const y = cross2d(this, other, 2, 0);
-    const z = cross2d(this, other, 0, 1);
+    const w = cross2d(this, other, 0, 1);
     outPoint.arr[0] = x;
     outPoint.arr[1] = y;
-    outPoint.arr[2] = z;
+    outPoint.arr[2] = w;
     return outPoint;
   }
 
@@ -744,117 +744,93 @@ class HPoint2d {
   }
 
 
-    // 2d cross product indicates orientation of a vector: ax*by - ay*bx
-    // • C > 0: b is "left", CCW
-    // • C < 0: b is "right", CW
-    // • C = 0: vectors are parallel, antiparallel, or orthogonal
-    // If C = 0, dot product distinguishes parallel from anti-parallel: D = ax*bx + ay*by
-    // • D > 0: vectors are parallel; point in the same general direction
-    // • D < 0: vectors are anti-parallel; point in opposite directions
-    // • D = 0: vectors are perpendicular
-    // angle between is cos-1(a•b / |a|•|b|) where || is magnitude
+  // 2d cross product indicates orientation of a vector: ax*by - ay*bx
+  // • C > 0: b is "left", CCW
+  // • C < 0: b is "right", CW
+  // • C = 0: vectors are parallel, antiparallel, or orthogonal
+  // If C = 0, dot product distinguishes parallel from anti-parallel: D = ax*bx + ay*by
+  // • D > 0: vectors are parallel; point in the same general direction
+  // • D < 0: vectors are anti-parallel; point in opposite directions
+  // • D = 0: vectors are perpendicular
+  // angle between is cos-1(a•b / |a|•|b|) where || is magnitude
 
-  static orientOrig(a, b, c) { return foundry.utils.orient2dFast(a, b, c); }
-
-  static orientDet(a, b, c) {
-    const mat = new CONFIG.GeometryLib.MatrixFlat([
-      a.x, a.y, 1,
-      b.x, b.y, 1,
-      c.x, c.y, 1,
-    ], 3, 3)
-
-    // Via testing, if aw and bw don't share a sign, the result is reversed.
-    return mat.determinant() * Math.sign(a.w * c.w);
+  /**
+   * Determine the relative orientation of three points in two-dimensional space.
+   * The result is also an approximation of twice the signed area of the triangle defined by the three points.
+   * This method is fast - but not robust against issues of floating point precision. Best used with integer coordinates.
+   * Adapted from https://github.com/mourner/robust-predicates.
+   * @param {HPoint2d} a     An endpoint of segment AB, relative to which point C is tested
+   * @param {HPoint2d} b     An endpoint of segment AB, relative to which point C is tested
+   * @param {HPoint2d} c     A point that is tested relative to segment AB
+   * @returns {number}    The relative orientation of points A, B, and C
+   *                      A positive value if the points are in counter-clockwise order (C lies to the left of AB)
+   *                      A negative value if the points are in clockwise order (C lies to the right of AB)
+   *                      Zero if the points A, B, and C are collinear.
+   */
+  static orient(a, b, c) {
+    // ac: a - c: a.x*c.w - c.x*a.w, a.y*c.w - c.y*a.w, a.w*c.w
+    // bc: b - c: b.x*c.w - c.x*b.w, b.y*c.w - c.y*b.w, b.w*c.w
+    // cross2d: ac.y * bc.x - ac.x * bc.y; w = ac.w * bc.w
+    // (a.y⋅c.w−c.y⋅a.w)(b.x⋅c.w−c.x⋅b.w)−(a.x⋅c.w−c.x⋅a.w)(b.y⋅c.w−c.y⋅b.w)
+    const ac12 = cross2d(a, c, 1, 2);
+    const bc02 = cross2d(b, c, 0, 2);
+    const ac02 = cross2d(a, c, 0, 2);
+    const bc12 = cross2d(b, c, 1, 2);
+    const cw = c.w;
+    return ((ac12 * bc02) - (ac02 * bc12)) / (a.w * b.w * cw * cw);
   }
 
   /**
-   * Orientation of three points
-   * @param {HPoint2d} a
-   * @param {HPoint2d} b
-   * @param {HPoint2d} c
-   * @returns {number} Positive if ccw; negative if cw.
+   * Quickly test whether the line segment AB intersects with the line segment CD.
+   * This method does not determine the point of intersection, for that use lineLineIntersection.
+   * @param {HPoint2d} a                   The first endpoint of segment AB
+   * @param {HPoint2d} b                   The second endpoint of segment AB
+   * @param {HPoint2d} c                   The first endpoint of segment CD
+   * @param {HPoint2d} d                   The second endpoint of segment CD
+   * @returns {boolean}                 Do the line segments intersect?
    */
-  static orient(a, b, c) {
-    const ac = a._cartesianSubtract(c);
-    const bc = b._cartesianSubtract(c);
-    // ac.y * bc.x - ac.x * bc.y, where ac = a - c and bc = b - c
-    // cross2d(ac, bc, 1, 0) after dividing by w.
-    const out = (ac.y * bc.x) - (ac.x * bc.y);
-    ac.release();
-    bc.release();
-    return out;
+  static lineSegmentIntersects(a, b, c, d) {
+    // First test the orientation of A and B with respect to CD to reject collinear cases
+    const xa = this.orient(a, b, c);
+    const xb = this.orient(a, b, d);
+    if ( !(xa || xb) ) return false;
+    const xab = (xa * xb) <= 0;
+
+    // Also require an intersection of CD with respect to AB
+    const xcd = (this.orient(c, d, a) * this.orient(c, d, b)) <= 0;
+    return xab && xcd;
   }
 
-  static orientV2(a, b, c) {
-    // Orient is
-    // ac.y * bc.x - ac.x * bc.y, where ac = a - c and bc = b - c
-    // (ac.y / ac.w * bc.x / bc.w) - (ac.x/ac.w * bc.y /bc.w) =
-    // ((ac.y * bc.x) / (ac.w * bc.w)) - ((ac.x*bc.y) / (ac.w * bc.w))
-    // (ac.y * bc.x) - (ac.x * bc.y) / (ac.w * bc.w)
+  static lineSegmentIntersectsV2(a, b, c, d) {
+    const ab = HLine2d.fromPoints(a, b);
+    const xa = ab.orient(c);
+    const xb = ab.orient(d);
+    ab.release;
+    if ( !(xa || xb) ) return false;
+    const xab = (xa * xb) <= 0;
 
-    // a - c: a.x/a.w - c.x/c.w => a.x*c.w - c.x*a.w, w = c.w * a.w
-
-    const deltaAC = a._cartesianSubtract(c);
-    const deltaBC = b._cartesianSubtract(c);
-    const ac = deltaAC.arr;
-    const bc = deltaBC.arr;
-    const cw = c.w;
-    const out = ((ac[1] * bc[0]) - (ac[0] * bc[1])) / (ac[2] * bc[2])
-    deltaAC.release();
-    deltaBC.release();
-    return out;
+    const cd = HLine2d.fromPoints(c, d);
+    const xcd = (cd.orient(a) * cd.orient(b)) <= 0;
+    cd.release();
+    return xab && xcd;
   }
 
-  static orientV3(a,b,c) {
-    // a-c: a.x*c.w - c.x*a.w, a.y*c.w - c.y*a.w, a.w*c.w
-    // b-c: b.x*c.w - c.x*b.w, b.y*c.w - c.y*b.w, b.w*c.w
-    // cross2d: ac.y * bc.x - ac.x * bc.y; w = ac.w * bc.w
-    // w = (a.w*c.w) * (b.w*c.w)
-    // ((a.y*c.w - c.y*a.w) * (b.x*c.w - c.x*b.w)) - ((a.x*c.w - c.x*a.w)*(b.y*c.w - c.y*b.w))
-
-    // Use the determinant of the 3x3 matrix
-    // a.x(b.y*c.w - c.y*b.w) - a.y(b.x*c.w - c.x*b.w) + a.w(b.x*c.y - c.x*b.y);
-    const cross12 = cross2d(b, c, 1, 2);
-    const cross02 = cross2d(b, c, 0, 1);
-    const cross01 = cross2d(b, c, 0, 1);
-
-    // Via testing, if aw and bw don't share a sign, the result is reversed.
-    const s =  Math.sign(a.w * c.w);
-    a = a.arr;
-    return (a[0]*cross12 - a[1]*cross02 + a[2]*cross01) * s;
+  static lineLineIntersection(a, b, c, d, outPoint) {
+    const ab = HLine2d.fromPoints(a, b);
+    const cd = HLine2d.fromPoints(c, d);
+    outPoint ??= this.constructor.tmp;
+    ab.intersection(cd, outPoint);
+    ab.release();
+    cd.release();
+    return outPoint;
   }
 
-  static orientV4(a, b, c) {
-    // Use determinant directly. Same sign, larger value.
-    const mat = new CONFIG.GeometryLib.MatrixFlat([
-      ...a.arr,
-      ...b.arr,
-      ...c.arr,
-    ], 3, 3)
-
-    // Via testing, if aw and bw don't share a sign, the result is reversed.
-    return mat.determinant() * Math.sign(a.w * c.w);;
+  static lineSegmentIntersection(a, b, c, d, outPoint, epsilon = 1e-08) {
+    if ( !this.lineSegmentIntersects(a, b, c, d) ) return null;
+    const ix = this.lineLineIntersection(a, b, c, d, outPoint);
+    if ( !ix.w ) return null;
+    return ix;
   }
-
-  static orientV5(a, b, c) {
-    const ab = b.subtract(a);
-    const bc = c.subtract(b);
-    const out = bc.cross(ab).w * Math.sign(a.w * c.w); // Via testing, if aw and bw don't share a sign, the result is reversed.
-    ac.release();
-    bc.release();
-    return out;
-  }
-
-  static orientV6(a, b, c) {
-    const ab = b.subtract(a);
-    const bc = c.subtract(b);
-    const out = cross2d(bc, ab, 0, 1) * Math.sign(a.w * c.w); // Via testing, if aw and bw don't share a sign, the result is reversed.
-    ac.release();
-    bc.release();
-    return out;
-  }
-
-
 
   /**
    * Angle between this and another vector.
@@ -928,7 +904,7 @@ class HLine2d extends HPoint2d {
    * @returns {HLine2d}
    */
   static fromPoints(a, b) {
-    const out = this.construtor.tmp;
+    const out = this.constructor.tmp;
     return b.cross(a, out);
   }
 
@@ -1015,16 +991,28 @@ class HLine2d extends HPoint2d {
 
   /**
    * Intersection of this line with another in 2d space.
-   * @param {HPoint2d} other
-   * @param {HPoint2d} [outPoint]
-   * @returns {HPoint2d}
+   * @param {HLine2d} other
+   * @param {HLine2d} [outPoint]
+   * @returns {HPoint2d} If w is 0, the lines are parallel.
    */
   intersection(other, outPoint) { return other.cross(this, outPoint); }
 
   /**
+   * Test whether this line intersects another.
+   * If the intersection is needed it is likely faster to just use the intersection method
+   * and test w for 0.
+   * @param {HLine2d} other
+   * @returns {boolean}
+   */
+  intersects(other) {
+    // See how cross method calculates w.
+    return cross2d(this, other, 0, 1) === 0;
+  }
+
+  /**
    * For a line defined as b.cross(a), where a --> b are two points,
    * return the value equivalent to orient2d(a, b, pt).
-   * @param {HPoint2d} pt
+   * @param {HLine2d} pt
    * @returns {number} Positive if ccw; negative if cw.
    */
   orient(pt) { return this.dot(pt); }
@@ -2280,6 +2268,8 @@ await QBenchmarkLoopFn(N, orientBench, "orientV2", HPoint2d.orientV2)
 await QBenchmarkLoopFn(N, orientBench, "orientV3", HPoint2d.orientV3)
 await QBenchmarkLoopFn(N, orientBench, "orientV4", HPoint2d.orientV4)
 await QBenchmarkLoopFn(N, orientBench, "orientV5", HPoint2d.orientV5)
+await QBenchmarkLoopFn(N, orientBench, "orientV6", HPoint2d.orientV6)
+await QBenchmarkLoopFn(N, orientBench, "orientV7", HPoint2d.orientV7)
 
 function sameSign(fn1, fn2) {
   r = () => (Math.random() - 0.5) * 5000;
@@ -2301,7 +2291,8 @@ Array.fromRange(100).every(elem => sameSign(foundry.utils.orient2dFast, HPoint3d
 Array.fromRange(100).every(elem => sameSign(foundry.utils.orient2dFast, HPoint3d.orientV2)) // √
 Array.fromRange(100).every(elem => sameSign(foundry.utils.orient2dFast, HPoint3d.orientV3))
 Array.fromRange(100).every(elem => sameSign(foundry.utils.orient2dFast, HPoint3d.orientV4))
-Array.fromRange(100).map(elem => sameSign(foundry.utils.orient2dFast, HPoint3d.orientV5))
+Array.fromRange(100).every(elem => sameSign(foundry.utils.orient2dFast, HPoint3d.orientV5))
+Array.fromRange(100).every(elem => sameSign(foundry.utils.orient2dFast, HPoint3d.orientV6))
 
 Array.fromRange(100).map(elem => sameSign(foundry.utils.orient2dFast, orientV5))
 Array.fromRange(100).map(elem => sameSign(foundry.utils.orient2dFast, orientV6))
@@ -2317,10 +2308,49 @@ a   b   c         Num -     a ^ c
 -   +   -     √       2     +
 -   -   -     √       3     +
 
+res = [];
+setSign = (elem, dir) => { if ( Math.sign(elem) !== dir ) elem.w *= -1; }
+for ( const i of [-1, 1] ) {
+  setSign(a, i);
+  for ( const j of [-1, 1] ) {
+    setSign(b, j);
+    for ( const k of [-1, 1] ) {
+      setSign(c, k)
+      const res1 = foundry.utils.orient2dFast(a, b, c);
+      const res2 = HPoint2d.orientV3(a, b, c);
+      res.push({ aw: a.w, bw: b.w, cw: c.w, a: i, b: j, c: k, correct: Math.sign(res1) === Math.sign(res2) })
+    }
+  }
+}
+console.table(res)
 
-Math.sign(a.w * c.w)
-a+, b+, c+: √
-a-, b+, c
+orientV3 x
+orientV5 x
 
-foundry.utils.orient2dFast(a, b, c)
-orientV6(a, b, c)
+
+// Same
+res = [];
+target = foundry.utils.orient2dFast(a, b, c)
+for ( const fnName of ["orientOrig", "orientDet", "orient", "orientV2", "orientV3", "orientV4", "orientV5", "orientV6", "orientV7"]) {
+  const value = HPoint2d[fnName](a, b, c);
+  res.push({ fnName, a: a.toString(), b: b.toString(), c: c.toString(), value, equal: target.almostEqual(value) });
+}
+console.table(res)
+
+            Equal   Small Diff    Sign only   Amount and Sign   Amount only
+orientOrig  √
+orientDet                         √
+orient              √
+*orientV2           √
+*orientV3                                      √
+orientV4    √
+orientV5                                                        √
+orientV6                                      √
+*orientV7    √
+
+*Fastest
+
+
+l = b.cross(a);
+
+cross2d(a.subtract(c), b.subtract(c))

@@ -659,6 +659,7 @@ export class Plane {
     const out = l0.add(u);
     w.release();
     u.release();
+    out.t0 = fac;
     return out;
   }
 

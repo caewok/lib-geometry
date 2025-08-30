@@ -10,6 +10,7 @@ import { MODULE_KEYS } from "./const.js";
 // Patches for the CanvasEdges class.
 export const PATCHES = {};
 PATCHES.CANVAS_EDGES = {};
+PATCHES.CANVAS_EDGES_V13 = {};
 
 // ----- Getters ----- //
 
@@ -91,3 +92,4 @@ function _setRampElevation(region, edge, e) {
 }
 
 PATCHES.CANVAS_EDGES.GETTERS = { elevationLibGeometry: getElevation };
+PATCHES.CANVAS_EDGES_V13.GETTERS = { elevationLibGeometry: getElevation };

@@ -7,7 +7,7 @@ game
 "use strict";
 
 import { roundNearWhole, pixelsToGridUnits, gridUnitsToPixels, bresenhamLine3d } from "../util.js";
-import { RegionMovementWaypoint3d } from "./RegionMovementWaypoint3d.js";
+import { ElevatedPoint } from "./ElevatedPoint.js";
 import { GridCoordinates } from "../GridCoordinates.js";
 import { GEOMETRY_CONFIG, GRID_DIAGONALS } from "../const.js";
 import {
@@ -20,7 +20,7 @@ import { Pool } from "../Pool.js";
 // ----- NOTE: 3d versions of Foundry typedefs ----- //
 
 /**
- * @typedef {object} RegionMovementWaypoint3d
+ * @typedef {object} ElevatedPoint
  * @property {number} x            The x-coordinates in pixels (integer).
  * @property {number} y            The y-coordinates in pixels (integer).
  * @property {number} elevation    The elevation in grid units.
@@ -46,7 +46,7 @@ import { Pool } from "../Pool.js";
  * A 3d point that can function as Point3d|GridOffset3d|RegionMovementWaypoint.
  * Links z to the elevation property.
  */
-export class GridCoordinates3d extends RegionMovementWaypoint3d {
+export class GridCoordinates3d extends ElevatedPoint {
 
   static classTypes = new Set([this.name]); // Alternative to instanceof
 
@@ -151,9 +151,9 @@ export class GridCoordinates3d extends RegionMovementWaypoint3d {
 
   /**
    * Convert this point to a RegionMovementWaypoint.
-   * @returns {RegionMovementWaypoint3d}
+   * @returns {ElevatedPoint}
    */
-  toWaypoint() { return RegionMovementWaypoint3d.fromObject(this); }
+  toWaypoint() { return ElevatedPoint.fromObject(this); }
 
   /**
    * Change this point to a specific offset value.
@@ -329,8 +329,8 @@ export class GridCoordinates3d extends RegionMovementWaypoint3d {
 
   /**
    * Constructs a direct path grid, accounting for elevation and diagonal elevation.
-   * @param {RegionMovementWaypoint3d} start
-   * @param {RegionMovementWaypoint3d} end
+   * @param {ElevatedPoint} start
+   * @param {ElevatedPoint} end
    * @returns {GridCoordinates3d[]}
    */
   static directPath = getDirectPath
@@ -405,7 +405,7 @@ export class GridCoordinates3d extends RegionMovementWaypoint3d {
 
 /**
  * Constructs a direct path for a gridless scene.
- * @param {RegionMovementWaypoint3d} start
+ * @param {ElevatedPoint} start
  * @returns {GridCoordinates3d[]}                 The sequence of grid offsets of a shortest, direct path
  * @abstract
  */
@@ -422,8 +422,8 @@ function directPathGridless(start, end) {
 
 /**
  * Constructs a direct path for a square grid, accounting for elevation and diagonal elevation.
- * @param {RegionMovementWaypoint3d} start
- * @param {RegionMovementWaypoint3d} end
+ * @param {ElevatedPoint} start
+ * @param {ElevatedPoint} end
  * @param {GridOffset[]} [path2d]             Optional path2d for the start and end waypoints.
  * @returns {GridCoordinates3d[]}
  */

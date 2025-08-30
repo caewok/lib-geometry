@@ -718,14 +718,11 @@ export class Polygon3d {
     tmpPt3d.release();
     if ( pts3d.length === 1 ) return pts3d[0];
 
-    const segments = [];
-    let currSegment = { a: null, b: null };
-    pts3d.forEach(ix => {
-      if ( !currSegment.a ) { currSegment.a = ix; return; }
-      currSegment.b = ix;
-      segments.push(currSegment);
-      currSegment = { a: null, b: null };
-    });
+    // Intersecting poly with a plane, so the first intersection must be outside --> inside.
+    // so ix0 -- ix1, ix1 -- ix2 (hole), ix2 --- ix3, ix3 --- ix4 (hole), ix4 --- ix5, ...
+    const nIxs = pts3d.length;
+    const segments = Array(Math.floor(nIxs * 0.5));
+    for ( let i = 0, j = 0; i < nIxs; i += 2 ) segments[j++] = { a: pts3d[i], b: pts3d[i + 1] };
     return segments;
   }
 
@@ -1565,6 +1562,12 @@ export class Polygons3d extends Polygon3d {
 
   static fromVertices(vertices, indices) { this.#createSingleUsingMethod("fromVertices", vertices, indices); }
 
+  static fromPlanarPolygons(polys, plane) {
+    const out = new this();
+    out.polygons = polys.map(poly => Polygon3d.fromPlanarPolygon(poly, plane));
+    return out;
+  }
+
   clone(out) {
     out ??= new this.constructor(0);
     out.polygons = this.polygons.map(poly => poly.clone());
@@ -1691,6 +1694,38 @@ export class Polygons3d extends Polygon3d {
       }
     }
     return ixNum > 0 ? ix : null;
+  }
+
+  /**
+   * Intersect this Polygons3d against a plane, noting holes.
+   * @param {Plane} plane
+   * @returns {Segment3d[]} May be empty if no intersecting segments.
+   */
+  intersectPlane(plane, { tangents = true } = {}) {
+    const res = this.plane.intersectPlane(plane);
+    if ( !res ) return [];
+
+    // Convert the intersecting ray to 2d values on this plane.
+    const to2dM = this.plane.conversion2dMatrix
+    const b3d = res.point.add(res.direction);
+    const tmpPt3d = Point3d.tmp;
+    const a = to2dM.multiplyPoint3d(res.point, tmpPt3d).to2d();
+    const b = to2dM.multiplyPoint3d(b3d, tmpPt3d).to2d();
+
+    // Locate the 2d intersecting segments for each polygon on the plane.
+    const nPolys = this.polygons.length;
+    const out = Array();
+    for ( let i = 0; i < nPolys; i += 1 ) {
+      const poly2d = new PIXI.Polygon(this.polygons[i].planarPoints);
+      const ixs = poly2d.lineIntersections(a, b, { tangents });
+      out[i] = { ixs, isPositive: poly2d.isPositive };
+    }
+
+    // Convert back to 3d.
+    const from2dM = this.plane.conversion2dMatrixInverse;
+    out.forEach(elem => elem.ixs.pt3d = from2dM.multiplyPoint3d(tmpPt3d.set(elem.ixs.x, elem.ixs.y, 0)));
+    tmpPt3d.release();
+    return out;
   }
 
   clipPlanePoints(...args) { this.#applyMethodToAllWithReturn("clipPlanePoints", ...args); }

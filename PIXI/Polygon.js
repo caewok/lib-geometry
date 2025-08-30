@@ -247,7 +247,23 @@ function linesCross(lines) {
       edge.A.release(); // B will later be set to A, so don't release it.
     }
   }
+  return false;
+}
 
+/**
+ * Test whether line segment AB crosses a polygon edge.
+ * @param {Point} a                       The first endpoint of segment AB
+ * @param {Point} b                       The second endpoint of segment AB
+ * @param {object} [options]              Options affecting the intersect test.
+ * @param {boolean} [options.inside]      If true, a line contained within the rectangle will
+ *                                        return true.
+ * @returns {boolean} True if intersects.
+ */
+function lineSegmentCrossesPolygon(a, b, { inside = false } = {}) {
+  if ( this.contains(a.x, a.y) && this.contains(b.x, b.y) ) return inside;
+  for ( const edge of this.pixiEdges() ) {
+    if ( lineSegmentCrosses(a, b, edge.A, edge.B) ) return true;
+  }
   return false;
 }
 
@@ -262,11 +278,10 @@ function linesCross(lines) {
  * @returns {boolean} True if intersects.
  */
 function lineSegmentIntersects(a, b, { inside = false } = {}) {
-  if (this.contains(a.x, a.y) && this.contains(b.x, b.y) ) return inside;
-  for ( const edge of this.pixiEdges()  ) {
+  if ( this.contains(a.x, a.y) && this.contains(b.x, b.y) ) return inside;
+  for ( const edge of this.pixiEdges() ) {
     if ( foundry.utils.lineSegmentIntersects(a, b, edge.A, edge.B) ) return true;
   }
-
   return false;
 }
 
@@ -278,25 +293,38 @@ function lineSegmentIntersects(a, b, { inside = false } = {}) {
  * @param {object} [options]    Optional parameters
  * @param {object[]} [options.edges]  Array of edges for this polygon, from this.iterateEdges.
  * @param {boolean} [options.indices] If true, return the indices for the edges instead of intersections
- * @returns {Point[]} Array of intersections or empty.
+ * @returns {PIXI.Point[]} Array of intersections or empty.
  *   If intersections returned, the t of each intersection is the distance along the a|b segment.
  */
-function segmentIntersections(a, b, { indices = false } = {}) {
+function segmentIntersections(a, b, { indices = false, tangents = true } = {}) {
   const edges = this.pixiEdges();
   const ixIndices = [];
-  edges.forEach((e, i) => {
-    if ( foundry.utils.lineSegmentIntersects(a, b, e.A, e.B) ) ixIndices.push(i);
+  const ixs = [];
+  edges.forEach((edge, i) => {
+     if ( !foundry.utils.lineSegmentIntersects(a, b, edge.A, edge.B) ) return;
+     if ( indices && tangents ) {
+       ixIndices.push(i);
+       return;
+     }
+     const ix = foundry.utils.lineLineIntersection(a, b, edge.A, edge.B);
+     if ( !ix ) return; // Shouldn't happen, but...
+     if ( edge.B.almostEqual(ix) ) return; // Get on the next iteration so endpoint intersections are not repeated.
+     if ( !tangents && _isTangentIntersection(a, b, edges, ix, i) ) return;
+     ixIndices.push(i);
+     ixs.push(_ixToPoint(ix));
   });
-  if ( indices ) return ixIndices;
+ return indices ? ixIndices : ixs;
+}
 
-  return ixIndices.map(i => {
-    const edge = edges[i];
-    return foundry.utils.lineLineIntersection(a, b, edge.A, edge.B);
-  });
+function _ixToPoint(ix) {
+  const pt = PIXI.Point.tmp.set(ix.x, ix.y);
+  pt.t0 = ix.t0;
+  return pt;
 }
 
 /**
  * Get all intersection points for a line that goes through A|B
+ * Ignores singleton tangents: intersects of vertex without penetrating the polygon.
  * @param {Point} a   Endpoint A of the segment
  * @param {Point} b   Endpoint B of the segment
  * @param {object} [options]    Optional parameters
@@ -305,18 +333,44 @@ function segmentIntersections(a, b, { indices = false } = {}) {
  * @returns {Point[]} Array of intersections or empty.
  *   If intersections returned, the t of each intersection is the distance along the a|b segment.
  */
-function lineIntersections(a, b, { indices = false } = {}) {
+function lineIntersections(a, b, { indices = false, tangents = true } = {}) {
   const edges = this.pixiEdges();
   const ixIndices = [];
   const ixs = [];
   edges.forEach((edge, i) => {
     const ix = foundry.utils.lineLineIntersection(a, b, edge.A, edge.B);
-    if ( indices ) { ixIndices.push(i); return; }
-    if ( ix.t0.between(0, 1) || ix.almostEqual(edge.A) || ix.almostEqual(edge.B) ) ixs.push(ix);
+    if ( !ix ) return;
+    if ( !tangents && _isTangentIntersection(a, b, edges, ix, i) ) return;
+    ixs.push(_ixToPoint(ix));
+    ixIndices.push(i);
   });
-  if ( indices ) return ixIndices;
-  return ixs;
+  return indices ? ixIndices : ixs;
 }
+
+/**
+ * Is this intersection of the polygon vertex tangent, such that the line does not go inside the
+ * V formed by the polygon edges?
+ * @param {Edges} edges
+ * @param {object} ix
+ * @param {number} i
+ */
+function _isTangentIntersection(a, b, edges, ix, i) {
+  // Could be a singleton; tangent to vertex but never moving into the edge.
+  // Happens if for edges A --> B --> C, orient(a, b, A) is same side as orient(a, b, C) for B edge
+  const edge = edges[i];
+  if ( edge.A.almostEqual(ix) ) {
+    const idx = (edges.length + i - 1) % edges.length;
+    const priorEdge = edges[idx];
+    if ( foundry.utils.orient2dFast(a, b, priorEdge.A) * foundry.utils.orient2dFast(a, b, edge.B) > 0 ) return true; // Same side
+
+  } else if ( edge.B.almostEqual(ix) ) {
+    const idx = (edges.length + i + 1) % edges.length;
+    const nextEdge = edges[idx];
+    if ( foundry.utils.orient2dFast(a, b, nextEdge.B) * foundry.utils.orient2dFast(a, b, edge.A) > 0 ) return true; // Same side
+  }
+  return false;
+}
+
 
 /**
  * Get all the points for this polygon between two points on the polygon
@@ -325,7 +379,7 @@ function lineIntersections(a, b, { indices = false } = {}) {
  * @param { Point } b
  * @param {object} [options]    Optional parameters
  * @param {object[]} [options.edges]  Array of edges for this polygon, from this.iterateEdges.
- * @return { Point[]}
+ * @return { PIXI.Point[]}
  */
 function pointsBetween(a, b) {
   const edges = this.pixiEdges();
@@ -345,7 +399,7 @@ function pointsBetween(a, b) {
   const out = [];
   const startEdge = edges[ixA];
   const startIx = foundry.utils.lineLineIntersection(startEdge.A, startEdge.B, a, b);
-  out.push(startIx);
+  out.push(_ixToPoint(startIx));
   if ( !startEdge.B.almostEqual(startIx) ) out.push(startEdge.B);
 
   const ln = edges.length;
@@ -358,7 +412,7 @@ function pointsBetween(a, b) {
 
   const endEdge = edges[ixB];
   const endIx = foundry.utils.lineLineIntersection(endEdge.A, endEdge.B, a, b);
-  if ( !endEdge.A.almostEqual(endIx) ) out.push(endIx);
+  if ( !endEdge.A.almostEqual(endIx) ) out.push(_ixToPoint(endIx));
 
   return out;
 }
@@ -1145,6 +1199,7 @@ PATCHES.PIXI.METHODS = {
   isSegmentEnclosed,
   linesCross,
   lineSegmentIntersects,
+  lineSegmentCrosses: lineSegmentCrossesPolygon,
   pad,
   lineIntersections,
   segmentIntersections,
@@ -1175,4 +1230,8 @@ PATCHES.PIXI.METHODS = {
 PATCHES.PIXI.STATIC_METHODS = {
   convexHull
 };
+
+
+
+
 

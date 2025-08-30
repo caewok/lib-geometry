@@ -6,7 +6,7 @@ PIXI,
 import { GEOMETRY_CONFIG } from "./const.js";
 import { Point3d } from "./3d/Point3d.js";
 import { Draw } from "./Draw.js";
-import { almostLessThan } from "./util.js";
+import { almostLessThan, almostGreaterThan } from "./util.js";
 
 const ptOnes = new Point3d(1, 1, 1);
 Object.freeze(ptOnes);
@@ -27,7 +27,7 @@ Object.freeze(axes.z);
 export class AABB2d {
   static POINT_CLASS = PIXI.Point;
 
-  static axes = ["x", "y", "z"];
+  static axes = ["x", "y"];
 
   /** @type {PIXI.Point} */
   min = new this.constructor.POINT_CLASS(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY);
@@ -53,11 +53,12 @@ export class AABB2d {
 
   /**
    * Union multiple bounds.
-   * @param {AABB2d} ....bounds
+   * @param {AABB2d[]} bounds
+   * @param {AABB2d} out
    * @returns {AABB2d}
    */
-  static union(...bounds) {
-    const out = new this();
+  static union(bounds, out) {
+    out ??= new this();
     const { min, max } = out;
     for ( const axis of this.axes ) {
       const boundsMin = bounds.map(b => b.min[axis]);
@@ -198,9 +199,10 @@ export class AABB2d {
    * Does this bounding box contain the point?
    * @param {PIXI.Point} p
    */
-  containsPoint(p) {
+  containsPoint(p, axes) {
+    axes ??= this.constructor.axes;
     const { min, max } = this;
-    for ( const axis of this.constructor.axes ) {
+    for ( const axis of axes ) {
       if ( !p[axis].between(min[axis], max[axis]) ) return false
     }
     return true;
@@ -237,36 +239,63 @@ export class AABB2d {
 
   /**
    * Does the segment cross the aabb bounds or is contained within?
-   * @param {Point3d} a
-   * @param {Point3d} b
+   * @param {PIXI.Point|Point3d} a
+   * @param {PIXI.Point|Point3d} b
+   * @param {boolean} [axes]            Which axes to test? Usually used to limit to "x" and "y"
    * @returns {boolean}
    */
-  overlapsSegment(a, b) {
-    // See https://jacco.ompf2.com/2022/04/13/how-to-build-a-bvh-part-1-basics/
-    const { min, max } = this.aabb;
-    const rayOrigin = a;
+  overlapsSegment(a, b, axes) {
+    axes ??= this.constructor.axes;
     const rayDirection = b.subtract(a);
-    const invDirection = ptOnes.divide(rayDirection);
-    const t1 = Point3d.tmp;
-    const t2 = Point3d.tmp;
+    const epsilon = 1e-06;
 
-    min.subtract(rayOrigin, t1).multiply(invDirection, t1);
-    max.subtract(rayOrigin, t2).multiply(invDirection, t2);
-    const xMinMax = Math.minMax(t1.x, t2.x);
-    const yMinMax = Math.minMax(t1.y, t2.y);
-    const zMinMax = Math.minMax(t1.z, t2.z);
-    Point3d.release(t1, t2);
-    const tmax = Math.min(xMinMax.max, yMinMax.max, zMinMax.max);
+    // Initialize t-interval for the infinite line's intersection with the AABB.
+    let tmin = -Infinity;
+    let tmax = Infinity;
 
-    let out = false;
-    if ( tmax > 0 ) {
-      const tmin = Math.max(xMinMax.min, yMinMax.min, zMinMax.min);
-      out = tmax >= tmin && (tmin * tmin) < rayDirection.dot(rayDirection);
+    for ( const axis of axes ) {
+      const min = this.min[axis];
+      const max = this.max[axis];
+      const p0 = a[axis];
+
+      if ( Math.abs(rayDirection[axis]) < epsilon ) {
+        // Segment is parallel to the slab for this axis.
+        // If segment origin is outside the slab, it can never intersect.
+        if ( p0 < min || p0 > max ) {
+          rayDirection.release();
+          return false;
+        }
+        // Otherwise, the infinite line is always within this slab. Proceed to next axis.
+      }
+
+      // Segment is not parallel.
+      const invD = 1.0 / rayDirection[axis];
+      let t1 = (min - p0) * invD;
+      let t2 = (max - p0) * invD;
+
+      // Ensure t1 is the intersection with the "near" plane and t2 with the "far" plane.
+      if ( t1 > t2 ) [t1, t2] = [t2, t1]; // Swap.
+
+      // Update the overall intersection interval [tmin, tmax].
+      tmin = Math.max(tmin, t1);
+      tmax = Math.min(tmax, t2);
+
+      // If the intersection interval becomes invalid, the line misses the box.
+      if ( tmin > tmax ) {
+        rayDirection.release();
+        return false;
+      }
     }
+
+    // After checking all axes, [tmin, tmax] is the interval where the infinite
+    // line intersects the AABB. The final step is to check if this interval
+    // overlaps with the segment's own interval, which is [0, 1].
+    // Two intervals [a, b] and [c, d] overlap if a <= d and b >= c.
     rayDirection.release();
-    invDirection.release();
-    return out;
+    return almostGreaterThan(1.0, tmin) && almostLessThan(0.0, tmax);
+    // return tmin <= 1.0 && tmax >= 0.0;
   }
+
 
   /**
    * Does a sphere overlap the bounds?
@@ -277,7 +306,7 @@ export class AABB2d {
     if ( this.containsPoint(sphere.center) ) return true;
 
     // https://stackoverflow.com/questions/28343716/sphere-intersection-test-of-aabb
-    const { min, max } = this.aabb;
+    const { min, max } = this;
     let dmin = 0;
     for ( const axis of this.constructor.axes ) {
       const c = sphere.center[axis];
@@ -317,6 +346,8 @@ export class AABB3d extends AABB2d {
 
   static POINT_CLASS = Point3d;
 
+  static axes = ["x", "y", "z"];
+
   /** @type {Point3d} */
   min = new this.constructor.POINT_CLASS(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY);
 
@@ -342,7 +373,7 @@ export class AABB3d extends AABB2d {
    * @param {number} [elevationZ=0]         Intended elevation in the z axis
    * @returns {AABB3d}
    */
-  static fromCircle(circle, out, { maxZ = 0, minZ = maxZ } = {}) {
+  static fromCircle(circle, maxZ = 0, minZ = maxZ, out) {
     out = super.fromCircle(circle, out);
     out.min.z = minZ;
     out.max.z = maxZ;
@@ -354,7 +385,7 @@ export class AABB3d extends AABB2d {
    * @param {number} [elevationZ=0]         Intended elevation in the z axis
    * @returns {AABB3d}
    */
-  static fromEllipse(ellipse, out, { maxZ = 0, minZ = maxZ } = {}) {
+  static fromEllipse(ellipse, maxZ = 0, minZ = maxZ, out) {
     out = super.fromEllipse(ellipse, out);
     out.min.z = minZ;
     out.max.z = maxZ;
@@ -366,7 +397,7 @@ export class AABB3d extends AABB2d {
    * @param {number} [elevationZ=0]         Intended elevation in the z axis
    * @returns {AABB3d}
    */
-  static fromRectangle(rect, out, { maxZ = 0, minZ = maxZ } = {}) {
+  static fromRectangle(rect, maxZ = 0, minZ = maxZ, out) {
     out = super.fromRectangle(rect, out);
     out.min.z = minZ;
     out.max.z = maxZ;
@@ -379,7 +410,7 @@ export class AABB3d extends AABB2d {
    * @returns {AABB3d}
    */
 
-  static fromPolygon(poly, out, { maxZ = 0, minZ = maxZ } = {}) {
+  static fromPolygon(poly, maxZ = 0, minZ = maxZ, out) {
     out = super.fromPolygon(poly, out);
     out.min.z = minZ;
     out.max.z = maxZ;
