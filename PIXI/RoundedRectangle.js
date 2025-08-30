@@ -40,23 +40,24 @@ const SIDES = {
  * @returns {PIXI.Circle}
  */
 function tmpCircle(rr, side) {
-  _tmpCir.radius = rr.radius;
+  const radius = rr.radius;
+  _tmpCir.radius = radius;
   switch ( side ) {
     case SIDES.TL:
-      _tmpCir.x = rr.x + rr.width;
-      _tmpCir.y = rr.y + rr.height;
+      _tmpCir.x = rr.x + radius;
+      _tmpCir.y = rr.y + radius;
       break;
     case SIDES.TR:
-      _tmpCir.x = rr.x - rr.width;
-      _tmpCir.y = rr.y + rr.height;
+      _tmpCir.x = rr.x + rr.width - radius;
+      _tmpCir.y = rr.y + radius;
       break;
     case SIDES.BR:
-      _tmpCir.x = rr.x - rr.width;
-      _tmpCir.y = rr.y - rr.height;
+      _tmpCir.x = rr.x + rr.width - radius;
+      _tmpCir.y = rr.y + rr.height - radius;
       break;
     case SIDES.BL:
-      _tmpCir.x = rr.x + rr.width;
-      _tmpCir.y = rr.y - rr.height;
+      _tmpCir.x = rr.x + radius;
+      _tmpCir.y = rr.y + rr.height - radius;
       break;
   }
   return _tmpCir;
@@ -90,11 +91,11 @@ function getBounds() { return tmpRect(this).getBounds(); }
 function pointIsOn(p) {
   if ( p.x >= this.x && p.x <= this.x + this.width ) {
     if ( p.y >= this.y && p.y <= this.y + this.height ) {
-      const d = this.radius * 2;
+      const r = this.radius;
 
       // Check each corner.
       // TL
-      if ( p.x <= this.x + d && p.y <= this.y + d ) {
+      if ( p.x <= this.x + r && p.y <= this.y + r ) {
         // Must be in the TL circle quadrant. x < center.x, y < center.x
         const cir = tmpCircle(this, SIDES.TL);
         const cirCenter = cir.center;
@@ -103,7 +104,7 @@ function pointIsOn(p) {
       }
 
       // TR
-      if ( p.x >= this.x - d && p.y <= this.y + d ) {
+      if ( p.x >= this.x + this.width - r && p.y <= this.y + r ) {
         // Must be in the TR circle quadrant. x > center.x, y < center.x
         const cir = tmpCircle(this, SIDES.TR);
         const cirCenter = cir.center;
@@ -112,7 +113,7 @@ function pointIsOn(p) {
       }
 
       // BL
-      if ( p.x >= this.x - d && p.y >= this.y - d ) {
+      if ( p.x >= this.x + this.width - r && p.y >= this.y + this.height - r ) {
         // Must be in the BL circle quadrant. x > center.x, y > center.x
         const cir = tmpCircle(this, SIDES.BL);
         const cirCenter = cir.center;
@@ -121,7 +122,7 @@ function pointIsOn(p) {
       }
 
       // BR
-      if ( p.x <= this.x + d && p.y >= this.y - d ) {
+      if ( p.x <= this.x + r && p.y >= this.y + this.height - r ) {
         // Must be in the BR circle quadrant. x < center.x, y > center.x
         const cir = tmpCircle(this, SIDES.BR);
         const cirCenter = cir.center;
@@ -166,35 +167,35 @@ function pointsBetween(a, b) {
  *  The t1 value is measured relative to the intersecting edge of the rectangle.
  */
 function segmentIntersections(a, b) {
-  const diameter = this.radius * 2;
+  const r = this.radius;
   const ixs = [];
 
   // TL
   const tlIxs = tmpCircle(this, SIDES.TL).segmentIntersections(a, b)
-    .filter(ix => ix.x.between(this.x, this.x + diameter, true) && ix.y.between(this.y, this.y + diameter));
+    .filter(ix => ix.x.between(this.x, this.x + r, true) && ix.y.between(this.y, this.y + r));
   ixs.push(...tlIxs);
 
   // TR
   const trIxs = tmpCircle(this, SIDES.TR).segmentIntersections(a, b)
-    .filter(ix => ix.x.between(this.x, this.x + diameter, true) && ix.y.between(this.y, this.y + diameter));
+    .filter(ix => ix.x.between(this.x, this.x + r, true) && ix.y.between(this.y, this.y + r));
   ixs.push(...trIxs);
 
   // BR
   const brIxs = tmpCircle(this, SIDES.BR).segmentIntersections(a, b)
-    .filter(ix => ix.x.between(this.x, this.x + diameter, true) && ix.y.between(this.y, this.y + diameter));
+    .filter(ix => ix.x.between(this.x, this.x + r, true) && ix.y.between(this.y, this.y + r));
   ixs.push(...brIxs);
 
   // BL
   const blIxs = tmpCircle(this, SIDES.BL).segmentIntersections(a, b)
-    .filter(ix => ix.x.between(this.x, this.x + diameter, true) && ix.y.between(this.y, this.y + diameter));
+    .filter(ix => ix.x.between(this.x, this.x + r, true) && ix.y.between(this.y, this.y + r));
   ixs.push(...blIxs);
 
   // Remainder
   const rectIxs = tmpRect(this).segmentIntersections(a, b)
-    .filter(ix => (ix.x.between(this.x + diameter, this.x + this.width - diameter) && ix.y.almostEqual(this.y)) // Top
-      || (ix.x.between(this.x + diameter, this.x + this.width - diameter) && ix.y.almostEqual(this.y + this.height)) // Bottom
-      || (ix.y.between(this.y + diameter, this.y + this.height - diameter) && ix.x.almostEqual(this.x)) // Left
-      || (ix.y.between(this.y + diameter, this.y + this.height - diameter) && ix.x.almostEqual(this.x + this.width))); // Right
+    .filter(ix => (ix.x.between(this.x + r, this.x + this.width - r) && ix.y.almostEqual(this.y)) // Top
+      || (ix.x.between(this.x + r, this.x + this.width - r) && ix.y.almostEqual(this.y + this.height)) // Bottom
+      || (ix.y.between(this.y + r, this.y + this.height - r) && ix.x.almostEqual(this.x)) // Left
+      || (ix.y.between(this.y + r, this.y + this.height - r) && ix.x.almostEqual(this.x + this.width))); // Right
   ixs.push(...rectIxs);
 
   // Sort to order a --> b.
@@ -207,36 +208,37 @@ function segmentIntersections(a, b) {
  * Convert this PIXI.Rectangle into a PIXI.Polygon
  * @returns {PIXI.Polygon}      The Rectangle expressed as a PIXI.Polygon
  */
-function toPolygon() {
-  const diameter = this.radius * 2;
+function toPolygon(density) {
+  const r = this.radius;
   const points = [];
+  const opts = { density };
 
   // TL
-  let a = PIXI.Point.tmp.set(this.x, this.y + diameter); // Use new a and b each time b/c part of out points.
-  let b = PIXI.Point.tmp.set(this.x + diameter, this.y);
-  const tl = tmpCircle(this, SIDES.TL).pointsBetween(a, b);
+  let a = PIXI.Point.tmp.set(this.x, this.y + r); // Use new a and b each time b/c part of out points.
+  let b = PIXI.Point.tmp.set(this.x + r, this.y);
+  const tl = tmpCircle(this, SIDES.TL).pointsBetween(a, b, opts);
   points.push(a, ...tl, b);
 
   // TR
-  a =  PIXI.Point.tmp.set(this.x + this.width - diameter, this.y);
-  b =  PIXI.Point.tmp.set(this.x + this.width, this.y + diameter);
-  const tr = tmpCircle(this, SIDES.TR).pointsBetween(a, b);
+  a =  PIXI.Point.tmp.set(this.x + this.width - r, this.y);
+  b =  PIXI.Point.tmp.set(this.x + this.width, this.y + r);
+  const tr = tmpCircle(this, SIDES.TR).pointsBetween(a, b, opts);
   points.push(a, ...tr, b);
 
   // BR
-  a =  PIXI.Point.tmp.set(this.x + this.width, this.y + this.height - diameter);
-  b =  PIXI.Point.tmp.set(this.x + this.width - diameter, this.y + this.height);
-  const br = tmpCircle(this, SIDES.BR).pointsBetween(a, b);
+  a =  PIXI.Point.tmp.set(this.x + this.width, this.y + this.height - r);
+  b =  PIXI.Point.tmp.set(this.x + this.width - r, this.y + this.height);
+  const br = tmpCircle(this, SIDES.BR).pointsBetween(a, b, opts);
   points.push(a, ...br, b);
 
   // BL
-  a = PIXI.Point.tmp.set(this.x + diameter, this.y + this.height);
-  b = PIXI.Point.tmp.set(this.x, this.y + this.height - diameter);
-  const bl = tmpCircle(this, SIDES.BL).pointsBetween(a, b);
+  a = PIXI.Point.tmp.set(this.x + r, this.y + this.height);
+  b = PIXI.Point.tmp.set(this.x, this.y + this.height - r);
+  const bl = tmpCircle(this, SIDES.BL).pointsBetween(a, b, opts);
   points.push(a, ...bl, b);
 
   const poly = new PIXI.Polygon(points);
-  points.forEach(pt => pt.release()); // PIXI.Polygon copies all the point coordinate values.
+  points.forEach(pt => { if ( pt.release ) pt.release(); }); // PIXI.Polygon copies all the point coordinate values.
   return poly;
 }
 
