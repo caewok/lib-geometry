@@ -37,7 +37,7 @@ function equals(other) {
  * @returns {boolean}
  */
 function almostEqual(other, epsilon = 1e-08) {
-  if ( !(other instanceof PIXI.Circle) ) return false;
+  if ( !(other instanceof PIXI.Rectangle) ) return false;
   return this.x.almostEqual(other.x, epsilon)
     && this.y.almostEqual(other.y, epsilon)
     && this.width.almostEqual(other.width, epsilon)
