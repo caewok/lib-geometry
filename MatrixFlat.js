@@ -63,6 +63,29 @@ export class MatrixFlat {
 
   setIndex(row, col, value) { this.arr[this._idx(row, col)] = value; }
 
+  /**
+   * Return a new matrix with smaller or equal dimensions from this matrix.
+   * @param {object} [opts]
+   * @param {number} [opts.rowStart=0]      First row to keep, indexed from 0
+   * @param {number} [opts.rowEnd]          Last row to keep, inclusive; defaults to last row
+   * @param {number} [opts.colStart=0]      First column to keep, indexed from 0
+   * @param {number} [opts.colEnd]          Last column to keep, inclusive; defaults to last column
+   * @returns {MatrixFlat} New matrix
+   */
+  subset({ rowStart = 0, rowEnd = this.nrow - 1, colStart = 0, colEnd = this.ncol - 1 } = {}) {
+    rowEnd += 1;
+    colEnd += 1;
+
+    // Rows are easy.
+    const rowArr = this.arr.slice(rowStart * this.nrow, rowEnd * this.nrow);
+    const newArr = [];
+    for ( let r = 0, rMax = rowEnd - rowStart; r < rMax; r += 1 ) {
+      const cIdx = r * this.ncol;
+      newArr.push(...rowArr.slice(cIdx + colStart, cIdx + colEnd));
+    }
+   return new this.constructor(newArr, rowEnd - rowStart, colEnd - colStart);
+  }
+
   // ----- NOTE: Iterators ----- //
 
   /**
@@ -1460,6 +1483,29 @@ export class MatrixFloat32 extends MatrixFlat {
   static arrayClass = Float32Array;
 
   static arrayIsTyped = true;
+
+  /**
+   * Return a new matrix with smaller or equal dimensions from this matrix.
+   * @param {object} [opts]
+   * @param {number} [opts.rowStart=0]      First row to keep, indexed from 0
+   * @param {number} [opts.rowEnd]          Last row to keep, inclusive; defaults to last row
+   * @param {number} [opts.colStart=0]      First column to keep, indexed from 0
+   * @param {number} [opts.colEnd]          Last column to keep, inclusive; defaults to last column
+   * @returns {MatrixFlat} New matrix
+   */
+  subset({ rowStart = 0, rowEnd = this.nrow - 1, colStart = 0, colEnd = this.ncol - 1 } = {}) {
+    rowEnd += 1;
+    colEnd += 1;
+
+    // Rows are easy.
+    const rowArr = this.arr.subarray(rowStart * this.nrow, rowEnd * this.nrow);
+    const out = this.constructor.empty(rowEnd - rowStart, colEnd - colStart);
+    for ( let r = 0, rMax = rowEnd - rowStart; r < rMax; r += 1 ) {
+      const cIdx = r * this.ncol;
+      out.arr.set(rowArr.subarray(cIdx + colStart, cIdx + colEnd), r * out.ncol);
+    }
+   return out;
+  }
 
 }
 GEOMETRY_CONFIG.MatrixFloat32 ??= MatrixFloat32;

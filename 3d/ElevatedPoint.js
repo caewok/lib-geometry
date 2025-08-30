@@ -12,7 +12,7 @@ import { Point3d } from "./Point3d.js";
 // ----- NOTE: 3d versions of Foundry typedefs ----- //
 
 /**
- * @typedef {object} RegionMovementWaypoint3d
+ * @typedef {object} RegionMovementWaypoint3d|ElevatedPoint
  * @property {number} x            The x-coordinates in pixels (integer).
  * @property {number} y            The y-coordinates in pixels (integer).
  * @property {number} elevation    The elevation in grid units.
@@ -20,13 +20,13 @@ import { Point3d } from "./Point3d.js";
 
 
 /**
- * A 3d point that can function as a Point3d|RegionMovementWaypoint.
+ * A 3d point that can function as a Point3d|RegionMovementWaypoint|ElevatedPoint.
  * Does not handle GridOffset3d so that it can be passed to 2d Foundry functions that
  * treat objects with {i,j} parameters differently.
  */
-export class RegionMovementWaypoint3d extends Point3d {
+export class ElevatedPoint extends Point3d {
 
-  static classTypes = new Set([this.name]); // Alternative to instanceof
+  static classTypes = new Set([this.name, "RegionMovementWaypoint3d"]); // Alternative to instanceof
 
   static #pool = new Pool(this);
 
@@ -44,7 +44,7 @@ export class RegionMovementWaypoint3d extends Point3d {
    * Factory function to convert a generic point object to a RegionMovementWaypoint3d.
    * @param {Point|PIXI.Point|GridOffset|RegionMovementWaypoint|GridOffset3d|GridCoordinates3d} pt
    *   i, j, k assumed to refer to the center of the grid
-   * @returns {RegionMovementWaypoint3d}
+   * @returns {ElevatedPoint}
    */
   static fromPoint(pt) {
     // Priority: x,y,z | elevation | i, j, k
@@ -60,7 +60,7 @@ export class RegionMovementWaypoint3d extends Point3d {
     }
 
     // Process elevation.
-    const newPt = new this(x, y);
+    const newPt = this.tmp.set(x, y, 0);
     if ( Object.hasOwn(pt, "z") ) newPt.z = pt.z;
     else if ( Object.hasOwn(pt, "elevation") ) newPt.elevation = pt.elevation;
     else if ( Object.hasOwn(pt, "k") ) newPt.elevation = elevationForUnit(pt.k);
@@ -71,10 +71,10 @@ export class RegionMovementWaypoint3d extends Point3d {
    * Construct a point given a 2d location and an elevation in grid units.
    * @param {Point} location      Object with {x, y} properties
    * @param {number} [elevation = 0]    Elevation in grid units
-   * @returns {RegionMovementWaypoint3d}
+   * @returns {ElevatedPoint}
    */
   static fromLocationWithElevation(location, elevation = 0) {
-    const pt = new this(location.x, location.y);
+    const pt = this.tmp.set(location.x, location.y, 0)
     pt.elevation = elevation;
     return pt;
   }
@@ -82,11 +82,11 @@ export class RegionMovementWaypoint3d extends Point3d {
   /**
    * Given a token, modify this point to match the center point of the token for that position.
    * @param {Token} token
-   * @param {RegionMovementWaypoint3d} outPoint
-   * @returns {RegionMovementWaypoint3d} The outPoint
+   * @param {ElevatedPoint} outPoint
+   * @returns {ElevatedPoint} The outPoint
    */
   centerPointToToken(token, outPoint) {
-    outPoint ??= new this.constructor();
+    outPoint ??= this.constructor.tmp;
     const center = token.getCenterPoint(this);
     outPoint.set(center.x, center.y, this.z);
     return outPoint;
@@ -94,16 +94,17 @@ export class RegionMovementWaypoint3d extends Point3d {
 
   /**
    * Modify this point to center it in elevation units.
-   * @param {RegionMovementWaypoint3d} outPoint
-   * @returns {RegionMovementWaypoint3d} The outPoint
+   * @param {ElevatedPoint} outPoint
+   * @returns {ElevatedPoint} The outPoint
    */
   centerElevation(outPoint) {
-    outPoint ??= new this.constructor();
+    outPoint ??= this.constructor.tmp;
     outPoint.copyFrom(this);
     outPoint.elevation = elevationForUnit(unitElevation(this.elevation));
     return outPoint;
   }
 }
 
-GEOMETRY_CONFIG.threeD.RegionMovementWaypoint3d ??= RegionMovementWaypoint3d;
+GEOMETRY_CONFIG.threeD.ElevatedPoint ??= ElevatedPoint;
+GEOMETRY_CONFIG.threeD.RegionMovementWaypoint3d ??= ElevatedPoint; // For backwards compatibility
 

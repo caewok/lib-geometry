@@ -205,8 +205,8 @@ function _alternatingGridDistance(maxAxis = 0, midAxis = 0, minAxis = 0) {
 
 /**
  * Constructs a direct path grid, accounting for elevation and diagonal elevation.
- * @param {RegionMovementWaypoint3d} start
- * @param {RegionMovementWaypoint3d} end
+ * @param {ElevatedPoint} start
+ * @param {ElevatedPoint} end
  * @param {GridOffset[]} [path2d]             Optional path2d for the start and end waypoints.
  * @returns {GridCoordinates3d[]}
  */

@@ -5,7 +5,7 @@ game,
 */
 "use strict";
 
-const VERSION = "0.4.2";
+const VERSION = "0.4.3";
 
 // Foundry utils
 import { GEOMETRY_CONFIG } from "./const.js";
@@ -71,6 +71,7 @@ import { PATCHES as PATCHES_Point } from "./PIXI/Point.js";
 import { PATCHES as PATCHES_Polygon } from "./PIXI/Polygon.js";
 import { PATCHES as PATCHES_Rectangle } from "./PIXI/Rectangle.js";
 import { PATCHES as PATCHES_Ellipse } from "./PIXI/Ellipse.js";
+import { PATCHES as PATCHES_RoundedRectangle } from "./PIXI/RoundedRectangle.js";
 
 // Elevation
 import { PATCHES as PATCHES_ELEVATION } from "./elevation.js";
@@ -90,7 +91,7 @@ import { PATCHES as PATCHES_Tile } from "./Tile.js";
 // Grid measurement
 import "./GridCoordinates.js";
 import "./3d/GridCoordinates3d.js";
-import "./3d/RegionMovementWaypoint3d.js";
+import "./3d/ElevatedPoint.js";
 import "./3d/HexGridCoordinates3d.js";
 
 // Cutaway
@@ -102,6 +103,7 @@ const PATCHES_V12 = {
   "PIXI.Polygon": PATCHES_Polygon,
   "PIXI.Rectangle": PATCHES_Rectangle,
   "PIXI.Ellipse": PATCHES_Ellipse,
+  "PIXI.RoundedRectangle": PATCHES_RoundedRectangle,
 
   // PixelCache
   "Tile": PATCHES_Tile,
@@ -123,11 +125,15 @@ const PATCHES_V12 = {
 }
 
 const PATCHES_V13 = {
+  // Don't need CanvasEdges b/c quadtree already in v13.
+  // Do need
+
   "PIXI.Circle": PATCHES_Circle,
   "PIXI.Point": PATCHES_Point,
   "PIXI.Polygon": PATCHES_Polygon,
   "PIXI.Rectangle": PATCHES_Rectangle,
   "PIXI.Ellipse": PATCHES_Ellipse,
+  "PIXI.RoundedRectangle": PATCHES_RoundedRectangle,
 
   // PixelCache
   "Tile": PATCHES_Tile,
@@ -180,9 +186,15 @@ export function registerGeometryLibPatches() {
   CONFIG.GeometryLib.PATCHER.addPatchesFromRegistrationObject(patches);
   CONFIG.GeometryLib.PATCHER.registerGroup("PIXI");
   CONFIG.GeometryLib.PATCHER.registerGroup("CONSTRAINED_TOKEN_BORDER");
-  CONFIG.GeometryLib.PATCHER.registerGroup("CANVAS_EDGES");
+
   CONFIG.GeometryLib.PATCHER.registerGroup("PIXEL_CACHE");
   CONFIG.GeometryLib.PATCHER.registerGroup("ELEVATION");
+
+  if ( foundry.utils.isNewerVersion(game.version, "13") ) {
+    CONFIG.GeometryLib.PATCHER.registerGroup("CANVAS_EDGES_V13");
+  } else {
+    CONFIG.GeometryLib.PATCHER.registerGroup("CANVAS_EDGES");
+  }
 }
 
 function deRegister() {
@@ -191,5 +203,6 @@ function deRegister() {
   CONFIG.GeometryLib.PATCHER.deregisterGroup("PIXI");
   CONFIG.GeometryLib.PATCHER.deregisterGroup("PIXEL_CACHE");
   CONFIG.GeometryLib.PATCHER.deregisterGroup("CANVAS_EDGES");
+  CONFIG.GeometryLib.PATCHER.deregisterGroup("CANVAS_EDGES_V13");
   CONFIG.GeometryLib.PATCHER.deregisterGroup("CONSTRAINED_TOKEN_BORDER");
 }

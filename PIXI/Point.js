@@ -114,7 +114,7 @@ function distanceBetween(a, b) {
 function distanceSquaredBetween(a, b) {
   const dx = (b.x - a.x) || 0; // In case x is undefined.
   const dy = (b.y - a.y) || 0;
-  return Math.pow(dx, 2) + Math.pow(dy, 2);
+  return (dx ** 2) + (dy ** 2);
 }
 
 /**
@@ -349,7 +349,7 @@ function magnitude() {
  * @returns {number}
  */
 function magnitudeSquared() {
-  return Math.pow(this.x, 2) + Math.pow(this.y, 2);
+  return (this.x ** 2) + (this.y ** 2);
 }
 
 /**
@@ -394,9 +394,11 @@ function projectToward(other, t, outPoint) {
  */
 function towardsPoint(other, distance, outPoint) {
   outPoint ??= this.constructor.tmp;
-  const delta = other.subtract(this, outPoint);
+  if ( !distance ) return outPoint.copyFrom(this);
+  const delta = other.subtract(this);
   const t = distance / delta.magnitude();
-  this.add(delta.multiplyScalar(t, outPoint), outPoint);
+  this.add(delta.multiplyScalar(t, delta), outPoint); // Note: this might equal other or outPoint.
+  delta.release();
   return outPoint;
 }
 
@@ -408,10 +410,12 @@ function towardsPoint(other, distance, outPoint) {
  */
 function towardsPointSquared(other, distance2, outPoint) {
   outPoint ??= this.constructor.tmp;
-  const delta = other.subtract(this, outPoint);
+  if ( !distance2 ) return outPoint.copyFrom(this);
+  const delta = other.subtract(this);
   const sign = Math.sign(distance2);
   const t = sign * Math.sqrt(Math.abs(distance2) / delta.magnitudeSquared());
-  this.add(delta.multiplyScalar(t, outPoint), outPoint);
+  this.add(delta.multiplyScalar(t, delta), outPoint); // Note: this might equal other or outPoint.
+  delta.release();
   return outPoint;
 }
 
@@ -489,6 +493,8 @@ function to2d(_opts, outPoint) {
   outPoint.copyFrom(this);
   return outPoint;
 }
+
+PIXI.Point.prototype.t0 = 0; // Solely for storing intersections to avoid rebuilding the class.
 
 /**
  * Iterator: x then y.

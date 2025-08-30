@@ -15,16 +15,18 @@ import { Draw } from "./Draw.js";
  */
 export class CutawayPolygon extends PIXI.Polygon {
   /** @type {Point3d} */
-  start = new GEOMETRY_CONFIG.threeD.Point3d();
+  start = Point3d.tmp;
 
   /** @type {Point3d} */
-  end = new GEOMETRY_CONFIG.threeD.Point3d();
+  end = Point3d.tmp;
 
   /** @type {number} */
   get top() { return this.getBounds().bottom; } // Y values are reversed.
 
   /** @type {number} */
   get bottom() { return this.getBounds().top; } // Y values are reversed.
+
+  get isHole() { return this.isPositive; } // Reversed from Foundry coordinates.
 
   /**
    * Create a new polygon from a series of cutaway points.
@@ -41,38 +43,9 @@ export class CutawayPolygon extends PIXI.Polygon {
   }
 
   /**
-   * Create a new polygon from an existing.
-   * @param {PIXI.Polygon} poly    Polygon, already converted points
-   * @param {Point3d} start
-   * @param {Point3d} end
-   * @returns {CutawayPolygon} New polygon
-   */
-  static _copyFromPolygon(poly, start, end) {
-    const cutawayPoly = new this(poly.points);
-    cutawayPoly.start.copyFrom(start);
-    cutawayPoly.end.copyFrom(end);
-    return cutawayPoly;
-  }
-
-  /**
-   * Like _copyFromPolygon but uses the same poly points array instead of copying it.
-   * @param {PIXI.Polygon} poly    Polygon, already converted points
-   * @param {Point3d} start
-   * @param {Point3d} end
-   * @returns {CutawayPolygon} Polygon with the poly's points array
-   */
-  static _convertFromPolygon(poly, start, end) {
-    const cutawayPoly = new this();
-    cutawayPoly.points = poly.points;
-    cutawayPoly.start.copyFrom(start);
-    cutawayPoly.end.copyFrom(end);
-    return cutawayPoly;
-  }
-
-  /**
    * Convert x,y to 3d position
    * @param {Point} {x, y}
-   * @returns {RegionMovementWaypoint3d}
+   * @returns {ElevatedPoint}
    */
   _from2d(pt2d) { return cutaway.from2d(pt2d, this.start, this.end); }
 
@@ -84,29 +57,6 @@ export class CutawayPolygon extends PIXI.Polygon {
   _to2d(pt3d) { return cutaway.to2d(pt3d, this.start, this.end); }
 
   /**
-   * Insert steps along the top of this cutaway.
-   * @param {function} stepsFn
-   *   - @param {Point3d} a
-   *   - @param {Point3d} b
-   *   - @returns {Point3d[]} The cutpoints in 3d space
-   */
-  insertTopSteps(stepsFn) {
-    const isHole = !this.isPositive;
-    const pts = this.pixiPoints();
-    const TL = pts[0];
-    const TR = isHole ? pts[1] : pts[3];
-    const TL3d = this._from2d(TL);
-    const TR3d = this._from2d(TR);
-    const steps = stepsFn(TL3d, TR3d);
-    const steps2d = steps.map(step => this._to2d(step));
-    if ( isHole ) this.points.slice(2, 0, ...steps2d.flatMap(step => [step.x, step.y]))
-    else {
-      steps2d.reverse();
-      this.points.push(...steps2d.flatMap(step => [step.x, step.y]));
-    }
-  }
-
-  /**
    * Intersect this cutaway quad based on a 3d segment.
    * @param {Point3d} a       Starting endpoint for the segment
    * @param {Point3d} b       Ending endpoint for the segment
@@ -115,7 +65,11 @@ export class CutawayPolygon extends PIXI.Polygon {
   intersectSegment3d(a, b) {
     const a2d = this._to2d(a);
     const b2d = this._to2d(b);
-    const ixs = this.segmentIntersections(a2d, b2d).map(ix => PIXI.Point.fromObject(ix));
+    const ixs = this.segmentIntersections(a2d, b2d).map(ix => {
+      const out = PIXI.Point.fromObject(ix);
+      out.t0 = ix.t0;
+      return out;
+    });
     if ( !ixs.length ) return ixs;
 
     // Shoelace in case the polygon is not simple. Right now, only b/c of steps.
@@ -217,7 +171,8 @@ export class CutawayPolygon extends PIXI.Polygon {
    * @param {function} [opts.topElevationFn]    Function to calculate the top elevation for a position
    * @param {function} [opts.bottomElevationFn] Function to calculate the bottom elevation for a position
    * @param {boolean} [opts.isHole=false]       Is this polygon a hole? If so, reverse points and use max/min elevations.
-   * @returns {CutawayPolygon}
+   * @returns {CutawayPolygon} Returns points such that a is on the left, b is on the right.
+   *   Points are clockwise but reversed from Foundry: Move from a to b takes you around the "top" of the polygon, through positive elevation.
    */
   static quadCutaway(a, b, { start, end, topElevationFn, bottomElevationFn, isHole = false } = {}) {
     const to2d = cutaway.to2d;
@@ -248,7 +203,8 @@ export class CutawayPolygon extends PIXI.Polygon {
     const BR = { x: b2d.x, y: bottomB };
 
     // _isPositive is y-down clockwise. For Foundry canvas, this is CCW.
-    return isHole ? this.fromCutawayPoints([TL, TR, BR, BL], start, end) : this.fromCutawayPoints([TL, BL, BR, TR], start, end);
+    // Returns y-up clockwise.
+    return isHole ? this.fromCutawayPoints([TL, BL, BR, TR], start, end) : this.fromCutawayPoints([TL, TR, BR, BL], start, end);
   }
 
   /**
