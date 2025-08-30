@@ -1,3 +1,88 @@
+## 0.4.3
+Refactor: Renames RegionMovementWaypoint3d to ElevatedPoint and fixes various bugs.
+
+This change renames RegionMovementWaypoint3d to ElevatedPoint, consolidating point handling in the 3D geometry library. It also includes numerous bug fixes and optimizations across various geometry-related classes, improving accuracy and stability.
+
+### Changes
+Renamed: RegionMovementWaypoint3d.js is deleted, and its functionality is merged into a new ElevatedPoint.js file.
+
+Class Hierarchy: GridCoordinates3d now extends ElevatedPoint instead of RegionMovementWaypoint3d.
+
+AABB: Modified AABB2d and AABB3d to improve segment overlap testing and containment checks. Simplified from factory methods.
+
+PIXI Extensions: Added segmentIntersections to PIXI.Circle that returns t0 values. Added lineSegmentCrosses to PIXI.Polygon. Improved intersection calculations. RoundedRectangle class added.
+
+MatrixFlat: Added a subset method to extract a portion of the matrix.
+
+CutawayPolygon: Modified CutawayPolygon to ensure clockwise point order in a y-up coordinate system. InsertTopSteps method removed.
+
+Point3d: Added t0 property to store intersection distances. Switched from Math.pow to ** operator.
+
+CanvasEdges: Modified Edge and CanvasEdges to patch for v13.
+
+### Impact
+Behavioral Changes: Improved accuracy of intersection calculations in PIXI.Circle, PIXI.Polygon, AABB, and RoundedRectangle.
+
+Dependencies Affected: GridCoordinates3d, HexGridCoordinates3d, and other classes using the renamed ElevatedPoint class are updated.
+
+Performance: Optimized Point.towardsPoint and switched to faster orient2d method, which should improve performance.
+
+
+## 0.4.2
+Refactor: Replace instanceof with class type checking; add instanceOrTypeOf.
+
+This change replaces instanceof checks with a more robust class type verification using a new instanceOrTypeOf utility function. It also introduces class type sets to ClipperPaths and Clipper2Paths as an alternative to instanceof.
+
+Needed b/c different modules may load parallel versions of classes like Point3d, but these should be seen as the same class.
+
+### Changes
+Replaced instanceof checks with instanceOrTypeOf in Ray3d.js for type validation of Point3d instances.
+
+Introduced classTypes static property (Set) and inheritsClassType, matchesClass, overlapsClass methods to ClipperPaths.js and Clipper2Paths.js as an alternative to instanceof. These Sets contain the name of the class and a parent class.
+
+Updated ConstrainedTokenBorder.js to use the inheritsClassType method of ClipperPaths and Clipper2Paths instead of instanceof.
+
+Added instanceOrTypeOf utility function to util.js to handle checking if an object is an instance of a given class type or has a matching class type, and added it to the Foundry utils.
+
+### Impact
+Replaces the potential issues of using instanceof that occur when a class is defined in a different context or has been modified during runtime.
+
+Provides a more reliable class type verification mechanism across different modules.
+
+Adds more robust type validation for shapes to ensure only ClipperPaths or Clipper2Paths are used by the ConstrainedTokenBorder class' clipperShapeToPolygon method.
+
+May improve the robustness of type checking throughout the code.
+
+## 0.4.1
+Implement object pooling for 3D geometry classes.
+
+This change introduces object pooling using a Pool class for Point3d and related 3D geometry classes to improve performance by reducing object creation/destruction overhead.
+
+Initial testing of homogenous points.
+Homogenous Point (HPoint) Class: Created HPoint2d, HPoint3d, HLine2d, and HPlane classes representing homogenous points and lines in 2D and planes in 3D.  These classes use 4D vectors to represent points/lines/planes at infinity and to simplify geometric calculations, also introducing functions to perform plane and ray intersections.
+
+### Changes
+Object Pooling: Implemented a Pool class to manage instances of Point3d, GridCoordinates3d, HexGridCoordinates3d, RegionMovementWaypoint3d and BarycentricPoint.
+
+Static tmp and releaseObj methods are added to these classes to facilitate acquiring and releasing objects from the pool.  Static buildNObjects was added to PIXI.Point and Point2dTyped for pool construction.
+
+Point3d modifications: Point3d now uses the Pool class for object management, including the addition of releaseObj and buildNObjects functions. The release function now calls the static releaseObj method.
+
+Class Type Checking: Replaced inheritsClassType, objectMatchesClassType, and objectOverlapsClassType with matchesClass and overlapsClass to remove the need for an object parameter and instead check only the class.
+
+TypedArrays Implementation: Point2dTyped and Point3dTyped are backed by typed arrays for optimal data layout in memory.
+
+Minor fixes: registration.js file is updated to version "0.4.1" and unnecessary NULL_SET imports removed.
+
+### Impact
+
+Performance:  The introduction of object pooling should lead to performance gains in scenarios with frequent object creation and deletion for 3D geometry. TypedArrays will also improve performance by optimizing the memory layout and access.
+
+API Changes: The addition of static tmp and releaseObj methods to Point3d and related classes changes how these objects are intended to be used. Code using these classes must be adapted to use the pooling mechanism.
+
+Dependencies: Code using 3D geometry classes now depends on the Pool class.
+
+
 ## 0.4.0 (Formerly known as 0.3.21)
 Fix setting / getting wall elevation and simplify MODULE_KEYS structure.
 Misc. fixes.
