@@ -28,20 +28,20 @@ clip.push(Clipper2.Clipper.makePath(b))
 solution = Clipper2.Clipper.Intersect(subj, clip, Clipper2Paths.FillRule.NonZero);
 solution = Clipper2.Clipper.Union(subj, clip, Clipper2Paths.FillRule.NonZero);
 solution = Clipper2.Clipper.Difference(subj, clip, Clipper2Paths.FillRule.NonZero);
-solution = Clipper2.Clipper.Union([...subj, ...clip], undefined, Clipper2Paths.FillRule.NonZero);
 
 subj2 = Clipper2Paths.fromArray(a)
 clip2 = Clipper2Paths.fromArray(b)
-subj2.intersectPaths(clip2)
-subj2.unionPaths(clip2)
+subj2.intersectPaths(clip2, Clipper2Paths.FillRule.NonZero)
+subj2.unionPaths(clip2, Clipper2Paths.FillRule.NonZero)
 subj2.unionPaths(clip2, Clipper2Paths.FillRule.Positive)
-subj2.union()
-subj2.combine()
+subj2.diffPaths(clip2, Clipper2Paths.FillRule.NonZero)
 
-
-
-
-
+solution = Clipper2.Clipper.Union([...subj, ...clip], undefined, Clipper2Paths.FillRule.NonZero);
+subj3 = new Clipper2Paths();
+subj3.addPathArray(a)
+subj3.addPathArray(b)
+subj3.union(Clipper2Paths.FillRule.NonZero)
+subj3.combine()
 */
 
 /**
@@ -407,7 +407,10 @@ export class Clipper2Paths {
   trimByArea(area = 1) {
     const scalingFactor = this.scalingFactor;
     const trimmedPaths = this.paths.filter(path => Math.abs(Clipper2.Clipper.area(path)) / Math.pow(scalingFactor, 2) >= area);
-    return new this.constructor(trimmedPaths, { scalingFactor });
+    const out = new this.constructor();
+    out.scalingFactor = scalingFactor;
+    out.paths = trimmedPaths;
+    return out;
   }
 
   /**
@@ -437,7 +440,10 @@ export class Clipper2Paths {
   clean(cleanDelta = 0.1) {
     const scalingFactor = this.scalingFactor;
     const cleanedPaths = Clipper2.Clipper.simplifyPath(this.paths, scalingFactor * cleanDelta);
-    return new this.constructor(cleanedPaths, { scalingFactor });
+    const out = new this.constructor();
+    out.scalingFactor = scalingFactor;
+    out.paths = cleanedPaths;
+    return out;
   }
 
   /**
@@ -461,7 +467,9 @@ export class Clipper2Paths {
 
     const scalingFactor = this.scalingFactor;
     const c = new Clipper2.Clipper64();
-    const solution = new this.constructor(undefined, { scalingFactor });
+    const solution = new this();
+    solution.scalingFactor = scalingFactor;
+
     const isOpen = !polygon.isClosed;
     c.addPath(this.constructor.polygonToPath(polygon, { scalingFactor }), Clipper2.PathType.Subject, isOpen);
     c.addPaths(this.paths, Clipper2.PathType.Clip, false);
