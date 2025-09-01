@@ -25,11 +25,12 @@ subj = new Clipper2.Paths64();
 clip = new Clipper2.Paths64();
 subj.push(Clipper2.Clipper.makePath(a))
 clip.push(Clipper2.Clipper.makePath(b))
-solution = Clipper.Intersect(subj, clip, Clipper2Paths.FillRule.NonZero);
-solution = Clipper.Union(subj, clip, Clipper2Paths.FillRule.NonZero);
-solution = Clipper.Difference(subj, clip, Clipper2Paths.FillRule.NonZero);
-solution = Clipper.Union([...subj, ...clip], undefined, Clipper2Paths.FillRule.NonZero);
+solution = Clipper2.Clipper.Intersect(subj, clip, Clipper2Paths.FillRule.NonZero);
+solution = Clipper2.Clipper.Union(subj, clip, Clipper2Paths.FillRule.NonZero);
+solution = Clipper2.Clipper.Difference(subj, clip, Clipper2Paths.FillRule.NonZero);
+solution = Clipper2.Clipper.Union([...subj, ...clip], undefined, Clipper2Paths.FillRule.NonZero);
 
+subj = Clipper2Paths.fromArray(a)
 subj = new Clipper2Paths([a]);
 clip = new Clipper2Paths([b])
 
@@ -123,7 +124,7 @@ export class Clipper2Paths {
   static fromArray(arr, scalingFactor = 1) {
     const out = new this();
     out.scalingFactor = scalingFactor;
-    out.addArrayToPaths(arr);
+    out.addPathArray(arr);
     return out;
   }
 
@@ -161,7 +162,7 @@ export class Clipper2Paths {
    */
   static fromPolygons(polygons, scalingFactor = 1) {
     const out = new this();
-    for ( const poly of polygons ) out.addArrayToPaths(poly.points);
+    for ( const poly of polygons ) out.addPathArray(poly.points);
     out.scalingFactor = scalingFactor;
     return out;
   }
@@ -174,7 +175,7 @@ export class Clipper2Paths {
    */
   static fromPolygon(polygon, scalingFactor = 1) {
     const out = new this();
-    out.addArrayToPaths(polygon.points);
+    out.addPathArray(polygon.points);
     out.scalingFactor = scalingFactor;
     return out;
   }
