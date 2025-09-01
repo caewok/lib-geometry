@@ -287,6 +287,7 @@ export class ClipperPaths {
     return new this.constructor(cleanedPaths, { scalingFactor });
   }
 
+
   /**
    * Execute a Clipper.clipType combination using the polygon as the subject.
    * @param {PIXI.Polygon} polygon          Subject for the clip
@@ -457,6 +458,8 @@ export class ClipperPaths {
     if ( !cPaths ) return undefined;
     return cPaths.combine();
   }
+
+
 
   /**
    * Execute a Clipper.clipType combination.
