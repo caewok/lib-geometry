@@ -30,9 +30,13 @@ solution = Clipper2.Clipper.Union(subj, clip, Clipper2Paths.FillRule.NonZero);
 solution = Clipper2.Clipper.Difference(subj, clip, Clipper2Paths.FillRule.NonZero);
 solution = Clipper2.Clipper.Union([...subj, ...clip], undefined, Clipper2Paths.FillRule.NonZero);
 
-subj = Clipper2Paths.fromArray(a)
-subj = new Clipper2Paths([a]);
-clip = new Clipper2Paths([b])
+subj2 = Clipper2Paths.fromArray(a)
+clip2 = Clipper2Paths.fromArray(b)
+subj2.intersectPaths(clip2)
+subj2.unionPaths(clip2)
+subj2.unionPaths(clip2, Clipper2Paths.FillRule.Positive)
+subj2.union()
+subj2.combine()
 
 
 
@@ -492,7 +496,7 @@ export class Clipper2Paths {
    */
   intersectPaths(other, fillRule) {
     fillRule ??= Clipper2.FillRule.EvenOdd;
-    const out = new this();
+    const out = new this.constructor();
     out.scalingFactor = this.scalingFactor;
     out.paths = Clipper2.Clipper.Intersect(this.paths, other.paths, fillRule);
     return out;
@@ -505,7 +509,7 @@ export class Clipper2Paths {
    */
   diffPaths(other, fillRule) {
     fillRule ??= Clipper2.FillRule.EvenOdd;
-    const out = new this();
+    const out = new this.constructor();
     out.scalingFactor = this.scalingFactor;
     out.paths = Clipper2.Clipper.Difference(this.paths, other.paths, fillRule);
     return out;
@@ -513,7 +517,7 @@ export class Clipper2Paths {
 
   unionPaths(other, fillRule) {
     fillRule ??= Clipper2.FillRule.EvenOdd;
-    const out = new this();
+    const out = new this.constructor();
     out.scalingFactor = this.scalingFactor;
     out.paths = Clipper2.Clipper.Union(this.paths, other.paths, fillRule);
     return out;
@@ -526,7 +530,7 @@ export class Clipper2Paths {
   union(fillRule) {
     if ( this.paths.length === 1 ) return this;
     fillRule ??= Clipper2.FillRule.NonZero;
-    const out = new this();
+    const out = new this.constructor();
     out.scalingFactor = this.scalingFactor;
     out.paths = Clipper2.Clipper.Union(this.paths, undefined, fillRule);
     return out;
