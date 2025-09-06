@@ -68,7 +68,7 @@ Static tmp and releaseObj methods are added to these classes to facilitate acqui
 
 Point3d modifications: Point3d now uses the Pool class for object management, including the addition of releaseObj and buildNObjects functions. The release function now calls the static releaseObj method.
 
-Class Type Checking: Replaced inheritsClassType, objectMatchesClassType, and objectOverlapsClassType with matchesClass and overlapsClass to remove the need for an object parameter and instead check only the class.
+Class Type Checking: Replaced inheritsClassType, matchesClass, and overlapsClass with matchesClass and overlapsClass to remove the need for an object parameter and instead check only the class.
 
 TypedArrays Implementation: Point2dTyped and Point3dTyped are backed by typed arrays for optimal data layout in memory.
 
