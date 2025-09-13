@@ -3,7 +3,6 @@ canvas,
 foundry,
 PIXI,
 Ray,
-TextureLoader,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
@@ -1676,7 +1675,7 @@ export class TilePixelCache extends TrimmedPixelCache {
    */
   static fromOverheadTileAlpha(tile, resolution = 1) {
     // See TextureLoader.getTextureAlphaData.
-    const textureData = TextureLoader.getTextureAlphaData(tile.texture, resolution);
+    const textureData = foundry.canvas.TextureLoader.getTextureAlphaData(tile.texture, resolution);
     const { minX, maxX, minY, maxY, data } = textureData;
     const pixelWidth = maxX - minX;
     return new this(data, pixelWidth, { tile, minX, maxX, minY, maxY, scale: { resolution } });

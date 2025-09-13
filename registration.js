@@ -5,11 +5,13 @@ game,
 */
 "use strict";
 
-const VERSION = "0.4.3";
+const VERSION = "0.4.4";
 
 // Foundry utils
 import { GEOMETRY_CONFIG } from "./const.js";
 import { registerFoundryUtilsMethods } from "./util.js";
+
+import "./tests/AABB.test.js";
 
 // Import all the files so GEOMETRY_CONFIG is populated.
 
