@@ -7,6 +7,8 @@ import { GEOMETRY_CONFIG } from "../const.js";
 import { Polygon3d, Circle3d } from "./Polygon3d.js";
 import { Point3d } from "./Point3d.js";
 import { MatrixFlat } from "../MatrixFlat.js";
+import { AABB3d } from "../AABB.js";
+import { gridUnitsToPixels, almostGreaterThan, almostLessThan } from "../util.js";
 
 /* Sphere
 Represent a 3d sphere, with some functions to manipulate it.
@@ -38,19 +40,16 @@ export class Sphere {
   center = new Point3d();
 
   /** @type {object<min: Point3d, max: Point3d>} */
-  #aabb = {
-    min: new Point3d(),
-    max: new Point3d(),
-  };
+  #aabb = new AABB3d();
 
   get aabb() {
     const { center, radius } = this;
     this.#aabb.min.set(center.x - radius, center.y - radius, center.z - radius);
     this.#aabb.max.set(center.x + radius, center.y + radius, center.z + radius);
-    return this.aabb;
+    return this.#aabb;
   }
 
-  contains(pt, epsilon = 1e-06) {
+  containsPoint(pt, epsilon = 1e-06) {
     return Point3d.distanceSquaredBetween(pt, this.center) < (this.radiusSquared + epsilon);
   }
 
@@ -64,7 +63,7 @@ export class Sphere {
   overlapsPolygon3d(poly3d) {
     if ( poly3d.overlapsClass("Circle3d") ) return this.overlapsCircle3d(poly3d);
     for ( const pt of poly3d.iteratePoints({ close: false }) ) {
-      const inside = this.contains(pt);
+      const inside = this.containsPoint(pt);
       if ( inside ) return true;
     }
 
@@ -96,7 +95,7 @@ export class Sphere {
     let allInside = true;
     let allOutside = true;
     for ( const pt of poly3d.iteratePoints({ close: false }) ) {
-      const inside = this.contains(pt);
+      const inside = this.containsPoint(pt);
       allInside &&= inside;
       allOutside &&= inside;
       if ( !(allInside || allOutside) ) break;
@@ -136,6 +135,70 @@ export class Sphere {
     const poly2d = sphereCircle.intersectPolygon(circle3d.toPlanarCircle().toPolygon());
     return Polygon3d.fromPlanarPolygon(poly2d, circle3d.plane);
   }
+
+  /**
+   * Test if a segment intersects the sphere.
+   * Optionally count if the sphere contains the segment.
+   * @param {Point3d} a
+   * @param {Point3d} b
+   * @param {object} [opts]
+   * @param {boolean} [opts.inside=false]
+   */
+  lineSegmentIntersects(a, b, { inside = false } = {}) {
+    if ( inside && (this.containsPoint(a) || this.containsPoint(b)) ) return true;
+    const d = b.subtract(a);
+    const ts = this._segmentIntersections(a, d);
+    d.release();
+    return ts.length;
+  }
+
+  segmentIntersections(a, b) {
+    const d = b.subtract(a);
+    const ts = this._segmentIntersections(a, d);
+    const out = ts.map(t => {
+      const pt = a.add(d.multiplyScalar(t));
+      pt.t0 = t;
+    });
+    d.release();
+    return out;
+  }
+
+  _segmentIntersections(p1, d) {
+    const oc = p1.subtract(this.center);
+
+    // Solve the quadratic equation at^2 + bt + c = 0
+    // a = d • d
+    // b = 2 * (oc • d)
+    // c = oc • oc - r^2
+    const a = d.dot(d);
+    const b = 2 * (oc.dot(d));
+    const c = oc.dot(oc) - (this.radiusSquared);
+
+    // if the discriminant is negative, there are no real roots and no intersection.
+    const disc = (b * b) - (4 * a * c);
+    if ( disc < 0 ) {
+      oc.release();
+      return [];
+    }
+
+    // Calculate the two potential solutions for t
+    const ts = [];
+    const sqrtDisc = Math.sqrt(disc);
+    const t1 = (-b - sqrtDisc) / (2 * a);
+    const t2 = (-b + sqrtDisc) / (2 * a);
+
+    // Check if t1 corresponds to a point on the segment [p1, p2]
+    if ( almostGreaterThan(t1, 0) && almostLessThan(t1, 1) ) ts.push(t1);
+
+    // Check if t2 corresponds to a point on the segment [p1, p2]
+    // Avoid adding the same point twice if the line is tangent (discriminant is 0)
+    if ( disc > 0 && almostGreaterThan(t2, 0) && almostLessThan(t2, 1) ) ts.push(t2);
+    oc.release();
+    return ts;
+  }
+
+
+
 
   /**
    * Assuming the sphere intersects the plane, determine the planar circle
@@ -207,7 +270,7 @@ export class Sphere {
 
     // If p is already in the sphere, finished this step.
     // Otherwise, p must be on the boundary of a new (larger) sphere.
-    const newSphere = sphere.contains(p) ? sphere : this._welzlRecursive(P, [...R, p]);
+    const newSphere = sphere.containsPoint(p) ? sphere : this._welzlRecursive(P, [...R, p]);
     P.push(p); // Add p back for subsequent
     return newSphere;
   }
@@ -363,6 +426,13 @@ export class Sphere {
     out.radiusSquared = Point3d.distanceSquaredBetween(this.center, a);
     out.center.set(Dx * invDetA, Dy * invDetA, Dz * invDetA);
     return out;
+  }
+
+  static fromTemplate(t) {
+    const sphere = new this();
+    sphere.center.set(t.x, t.y, t.elevationZ);
+    sphere.radius = gridUnitsToPixels(t.document.distance);
+    return sphere;
   }
 }
 
