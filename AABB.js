@@ -85,7 +85,7 @@ export class AABB2d {
   addPoints(pts = []) {
     const { min, max } = this;
     for ( const pt of pts ) {
-      for ( const axis of this.axes ) {
+      for ( const axis of this.constructor.axes ) {
         min[axis] = Math.min(pt[axis], min[axis]);
         max[axis] = Math.max(pt[axis], max[axis]);
       }
@@ -134,7 +134,7 @@ export class AABB2d {
    */
   static fromPolygon(poly, out) {
     // Iterating the points will determine the min/max values.
-    return this.fromPoints(poly.iteratePoints({ close: false }), out);
+    return this.fromPoints([...poly.iteratePoints({ close: false })], out);
   }
 
   /**
@@ -172,7 +172,7 @@ export class AABB2d {
    * @returns {AABB2d}
    */
   static fromToken(token, out) {
-    const border = token.tokenBorder;
+    const border = token.constrainedTokenBorder;
     return border instanceof PIXI.Rectangle ? this.fromRectangle(border, out) : this.fromPolygon(border, out);
   }
 
@@ -483,55 +483,6 @@ export class AABB3d extends AABB2d {
   }
 
   /**
-   * @param {PIXI.Circle} circle            2d circle, assumed to be flat on the plane
-   * @param {number} [elevationZ=0]         Intended elevation in the z axis
-   * @returns {AABB3d}
-   */
-  static fromCircle(circle, maxZ = 0, minZ = maxZ, out) {
-    out = super.fromCircle(circle, out);
-    out.min.z = minZ;
-    out.max.z = maxZ;
-    return out;
-  }
-
-  /**
-   * @param {PIXI.Ellipse} ellipse          2d ellipse, assumed to be flat on the plane
-   * @param {number} [elevationZ=0]         Intended elevation in the z axis
-   * @returns {AABB3d}
-   */
-  static fromEllipse(ellipse, maxZ = 0, minZ = maxZ, out) {
-    out = super.fromEllipse(ellipse, out);
-    out.min.z = minZ;
-    out.max.z = maxZ;
-    return out;
-  }
-
-  /**
-   * @param {PIXI.Rectangle} rect           2d rectangle, assumed to be flat on the plane
-   * @param {number} [elevationZ=0]         Intended elevation in the z axis
-   * @returns {AABB3d}
-   */
-  static fromRectangle(rect, maxZ = 0, minZ = maxZ, out) {
-    out = super.fromRectangle(rect, out);
-    out.min.z = minZ;
-    out.max.z = maxZ;
-    return out;
-  }
-
-  /**
-   * @param {PIXI.Polygon} poly             2d polygon, assumed to be flat on the plane
-   * @param {number} [elevationZ=0]         Intended elevation in the z axis
-   * @returns {AABB3d}
-   */
-
-  static fromPolygon(poly, maxZ = 0, minZ = maxZ, out) {
-    out = super.fromPolygon(poly, out);
-    out.min.z = minZ;
-    out.max.z = maxZ;
-    return out;
-  }
-
-  /**
    * @param {Tile} tile
    * @returns {AABB3d}
    */
@@ -589,8 +540,6 @@ export class AABB3d extends AABB2d {
     out.max.set(center.x + radius, center.y + radius, center.z + radius);
     return out;
   }
-
-
 
   /**
    * @param {Polygon3d} poly3d
