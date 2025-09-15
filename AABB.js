@@ -6,7 +6,7 @@ PIXI,
 import { GEOMETRY_CONFIG } from "./const.js";
 import { Point3d } from "./3d/Point3d.js";
 import { Draw } from "./Draw.js";
-import { almostLessThan, almostGreaterThan } from "./util.js";
+import { almostLessThan, almostGreaterThan, almostBetween } from "./util.js";
 
 const ptOnes = new Point3d(1, 1, 1);
 Object.freeze(ptOnes);
@@ -39,14 +39,11 @@ export class AABB2d {
    * The width (delta) along each axis.
    * @returns {Point3d}
    */
-  getDelta(out) {
-    out ??= Point3d.tmp;
-    return this.max.subtract(this.min, out);
-  }
+  get delta() { return this.max.subtract(this.min); }
 
-  getCenter(out) {
+  get center() {
     const delta = this.getDelta();
-    this.min.add(delta.multiplyScalar(0.5, out), out);
+    const out = this.min.add(delta.multiplyScalar(0.5, delta));
     delta.release();
     return out;
   }
@@ -77,13 +74,23 @@ export class AABB2d {
   static fromPoints(pts = [], out) {
     out ??= new this();
     const { min, max } = out;
+    for ( const axis of this.axes ) min[axis] = max[axis] = pts[0][axis];
+    return out.addPoints(pts.slice(1));
+  }
+
+  /**
+   * @param {PIXI.Point[]} pts    Points to include within the bounds
+   * @returns {AABB2d} For convenience
+   */
+  addPoints(pts = []) {
+    const { min, max } = this;
     for ( const pt of pts ) {
       for ( const axis of this.axes ) {
-        min[axis] = Math.min(pt[axis] ?? 0, min[axis]);
-        max[axis] = Math.max(pt[axis] ?? 0, max[axis]);
+        min[axis] = Math.min(pt[axis], min[axis]);
+        max[axis] = Math.max(pt[axis], max[axis]);
       }
     }
-    return out;
+    return this;
   }
 
   /**
@@ -209,17 +216,36 @@ export class AABB2d {
   }
 
   /**
-   * @param {PIXI.Point} [outPoint]
    * @returns {outPoint}
+   * Vertices indices: 0:--, 1: -+, 2: +-, 3: ++
    */
-  *iterateVertices(outPoint) {
-    outPoint ??= new this.constructor.POINT_CLASS();
+  *iterateVertices() {
     const pts = [this.min, this.max];
     for ( const xType of pts ) {
       for ( const yType of pts ) {
-        yield outPoint.set(xType.x, yType.y);
+        yield Point3d.tmp.set(xType.x, yType.y);
       }
     }
+  }
+
+  /**
+   * @param {PIXI.Point} outA
+   * @param {PIXI.Point} outB
+   * @returns { object{ A: PIXI.Point, B: PIXI.Point }}
+   * Order: top CW
+   */
+  *iterateEdges() {
+    // Square.
+    let A = PIXI.Point.tmp.copyFrom(this.min);
+    let B = PIXI.Point.tmp.set(this.max.x, this.min.y);
+    yield { A, B };
+
+    let C = PIXI.Point.tmp.copyFrom(this.max);
+    yield { A: B, B: C };
+
+    let D = PIXI.Point.tmp.set(this.min.x, this.max.y);
+    yield { A: C, B: D }
+    yield { A: D, B: A }
   }
 
   /**
@@ -242,12 +268,13 @@ export class AABB2d {
    * @param {PIXI.Point|Point3d} a
    * @param {PIXI.Point|Point3d} b
    * @param {boolean} [axes]            Which axes to test? Usually used to limit to "x" and "y"
-   * @returns {boolean}
+   * @returns {number[]}
    */
-  overlapsSegment(a, b, axes) {
+  _overlapsSegment(a, b, axes) {
     axes ??= this.constructor.axes;
     const rayDirection = b.subtract(a);
     const epsilon = 1e-06;
+    const out = [];
 
     // Initialize t-interval for the infinite line's intersection with the AABB.
     let tmin = -Infinity;
@@ -263,7 +290,7 @@ export class AABB2d {
         // If segment origin is outside the slab, it can never intersect.
         if ( p0 < min || p0 > max ) {
           rayDirection.release();
-          return false;
+          return out;
         }
         // Otherwise, the infinite line is always within this slab. Proceed to next axis.
       }
@@ -283,18 +310,75 @@ export class AABB2d {
       // If the intersection interval becomes invalid, the line misses the box.
       if ( tmin > tmax ) {
         rayDirection.release();
-        return false;
+        return out;
       }
     }
+    rayDirection.release();
+    return [tmin, tmax];
+  }
+
+  /**
+   * Does the segment cross the aabb bounds or is contained within?
+   * @param {PIXI.Point|Point3d} a
+   * @param {PIXI.Point|Point3d} b
+   * @param {boolean} [axes]            Which axes to test? Usually used to limit to "x" and "y"
+   * @returns {boolean}
+   */
+  overlapsSegment(a, b, axes) {
+    const [tmin, tmax] = this._overlapsSegment(a, b, axes);
+    if ( !tmin ) return false;
 
     // After checking all axes, [tmin, tmax] is the interval where the infinite
     // line intersects the AABB. The final step is to check if this interval
     // overlaps with the segment's own interval, which is [0, 1].
     // Two intervals [a, b] and [c, d] overlap if a <= d and b >= c.
-    rayDirection.release();
-    return almostGreaterThan(1.0, tmin) && almostLessThan(0.0, tmax);
-    // return tmin <= 1.0 && tmax >= 0.0;
+    return almostGreaterThan(1.0, tmin) && almostLessThan(0.0, tmax); // return tmin <= 1.0 && tmax >= 0.0;
+
+
   }
+
+  /**
+   * @param {PIXI.Point|Point3d} a
+   * @param {PIXI.Point|Point3d} b
+   * @param {boolean} [axes]            Which axes to test? Usually used to limit to "x" and "y"
+   * @returns {PIXI.Point|Point3d[]}
+   */
+  segmentIntersections(a, b, axes) {
+    const [tmin, tmax] = this._overlapsSegment(a, b, axes);
+    if ( !tmin ) return [];
+
+    // [tmin, tmax] is the interval where the infinite
+    // line intersects the AABB. The final step is to check if this interval
+    // overlaps with the segment's own interval, which is [0, 1].
+    // If tmin is between 0 and 1, tmin is an intersection.
+    // If tmin is less than 0 and tmax is greater than 0, a is an intersection.
+    // If tmax is between 0 and 1, tmax is an intersection.
+    // If tmax is greater than 1 and tmin is less than 1, b is an intersection.
+
+    const ixs = [];
+    if ( almostBetween(tmin, 0, 1) ) {
+      const pt = a.add(b.multiplyScalar(tmin));
+      pt.t0 = tmin;
+      ixs.push(pt);
+    } else if ( tmin < 0 && tmax > 0 ) {
+      const pt = a.clone();
+      pt.t0 = 0;
+      ixs.push(pt);
+    }
+
+    if ( almostBetween(tmax, 0, 1) ) {
+      const pt = a.add(b.multiplyScalar(tmax));
+      pt.t0 = tmax;
+      ixs.push(pt);
+    } else if ( tmin < 1 && tmax > 1 ) {
+      const pt = b.clone();
+      pt.t0 = 1;
+      ixs.push(pt);
+    }
+
+    return ixs;
+  }
+
 
 
   /**
@@ -314,6 +398,36 @@ export class AABB2d {
       else if ( c > max[axis] ) dmin += Math.pow(c - max[axis], 2);
     }
     return dmin <= sphere.radiusSquared;
+  }
+
+  /**
+   * Does a cone overlap the bounds?
+   * @param {Cone} cone
+   * @returns {boolean}
+   */
+  overlapsCone(cone) {
+    // 1. Is the cone origin inside the bounding box?
+    if ( this.containsPoint(cone.origin) ) return true;
+
+    // 1.5. Is the AABB center inside the cone bounding box?
+    const coneAABB = cone.aabb;
+    if ( coneAABB.containsPoint(this.center) ) return true;
+
+    // 2. Do the bounding boxes overlap?
+    if ( !this.overlapsAABB(coneAABB) ) return false;
+
+    // 3. Check if any AABB vertex is inside the cone.
+    for ( const vertex of this.iterateVertices() ) {
+      if ( !coneAABB.containsPoint(vertex) ) continue;
+      if ( cone.containsPoint(vertex) ) return true;
+    }
+
+    // 4. Check if any AABB edge intersects the cone surface.
+    const cosThetaSq = cone.cosThetaSq;
+    for ( const edge of this.iterateEdges() ) {
+      if ( cone.segmentIntersects(edge.A, edge.B, cosThetaSq) ) return true;
+    }
+    return false;
   }
 
   toPIXIRectangle(out) {
@@ -635,19 +749,54 @@ export class AABB3d extends AABB2d {
   }
 
   /**
-   * @param {Point3d} [outPoint]
-   * @returns {outPoint}
+   * @returns {Point3d}
+   * Vertices indices: 0:---, 1:--+, 2:-+-, 3:-++, 4:+--, 5:+-+, 6:++-, 7:+++
    */
-  *iterateVertices(outPoint) {
-    outPoint ??= new this.constructor.POINT_CLASS();
+  *iterateVertices() {
     const pts = [this.min, this.max];
     for ( const xType of pts ) {
       for ( const yType of pts ) {
         for ( const zType of pts) {
-          yield outPoint.set(xType.x, yType.y, zType.z);
+          yield Point3d.tmp.set(xType.x, yType.y, zType.z);
         }
       }
     }
+  }
+
+  /**
+   * @returns { object{ A: Point3d, B: Point3d }}
+   * Order: top CW, bottom CW, sides CW
+   */
+  *iterateEdges() {
+    // Top
+    let A = Point3d.tmp.set(this.min.x, this.min.y, this.max.z);
+    let B = Point3d.tmp.set(this.max.x, this.min.y, this.max.z);
+    yield { A, B };
+
+    let C = Point3d.tmp.set(this.max.x, this.max.y, this.max.z);
+    yield { A: B, B: C };
+
+    let D = Point3d.tmp.set(this.min.x, this.max.y, this.max.z);
+    yield { A: C, B: D }
+    yield { A: D, B: A }
+
+    // Bottom
+    let Ad = Point3d.tmp.set(this.min.x, this.min.y, this.min.z);
+    let Bd = Point3d.tmp.set(this.max.x, this.min.y, this.min.z);
+    yield { A: Ad, Bd };
+
+    let Cd = Point3d.tmp.set(this.max.x, this.max.y, this.min.z);
+    yield { A: Bd, B: Cd };
+
+    let Dd = Point3d.tmp.set(this.min.x, this.max.y, this.min.z);
+    yield { A: Cd, B: Dd }
+    yield { A: Dd, B: Ad }
+
+    // Sides
+    yield { A: A, B: Ad };
+    yield { A: B, B: Bd };
+    yield { A: C, B: Cd };
+    yield { A: D, B: Dd };
   }
 }
 
