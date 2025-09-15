@@ -31,6 +31,7 @@ export class Cone {
   radius = 0; // Radius of the circular base.
 
 
+
   /* ----- Static factory methods ----- */
 
   static fromTemplate(t) {
@@ -38,7 +39,13 @@ export class Cone {
     const cone = new this();
     cone.origin.set(t.document.x, t.document.y, t.elevationZ);
     cone.height = gridUnitsToPixels(t.document.distance);
-    cone.radius = Math.tan(Math.toRadians(t.document.angle)) * cone.height; // tan ø = opp / adj
+    const rad = Math.toRadians(t.document.angle);
+    cone.radius = Math.tan(rad) * cone.height; // tan ø = opp / adj
+
+    // Normal of the cone from the origin perpendicular to the base
+    const baseCenter = Point3d.fromAngle(cone.origin, rad, cone.height);
+    baseCenter.subtract(cone.origin, cone.direction);
+    cone.direction.normalize(cone.direction);
   }
 
 
