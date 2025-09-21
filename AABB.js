@@ -42,7 +42,7 @@ export class AABB2d {
   get delta() { return this.max.subtract(this.min); }
 
   get center() {
-    const delta = this.getDelta();
+    const delta = this.delta;
     const out = this.min.add(delta.multiplyScalar(0.5, delta));
     delta.release();
     return out;
