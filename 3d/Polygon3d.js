@@ -63,6 +63,10 @@ export class Polygon3d {
     for ( let i = 0; i < n; i += 1 ) this.points[i] = new Point3d();
   }
 
+  release() {
+    this.points.forEach(pt => pt.release());
+  }
+
   // ----- NOTE: In-place modifiers ----- //
 
   /**
@@ -1466,6 +1470,8 @@ export class Polygons3d extends Polygon3d {
     super(0);
     this.polygons.length = n;
   }
+
+  release() { this.#applyMethodToAll("release"); }
 
   #applyMethodToAll(method, ...args) { this.polygons.forEach(poly => poly[method](...args)); }
 

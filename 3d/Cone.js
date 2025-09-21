@@ -30,7 +30,11 @@ export class Cone {
   /** @type {number} */
   radius = 0; // Radius of the circular base.
 
-
+  release() {
+    this.origin.release();
+    this.direction.release();
+    this.#aabb.release();
+  }
 
   /* ----- Static factory methods ----- */
 

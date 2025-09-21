@@ -448,6 +448,11 @@ export class AABB2d {
     return out;
   }
 
+  release() {
+    this.min.release();
+    this.max.release();
+  }
+
   // ----- NOTE: Debug ----- //
   draw2d({ draw, ...opts } = {}) {
     draw ??= new Draw();

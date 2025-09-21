@@ -49,6 +49,11 @@ export class Sphere {
     return this.#aabb;
   }
 
+  release() {
+    this.center.release();
+    this.#aabb.release();
+  }
+
   containsPoint(pt, epsilon = 1e-06) {
     return Point3d.distanceSquaredBetween(pt, this.center) < (this.radiusSquared + epsilon);
   }
