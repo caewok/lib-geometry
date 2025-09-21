@@ -301,7 +301,7 @@ export class Polygon3d {
     if ( out && out.points.length !== n ) {
       out.points.length = n;
       for ( let i = 0; i < n; i += 1 ) out.points[i] = new Point3d();
-    } else out = new this.constructor(n);
+    } else out ??= new this.constructor(n);
     out.isHole = this.isHole;
     this.points.forEach((pt, idx) => out.points[idx].copyFrom(pt));
     return out;
