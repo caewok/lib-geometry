@@ -70,6 +70,12 @@ export class ClipperPaths {
     this.#scalingFactor = value;
   }
 
+  orientation() { return this.paths.map(pts => ClipperLib.Clipper.Orientation(pts)); }
+
+  holes() { return this.paths.map(pts => !ClipperLib.Clipper.Orientation(pts)); }
+
+  reverseOrientation() { this.paths.forEach(path => path.reverse()); }
+
   /**
    * Determine the best way to represent Clipper paths.
    * @param {ClipperLib.Paths}

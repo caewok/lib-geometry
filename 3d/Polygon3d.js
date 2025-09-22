@@ -344,6 +344,9 @@ export class Polygon3d {
       }
     }
     const out = new cl([points], { scalingFactor });
+
+    // Polygons should form positive paths unless holes.
+    if ( out.holes[0] ^ this.isHole ) out.reverseOrientation();
     return out;
   }
 
