@@ -104,9 +104,9 @@ export class Clipper2Paths {
     this.#scalingFactor = value;
   }
 
-  orientation() { return this.paths.map(pts => Clipper2.Clipper.isPositive(pts)); }
+  get orientation() { return this.paths.map(pts => Clipper2.Clipper.isPositive(pts)); }
 
-  holes() { return this.paths.map(pts => !Clipper2.Clipper.isPositive(pts)); }
+  get holes() { return this.paths.map(pts => !Clipper2.Clipper.isPositive(pts)); }
 
   reverseOrientation() { this.paths.forEach(path => path.reverse()); }
 

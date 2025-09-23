@@ -70,9 +70,9 @@ export class ClipperPaths {
     this.#scalingFactor = value;
   }
 
-  orientation() { return this.paths.map(pts => ClipperLib.Clipper.Orientation(pts)); }
+  get orientation() { return this.paths.map(pts => ClipperLib.Clipper.Orientation(pts)); }
 
-  holes() { return this.paths.map(pts => !ClipperLib.Clipper.Orientation(pts)); }
+  get holes() { return this.paths.map(pts => !ClipperLib.Clipper.Orientation(pts)); }
 
   reverseOrientation() { this.paths.forEach(path => path.reverse()); }
 
