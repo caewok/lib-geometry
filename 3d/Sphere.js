@@ -85,6 +85,131 @@ export class Sphere {
     const circle2d = circle3d.toPlanarCircle();
     return sphereCircle.overlaps(circle2d);
   }
+  
+  /**
+   * Locate the closest point on the line a|b to the sphere.
+   * @param {Point3d} a
+   * @param {Point3d} b
+   * @returns {Point3d}
+   */
+  closestPointToSegment(a, b) {
+    const { center, radiusSquared ) = this;
+    const closest2d = foundry.utils.closestPointToSegment(center, a, b);
+   
+		// Test endpoints as needed.
+		if ( closest2d.x.almostEqual(a.x) && closest2d.y.almostEqual(a.y) ) {
+			closest2d.release();
+			return a.clone();
+		}
+		if ( closest2d.x.almostEqual(b.x) && closest2d.y.almostEqual(a.y) ) {
+			closest2d.release();
+			return b.clone(); 
+		}
+		if ( closest2d.x.almostEqual(center.x) && closest2d.y.almostEqual(center.y) ) {
+		  closest2d.release();
+		  return center.clone();
+		}
+		
+		// Closest point is somewhere on the a|b line. 
+		// Given x|y intersection on 3d line, find the z value. Use rate of change along each axis.
+		const delta = b.subtract(a);
+		const maxAxis = Math.abs(delta.x) > Math.abs(delta.y) ? "x" : "y";
+		const t = (closest2d[maxAxis] - a[maxAxis]) / delta[maxAxis];
+		
+		const closest3d = Point3d.tmp;
+		a.add(delta.multiplyScalar(t, closest3d), closest3d); // From PIXI.Point#projectToward.
+    closest2d.release();
+    delta.release();
+    return closest3d;
+  }
+  
+  /**
+   * Intersect this sphere with a line
+   */
+  lineIntersections(a, b, { inside = false } = {}) {
+ 		/*
+		a--ix0----cl-----ix1--b
+				\   |
+				 \  |
+					\ |
+					 \|
+						c
+		
+		∆abc such that x|c is less than or equal to radius length. May also have an y|c
+		
+		If a|b is a line, then closest point forms right triangle with a|ix|cl
+		If a|b runs through cl, then intersection is for the circle (sphere maximum extent) at appropriate z values.
+		if cl|ix greater than radius, no intersection.	
+		
+		We know length of c|x, c|ix, c|y. And length of c|x == length of c|y.
+		So use Pythagorean to get length from ix to x. (ix to y is same length)
+		x|ix ^ 2 + c|ix ^2 = c|x ^ 2 
+		x|ix = sqrt(c|x ^ 2 - c|ix ^ 2)			
+	  */
+
+		const { center, radiusSquared ) = this;
+		const closest3d = this.closestPointToSegment(a, b);
+		const distSquared = Point3d.distanceSquaredBetween(closest3d, center);
+		if ( radiusSquared.almostEqual(distSquared) ) return [closest3d];
+		if ( radiusSquared > distSquared ) return [];
+		if ( distSquared.almostEqual(0) ) return center.clone();
+		
+		// Determine length from closest point to the first intersection.
+		const xDistSquared = distSquared + radiusSquared;
+		
+		// Depending on where a and b are located w/r/t ix, move in given direction.
+		// Treat segment as line
+		const aPrime = a.towardsPointSquared(b, Number.MIN_SAFE_INTEGER);
+		const bPrime = b.towardsPointSquared(a, Number.MIN_SAFE_INTEGER);
+		const ix0 = ix.towardsPointSquared(aPrime, xDistSquared);
+		const ix1 = ix.towardsPointSquared(bPrime, xDistSquared);   
+		
+		return [ix0, ix1];
+  }
+  
+  /**
+   * Intersect this sphere with a segment.
+   * @param {Point3d} a
+   * @param {Point3d} b
+   * @returns {Point3d[]}
+   */
+  lineSegmentIntersections(a, b) {
+    return this.rayIntersectionTo(a, b.subtract(a)).filter(t => t.almostBetween(0, 1));
+  }
+  
+  /** 
+   * Intersect this sphere with a ray.
+   * @param {Point3d} a
+   * @param {Point3d} b
+   * @returns {number[]}
+   */
+  rayIntersectionT(a, rayDirection) {
+    const b = a.add(rayDirection);
+    const ixs = this.lineIntersections(a, b);
+    b.release();
+    if ( !ixs.length ) return ixs;
+
+		// Determine if ix0 and ix1 are between a and b.
+		const delta = rayDirection;
+		const maxAxis = (delta.x > delta.y && delta.x > delta.z) ? "x" 
+		  : (delta.y > delta.x && delta.y) > delta.z ? "y" : "z" 
+		return ixs.map(ix => (ix[maxAxis] - a[maxAxis]) / delta[maxAxis]);    
+  }
+  
+  /**
+   * Does a line segment intersect this sphere?
+   * @param {Point3d} a
+   * @param {Point3d} b
+   * @returns {boolean}
+   */
+  lineSegmentIntersects(a, b) {
+    // Closest point on the line segment must be within the sphere; test using the sphere center and radius.
+    const { center, radiusSquared ) = this;
+    const closest3d = this.closestPointToSegment(a, b);
+    const out = radiusSquared < Point3d.distanceSquaredBetween(center, closest3d);
+    closest3d.release();
+    return out;
+  } 
 
   /**
    * Intersect this sphere with a planar polygon.
