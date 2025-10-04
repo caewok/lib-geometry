@@ -1821,12 +1821,18 @@ function convexHull(points) {
   return upperHull.concat(lowerHull);
 }
 
+
+
 GEOMETRY_CONFIG.threeD.Polygon3d = Polygon3d;
 GEOMETRY_CONFIG.threeD.Ellipse3d = Ellipse3d;
 GEOMETRY_CONFIG.threeD.Circle3d = Circle3d;
 GEOMETRY_CONFIG.threeD.Triangle3d = Triangle3d;
 GEOMETRY_CONFIG.threeD.Quad3d = Quad3d;
 GEOMETRY_CONFIG.threeD.Polygons3d = Polygons3d;
+
+// Synonym for Circle3d.
+export const Cylinder = GEOMETRY_CONFIG.threeD.Circle3d; 
+GEOMETRY_CONFIG.threeD.Cylinder = Circle3d;
 
 
 /* Testing

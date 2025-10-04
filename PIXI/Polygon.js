@@ -599,7 +599,7 @@ function _envelopsCircle(circle) {
  * @param {number} [scalingFactor] How to scale the coordinates when translating to/from integers.
  * @returns {PIXI.Polygon}
  */
-function pad(delta, { miterLimit = 2, scalingFactor = 1 } = {}) {
+function pad(delta, { miterLimit = 2, scalingFactor = 100 } = {}) {
   if ( miterLimit < 2) {
     console.warn("miterLimit for PIXI.Polygon.prototype.offset must be ≥ 2.");
     miterLimit = 2;
