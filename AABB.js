@@ -376,7 +376,7 @@ export class AABB3d extends AABB2d {
    * @param {number} [minZ=maxZ]
    * @returns {AABB3d}
    */
-  static fromAABB2d(aabb2d, maxZ = 0, minZ = maxZ, out) {
+  static fromAABB2d(aabb2d, out, { maxZ = 0, minZ = maxZ } = {}) {
     out ??= new this();
     out.min.set(aabb2d.min.x, aabb2d.min.y, minZ);
     out.max.set(aabb2d.max.z, aabb2d.max.y, maxZ);
@@ -388,7 +388,9 @@ export class AABB3d extends AABB2d {
    * @param {number} [elevationZ=0]         Intended elevation in the z axis
    * @returns {AABB3d}
    */
-  static fromCircle(circle, maxZ = 0, minZ = maxZ, out) {
+  static fromCircle(circle, out, { maxZ = 0, minZ = maxZ } = {}) {
+    const out = args.at(-1) ?? new this();
+  
     out ??= new this();
     super.fromCircle(circle, out);
     out.min.z = minZ;
@@ -401,7 +403,7 @@ export class AABB3d extends AABB2d {
    * @param {number} [elevationZ=0]         Intended elevation in the z axis
    * @returns {AABB3d}
    */
-  static fromEllipse(ellipse, maxZ = 0, minZ = maxZ, out) {
+  static fromEllipse(ellipse, out, { maxZ = 0, minZ = maxZ } = {}) {
     out ??= new this();
     super.fromEllipse(ellipse, out);
     out.min.z = minZ;
@@ -414,7 +416,7 @@ export class AABB3d extends AABB2d {
    * @param {number} [elevationZ=0]         Intended elevation in the z axis
    * @returns {AABB3d}
    */
-  static fromRectangle(rect, maxZ = 0, minZ = maxZ, out) {
+  static fromRectangle(rect, out, { maxZ = 0, minZ = maxZ } = {}) {
     out ??= new this();
     super.fromRectangle(rect, out);
     out.min.z = minZ;
@@ -427,7 +429,7 @@ export class AABB3d extends AABB2d {
    * @param {number} [elevationZ=0]         Intended elevation in the z axis
    * @returns {AABB3d}
    */
-  static fromPolygon(poly, maxZ = 0, minZ = maxZ, out) {
+  static fromPolygon(poly, out, { maxZ = 0, minZ = maxZ } = {}) {
     out ??= new this();
     super.fromPolygon(poly, out);
     out.min.z = minZ;
@@ -435,7 +437,7 @@ export class AABB3d extends AABB2d {
     return out;
   }
   
-  static fromShape(shape, maxZ = 0, minZ = maxZ, out) {
+  static fromShape(shape, out, { maxZ = 0, minZ = maxZ } = {}) {
     out ??= new this();
     super.fromShape(shape, out);
     out.min.z = minZ;
