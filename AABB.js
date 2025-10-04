@@ -129,6 +129,21 @@ export class AABB2d {
     // Iterating the points will determine the min/max values.
     return this.fromPoints(poly.iteratePoints({ close: false }), out);
   }
+  
+  /**
+   * @param {PIXI.Circle|PIXI.Ellipse|PIXI.Rectangle|PIXI.Polygon} 
+   * @returns {AABB2d} 
+   */
+  static fromShape(shape, out) {
+    out ??= new this();
+    if ( shape instanceof PIXI.Rectangle ) this.fromRectangle(shape, out);
+    else if ( shape instanceof PIXI.Polygon ) this.fromPolygon(shape, out);
+    else if ( shape instanceof PIXI.Circle ) this.fromCircle(shape, out);	
+    else if ( shape instanceof PIXI.Ellipse ) this.fromEllipse(shape, out);
+    else if ( shape.toPolygon ) this.fromPolygon(shape.toPolygon(), out);
+    else throw Error("AABB2d.fromShape|Shape not recognized", shape);
+    return out;
+  }
 
   /**
    * @param {Tile} tile
@@ -409,9 +424,15 @@ export class AABB3d extends AABB2d {
    * @param {number} [elevationZ=0]         Intended elevation in the z axis
    * @returns {AABB3d}
    */
-
   static fromPolygon(poly, maxZ = 0, minZ = maxZ, out) {
     out = super.fromPolygon(poly, out);
+    out.min.z = minZ;
+    out.max.z = maxZ;
+    return out;
+  }
+  
+  static fromShape(shape, maxZ = 0, minZ = maxZ, out) {
+    out = super.fromShape(shape, out);
     out.min.z = minZ;
     out.max.z = maxZ;
     return out;
