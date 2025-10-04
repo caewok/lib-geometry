@@ -34,6 +34,11 @@ export class AABB2d {
 
   /** @type {PIXI.Point} */
   max = new this.constructor.POINT_CLASS(Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY);
+  
+  release() {
+    this.min.release();
+    this.max.release();
+  }
 
   /**
    * The width (delta) along each axis.
