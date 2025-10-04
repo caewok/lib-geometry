@@ -1,4 +1,5 @@
 /* globals
+foundry,
 PIXI,
 */
 "use strict";
@@ -93,7 +94,7 @@ export class Sphere {
    * @returns {Point3d}
    */
   closestPointToSegment(a, b) {
-    const { center, radiusSquared ) = this;
+    const { center } = this;
     const closest2d = foundry.utils.closestPointToSegment(center, a, b);
    
 		// Test endpoints as needed.
@@ -126,7 +127,7 @@ export class Sphere {
   /**
    * Intersect this sphere with a line
    */
-  lineIntersections(a, b, { inside = false } = {}) {
+  lineIntersections(a, b) {
  		/*
 		a--ix0----cl-----ix1--b
 				\   |
@@ -147,7 +148,7 @@ export class Sphere {
 		x|ix = sqrt(c|x ^ 2 - c|ix ^ 2)			
 	  */
 
-		const { center, radiusSquared ) = this;
+		const { center, radiusSquared } = this;
 		const closest3d = this.closestPointToSegment(a, b);
 		const distSquared = Point3d.distanceSquaredBetween(closest3d, center);
 		if ( radiusSquared.almostEqual(distSquared) ) return [closest3d];
@@ -161,9 +162,9 @@ export class Sphere {
 		// Treat segment as line
 		const aPrime = a.towardsPointSquared(b, Number.MIN_SAFE_INTEGER);
 		const bPrime = b.towardsPointSquared(a, Number.MIN_SAFE_INTEGER);
-		const ix0 = ix.towardsPointSquared(aPrime, xDistSquared);
-		const ix1 = ix.towardsPointSquared(bPrime, xDistSquared);   
-		
+		const ix0 = closest3d.towardsPointSquared(aPrime, xDistSquared);
+		const ix1 = closest3d.towardsPointSquared(bPrime, xDistSquared); 
+				  
 		return [ix0, ix1];
   }
   
@@ -173,8 +174,14 @@ export class Sphere {
    * @param {Point3d} b
    * @returns {Point3d[]}
    */
-  lineSegmentIntersections(a, b) {
-    return this.rayIntersectionTo(a, b.subtract(a)).filter(t => t.almostBetween(0, 1));
+  lineSegmentIntersections(a, b, { inside = false } = {}) {
+    const out = [...this.rayIntersectionTo(a, b.subtract(a)).filter(t => t.almostBetween(0, 1))];
+    if ( inside ) {
+      if ( this.contains(a) ) out.push(a);
+      if ( this.contains(b) ) out.push(b);
+    }
+  
+    return ;
   }
   
   /** 
@@ -204,7 +211,7 @@ export class Sphere {
    */
   lineSegmentIntersects(a, b) {
     // Closest point on the line segment must be within the sphere; test using the sphere center and radius.
-    const { center, radiusSquared ) = this;
+    const { center, radiusSquared } = this;
     const closest3d = this.closestPointToSegment(a, b);
     const out = radiusSquared < Point3d.distanceSquaredBetween(center, closest3d);
     closest3d.release();
