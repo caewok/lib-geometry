@@ -388,9 +388,7 @@ export class AABB3d extends AABB2d {
    * @param {number} [elevationZ=0]         Intended elevation in the z axis
    * @returns {AABB3d}
    */
-  static fromCircle(circle, out, { maxZ = 0, minZ = maxZ } = {}) {
-    const out = args.at(-1) ?? new this();
-  
+  static fromCircle(circle, out, { maxZ = 0, minZ = maxZ } = {}) {  
     out ??= new this();
     super.fromCircle(circle, out);
     out.min.z = minZ;
