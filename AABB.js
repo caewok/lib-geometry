@@ -181,7 +181,7 @@ export class AABB2d {
    */
   static fromToken(token, out) {
     const border = token.tokenBorder;
-    return border instanceof PIXI.Rectangle ? this.fromRectangle(border, out) : this.fromPolygon(border, out);
+    this.fromShape(border, out);
   }
 
   /**
@@ -389,7 +389,8 @@ export class AABB3d extends AABB2d {
    * @returns {AABB3d}
    */
   static fromCircle(circle, maxZ = 0, minZ = maxZ, out) {
-    out = super.fromCircle(circle, out);
+    out ??= new this();
+    super.fromCircle(circle, out);
     out.min.z = minZ;
     out.max.z = maxZ;
     return out;
@@ -401,7 +402,8 @@ export class AABB3d extends AABB2d {
    * @returns {AABB3d}
    */
   static fromEllipse(ellipse, maxZ = 0, minZ = maxZ, out) {
-    out = super.fromEllipse(ellipse, out);
+    out ??= new this();
+    super.fromEllipse(ellipse, out);
     out.min.z = minZ;
     out.max.z = maxZ;
     return out;
@@ -413,7 +415,8 @@ export class AABB3d extends AABB2d {
    * @returns {AABB3d}
    */
   static fromRectangle(rect, maxZ = 0, minZ = maxZ, out) {
-    out = super.fromRectangle(rect, out);
+    out ??= new this();
+    super.fromRectangle(rect, out);
     out.min.z = minZ;
     out.max.z = maxZ;
     return out;
@@ -425,14 +428,16 @@ export class AABB3d extends AABB2d {
    * @returns {AABB3d}
    */
   static fromPolygon(poly, maxZ = 0, minZ = maxZ, out) {
-    out = super.fromPolygon(poly, out);
+    out ??= new this();
+    super.fromPolygon(poly, out);
     out.min.z = minZ;
     out.max.z = maxZ;
     return out;
   }
   
   static fromShape(shape, maxZ = 0, minZ = maxZ, out) {
-    out = super.fromShape(shape, out);
+    out ??= new this();
+    super.fromShape(shape, out);
     out.min.z = minZ;
     out.max.z = maxZ;
     return out;
