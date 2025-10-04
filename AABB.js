@@ -181,7 +181,7 @@ export class AABB2d {
    */
   static fromToken(token, out) {
     const border = token.tokenBorder;
-    this.fromShape(border, out);
+    return this.fromShape(border, out);
   }
 
   /**
