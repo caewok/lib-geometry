@@ -366,6 +366,7 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
    */
   static constructLitTokenShape(token) {
     const shape = this.constrainTokenShapeWithLights(token);
+    if ( !shape ) return undefined;
     const poly = this.clipperShapeToPolygon(shape);
     if ( !poly || poly.points < 6 ) return undefined;
     return poly;
@@ -373,6 +374,7 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
 
   static constructBrightLitTokenShape(token) {
     const shape = this.constrainTokenShapeWithBrightLights(token);
+    if ( !shape ) return undefined;
     const poly = this.clipperShapeToPolygon(shape);
     if ( !poly || poly.points < 6 ) return undefined;
     return poly;
@@ -380,6 +382,7 @@ export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
 
   static constructSoundTokenShape(token) {
     const shape = this.constrainTokenShapeWithSounds(token);
+    if ( !shape ) return undefined;
     const poly = this.clipperShapeToPolygon(shape);
     if ( !poly || poly.points < 6 ) return undefined;
     return poly;
