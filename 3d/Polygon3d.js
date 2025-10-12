@@ -295,6 +295,7 @@ export class Polygon3d {
   clone(out) {
     out ??= new this.constructor(this.points.length);
     out.isHole = this.isHole;
+    if ( out.points.length !== this.points.length ) out.points = this.points.map(_pt => Point3d.tmp);
     this.points.forEach((pt, idx) => out.points[idx].copyFrom(pt));
     return out;
   }
