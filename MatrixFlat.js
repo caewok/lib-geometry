@@ -461,6 +461,7 @@ export class MatrixFlat {
       M.setIndex(2, 2, -1);         // DIAG2
       M.setIndex(3, 2, -2 * zNear); // A
     }
+    return M;
 
     /*
       DIAG0,   0,    0,      0,
@@ -496,6 +497,7 @@ export class MatrixFlat {
       M.setIndex(2, 2, -1);         // DIAG2
       M.setIndex(3, 2, -zNear);     // A
     }
+    return M;
 
     /*
       DIAG0,   0,    0,      0,
