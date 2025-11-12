@@ -8,10 +8,19 @@ import { Point3d } from "./3d/Point3d.js";
 import { Draw } from "./Draw.js";
 import { almostLessThan, almostGreaterThan } from "./util.js";
 
+const axes = {
+  x: new Point3d(1, 0, 0),
+  y: new Point3d(0, 1, 0),
+  z: new Point3d(0, 0, 1),
+};
+Object.freeze(axes.x);
+Object.freeze(axes.y);
+Object.freeze(axes.z);
+
+
 /* Axis-aligned bounding box
   Represent a bounding box as a minimum and maximum point in 2d or 3d.
 */
-
 export class AABB2d {
   static POINT_CLASS = PIXI.Point;
 
