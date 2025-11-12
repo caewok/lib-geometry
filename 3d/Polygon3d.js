@@ -554,7 +554,7 @@ export class Polygon3d {
 
   scale({ x = 1, y = 1, z = 1} = {}, poly3d) {
     poly3d ??= this.clone();
-    const scalePt = Point3d.tmp1.set(x, y, z);
+    const scalePt = Point3d.tmp.set(x, y, z);
     poly3d.points.forEach(pt => pt.multiply(scalePt, pt));
     poly3d.clearCache();
     scalePt.release();
@@ -1832,7 +1832,7 @@ GEOMETRY_CONFIG.threeD.Quad3d = Quad3d;
 GEOMETRY_CONFIG.threeD.Polygons3d = Polygons3d;
 
 // Synonym for Circle3d.
-export const Cylinder = GEOMETRY_CONFIG.threeD.Circle3d; 
+export const Cylinder = GEOMETRY_CONFIG.threeD.Circle3d;
 GEOMETRY_CONFIG.threeD.Cylinder = Circle3d;
 
 
