@@ -474,7 +474,7 @@ export class Polygon3d {
 
     // Convert using plane's matrix.
     const from2dM = this.plane.conversion2dMatrixInverse;
-    return pts.map(pt => from2dM.multiplyPoint3d());
+    return pts.map(pt => from2dM.multiplyPoint3d(pt));
   }
 
   /**
@@ -1407,7 +1407,7 @@ export class Triangle3d extends Polygon3d {
 /**
  * A quad shape in 3d. Primarily for its fast intersection test and ease of splitting into triangles.
  */
-export class d extends Polygon3d {
+export class Quad3d extends Polygon3d {
 
   static classTypes = new Set([this.name], "Quad", "PlanarQuad"); // Alternative to instanceof
 
