@@ -425,24 +425,6 @@ export class Polygon3d {
    * @returns {PIXI.Point[]}
    */
   _convert3dPointsTo2d(pts) {
-    // If the plane is horizontal (parallel to the canvas), can simply drop z.
-    // TODO: Make permanent without the test
-    if ( this.plane.normal.x === 0
-      && this.plane.normal.y === 0
-      && this.plane.normal.z > 0 ) {
-
-      const out = pts.map(pt => PIXI.Point.tmp.set(pt.x, pt.y));
-      const to2dM = this.plane.conversion2dMatrix;
-      const points2d = pts.map(pt => to2dM.multiplyPoint3d(pt));
-      for ( let i = 0; i < out.length; i += 1 ) {
-        if ( !out[i].almostEqual(points2d[i]) ) {
-          console.warn("_convert3dPointsTo2d|Quick conversion failed.");
-          break;
-        }
-      }
-      // return out;
-    }
-
     // Convert using plane's matrix.
     const to2dM = this.plane.conversion2dMatrix;
     return pts.map(pt => to2dM.multiplyPoint3d(pt));
@@ -454,26 +436,7 @@ export class Polygon3d {
    * @returns {Point3d[]}
    */
   _convert2dPointsTo3d(pts) {
-    // If the plane is horizontal (parallel to the canvas), can simply add elevation.
     const tmp3d = Point3d.tmp;
-    if ( this.plane.normal.x === 0
-      && this.plane.normal.y === 0
-      && this.plane.normal.z > 0 ) {
-
-      const z = this.points[0].z;
-      const out = pts.map(pt => Point3d.tmp.set(pt.x, pt.y, z));
-      const from2dM = this.plane.conversion2dMatrixInverse;
-      const points3d = pts.map(pt => from2dM.multiplyPoint3d(tmp3d.set(pt.x, pt.y, 0)));
-      for ( let i = 0; i < out.length; i += 1 ) {
-        if ( !out[i].almostEqual(points3d[i]) ) {
-          console.warn("_convert3dPointsTo2d|Quick conversion failed.");
-          break;
-        }
-      }
-      // return out;
-    }
-
-    // Convert using plane's matrix.
     const from2dM = this.plane.conversion2dMatrixInverse;
     const points3d = pts.map(pt => from2dM.multiplyPoint3d(tmp3d.set(pt.x, pt.y, 0)));
     tmp3d.release();
