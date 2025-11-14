@@ -1,6 +1,6 @@
 /* globals
+foundry,
 Region,
-Wall
 */
 "use strict";
 
@@ -33,7 +33,7 @@ PATCHES.CANVAS_EDGES_V13 = {};
  */
 function getElevation() {
   const e = this._elevation ??= { a: { top: null, bottom: null }, b: { top: null, bottom: null }};
-  if ( this.object instanceof Wall ) _setWallElevation(this.object, e);
+  if ( this.object instanceof foundry.canvas.placeables.Wall ) _setWallElevation(this.object, e);
   else if ( this.object instanceof Region ) _setRegionElevation(this.object, this, e);
   return e;
 }
