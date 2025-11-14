@@ -1,6 +1,5 @@
 /* globals
 canvas,
-ClockwiseSweepPolygon,
 foundry,
 PIXI
 */
@@ -26,7 +25,7 @@ PATCHES.CONSTRAINED_TOKEN_BORDER.HOOKS = { canvasInit };
  * This border represents the physical bounds of the token, so the move restriction is
  * used for walls (which thus don't have limited restriction walls).
  */
-export class ConstrainedTokenBorder extends ClockwiseSweepPolygon {
+export class ConstrainedTokenBorder extends foundry.canvas.geometry.ClockwiseSweepPolygon {
   /**
    * Cache shape by token.
    */
