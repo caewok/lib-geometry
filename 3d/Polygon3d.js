@@ -395,17 +395,16 @@ export class Polygon3d {
    */
   triangulate(opts) {
     // Convert the polygon points to 2d and triangulate.
-    const to2dM = this.plane.conversion2dMatrix;
-    const points2d = this.points.map(pt => to2dM.multiplyPoint3d(pt));
-    const poly = new PIXI.Polygon(points2d); // PIXI.Polygon ignores z values.
+    const points2d = this._convert3dPointsTo2d(this.points);
+    const poly = new PIXI.Polygon(points2d);
     const tris2d = poly.triangulate(opts);
+    PIXI.Point.release(...points2d);
 
-    // Convert back to 3d.
+    // Convert back to 3d. For speed, do with tmp points instead of using _convert2dPointsTo3d.
     const from2dM = this.plane.conversion2dMatrixInverse;
     const a = Point3d.tmp;
     const b = Point3d.tmp;
     const c = Point3d.tmp;
-
     const out = tris2d.map(tri2d => {
       const pts = tri2d.points;
       a.set(pts[0], pts[1], 0);
@@ -418,6 +417,64 @@ export class Polygon3d {
     });
     Point3d.release(a, b, c);
     return out;
+  }
+
+  /**
+   * Convert 3d points on the polygon plane to 2d. Does not confirm the 3d point locations.
+   * @param {Point3d[]} pts
+   * @returns {PIXI.Point[]}
+   */
+  _convert3dPointsTo2d(pts) {
+    // If the plane is horizontal (parallel to the canvas), can simply drop z.
+    // TODO: Make permanent without the test
+    if ( this.plane.normal.x === 0
+      && this.plane.normal.y === 0
+      && this.plane.normal.z > 0 ) {
+
+      const out = pts.map(pt => PIXI.Point.tmp.set(pt.x, pt.y));
+      const to2dM = this.plane.conversion2dMatrix;
+      const points2d = pts.map(pt => to2dM.multiplyPoint3d(pt));
+      for ( let i = 0; i < out.length; i += 1 ) {
+        if ( !out[i].almostEqual(points2d[i]) ) {
+          console.warn("_convert3dPointsTo2d|Quick conversion failed.");
+          break;
+        }
+      }
+      // return out;
+    }
+
+    // Convert using plane's matrix.
+    const to2dM = this.plane.conversion2dMatrix;
+    return pts.map(pt => to2dM.multiplyPoint3d(pt));
+  }
+
+  /**
+   * Convert 2d points on the polygon plane to 3d. Does not confirm the 2d point locations.
+   * @param {PIXI.Point[]} pts
+   * @returns {Point3d[]}
+   */
+  _convert2dPointsTo3d(pts) {
+    // If the plane is horizontal (parallel to the canvas), can simply add elevation.
+    if ( this.plane.normal.x === 0
+      && this.plane.normal.y === 0
+      && this.plane.normal.z > 0 ) {
+
+      const z = this.points[0].z;
+      const out = pts.map(pt => Point3d.tmp.set(pt.x, pt.y, z));
+      const from2dM = this.plane.conversion2dMatrixInverse;
+      const points3d = pts.map(pt => from2dM.multiplyPoint3d(pt));
+      for ( let i = 0; i < out.length; i += 1 ) {
+        if ( !out[i].almostEqual(points3d[i]) ) {
+          console.warn("_convert3dPointsTo2d|Quick conversion failed.");
+          break;
+        }
+      }
+      // return out;
+    }
+
+    // Convert using plane's matrix.
+    const from2dM = this.plane.conversion2dMatrixInverse;
+    return pts.map(pt => from2dM.multiplyPoint3d());
   }
 
   /**
@@ -448,6 +505,28 @@ export class Polygon3d {
     Point3d.release(a, b);
     return sides;
   }
+
+  /**
+   * Create a grid of points within this polygon.
+   * @param {object} [opts]
+   * @param {number} [opts.spacing = 1]              How many pixels between each point?
+   * @param {boolean} [opts.startAtEdge = false]     Are points allowed within spacing of the edges? Otherwise will be at least spacing away.
+   * @returns {Point3d[]} Points in order from left to right, top to bottom.
+   */
+  pointsLattice(opts) {
+    // Convert to 2d points and get the 2d points lattice.
+    const poly = this.toPlanarPolygon();
+
+    // Construct lattice points in 2d.
+    const latticePoints = poly.pointsLattice(opts);
+
+    // Convert back to 3d.
+    const out = this._convert2dPointsTo3d(latticePoints);
+    PIXI.Point.release(...latticePoints);
+    return out;
+  }
+
+
 
   // ----- NOTE: Iterators ----- //
 
@@ -1079,6 +1158,26 @@ export class Circle3d extends Ellipse3d {
     const cir = this.toPlanarCircle();
     return cir.toPolygon(opts);
   }
+
+  /**
+   * Create a grid of points within this 3d circle.
+   * @param {object} [opts]
+   * @param {number} [opts.spacing = 1]              How many pixels between each point?
+   * @param {boolean} [opts.startAtEdge = false]     Are points allowed within spacing of the edges? Otherwise will be at least spacing away.
+   * @returns {Point3d[]} Points in order from left to right, top to bottom.
+   */
+  pointsLattice(opts) {
+    // Convert to 2d points and get the 2d points lattice.
+    const cir = this.toPlanarCircle();
+
+    // Construct lattice points in 2d.
+    const latticePoints = cir.pointsLattice(opts);
+
+    // Convert back to 3d.
+    const out = this._convert2dPointsTo3d(latticePoints);
+    PIXI.Point.release(...latticePoints);
+    return out;
+  }
 }
 
 
@@ -1308,7 +1407,7 @@ export class Triangle3d extends Polygon3d {
 /**
  * A quad shape in 3d. Primarily for its fast intersection test and ease of splitting into triangles.
  */
-export class Quad3d extends Polygon3d {
+export class d extends Polygon3d {
 
   static classTypes = new Set([this.name], "Quad", "PlanarQuad"); // Alternative to instanceof
 
@@ -1442,6 +1541,45 @@ export class Quad3d extends Polygon3d {
   isValid() {
     this.clean();
     return this.points.length === 4;
+  }
+
+  /**
+   * Create a grid of points within this polygon.
+   * @param {object} [opts]
+   * @param {number} [opts.spacing = 1]              How many pixels between each point?
+   * @param {boolean} [opts.startAtEdge = false]     Are points allowed within spacing of the edges? Otherwise will be at least spacing away.
+   * @returns {Point3d[]} Points in order from left to right, top to bottom.
+   */
+  pointsLattice(opts) {
+    // Convert to 2d points and get the 2d points lattice.
+    let poly = this.toPlanarPolygon();
+
+    // If the quad creates an AABB rectangle, use rectangle instead b/c much faster lattice creation
+    const xMinMax = Math.minMax(poly.points[0], poly.points[2], poly.points[4], poly.points[6]);
+    const yMinMax = Math.minMax(poly.points[1], poly.points[3], poly.points[5], poly.points[7]);
+    if ( (poly.points[0] === xMinMax.min || poly.points[0] === xMinMax.max)
+      && (poly.points[2] === xMinMax.min || poly.points[2] === xMinMax.max)
+      && (poly.points[4] === xMinMax.min || poly.points[4] === xMinMax.max)
+      && (poly.points[6] === xMinMax.min || poly.points[6] === xMinMax.max)
+      && (poly.points[1] === yMinMax.min || poly.points[1] === yMinMax.max)
+      && (poly.points[3] === yMinMax.min || poly.points[3] === yMinMax.max)
+      && (poly.points[5] === yMinMax.min || poly.points[5] === yMinMax.max)
+      && (poly.points[7] === yMinMax.min || poly.points[7] === yMinMax.max) ) {
+
+      poly = new PIXI.Rectangle(
+        xMinMax.min,
+        yMinMax.min,
+        xMinMax.max - xMinMax.min,
+        yMinMax.max - yMinMax.min)
+    }
+
+    // Construct lattice points in 2d.
+    const latticePoints = poly.pointsLattice(opts);
+
+    // Convert back to 3d.
+    const out = this._convert2dPointsTo3d(latticePoints);
+    PIXI.Point.release(...latticePoints);
+    return out;
   }
 
 }

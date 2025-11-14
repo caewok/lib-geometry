@@ -1167,6 +1167,22 @@ function triangulate({ useFan, centroid } = {}) {
   return polys;
 }
 
+/**
+ * Create a grid of points within this polygon.
+ * @param {object} [opts]
+ * @param {number} [opts.spacing = 1]              How many pixels between each point?
+ * @param {boolean} [opts.startAtEdge = false]     Are points allowed within spacing of the edges? Otherwise will be at least spacing away.
+ * @returns {PIXI.Point[]} Points in order from left to right, top to bottom.
+ */
+function pointsLattice({ spacing = 1, startAtEdge = false } = {}) {
+  const poly = startAtEdge ? this : this.pad(-spacing);
+  const bounds = poly.getBounds();
+  const pts = bounds.pointsLattice({ spacing, startAtEdge: true }); // Start at edge b/c already padded the polygon.
+
+  // For arbitrary polygon, unfortunately have to test the bounds for each.
+  return pts.filter(pt => this.contains(pt.x, pt.y));
+}
+
 
 PATCHES.PIXI.GETTERS = {
   area,
@@ -1208,6 +1224,7 @@ PATCHES.PIXI.METHODS = {
   scale,
   translateScale,
   viewablePoints,
+  pointsLattice,
 
   // Overlap methods
   overlaps,
