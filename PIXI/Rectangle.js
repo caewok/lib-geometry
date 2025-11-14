@@ -492,10 +492,10 @@ function normalizeDegrees(degrees) {
 function pointsLattice({ spacing = 1, startAtEdge = false } = {}) {
   const { left, right, top, bottom } = this;
   const pts = [];
-  const startX = left + startAtEdge;
-  const startY = top + startAtEdge;
-  const endX = right - startAtEdge;
-  const endY = bottom - startAtEdge;
+  const startX = startAtEdge ? left : left + spacing;
+  const startY = startAtEdge ? top : top + spacing;
+  const endX = startAtEdge ? right : right - spacing;
+  const endY = startAtEdge ? bottom : bottom - spacing;
   for ( let x = startX; x < endX; x += spacing ) {
     for ( let y = startY; y < endY; y += spacing ) pts.push(new PIXI.Point(x, y))
   }
