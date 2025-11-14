@@ -496,8 +496,8 @@ function pointsLattice({ spacing = 1, startAtEdge = false } = {}) {
   const startY = startAtEdge ? top : top + spacing;
   const endX = startAtEdge ? right : right - spacing;
   const endY = startAtEdge ? bottom : bottom - spacing;
-  for ( let x = startX; x < endX; x += spacing ) {
-    for ( let y = startY; y < endY; y += spacing ) pts.push(new PIXI.Point(x, y))
+  for ( let x = startX; x <= endX; x += spacing ) {
+    for ( let y = startY; y <= endY; y += spacing ) pts.push(new PIXI.Point(x, y))
   }
   return pts;
 }
