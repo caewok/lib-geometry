@@ -455,6 +455,7 @@ export class Polygon3d {
    */
   _convert2dPointsTo3d(pts) {
     // If the plane is horizontal (parallel to the canvas), can simply add elevation.
+    const tmp3d = Point3d.tmp;
     if ( this.plane.normal.x === 0
       && this.plane.normal.y === 0
       && this.plane.normal.z > 0 ) {
@@ -462,7 +463,7 @@ export class Polygon3d {
       const z = this.points[0].z;
       const out = pts.map(pt => Point3d.tmp.set(pt.x, pt.y, z));
       const from2dM = this.plane.conversion2dMatrixInverse;
-      const points3d = pts.map(pt => from2dM.multiplyPoint3d(pt));
+      const points3d = pts.map(pt => from2dM.multiplyPoint3d(tmp3d.set(pt.x, pt.y, 0)));
       for ( let i = 0; i < out.length; i += 1 ) {
         if ( !out[i].almostEqual(points3d[i]) ) {
           console.warn("_convert3dPointsTo2d|Quick conversion failed.");
@@ -474,7 +475,9 @@ export class Polygon3d {
 
     // Convert using plane's matrix.
     const from2dM = this.plane.conversion2dMatrixInverse;
-    return pts.map(pt => from2dM.multiplyPoint3d(pt));
+    const points3d = pts.map(pt => from2dM.multiplyPoint3d(tmp3d.set(pt.x, pt.y, 0)));
+    tmp3d.release();
+    return points3d;
   }
 
   /**
