@@ -1237,6 +1237,7 @@ export class Circle3d extends Ellipse3d {
    * @returns {Polygon3d} The modified tri.
    */
   transform(M, circle3d) {
+    // TODO: If the x and y scales are different, this will result in an ellipse, not a circle.
     // Get the x and y points along the ellipse.
     const { center, x, y } = this.#circlePoints();
     const txCenter = M.multiplyPoint3d(center);
@@ -1265,6 +1266,8 @@ export class Circle3d extends Ellipse3d {
   }
 
   scale({ x = 1, y = 1, z = 1} = {}, circle3d) {
+    // TODO: If the x and y scales are different, this will result in an ellipse, not a circle.
+
     // Get the x and y points along the ellipse.
     const { center, x: xPt, y: yPt } = this.#circlePoints();
     const scalePt = Point3d.tmp.set(x, y, z);
