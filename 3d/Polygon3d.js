@@ -1102,8 +1102,7 @@ export class Ellipse3d extends Polygon3d {
 
     const xPt2d = ellipse2d.center.add(w);
     const yPt2d = ellipse2d.center.add(h);
-    const x = this._convert2dPointsTo3d(xPt2d);
-    const y = this._convert2dPointsTo3d(yPt2d);
+    const [x, y] = this._convert2dPointsTo3d([xPt2d, yPt2d]);
     xPt2d.release();
     yPt2d.release();
     w.release();
@@ -1290,8 +1289,7 @@ export class Circle3d extends Ellipse3d {
 
     const xPt2d = circle2d.center.add(w);
     const yPt2d = circle2d.center.add(h);
-    const x = this._convert2dPointsTo3d(xPt2d);
-    const y = this._convert2dPointsTo3d(yPt2d);
+    const [x, y] = this._convert2dPointsTo3d([xPt2d, yPt2d]);
     xPt2d.release();
     yPt2d.release();
     w.release();
