@@ -1035,6 +1035,85 @@ export class Ellipse3d extends Polygon3d {
     const poly3d = this.toPolygon3d();
     for ( const pt of poly3d.iteratePoints(opts) ) yield pt;
   }
+
+  // ----- NOTE: Transformations ----- //
+  isValid() {
+    this.clean();
+    return this.points.length === 1;
+  }
+
+  /**
+   * Transform the points using a transformation matrix.
+   * @param {Matrix} M
+   * @param {Polygon3d} [poly]    The triangle to modify
+   * @returns {Polygon3d} The modified tri.
+   */
+  transform(M, ellipse3d) {
+    // Get the x and y points along the ellipse.
+    const { center, x, y } = this.#ellipsePoints();
+    const txCenter = M.multiplyPoint3d(center);
+    const txX = M.multiplyPoint3d(x);
+    const txY = M.multiplyPoint3d(y);
+
+    ellipse3d ??= this.clone();
+    ellipse3d.points[0].copyFrom(txCenter);
+    ellipse3d.radiusX = Point3d.distanceBetween(txCenter, txX);
+    ellipse3d.radiusY = Point3d.distanceBetween(txCenter, txY);
+    Point3d.release(center, x, y, txCenter, txX, txY);
+    return ellipse3d;
+  }
+
+  multiplyScalar(multiplier, ellipse3d) {
+    // Get the x and y points along the ellipse.
+    const { center, x, y } = this.#ellipsePoints();
+    const txCenter = center.multiplyScalar(multiplier);
+    const txX = x.multiplyScalar(multiplier);
+    const txY = y.multiplyScalar(multiplier);
+
+    ellipse3d ??= this.clone();
+    ellipse3d.points[0].copyFrom(txCenter);
+    ellipse3d.radiusX = Point3d.distanceBetween(txCenter, txX);
+    ellipse3d.radiusY = Point3d.distanceBetween(txCenter, txY);
+    Point3d.release(center, x, y, txCenter, txX, txY);
+    return ellipse3d;
+  }
+
+  scale({ x = 1, y = 1, z = 1} = {}, ellipse3d) {
+    // Get the x and y points along the ellipse.
+    const { center, x: xPt, y: yPt } = this.#ellipsePoints();
+    const scalePt = Point3d.tmp.set(x, y, z);
+    const txCenter = center.multiply(scalePt);
+    const txX = xPt.multiply(scalePt);
+    const txY = yPt.multiply(scalePt);
+
+    ellipse3d ??= this.clone();
+    ellipse3d.points[0].copyFrom(txCenter);
+    ellipse3d.radiusX = Point3d.distanceBetween(txCenter, txX);
+    ellipse3d.radiusY = Point3d.distanceBetween(txCenter, txY);
+    scalePt.release();
+    Point3d.release(center, xPt, yPt, txCenter, txX, txY);
+    return ellipse3d;
+  }
+
+  #ellipsePoints() {
+    const ellipse2d = this.toPlanarEllipse();
+    const w = PIXI.Point.tmp.set(ellipse2d.width, 0);
+    const h = PIXI.Point.tmp.set(0, ellipse2d.height);
+
+    const xPt2d = ellipse2d.center.add(w);
+    const yPt2d = ellipse2d.center.add(h);
+    const x = this._convert2dPointsTo3d(xPt2d);
+    const y = this._convert2dPointsTo3d(yPt2d);
+    xPt2d.release();
+    yPt2d.release();
+    w.release();
+    h.release();
+    return { center: this.points[0], x,  y };
+  }
+
+  // divideByZ: same for ellipse.
+
+
 }
 
 /**
@@ -1143,6 +1222,78 @@ export class Circle3d extends Ellipse3d {
     const out = this._convert2dPointsTo3d(latticePoints);
     PIXI.Point.release(...latticePoints);
     return out;
+  }
+
+  // ----- NOTE: Transformations ----- //
+  isValid() {
+    this.clean();
+    return this.points.length === 1;
+  }
+
+  /**
+   * Transform the points using a transformation matrix.
+   * @param {Matrix} M
+   * @param {Polygon3d} [poly]    The triangle to modify
+   * @returns {Polygon3d} The modified tri.
+   */
+  transform(M, circle3d) {
+    // Get the x and y points along the ellipse.
+    const { center, x, y } = this.#circlePoints();
+    const txCenter = M.multiplyPoint3d(center);
+    const txX = M.multiplyPoint3d(x);
+    const txY = M.multiplyPoint3d(y);
+
+    circle3d ??= this.clone();
+    circle3d.points[0].copyFrom(txCenter);
+    circle3d.radius = Math.max(Point3d.distanceBetween(txCenter, txX), Point3d.distanceBetween(txCenter, txY));
+    Point3d.release(center, x, y, txCenter, txX, txY);
+    return circle3d;
+  }
+
+  multiplyScalar(multiplier, circle3d) {
+    // Get the x and y points along the ellipse.
+    const { center, x, y } = this.#circlePoints();
+    const txCenter = center.multiplyScalar(multiplier);
+    const txX = x.multiplyScalar(multiplier);
+    const txY = y.multiplyScalar(multiplier);
+
+    circle3d ??= this.clone();
+    circle3d.points[0].copyFrom(txCenter);
+    circle3d.radius = Math.max(Point3d.distanceBetween(txCenter, txX), Point3d.distanceBetween(txCenter, txY));
+    Point3d.release(center, x, y, txCenter, txX, txY);
+    return circle3d;
+  }
+
+  scale({ x = 1, y = 1, z = 1} = {}, circle3d) {
+    // Get the x and y points along the ellipse.
+    const { center, x: xPt, y: yPt } = this.#circlePoints();
+    const scalePt = Point3d.tmp.set(x, y, z);
+    const txCenter = center.multiply(scalePt);
+    const txX = xPt.multiply(scalePt);
+    const txY = yPt.multiply(scalePt);
+
+    circle3d ??= this.clone();
+    circle3d.points[0].copyFrom(txCenter);
+    circle3d.radius = Math.max(Point3d.distanceBetween(txCenter, txX), Point3d.distanceBetween(txCenter, txY));
+    scalePt.release();
+    Point3d.release(center, xPt, yPt, txCenter, txX, txY);
+    return circle3d;
+  }
+
+  #circlePoints() {
+    const circle2d = this.toPlanarCircle();
+    const w = PIXI.Point.tmp.set(circle2d.radius, 0);
+    const h = PIXI.Point.tmp.set(0, circle2d.radius);
+
+    const xPt2d = circle2d.center.add(w);
+    const yPt2d = circle2d.center.add(h);
+    const x = this._convert2dPointsTo3d(xPt2d);
+    const y = this._convert2dPointsTo3d(yPt2d);
+    xPt2d.release();
+    yPt2d.release();
+    w.release();
+    h.release();
+    return { center: this.points[0], x,  y };
   }
 }
 
