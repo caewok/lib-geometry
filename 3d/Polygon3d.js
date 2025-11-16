@@ -1423,9 +1423,9 @@ export class Triangle3d extends Polygon3d {
     outArr ??= new Float32Array(stride * NUM_POINTS * tris.length);
     const opts = { addNormals, outArr, outIdx };
     const adder = stride * NUM_POINTS;
-    tris.forEach((tri, idx) => {
-      opts.outIdx += adder;
+    tris.forEach(tri => {
       tri.toVertices(opts);
+      opts.outIdx += adder;
     });
     return outArr;
   }
