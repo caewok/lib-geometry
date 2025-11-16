@@ -1396,7 +1396,7 @@ export class Triangle3d extends Polygon3d {
     // Should be set when constructing the triangle to point up when triangle is CCW.
     if ( addNormals ) {
       const normal = [...this.plane.normal];
-      outArr.set([...this.a, ...normal, ...this.b, ...normal, ...this.c, ...normal]);
+      outArr.set([...this.a, ...normal, ...this.b, ...normal, ...this.c, ...normal], outIdx);
     } else outArr.set([...this.a, ...this.b, ...this.c], outIdx);
     return outArr;
   }
