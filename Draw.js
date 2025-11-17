@@ -118,13 +118,26 @@ export class Draw {
    * @param {Number}  alpha   Transparency level.
    * @param {Number}  width   Width of the line in pixels.
    */
-  segment(s, { color = Draw.COLORS.blue, alpha = 1, width = 1 } = {}) {
+  segment(s, { color = Draw.COLORS.blue, alpha = 1, width = 1, dashLength = 0, gapLength = 0 } = {}) {
     // Handle Wall, Edge, other
     const A = s.edge?.a ?? s.a ?? s.A;
     const B = s.edge?.b ?? s.b ?? s.B;
+
     this.g.lineStyle(width, color, alpha)
-      .moveTo(A.x, A.y)
-      .lineTo(B.x, B.y);
+    if ( !(dashLength && gapLength) ) this.g
+        .moveTo(A.x, A.y)
+        .lineTo(B.x, B.y);
+    else {
+      const current = A.clone();
+      while ( current.x < B.x && current.y < B.y ) {
+        this.g.moveTo(current.x, current.y);
+        current.towardsPoint(B, dashLength, current);
+        current.min(B, current); // Don't go past B.
+        this.g.lineTo(current.x, current.y);
+        current.towardsPoint(B, gapLength, current);
+      }
+      current.release();
+    }
   }
 
   /**
