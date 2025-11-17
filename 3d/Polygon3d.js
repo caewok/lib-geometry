@@ -111,7 +111,8 @@ export class Polygon3d {
    */
   reverseOrientation() {
     this.points.reverse();
-    if ( this.#plane ) this.plane.normal.multiplyScalar(-1);
+    // if ( this.#plane ) this.plane.normal.multiplyScalar(-1);
+    this.clearCache();
     return this;
   }
 
@@ -845,7 +846,8 @@ export class Ellipse3d extends Polygon3d {
 
   reverseOrientation() {
     // No points to reverse.
-    this.plane.normal.multiplyScalar(-1);
+    // this.plane.normal.multiplyScalar(-1);
+    this.clearCache();
     return this;
   }
 
