@@ -128,13 +128,23 @@ export class Draw {
         .moveTo(A.x, A.y)
         .lineTo(B.x, B.y);
     else {
+      // Move from t = 0 to t = 1.
+      // Calculate the percent t for dash and gap lengths.
+      const delta = B.subtract(A);
+      const dist = delta.magnitude();
+      delta.release();
+      const gapT = gapLength / dist;
+      const dashT = dashLength / dist;
+      let t = 0;
       const current = A.clone();
-      while ( current.x < B.x && current.y < B.y ) {
+      while ( t < 1 ) {
         this.g.moveTo(current.x, current.y);
-        current.towardsPoint(B, dashLength, current);
-        current.min(B, current); // Don't go past B.
+        t += dashT;
+        t = Math.min(t, 1); // Don't go past B.
+        A.projectToward(B, t, current);
         this.g.lineTo(current.x, current.y);
-        current.towardsPoint(B, gapLength, current);
+        t += gapT;
+        A.projectToward(B, t, current);
       }
       current.release();
     }
