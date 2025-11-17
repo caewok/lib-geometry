@@ -592,12 +592,12 @@ function _envelopsCircle(circle) {
 }
 
 /**
- * Use Clipper to pad (offset) polygon by delta.
+ * Use Clipper to pad (offset) polygon by delta. Pads in place for consistency with PIXI.Rectangle#pad.
  * @param {number} delta           Padding amount
  * @param {object} [options]       Options that affect the padding calculation.
  * @param {number} [miterLimit]    Value of at least 2 used to avoid sharp points.
  * @param {number} [scalingFactor] How to scale the coordinates when translating to/from integers.
- * @returns {PIXI.Polygon}
+ * @returns {PIXI.Polygon} This polygon, for convenience.
  */
 function pad(delta, { miterLimit = 2, scalingFactor = 100 } = {}) {
   if ( miterLimit < 2) {
@@ -609,7 +609,9 @@ function pad(delta, { miterLimit = 2, scalingFactor = 100 } = {}) {
   const c = new ClipperLib.ClipperOffset(miterLimit);
   c.AddPath(this.toClipperPoints({scalingFactor}), ClipperLib.JoinType.jtMiter, ClipperLib.EndType.etClosedPolygon);
   c.Execute(solution, delta);
-  return PIXI.Polygon.fromClipperPoints(solution.length ? solution[0] : [], {scalingFactor});
+  const poly = PIXI.Polygon.fromClipperPoints(solution.length ? solution[0] : [], {scalingFactor});
+  this.points = poly.points;
+  return this;
 }
 
 /**
@@ -1175,7 +1177,7 @@ function triangulate({ useFan, centroid } = {}) {
  * @returns {PIXI.Point[]} Points in order from left to right, top to bottom.
  */
 function pointsLattice({ spacing = 1, startAtEdge = false } = {}) {
-  const poly = startAtEdge ? this : this.pad(-spacing);
+  const poly = startAtEdge ? this : this.clone().pad(-spacing);
   const bounds = poly.getBounds();
   const pts = bounds.pointsLattice({ spacing, startAtEdge: true }); // Start at edge b/c already padded the polygon.
 
