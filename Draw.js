@@ -175,9 +175,11 @@ export class Draw {
    * @param {hex|null}[fill=null]             Color of the fill, if any.
    * @param {number}  [fillAlpha=1]           Alpha of the fill, if any.
    */
-  shape(shape, { color = Draw.COLORS.black, width = 1, fill = null, fillAlpha = 1 } = {}) {
+  shape(shape, { color = Draw.COLORS.black, width = 1, alpha, fill = null, fillAlpha } = {}) {
+    alpha ??= 1;
+    fillAlpha ??= alpha;
     if ( fill ) this.g.beginFill(fill, fillAlpha);
-    this.g.lineStyle(width, color).drawShape(shape);
+    this.g.lineStyle(width, color, alpha).drawShape(shape);
     if ( fill ) this.g.endFill();
   }
 
