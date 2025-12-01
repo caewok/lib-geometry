@@ -233,7 +233,7 @@ export class ClipperPaths {
    * @returns {ClipperPaths} New paths
    */
   transform(M) {
-    const out = new this([], { scalingFactor: this.scalingFactor });
+    const out = new this.constructor([], { scalingFactor: this.scalingFactor });
     this.paths.forEach(path => {
       const pts = this.constructor.pathToPoints(path, this.scalingFactor);
       pts.forEach(pt => M.multiplyPoint2d(pt, pt));
