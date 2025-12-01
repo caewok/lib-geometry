@@ -70,6 +70,25 @@ export class ClipperPaths {
     this.#scalingFactor = value;
   }
 
+  // ----- NOTE: Static conversion helpers ----- //
+
+  static pathToPoints(path, scalingFactor = 1) {
+    const invScale = 1 / scalingFactor;
+    return path.map(pt => PIXI.Point.tmp.set(pt.X * invScale, pt.Y * invScale));
+  }
+
+  static pointsToPath(pts, scalingFactor = 1) {
+    return pts.map(pt => { return { X: pt.x * scalingFactor, Y: pt.y * scalingFactor }; });
+  }
+
+  /**
+   * Add an array of point objects as a path to this object.
+   * @param {Point[]} pts
+   */
+  addPathPoints(pts) {
+    this.paths.push(this.constructor.pointsToPath(pts, this.scalingFactor));
+  }
+
   /**
    * Determine the best way to represent Clipper paths.
    * @param {ClipperLib.Paths}
@@ -206,6 +225,21 @@ export class ClipperPaths {
       cPaths.paths.push(path);
     }
     return cPaths;
+  }
+
+  /**
+   * Transform these paths with a 3x3 matrix.
+   * @param {Matrix} M        3x3 transform matrix
+   * @returns {ClipperPaths} New paths
+   */
+  transform(M) {
+    const out = new this([], { scalingFactor: this.scalingFactor });
+    this.paths.forEach(path => {
+      const pts = this.constructor.pathToPoints(path, this.scalingFactor);
+      pts.forEach(pt => M.multiplyPoint2d(pt, pt));
+      out.addPathPoints(pts);
+    });
+    return out;
   }
 
   /**

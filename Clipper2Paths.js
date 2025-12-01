@@ -212,7 +212,14 @@ export class Clipper2Paths {
 
   static pathToPoints(path, scalingFactor = 1) {
     const invScale = 1 / scalingFactor;
-    return path.map(pt64 => new PIXI.Point(pt64.x * invScale, pt64.y * invScale));
+    return path.map(pt64 => PIXI.Point.tmp.set(pt64.x * invScale, pt64.y * invScale));
+  }
+
+  static pointsToPath(pts, scalingFactor = 1) {
+    const nPts = pts.length;
+    const path = new Path64(nPts)
+    for ( let i = 0; i < nPts; i += 1 ) path[i] = new Point64(pts[i], scalingFactor);
+    return path;
   }
 
   static pathToFlatArray(path, scalingFactor) {
@@ -244,10 +251,7 @@ export class Clipper2Paths {
    * @param {Point[]} pts
    */
   addPathPoints(pts) {
-    const nPts = pts.length;
-    const path = new Path64(nPts)
-    for ( let i = 0; i < nPts; i += 1 ) path[i] = new Point64(pts[i], this.scalingFactor);
-    this.paths.push(path);
+    this.paths.push(this.constructor.pointsToPath(pts, this.scalingFactor));
   }
 
   /**
@@ -397,6 +401,22 @@ export class Clipper2Paths {
     const coords = this.toEarcutCoordinates();
     const res = PIXI.utils.earcut(coords.vertices, coords.holes, coords.dimensions);
     return Clipper2Paths.fromEarcutCoordinates(coords.vertices, res, coords.dimensions);
+  }
+
+  /**
+   * Transform these paths with a 3x3 matrix.
+   * @param {Matrix} M        3x3 transform matrix
+   * @returns {ClipperPaths} New paths
+   */
+  transform(M) {
+    const out = new this();
+    out.scalingFactor = this.scalingFactor;
+    this.paths.forEach(path => {
+      const pts = this.constructor.pathToPoints(path, this.scalingFactor);
+      pts.forEach(pt => M.multiplyPoint2d(pt, pt));
+      out.addPathPoints(pts);
+    });
+    return out;
   }
 
   /**
