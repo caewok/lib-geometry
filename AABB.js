@@ -459,6 +459,18 @@ export class AABB3d extends AABB2d {
   }
 
   /**
+   * @param {Tile} tile
+   * @returns {AABB3d}
+   */
+  static fromTileAlpha(tile, out) {
+    out = super.fromTileAlpha(tile, out);
+    const elevZ = tile.elevationZ;
+    out.max.z = elevZ;
+    out.min.z = elevZ;
+    return out;
+  }
+
+  /**
    * @param {Edge} edge
    * @returns {AABB3d}
    */
