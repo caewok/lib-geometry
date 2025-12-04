@@ -246,6 +246,7 @@ export class Polygon3d {
     const pts = [...poly.iteratePoints({ close: false })];
     out = this.from2dPoints(pts, elevation, out);
     PIXI.Point.release(...pts);
+    out.isHole = poly.isHole;
     return out;
   }
 
