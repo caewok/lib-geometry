@@ -623,15 +623,48 @@ export class Polygon3d {
   // ----- NOTE: Intersection ----- //
 
   /**
-   * Test if a ray intersects the polygon's plane. Does not consider whether this polygon is facing.
+   * Test if a ray is within the polygon bounds and intersects the polygon's plane.
+   * Does not consider whether this polygon is facing.
    * @param {Point3d} rayOrigin
    * @param {Point3d} rayDirection
    * @returns {number|null} The t value of the plane intersection.
-   *  Does not test if the intersection is within bounds of the polygon.
-   *  For polygons, use intersection to test bounds.
    */
   intersectionT(rayOrigin, rayDirection) {
-    return this.plane.rayIntersection(rayOrigin, rayDirection);
+    // First get the plane intersection.
+    const plane = this.plane;
+    const t = plane.rayIntersection(rayOrigin, rayDirection);
+    if ( t === null || !t.almostBetween(minT, maxT) ) return null;
+
+    const ix = Point3d.tmp;
+    rayOrigin.add(rayDirection.multiplyScalar(t, ix), ix)
+
+    // Test 3d bounding box.
+    let contained = true;
+
+    const { min, max } = this.aabb;
+    if ( !almostLessThan(ix.x, max.x)
+      || !almostGreaterThan(ix.x, min.x)
+      || !almostLessThan(ix.y, max.y)
+      || !almostGreaterThan(ix.y, min.y)
+      || !almostLessThan(ix.z, max.z)
+      || !almostGreaterThan(ix.z, min.z) ) contained = false;
+
+    // If the plane is not vertical, can do a simple projection onto the x/y plane as a 2d polygon.
+    if ( !contained ) {
+      let poly2d;
+      let ix2d;
+      if ( plane.normal.z ) {
+        poly2d = this.toPolygon2d();
+        ix2d = ix.to2d();
+      } else {
+        poly2d = this.toPlanarPolygon()
+        ix2d = this._convert3dPointsTo2d([ix])[0];
+        ix2d.release();
+      }
+      contained = poly2d.contains(ix2d.x, ix2d.y);
+    }
+    ix.release();
+    return contained ? t : null;
   }
 
   /**
@@ -641,40 +674,12 @@ export class Polygon3d {
    * @returns {Point3d|null}
    */
   intersection(rayOrigin, rayDirection, minT = 0, maxT = Number.POSITIVE_INFINITY) {
-    // First get the plane intersection.
-    const plane = this.plane;
-    const t = plane.rayIntersection(rayOrigin, rayDirection);
+    const t = this.intersectionT(rayOrigin, rayDirection);
     if ( t === null || !t.almostBetween(minT, maxT) ) return null;
-    if ( t.almostEqual(0) ) return rayOrigin;
 
     const ix = Point3d.tmp;
     rayOrigin.add(rayDirection.multiplyScalar(t, ix), ix)
-
-    // If the plane is not vertical, can do a simple projection onto the x/y plane as a 2d polygon.
-    if ( plane.normal.z ) {
-      const poly2d = this.toPolygon2d();
-      return poly2d.contains(ix.x, ix.y) ? ix : null;
-    }
-
-    // Otherwise, test 3d bounds by full conversion.
-    const { min, max } = this.aabb;
-    if ( !almostLessThan(ix.x, max.x)
-      || !almostGreaterThan(ix.x, min.x)
-      || !almostLessThan(ix.y, max.y)
-      || !almostGreaterThan(ix.y, min.y)
-      || !almostLessThan(ix.z, max.z)
-      || !almostGreaterThan(ix.z, min.z) ) return null;
-
-    // Then convert to 2d polygon and test if contained.
-    const M2d = plane.conversion2dMatrix;
-    const tmpPt3d = Point3d.tmp;
-    const pts = this.points.map(pt3d => M2d.multiplyPoint3d(pt3d, tmpPt3d).to2d());
-    const poly2d = new PIXI.Polygon(pts);
-    const ix2d = M2d.multiplyPoint3d(ix, tmpPt3d).to2d();
-    const out = poly2d.contains(ix2d.x, ix2d.y) ? ix : null;
-    tmpPt3d.release();
-    PIXI.Point.release(...pts);
-    return out;
+    return ix;
   }
 
   /**
