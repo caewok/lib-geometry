@@ -633,14 +633,12 @@ export class Polygon3d {
     // First get the plane intersection.
     const plane = this.plane;
     const t = plane.rayIntersection(rayOrigin, rayDirection);
-    if ( t === null || !t.almostBetween(minT, maxT) ) return null;
-
+    if ( t === null ) return null;
     const ix = Point3d.tmp;
     rayOrigin.add(rayDirection.multiplyScalar(t, ix), ix)
 
     // Test 3d bounding box.
     let contained = true;
-
     const { min, max } = this.aabb;
     if ( !almostLessThan(ix.x, max.x)
       || !almostGreaterThan(ix.x, min.x)
