@@ -1686,9 +1686,9 @@ export class Quad3d extends Polygon3d {
    * @param {Point3d} rayDirection
    * @returns {t|null} Returns null if not within the quad
    */
-//   intersectionT(rayOrigin, rayDirection) {
-//     return Plane.rayIntersectionQuad3dLD(rayOrigin, rayDirection, this.a, this.b, this.c, this.d);
-//   }
+  intersectionT(rayOrigin, rayDirection) {
+    return this.rayIntersectionLD(rayOrigin, rayDirection);
+  }
 
 
   /**
