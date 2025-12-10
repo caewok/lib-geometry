@@ -1711,80 +1711,67 @@ export class Quad3d extends Polygon3d {
   /**
    * Lagae-Dutré intersection algorithm for a quad
    * https://graphics.cs.kuleuven.be/publications/LD04ERQIT/LD04ERQIT_paper.pdf
-   * Appears a bit faster than doing rayIntersectionTriangle3d twice, but depends on setup.
-   * Usually does equal or better.
+   * https://graphics.cs.kuleuven.be/publications/LD04ERQIT/
    * @param {Point3d} rayOrigin
    * @param {Point3d} rayDirection
    * @returns {number|null}  Null if no intersection. If negative, the intersection is behind the ray origin.
    */
   rayIntersectionLD(rayOrigin, rayDirection) {
     const [v0, v1, v2, v3] = this.points;
+    rayDirection = rayDirection.normalize();
 
-    // Reject rays using the barycentric coordinates of the intersection point with respect to T
-    const E01 = v1.subtract(v0);
-    const E03 = v3.subtract(v0);
-    const P = rayDirection.cross(E03);
-    const det = E01.dot(P);
-    if ( Math.abs(det) < Number.EPSILON ) {
-      Point3d.release(E01, E03, P);
+    // Edge vectors.
+    const e01 = v1.subtract(v0);
+    const e03 = v3.subtract(v0);
+
+    // Cross product rayDirection × e03.
+    const p = rayDirection.cross(e03);
+
+    // Determinant
+    const det = e01.dot(p);
+
+    // If determinant is near zero, ray lies in plane of triangle.
+    if ( det.almostEqual(0) ) {
+      Point3d.release(rayDirection, e01, e03, p);
+      return null;
+    }
+    const invDet = 1.0 / det;
+
+    // Vector from v0 to ray origin.
+    const t = rayOrigin.subtract(v0);
+
+    // Calculate Barycentric u parameter.
+    const u = t.dot(p) * invDet;
+
+    // Check if intersection is outside the triangle
+    if ( u < 0.0 || u > 1.0 ) {
+      Point3d.release(rayDirection, e01, e03, p);
       return null;
     }
 
-    const T = rayOrigin.subtract(v0);
-    const alpha = T.dot(P) / det;
-    if ( alpha < 0 || alpha > 1 ) {
-      Point3d.release(E01, E03, P, T);
+    // Calculate Barycentric v parameter.
+    const q = t.cross(e01);
+    const v = rayDirection.dot(q) * invDet;
+
+    // Check if intersection is outside the triangle.
+    if ( v < 0.0 || v > 1.0 ) {
+      Point3d.release(rayDirection, e01, e03, p, q);
       return null;
     }
 
-    const Q = T.cross(E01, E01);
-    const beta = rayDirection.dot(Q) / det;
-    if ( beta < 0 || beta > 1 ) {
-      Point3d.release(E01, E03, P, T, Q);
+    // Calculate t; ray intersects the triangle.
+    const tVal = e03.dot(q) * invDet;
+
+    // Check if intersection is behind the ray origin.
+    if ( tVal < 0.0 ) {
+      Point3d.release(rayDirection, e01, e03, p, q);
       return null;
     }
 
-    // Done with some temp variables. Remaining: E03, Q.
-    Point3d.release(E01, P, T);
-
-    // Reject rays using the barycentric coordinates of the intersection point with respect to T'
-    if ( (alpha + beta) > 1 ) {
-      const E23 = v3.subtract(v2);
-      const E21 = v1.subtract(v2);
-      const Pprime = rayDirection.cross(E21, E21);
-      const detprime = E23.dot(Pprime);
-      if ( Math.abs(detprime) < Number.EPSILON ) {
-        Point3d.release(E23, E21, Pprime, E03, Q);
-        return null;
-      }
-
-      const Tprime = rayOrigin.subtract(v2);
-      const alphaprime = Tprime.dot(Pprime) / detprime;
-      if ( alphaprime < 0 ) {
-        Point3d.release(E23, E21, Pprime, Tprime, E03, Q);
-        return null;
-      }
-      const Qprime = Tprime.cross(E23, E23);
-      const betaprime = rayDirection.dot(Qprime) / detprime;
-      Point3d.release(E23, E21, Pprime, Qprime, Tprime, Qprime);
-      if ( betaprime < 0 ) {
-        E03.release();
-        Q.release()
-        return null;
-      }
-    }
-
-    // Compute the ray parameter of the intersection point
-    const num = E03.dot(Q);
-    E03.release();
-    Q.release();
-    return num / det;
-    // if ( t < 0 ) return null;
-
-    // If barycentric coordinates of the intersection point are needed, this would be done here.
-    // See the original Lagae-Dutré paper.
-    // For current purposes, the estimated point using the ray is likely sufficient.
+    Point3d.release(rayDirection, e01, e03, p, q);
+    return tVal;
   }
+
 
   /**
    * Clip this polygon in the z direction.
