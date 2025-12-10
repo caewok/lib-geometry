@@ -639,7 +639,7 @@ export class Polygon3d {
 
     // Test 3d bounding box.
     if ( !this.aabb.almostContainsPoint(ix) ) return null;
-    return this._intersectionWithinPolygon(ix) ? t : null;
+    return this._isIntersectionWithinPolygon(ix) ? t : null;
   }
 
   /**
@@ -648,7 +648,7 @@ export class Polygon3d {
    * @param {Point3d} ix
    * @returns {boolean}
    */
-  _intersectionWithinPolygon(ix) {
+  _isIntersectionWithinPolygon(ix) {
     // If the plane is not vertical, can do a simple projection onto the x/y plane as a 2d polygon.
     let poly2d;
     let ix2d;
@@ -1050,7 +1050,7 @@ export class Ellipse3d extends Polygon3d {
    * @param {Point3d} pt
    * @returns {boolean}
    */
-  _intersectionWithinPolygon(ix) {
+  _isIntersectionWithinPolygon(ix) {
     // If the plane is not vertical, can do a simple projection onto the x/y plane as a 2d polygon.
     let ix2d;
     if ( this.plane.normal.z ) ix2d = ix.to2d();
@@ -1482,7 +1482,60 @@ export class Triangle3d extends Polygon3d {
 
   // ----- NOTE: Intersection ----- //
 
+  /**
+   * Möller-Trumbore intersection algorithm for a triangle.
+   * ChatGPT assist
+   * This function first calculates the edge vectors of the triangle and the determinant
+   * of the triangle using the cross product and dot product. It then uses the Möller–Trumbore
+   * intersection algorithm to calculate the intersection point using barycentric coordinates,
+   * and checks if the intersection point is within the bounds of the triangle. If it is,
+   * the function returns the distance from ray origin to point of intersection.
+   * If the ray is parallel to the triangle or the intersection point is outside of the triangle,
+   * the function returns null.
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @returns {number} Distance from ray origin to the point of intersection.
+   *
+   */
+  rayIntersectionMT(rayOrigin, rayDirection) {
+    const [v0, v1, v2] = this.points;
 
+    // Calculate the edge vectors of the triangle
+    const edge1 = v1.subtract(v0);
+    const edge2 = v2.subtract(v0);
+
+    // Calculate the determinant of the triangle
+    const pvec = rayDirection.cross(edge2);
+
+    // If the determinant is near zero, ray lies in plane of triangle
+    const det = edge1.dot(pvec);
+    if (det > -Number.EPSILON && det < Number.EPSILON) {
+      Point3d.release(edge1, edge2, pvec);
+      return null;  // Ray is parallel to triangle
+    }
+    const invDet = 1 / det;
+
+    // Calculate the intersection point using barycentric coordinates
+    const tvec = rayOrigin.subtract(v0);
+    const u = invDet * tvec.dot(pvec);
+    if (u < 0 || u > 1) {
+      Point3d.release(edge1, edge2, pvec, tvec);
+      return null;  // Intersection point is outside of triangle
+    }
+
+    const qvec = tvec.cross(edge1, edge1);
+    const v = invDet * rayDirection.dot(qvec);
+    if (v < 0 || u + v > 1) {
+      Point3d.release(edge1, edge2, pvec, tvec, qvec);
+      return null;  // Intersection point is outside of triangle
+    }
+
+    // Calculate the distance to the intersection point
+    const t = invDet * edge2.dot(qvec);
+    const out = t > Number.EPSILON ? t : null;
+    Point3d.release(edge1, edge2, pvec, tvec, qvec);
+    return out;
+  }
 
   /**
    * Test if a ray intersects the triangle. Does not consider whether this triangle is facing.
@@ -1492,7 +1545,7 @@ export class Triangle3d extends Polygon3d {
    * @returns {t|null} Returns null if not within the triangle
    */
   intersectionT(rayOrigin, rayDirection) {
-    return Plane.rayIntersectionTriangle3d(rayOrigin, rayDirection, this.a, this.b, this.c);
+    return this.rayIntersectionMT(rayOrigin, rayDirection);
   }
 
   /**
@@ -1636,6 +1689,97 @@ export class Quad3d extends Polygon3d {
 //   intersectionT(rayOrigin, rayDirection) {
 //     return Plane.rayIntersectionQuad3dLD(rayOrigin, rayDirection, this.a, this.b, this.c, this.d);
 //   }
+
+
+  /**
+   * Möller-Trumbore intersection algorithm for a quad.
+   * Test the two triangles of the quad.
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @param {Point3d} v0
+   * @param {Point3d} v1
+   * @param {Point3d} v2
+   * @param {Point3d} v3
+   */
+//   static rayIntersectionQuad3d(rayOrigin, rayDirection, v0, v1, v2, v3) {
+//     // Triangles are 0 - 1 - 2 and 1-2-3
+//
+//     return Plane.rayIntersectionTriangle3d(rayOrigin, rayDirection, v0, v1, v2)
+//       ?? Plane.rayIntersectionTriangle3d(rayOrigin, rayDirection, v1, v2, v3);
+//   }
+
+  /**
+   * Lagae-Dutré intersection algorithm for a quad
+   * https://graphics.cs.kuleuven.be/publications/LD04ERQIT/LD04ERQIT_paper.pdf
+   * Appears a bit faster than doing rayIntersectionTriangle3d twice, but depends on setup.
+   * Usually does equal or better.
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @returns {number|null}  Null if no intersection. If negative, the intersection is behind the ray origin.
+   */
+  rayIntersectionLD(rayOrigin, rayDirection) {
+    const [v0, v1, v2, v3] = this.points;
+
+
+    // Reject rays using the barycentric coordinates of the intersection point with respect to T
+    const E01 = v1.subtract(v0);
+    const E03 = v3.subtract(v0);
+    const P = rayDirection.cross(E03);
+    const det = E01.dot(P);
+    if ( Math.abs(det) < Number.EPSILON ) {
+      Point3d.release(E01, E03, P)
+      return null;
+    }
+
+    const T = rayOrigin.subtract(v0);
+    const alpha = T.dot(P) / det;
+    if ( alpha < 0 || alpha > 1 ) {
+      Point3d.release(E01, E03, P, T);
+      return null;
+    }
+
+    const Q = T.cross(E01, E01);
+    const beta = rayDirection.dot(Q) / det;
+    if ( beta < 0 || beta > 1 ) {
+      Point3d.release(E01, E03, P, T, Q);
+      return null;
+    }
+
+    // Done with E01, E03, P, T.
+    Point3d.release(E01, E03, P, T);
+
+
+    // Reject rays using the barycentric coordinates of the intersection point with respect to T'
+    if ( (alpha + beta) > 1 ) {
+      const E23 = v3.subtract(v2);
+      const E21 = v1.subtract(v2);
+      const Pprime = rayDirection.cross(E21, E21);
+      const detprime = E23.dot(Pprime);
+      if ( Math.abs(detprime) < Number.EPSILON ) {
+        Point3d.release(E23, E21, Pprime);
+        return null;
+      }
+
+      const Tprime = rayOrigin.subtract(v2);
+      const alphaprime = Tprime.dot(Pprime) / detprime;
+      if ( alphaprime < 0 ) {
+        Point3d.release(E23, E21, Pprime, Tprime);
+        return null;
+      }
+      const Qprime = Tprime.cross(E23, E23);
+      const betaprime = rayDirection.dot(Qprime) / detprime;
+      Point3d.release(E23, E21, Pprime, Qprime, Tprime, Qprime);
+      if ( betaprime < 0 ) return null;
+    }
+
+    // Compute the ray parameter of the intersection point
+    return E03.dot(Q) / det;
+    // if ( t < 0 ) return null;
+
+    // If barycentric coordinates of the intersection point are needed, this would be done here.
+    // See the original Lagae-Dutré paper.
+    // For current purposes, the estimated point using the ray is likely sufficient.
+  }
 
   /**
    * Clip this polygon in the z direction.
