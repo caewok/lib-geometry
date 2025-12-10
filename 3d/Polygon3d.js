@@ -11,7 +11,7 @@ PIXI,
 import { GEOMETRY_CONFIG } from "../const.js";
 import { Point3d } from "./Point3d.js";
 import { Plane } from "./Plane.js";
-import { almostLessThan, almostGreaterThan, pointsAreCollinear, NULL_SET } from "../util.js";
+import { pointsAreCollinear, NULL_SET } from "../util.js";
 import { AABB3d } from "../AABB.js";
 import { ClipperPaths } from "../ClipperPaths.js";
 import { Clipper2Paths } from "../Clipper2Paths.js";
@@ -638,31 +638,31 @@ export class Polygon3d {
     rayOrigin.add(rayDirection.multiplyScalar(t, ix), ix)
 
     // Test 3d bounding box.
-    let contained = true;
-    const { min, max } = this.aabb;
-    if ( !almostLessThan(ix.x, max.x)
-      || !almostGreaterThan(ix.x, min.x)
-      || !almostLessThan(ix.y, max.y)
-      || !almostGreaterThan(ix.y, min.y)
-      || !almostLessThan(ix.z, max.z)
-      || !almostGreaterThan(ix.z, min.z) ) contained = false;
+    if ( !this.aabb.almostContainsPoint(ix) ) return null;
+    return this._intersectionWithinPolygon(ix) ? t : null;
+  }
 
+  /**
+   * Is a 3d point that is on the plane within the polygon?
+   * Does not check bounding box or if it is in fact on the plane.
+   * @param {Point3d} ix
+   * @returns {boolean}
+   */
+  _intersectionWithinPolygon(ix) {
     // If the plane is not vertical, can do a simple projection onto the x/y plane as a 2d polygon.
-    if ( !contained ) {
-      let poly2d;
-      let ix2d;
-      if ( plane.normal.z ) {
-        poly2d = this.toPolygon2d();
-        ix2d = ix.to2d();
-      } else {
-        poly2d = this.toPlanarPolygon()
-        ix2d = this._convert3dPointsTo2d([ix])[0];
-        ix2d.release();
-      }
-      contained = poly2d.contains(ix2d.x, ix2d.y);
+    let poly2d;
+    let ix2d;
+    if ( this.plane.normal.z ) {
+      poly2d = this.toPolygon2d();
+      ix2d = ix.to2d();
+    } else {
+      poly2d = this.toPlanarPolygon()
+      ix2d = this._convert3dPointsTo2d([ix])[0];
+      ix2d.release();
     }
+    const contained = poly2d.contains(ix2d.x, ix2d.y);
     ix.release();
-    return contained ? t : null;
+    return contained;
   }
 
   /**
@@ -674,7 +674,7 @@ export class Polygon3d {
   intersection(rayOrigin, rayDirection, minT = 0, maxT = Number.POSITIVE_INFINITY) {
     const t = this.intersectionT(rayOrigin, rayDirection);
     if ( t === null || !t.almostBetween(minT, maxT) ) return null;
-
+    if ( t.almostEqual(0) ) return rayOrigin;
     const ix = Point3d.tmp;
     rayOrigin.add(rayDirection.multiplyScalar(t, ix), ix)
     return ix;
@@ -1042,6 +1042,29 @@ export class Ellipse3d extends Polygon3d {
     for ( const pt of poly3d.iteratePoints(opts) ) yield pt;
   }
 
+  // ----- NOTE: Intersection ----- //
+
+  /**
+   * Is a 3d point that is on the plane within the polygon?
+   * Does not check bounding box or if it is in fact on the plane.
+   * @param {Point3d} pt
+   * @returns {boolean}
+   */
+  _intersectionWithinPolygon(ix) {
+    // If the plane is not vertical, can do a simple projection onto the x/y plane as a 2d polygon.
+    let ix2d;
+    if ( this.plane.normal.z ) ix2d = ix.to2d();
+    else {
+      ix2d = this._convert3dPointsTo2d([ix])[0];
+      ix2d.release();
+    }
+    const contained = this.toPlanarEllipse.contains(ix2d.x, ix2d.y);
+    ix.release();
+    return contained;
+  }
+
+
+
   // ----- NOTE: Transformations ----- //
   isValid() {
     this.clean();
@@ -1227,6 +1250,27 @@ export class Circle3d extends Ellipse3d {
     const out = this._convert2dPointsTo3d(latticePoints);
     PIXI.Point.release(...latticePoints);
     return out;
+  }
+
+  // ----- NOTE: Intersection ----- //
+
+  /**
+   * Is a 3d point that is on the plane within the polygon?
+   * Does not check bounding box or if it is in fact on the plane.
+   * @param {Point3d} pt
+   * @returns {boolean}
+   */
+  _intersetionWithinPolygon(ix) {
+    // If the plane is not vertical, can do a simple projection onto the x/y plane as a 2d polygon.
+    let ix2d;
+    if ( this.plane.normal.z ) ix2d = ix.to2d();
+    else {
+      ix2d = this._convert3dPointsTo2d([ix])[0];
+      ix2d.release();
+    }
+    const contained = this.toPlanarCircle.contains(ix2d.x, ix2d.y);
+    ix.release();
+    return contained;
   }
 
   // ----- NOTE: Transformations ----- //
@@ -1451,14 +1495,6 @@ export class Triangle3d extends Polygon3d {
     return Plane.rayIntersectionTriangle3d(rayOrigin, rayDirection, this.a, this.b, this.c);
   }
 
-  intersection(rayOrigin, rayDirection, minT = 0, maxT = Number.POSITIVE_INFINITY) {
-    const t = this.intersectionT(rayOrigin, rayDirection);
-    if ( t === null || !t.almostBetween(minT, maxT) ) return null;
-    if ( t.almostEqual(0) ) return rayOrigin;
-    const ix = Point3d.tmp;
-    return rayOrigin.add(rayDirection.multiplyScalar(t, ix), ix);
-  }
-
   /**
    * Clip this polygon in the z direction.
    * @param {number} z
@@ -1597,17 +1633,9 @@ export class Quad3d extends Polygon3d {
    * @param {Point3d} rayDirection
    * @returns {t|null} Returns null if not within the quad
    */
-  intersectionT(rayOrigin, rayDirection) {
-    return Plane.rayIntersectionQuad3dLD(rayOrigin, rayDirection, this.a, this.b, this.c, this.d);
-  }
-
-  intersection(rayOrigin, rayDirection, minT = 0, maxT = Number.POSITIVE_INFINITY) {
-    const t = this.intersectionT(rayOrigin, rayDirection);
-    if ( t === null || !t.almostBetween(minT, maxT) ) return null;
-    if ( t.almostEqual(0) ) return rayOrigin;
-    const ix = Point3d.tmp;
-    return rayOrigin.add(rayDirection.multiplyScalar(t, ix), ix);
-  }
+//   intersectionT(rayOrigin, rayDirection) {
+//     return Plane.rayIntersectionQuad3dLD(rayOrigin, rayDirection, this.a, this.b, this.c, this.d);
+//   }
 
   /**
    * Clip this polygon in the z direction.
