@@ -1711,7 +1711,6 @@ export class Quad3d extends Polygon3d {
   /**
    * Lagae-Dutré intersection algorithm for a quad
    * https://graphics.cs.kuleuven.be/publications/LD04ERQIT/LD04ERQIT_paper.pdf
-   * https://graphics.cs.kuleuven.be/publications/LD04ERQIT/
    * @param {Point3d} rayOrigin
    * @param {Point3d} rayDirection
    * @returns {number|null}  Null if no intersection. If negative, the intersection is behind the ray origin.
@@ -1720,56 +1719,82 @@ export class Quad3d extends Polygon3d {
     const [v0, v1, v2, v3] = this.points;
     rayDirection = rayDirection.normalize();
 
+    // --- Triangle 1: V0, V1, V3 ---
     // Edge vectors.
-    const e01 = v1.subtract(v0);
-    const e03 = v3.subtract(v0);
+    const edge1 = v1.subtract(v0);
+    const edge2 = v3.subtract(v0);
 
     // Cross product rayDirection × e03.
-    const p = rayDirection.cross(e03);
+    const p = rayDirection.cross(edge2);
 
-    // Determinant
-    const det = e01.dot(p);
+    // Determinant. If close to 0, ray is parallel to plane.
+    const det = edge1.dot(p);
 
     // If determinant is near zero, ray lies in plane of triangle.
     if ( det.almostEqual(0) ) {
-      Point3d.release(rayDirection, e01, e03, p);
+      Point3d.release(rayDirection, edge1, edge2, p);
       return null;
     }
     const invDet = 1.0 / det;
 
     // Vector from v0 to ray origin.
-    const t = rayOrigin.subtract(v0);
+    const tVec = rayOrigin.subtract(v0);
 
-    // Calculate Barycentric u parameter.
-    const u = t.dot(p) * invDet;
+    // Calculate Barycentric u (alpha) parameter.
+    const u = tVec.dot(p) * invDet;
 
-    // Check if intersection is outside the triangle
-    if ( u < 0.0 || u > 1.0 ) {
-      Point3d.release(rayDirection, e01, e03, p);
-      return null;
-    }
-
-    // Calculate Barycentric v parameter.
-    const q = t.cross(e01);
+    // Calculate Barycentric v (beta) parameter.
+    const q = tVec.cross(edge1);
     const v = rayDirection.dot(q) * invDet;
 
-    // Check if intersection is outside the triangle.
-    if ( v < 0.0 || v > 1.0 ) {
-      Point3d.release(rayDirection, e01, e03, p, q);
+    // Check Triangle 1 Intersection:
+    // Condition: alpha >= 0, beta >= 0, alpha + beta <= 1
+    if ( u >= 0.0 && v >= 0.0  && (u + v) <= 1.0 ) {
+      const t = edge2.dot(q) * invDet;
+      if ( !t.almostEqual(0.0) && t > 0.0 ) {
+        Point3d.release(rayDirection, edge1, edge2, p, q, tVec);
+        return t; // Could return { u, v, triangle: 1 }
+      }
+    }
+
+    // --- Triangle 2: V1, V2, V3 ---
+    const edge1Prime = v2.subtract(v1);
+    const edge2Prime = v3.subtract(v1);
+    const pPrime = rayDirection.dot(edge2Prime);
+    const detPrime = edge1Prime.dot(pPrime);
+
+    if ( detPrime.almostEqual(0) ) {
+      Point3d.release(rayDirection, edge1, edge2, p, q, tVec, edge1Prime, edge2Prime);
       return null;
     }
 
-    // Calculate t; ray intersects the triangle.
-    const tVal = e03.dot(q) * invDet;
+    const invDetPrime = 1.0 / detPrime;
+    const tVecPrime = rayOrigin.subtract(v1); // Ray origin relative to V1.
 
-    // Check if intersection is behind the ray origin.
-    if ( tVal < 0.0 ) {
-      Point3d.release(rayDirection, e01, e03, p, q);
+    const uPrime = tVecPrime.dot(pPrime) * invDetPrime; // Aka alphaPrime.
+    if ( uPrime < 0.0 || uPrime > 1.0 ) {
+      Point3d.release(rayDirection, edge1, edge2, p, q, tVec, edge1Prime, edge2Prime, tVecPrime);
       return null;
     }
 
-    Point3d.release(rayDirection, e01, e03, p, q);
-    return tVal;
+    const qPrime = tPrime.cross(edge1Prime);
+    const vPrime = rayDirection.dot(qPrime) * invDetPrime;
+    if ( vPrime < 0.0 || (uPrime + vPrime) > 1.0 ) {
+      Point3d.release(rayDirection, edge1, edge2, p, q, tVec, edge1Prime, edge2Prime, tVecPrime, qPrime);
+      return null;
+    }
+
+    // Hit Triangle 2
+    const tPrime = edge2Prime.dot(qPrime) * invDetPrime;
+    Point3d.release(rayDirection, edge1, edge2, p, q, tVec, edge1Prime, edge2Prime, qPrime, tVecPrime);
+    if ( !tPrime.almostEqual(0) && tPrime > 0.0 ) {
+      // Hit Triangle 2
+      // Note: Mapping barycentric to bilinear for T2 is complex.
+      // Simple approximation: u = 1-beta', v = 1-alpha' (valid for parallelograms)
+      return tPrime; // {u: 1.0 - vPrime, v: 1.0 - uPrime, triangle: 2 }
+    }
+
+    return null;
   }
 
 
