@@ -11,7 +11,7 @@ PIXI,
 import { GEOMETRY_CONFIG } from "../const.js";
 import { Point3d } from "./Point3d.js";
 import { Plane } from "./Plane.js";
-import { pointsAreCollinear, NULL_SET } from "../util.js";
+import { pointsAreCollinear, NULL_SET, almostBetween } from "../util.js";
 import { AABB3d } from "../AABB.js";
 import { ClipperPaths } from "../ClipperPaths.js";
 import { Clipper2Paths } from "../Clipper2Paths.js";
@@ -673,7 +673,7 @@ export class Polygon3d {
    */
   intersection(rayOrigin, rayDirection, minT = 0, maxT = Number.POSITIVE_INFINITY) {
     const t = this.intersectionT(rayOrigin, rayDirection);
-    if ( t === null || !t.almostBetween(minT, maxT) ) return null;
+    if ( t === null || !almostBetween(t, minT, maxT) ) return null;
     if ( t.almostEqual(0) ) return rayOrigin;
     const ix = Point3d.tmp;
     rayOrigin.add(rayDirection.multiplyScalar(t, ix), ix)

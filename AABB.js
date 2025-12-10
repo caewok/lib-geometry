@@ -6,7 +6,7 @@ PIXI,
 import { GEOMETRY_CONFIG } from "./const.js";
 import { Point3d } from "./3d/Point3d.js";
 import { Draw } from "./Draw.js";
-import { almostLessThan, almostGreaterThan } from "./util.js";
+import { almostLessThan, almostGreaterThan, almostBetween } from "./util.js";
 
 const axes = {
   x: new Point3d(1, 0, 0),
@@ -208,7 +208,7 @@ export class AABB2d {
   almostContainsPoint(p, epsilon = 1e-06) {
     const { min, max } = this;
     for ( const axis of this.constructor.axes ) {
-      if ( !p[axis].almostBetween(min[axis], max[axis], epsilon) ) return false
+      if ( !almostBetween(p[axis], min[axis], max[axis], epsilon) ) return false
     }
     return true;
   }
