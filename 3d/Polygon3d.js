@@ -1720,14 +1720,13 @@ export class Quad3d extends Polygon3d {
   rayIntersectionLD(rayOrigin, rayDirection) {
     const [v0, v1, v2, v3] = this.points;
 
-
     // Reject rays using the barycentric coordinates of the intersection point with respect to T
     const E01 = v1.subtract(v0);
     const E03 = v3.subtract(v0);
     const P = rayDirection.cross(E03);
     const det = E01.dot(P);
     if ( Math.abs(det) < Number.EPSILON ) {
-      Point3d.release(E01, E03, P)
+      Point3d.release(E01, E03, P);
       return null;
     }
 
@@ -1745,9 +1744,8 @@ export class Quad3d extends Polygon3d {
       return null;
     }
 
-    // Done with E01, E03, P, T.
-    Point3d.release(E01, E03, P, T);
-
+    // Done with some temp variables. Remaining: E03, Q.
+    Point3d.release(E01, P, T);
 
     // Reject rays using the barycentric coordinates of the intersection point with respect to T'
     if ( (alpha + beta) > 1 ) {
@@ -1756,24 +1754,31 @@ export class Quad3d extends Polygon3d {
       const Pprime = rayDirection.cross(E21, E21);
       const detprime = E23.dot(Pprime);
       if ( Math.abs(detprime) < Number.EPSILON ) {
-        Point3d.release(E23, E21, Pprime);
+        Point3d.release(E23, E21, Pprime, E03, Q);
         return null;
       }
 
       const Tprime = rayOrigin.subtract(v2);
       const alphaprime = Tprime.dot(Pprime) / detprime;
       if ( alphaprime < 0 ) {
-        Point3d.release(E23, E21, Pprime, Tprime);
+        Point3d.release(E23, E21, Pprime, Tprime, E03, Q);
         return null;
       }
       const Qprime = Tprime.cross(E23, E23);
       const betaprime = rayDirection.dot(Qprime) / detprime;
       Point3d.release(E23, E21, Pprime, Qprime, Tprime, Qprime);
-      if ( betaprime < 0 ) return null;
+      if ( betaprime < 0 ) {
+        E03.release();
+        Q.release()
+        return null;
+      }
     }
 
     // Compute the ray parameter of the intersection point
-    return E03.dot(Q) / det;
+    const num = E03.dot(Q);
+    E03.release();
+    Q.release();
+    return num / det;
     // if ( t < 0 ) return null;
 
     // If barycentric coordinates of the intersection point are needed, this would be done here.
