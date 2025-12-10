@@ -1777,7 +1777,7 @@ export class Quad3d extends Polygon3d {
       return null;
     }
 
-    const qPrime = tPrime.cross(edge1Prime);
+    const qPrime = tVecPrime.cross(edge1Prime);
     const vPrime = rayDirection.dot(qPrime) * invDetPrime;
     if ( vPrime < 0.0 || (uPrime + vPrime) > 1.0 ) {
       Point3d.release(rayDirection, edge1, edge2, p, q, tVec, edge1Prime, edge2Prime, tVecPrime, qPrime);
