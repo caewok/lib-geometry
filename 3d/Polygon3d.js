@@ -1719,6 +1719,13 @@ export class Quad3d extends Polygon3d {
     const [v0, v1, v2, v3] = this.points;
     rayDirection = rayDirection.normalize();
 
+    /*
+    v0 --- v1
+     |     |
+     |     |
+    v3 --- v2
+    */
+
     // --- Triangle 1: V0, V1, V3 ---
     // Edge vectors.
     const edge1 = v1.subtract(v0);
@@ -1737,7 +1744,7 @@ export class Quad3d extends Polygon3d {
     }
     const invDet = 1.0 / det;
 
-    // Vector from v0 to ray origin.
+    // Vector to ray origin.
     const tVec = rayOrigin.subtract(v0);
 
     // Calculate Barycentric u (alpha) parameter.
@@ -1758,8 +1765,8 @@ export class Quad3d extends Polygon3d {
     }
 
     // --- Triangle 2: V1, V2, V3 ---
-    const edge1Prime = v2.subtract(v1);
-    const edge2Prime = v3.subtract(v1);
+    const edge1Prime = v1.subtract(v2);
+    const edge2Prime = v3.subtract(v2);
     const pPrime = rayDirection.cross(edge2Prime);
     const detPrime = edge1Prime.dot(pPrime);
 
@@ -1769,7 +1776,7 @@ export class Quad3d extends Polygon3d {
     }
 
     const invDetPrime = 1.0 / detPrime;
-    const tVecPrime = rayOrigin.subtract(v1); // Ray origin relative to V1.
+    const tVecPrime = rayOrigin.subtract(v2); // Vector to ray origin.
 
     const uPrime = tVecPrime.dot(pPrime) * invDetPrime; // Aka alphaPrime.
     if ( uPrime < 0.0 || uPrime > 1.0 ) {
