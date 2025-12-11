@@ -1717,7 +1717,7 @@ export class Quad3d extends Polygon3d {
    */
   rayIntersectionLD(rayOrigin, rayDirection) {
     const [v0, v1, v2, v3] = this.points;
-    rayDirection = rayDirection.normalize();
+    // rayDirection = rayDirection.normalize();
 
     /*
     v0 --- v1
@@ -1739,7 +1739,7 @@ export class Quad3d extends Polygon3d {
 
     // If determinant is near zero, ray lies in plane of triangle.
     if ( det.almostEqual(0) ) {
-      Point3d.release(rayDirection, edge1, edge2, p);
+      Point3d.release(edge1, edge2, p);
       return null;
     }
     const invDet = 1.0 / det;
@@ -1759,7 +1759,7 @@ export class Quad3d extends Polygon3d {
     if ( u >= 0.0 && v >= 0.0  && (u + v) <= 1.0 ) {
       const t = edge2.dot(q) * invDet;
       if ( !t.almostEqual(0.0) && t > 0.0 ) {
-        Point3d.release(rayDirection, edge1, edge2, p, q, tVec);
+        Point3d.release(edge1, edge2, p, q, tVec);
         return t; // Could return { u, v, triangle: 1 }
       }
     }
@@ -1771,7 +1771,7 @@ export class Quad3d extends Polygon3d {
     const detPrime = edge1Prime.dot(pPrime);
 
     if ( detPrime.almostEqual(0) ) {
-      Point3d.release(rayDirection, edge1, edge2, p, q, tVec, edge1Prime, edge2Prime, pPrime);
+      Point3d.release(edge1, edge2, p, q, tVec, edge1Prime, edge2Prime, pPrime);
       return null;
     }
 
@@ -1780,20 +1780,20 @@ export class Quad3d extends Polygon3d {
 
     const uPrime = tVecPrime.dot(pPrime) * invDetPrime; // Aka alphaPrime.
     if ( uPrime < 0.0 || uPrime > 1.0 ) {
-      Point3d.release(rayDirection, edge1, edge2, p, q, tVec, edge1Prime, edge2Prime, tVecPrime, pPrime);
+      Point3d.release(edge1, edge2, p, q, tVec, edge1Prime, edge2Prime, tVecPrime, pPrime);
       return null;
     }
 
     const qPrime = tVecPrime.cross(edge1Prime);
     const vPrime = rayDirection.dot(qPrime) * invDetPrime;
     if ( vPrime < 0.0 || (uPrime + vPrime) > 1.0 ) {
-      Point3d.release(rayDirection, edge1, edge2, p, q, tVec, edge1Prime, edge2Prime, tVecPrime, qPrime, pPrime);
+      Point3d.release(edge1, edge2, p, q, tVec, edge1Prime, edge2Prime, tVecPrime, qPrime, pPrime);
       return null;
     }
 
     // Hit Triangle 2
     const tPrime = edge2Prime.dot(qPrime) * invDetPrime;
-    Point3d.release(rayDirection, edge1, edge2, p, q, tVec, edge1Prime, edge2Prime, qPrime, tVecPrime, pPrime);
+    Point3d.release(edge1, edge2, p, q, tVec, edge1Prime, edge2Prime, qPrime, tVecPrime, pPrime);
     if ( !tPrime.almostEqual(0) && tPrime > 0.0 ) {
       // Hit Triangle 2
       // Note: Mapping barycentric to bilinear for T2 is complex.
