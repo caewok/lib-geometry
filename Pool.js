@@ -12,7 +12,7 @@ export class Pool {
   initialSize = 10;
 
   /** @type {Set<object>} */
-  #pool = new Set();
+  #pool = new Set(); // Probably don't want a weak set b/c we want to reuse the object. Smaller memory if WeakSet used.
 
   /** @type {class} */
   cl;
@@ -55,6 +55,6 @@ export class Pool {
       console.warn("Pool object does not match other instance in the pool.", { cl, obj });
       return;
     }
-    this.#pool.add(obj);
+    this.#pool.add(obj); // Important that the object here is only added once.
   }
 }

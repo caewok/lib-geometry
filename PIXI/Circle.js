@@ -408,7 +408,21 @@ function segmentIntersectionsGeometric(a, b) {
   return intersections;
 }
 
+/**
+ * Create a grid of points within this circle.
+ * @param {object} [opts]
+ * @param {number} [opts.spacing = 1]              How many pixels between each point?
+ * @param {boolean} [opts.startAtEdge = false]     Are points allowed within spacing of the edges? Otherwise will be at least spacing away.
+ * @returns {PIXI.Point[]} Points in order from left to right, top to bottom.
+ */
+function pointsLattice({ spacing = 1, startAtEdge = false } = {}) {
+  const cir = startAtEdge ? this : new PIXI.Circle(this.x, this.y, Math.max(this.radius - spacing, 1));
+  const bounds = cir.getBounds();
+  const pts = bounds.pointsLattice({ spacing, startAtEdge: true }); // Start at edge b/c already padded the polygon.
 
+  // For arbitrary circle, unfortunately have to test the bounds for each.
+  return pts.filter(pt => this.contains(pt.x, pt.y));
+}
 
 PATCHES.PIXI.GETTERS = { area };
 
@@ -419,6 +433,7 @@ PATCHES.PIXI.METHODS = {
   lineSegmentIntersects,
   segmentIntersectionsGeometric,
   segmentIntersections,
+  pointsLattice,
 
   // Equality
   equals,

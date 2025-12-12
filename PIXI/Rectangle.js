@@ -482,6 +482,27 @@ function normalizeDegrees(degrees) {
 }
 
 
+/**
+ * Create a grid of points within this rectangle.
+ * @param {object} [opts]
+ * @param {number} [opts.spacing = 1]              How many pixels between each point?
+ * @param {boolean} [opts.startAtEdge = false]     Are points allowed within spacing of the edges? If false, will be at least spacing away.
+ * @returns {PIXI.Point[]} Points in order from left to right, top to bottom.
+ */
+function pointsLattice({ spacing = 1, startAtEdge = false } = {}) {
+  const { left, right, top, bottom } = this;
+  const pts = [];
+  const startX = startAtEdge ? left : left + spacing;
+  const startY = startAtEdge ? top : top + spacing;
+  const endX = startAtEdge ? right : right - spacing;
+  const endY = startAtEdge ? bottom : bottom - spacing;
+  for ( let x = startX; x <= endX; x += spacing ) {
+    for ( let y = startY; y <= endY; y += spacing ) pts.push(new PIXI.Point(x, y))
+  }
+  return pts;
+}
+
+
 PATCHES.PIXI.STATIC_METHODS = { gridRectangles };
 
 PATCHES.PIXI.GETTERS = { area };
@@ -500,6 +521,7 @@ PATCHES.PIXI.METHODS = {
   difference,
   translate,
   viewablePoints,
+  pointsLattice,
 
   // Overlap methods
   overlaps,

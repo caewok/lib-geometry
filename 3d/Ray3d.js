@@ -1,8 +1,8 @@
 /* globals
 canvas,
 CONST,
+foundry,
 PIXI,
-Ray,
 */
 "use strict";
 
@@ -16,7 +16,7 @@ import { instanceOrTypeOf } from "../util.js";
  * @param {Point3d|Point} A
  * @param {Point3d|Point} B
  */
-export class Ray3d extends Ray {
+export class Ray3d extends foundry.canvas.geometry.Ray {
   constructor(A, B) {
     if ( !instanceOrTypeOf(A, Point3d) ) A = new Point3d(A.x, A.y, A.z);
     if ( !instanceOrTypeOf(B, Point3d) ) B = new Point3d(B.x, B.y, B.z);
@@ -87,9 +87,9 @@ export class Ray3d extends Ray {
    * @returns {Ray} The new 2d ray
    */
   projectOntoCanvas() {
-    if ( this.dz.almostEqual(0) ) return new Ray(this.A.to2d({x: "x", y: "y"}), this.B.to2d({x: "x", y: "y"}));
-    if ( this.dx.almostEqual(0) ) return new Ray(this.A.to2d({x: "z", y: "y"}), this.B.to2d({x: "z", y: "y"}));
-    if ( this.dy.almostEqual(0) ) return new Ray(this.A.to2d({x: "x", y: "z"}), this.B.to2d({x: "x", y: "z"}));
+    if ( this.dz.almostEqual(0) ) return new foundry.canvas.geometry.Ray(this.A.to2d({x: "x", y: "y"}), this.B.to2d({x: "x", y: "y"}));
+    if ( this.dx.almostEqual(0) ) return new foundry.canvas.geometry.Ray(this.A.to2d({x: "z", y: "y"}), this.B.to2d({x: "z", y: "y"}));
+    if ( this.dy.almostEqual(0) ) return new foundry.canvas.geometry.Ray(this.A.to2d({x: "x", y: "z"}), this.B.to2d({x: "x", y: "z"}));
 
     switch ( canvas.grid.type ) {
       case CONST.GRID_TYPES.GRIDLESS: return this._projectGridless();
@@ -126,7 +126,7 @@ export class Ray3d extends Ray {
     A.y -= ratio * this.dx;
 
    // Debug: console.log(`Projecting Gridless: A: (${this.A.x},${this.A.y},${this.A.z})->(${A.x}, ${A.y}); B: (${this.B.x}, ${this.B.y}, ${this.B.z})->(${B.x}, ${B.y})`);
-    return new Ray(A, B);
+    return new foundry.canvas.geometry.Ray(A, B);
   }
 
   /**
@@ -176,7 +176,7 @@ export class Ray3d extends Ray {
 
     // Debug: console.log(`Projecting Square: A: (${this.A.x},${this.A.y},${this.A.z})->(${A.x},${A.y}); B: (${this.B.x},${this.B.y},${this.B.z})->(${B.x},${B.y})`);
 
-    return new Ray(A, B);
+    return new foundry.canvas.geometry.Ray(A, B);
   }
 
   /**
@@ -204,7 +204,7 @@ export class Ray3d extends Ray {
 
     // Debug: console.log(`Projecting South: A: (${this.A.x},${this.A.y},${this.A.z})->(${A.x},${A.y}); B: (${this.B.x},${this.B.y},${this.B.z})->(${B.x},${B.y})`);
 
-    return new Ray(A, B);
+    return new foundry.canvas.geometry.Ray(A, B);
   }
 
   /**
@@ -232,6 +232,6 @@ export class Ray3d extends Ray {
 
     // Debug: log(`Projecting East: A: (${this.A.x},${this.A.y},${this.A.z})->(${A.x},${A.y}); B: (${this.B.x},${this.B.y},${this.B.z})->(${B.x},${B.y})`);
 
-    return new Ray(A, B);
+    return new foundry.canvas.geometry.Ray(A, B);
   }
 }
