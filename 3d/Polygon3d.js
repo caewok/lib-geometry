@@ -1763,6 +1763,7 @@ export class Quad3d extends Polygon3d {
         return t; // Could return { u, v, triangle: 1 }
       }
     }
+    Point3d.release(edge1, edge2, p, q, tVec)
 
     // --- Triangle 2: V1, V2, V3 ---
     const edge1Prime = v1.subtract(v2);
@@ -1771,7 +1772,7 @@ export class Quad3d extends Polygon3d {
     const detPrime = edge1Prime.dot(pPrime);
 
     if ( detPrime.almostEqual(0) ) {
-      Point3d.release(edge1, edge2, p, q, tVec, edge1Prime, edge2Prime, pPrime);
+      Point3d.release(edge1Prime, edge2Prime, pPrime);
       return null;
     }
 
@@ -1780,20 +1781,20 @@ export class Quad3d extends Polygon3d {
 
     const uPrime = tVecPrime.dot(pPrime) * invDetPrime; // Aka alphaPrime.
     if ( uPrime < 0.0 || uPrime > 1.0 ) {
-      Point3d.release(edge1, edge2, p, q, tVec, edge1Prime, edge2Prime, tVecPrime, pPrime);
+      Point3d.release(edge1Prime, edge2Prime, tVecPrime, pPrime);
       return null;
     }
 
     const qPrime = tVecPrime.cross(edge1Prime);
     const vPrime = rayDirection.dot(qPrime) * invDetPrime;
     if ( vPrime < 0.0 || (uPrime + vPrime) > 1.0 ) {
-      Point3d.release(edge1, edge2, p, q, tVec, edge1Prime, edge2Prime, tVecPrime, qPrime, pPrime);
+      Point3d.release(edge1Prime, edge2Prime, tVecPrime, qPrime, pPrime);
       return null;
     }
 
     // Hit Triangle 2
     const tPrime = edge2Prime.dot(qPrime) * invDetPrime;
-    Point3d.release(edge1, edge2, p, q, tVec, edge1Prime, edge2Prime, qPrime, tVecPrime, pPrime);
+    Point3d.release(edge1Prime, edge2Prime, qPrime, tVecPrime, pPrime);
     if ( !tPrime.almostEqual(0) && tPrime > 0.0 ) {
       // Hit Triangle 2
       // Note: Mapping barycentric to bilinear for T2 is complex.
