@@ -6,10 +6,7 @@ PIXI,
 import { GEOMETRY_CONFIG } from "./const.js";
 import { Point3d } from "./3d/Point3d.js";
 import { Draw } from "./Draw.js";
-import { almostLessThan, almostGreaterThan } from "./util.js";
-
-const ptOnes = new Point3d(1, 1, 1);
-Object.freeze(ptOnes);
+import { almostLessThan, almostGreaterThan, almostBetween } from "./util.js";
 
 const axes = {
   x: new Point3d(1, 0, 0),
@@ -20,10 +17,10 @@ Object.freeze(axes.x);
 Object.freeze(axes.y);
 Object.freeze(axes.z);
 
+
 /* Axis-aligned bounding box
   Represent a bounding box as a minimum and maximum point in 2d or 3d.
 */
-
 export class AABB2d {
   static POINT_CLASS = PIXI.Point;
 
@@ -35,16 +32,22 @@ export class AABB2d {
   /** @type {PIXI.Point} */
   max = new this.constructor.POINT_CLASS(Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY);
 
+  release() {
+    this.min.release();
+    this.max.release();
+  }
+
   /**
    * The width (delta) along each axis.
    * @returns {Point3d}
    */
   getDelta(out) {
-    out ??= Point3d.tmp;
+    out ??= this.constructor.POINT_CLASS.tmp;
     return this.max.subtract(this.min, out);
   }
 
   getCenter(out) {
+    out ??= this.constructor.POINT_CLASS.tmp;
     const delta = this.getDelta();
     this.min.add(delta.multiplyScalar(0.5, out), out);
     delta.release();
@@ -131,6 +134,21 @@ export class AABB2d {
   }
 
   /**
+   * @param {PIXI.Circle|PIXI.Ellipse|PIXI.Rectangle|PIXI.Polygon}
+   * @returns {AABB2d}
+   */
+  static fromShape(shape, out) {
+    out ??= new this();
+    if ( shape instanceof PIXI.Rectangle ) this.fromRectangle(shape, out);
+    else if ( shape instanceof PIXI.Polygon ) this.fromPolygon(shape, out);
+    else if ( shape instanceof PIXI.Circle ) this.fromCircle(shape, out);
+    else if ( shape instanceof PIXI.Ellipse ) this.fromEllipse(shape, out);
+    else if ( shape.toPolygon ) this.fromPolygon(shape.toPolygon(), out);
+    else throw Error("AABB2d.fromShape|Shape not recognized", shape);
+    return out;
+  }
+
+  /**
    * @param {Tile} tile
    * @returns {AABB2d}
    */
@@ -166,7 +184,7 @@ export class AABB2d {
    */
   static fromToken(token, out) {
     const border = token.tokenBorder;
-    return border instanceof PIXI.Rectangle ? this.fromRectangle(border, out) : this.fromPolygon(border, out);
+    return this.fromShape(border, out);
   }
 
   /**
@@ -190,7 +208,7 @@ export class AABB2d {
   almostContainsPoint(p, epsilon = 1e-06) {
     const { min, max } = this;
     for ( const axis of this.constructor.axes ) {
-      if ( !p[axis].almostBetween(min[axis], max[axis], epsilon) ) return false
+      if ( !almostBetween(p[axis], min[axis], max[axis], epsilon) ) return false
     }
     return true;
   }
@@ -361,7 +379,7 @@ export class AABB3d extends AABB2d {
    * @param {number} [minZ=maxZ]
    * @returns {AABB3d}
    */
-  static fromAABB2d(aabb2d, maxZ = 0, minZ = maxZ, out) {
+  static fromAABB2d(aabb2d, out, { maxZ = 0, minZ = maxZ } = {}) {
     out ??= new this();
     out.min.set(aabb2d.min.x, aabb2d.min.y, minZ);
     out.max.set(aabb2d.max.z, aabb2d.max.y, maxZ);
@@ -373,8 +391,9 @@ export class AABB3d extends AABB2d {
    * @param {number} [elevationZ=0]         Intended elevation in the z axis
    * @returns {AABB3d}
    */
-  static fromCircle(circle, maxZ = 0, minZ = maxZ, out) {
-    out = super.fromCircle(circle, out);
+  static fromCircle(circle, out, { maxZ = 0, minZ = maxZ } = {}) {
+    out ??= new this();
+    super.fromCircle(circle, out);
     out.min.z = minZ;
     out.max.z = maxZ;
     return out;
@@ -385,8 +404,9 @@ export class AABB3d extends AABB2d {
    * @param {number} [elevationZ=0]         Intended elevation in the z axis
    * @returns {AABB3d}
    */
-  static fromEllipse(ellipse, maxZ = 0, minZ = maxZ, out) {
-    out = super.fromEllipse(ellipse, out);
+  static fromEllipse(ellipse, out, { maxZ = 0, minZ = maxZ } = {}) {
+    out ??= new this();
+    super.fromEllipse(ellipse, out);
     out.min.z = minZ;
     out.max.z = maxZ;
     return out;
@@ -397,8 +417,9 @@ export class AABB3d extends AABB2d {
    * @param {number} [elevationZ=0]         Intended elevation in the z axis
    * @returns {AABB3d}
    */
-  static fromRectangle(rect, maxZ = 0, minZ = maxZ, out) {
-    out = super.fromRectangle(rect, out);
+  static fromRectangle(rect, out, { maxZ = 0, minZ = maxZ } = {}) {
+    out ??= new this();
+    super.fromRectangle(rect, out);
     out.min.z = minZ;
     out.max.z = maxZ;
     return out;
@@ -409,9 +430,17 @@ export class AABB3d extends AABB2d {
    * @param {number} [elevationZ=0]         Intended elevation in the z axis
    * @returns {AABB3d}
    */
+  static fromPolygon(poly, out, { maxZ = 0, minZ = maxZ } = {}) {
+    out ??= new this();
+    super.fromPolygon(poly, out);
+    out.min.z = minZ;
+    out.max.z = maxZ;
+    return out;
+  }
 
-  static fromPolygon(poly, maxZ = 0, minZ = maxZ, out) {
-    out = super.fromPolygon(poly, out);
+  static fromShape(shape, out, { maxZ = 0, minZ = maxZ } = {}) {
+    out ??= new this();
+    super.fromShape(shape, out);
     out.min.z = minZ;
     out.max.z = maxZ;
     return out;
@@ -423,6 +452,18 @@ export class AABB3d extends AABB2d {
    */
   static fromTile(tile, out) {
     out = super.fromTile(tile, out);
+    const elevZ = tile.elevationZ;
+    out.max.z = elevZ;
+    out.min.z = elevZ;
+    return out;
+  }
+
+  /**
+   * @param {Tile} tile
+   * @returns {AABB3d}
+   */
+  static fromTileAlpha(tile, alphaThreshold, out) {
+    out = super.fromTileAlpha(tile, alphaThreshold, out);
     const elevZ = tile.elevationZ;
     out.max.z = elevZ;
     out.min.z = elevZ;

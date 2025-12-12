@@ -118,13 +118,36 @@ export class Draw {
    * @param {Number}  alpha   Transparency level.
    * @param {Number}  width   Width of the line in pixels.
    */
-  segment(s, { color = Draw.COLORS.blue, alpha = 1, width = 1 } = {}) {
+  segment(s, { color = Draw.COLORS.blue, alpha = 1, width = 1, dashLength = 0, gapLength = 0 } = {}) {
     // Handle Wall, Edge, other
     const A = s.edge?.a ?? s.a ?? s.A;
     const B = s.edge?.b ?? s.b ?? s.B;
+
     this.g.lineStyle(width, color, alpha)
-      .moveTo(A.x, A.y)
-      .lineTo(B.x, B.y);
+    if ( !(dashLength && gapLength) ) this.g
+        .moveTo(A.x, A.y)
+        .lineTo(B.x, B.y);
+    else {
+      // Move from t = 0 to t = 1.
+      // Calculate the percent t for dash and gap lengths.
+      const delta = B.subtract(A);
+      const dist = delta.magnitude();
+      delta.release();
+      const gapT = gapLength / dist;
+      const dashT = dashLength / dist;
+      let t = 0;
+      const current = A.clone();
+      while ( t < 1 ) {
+        this.g.moveTo(current.x, current.y);
+        t += dashT;
+        t = Math.min(t, 1); // Don't go past B.
+        A.projectToward(B, t, current);
+        this.g.lineTo(current.x, current.y);
+        t += gapT;
+        A.projectToward(B, t, current);
+      }
+      current.release();
+    }
   }
 
   /**
@@ -152,9 +175,11 @@ export class Draw {
    * @param {hex|null}[fill=null]             Color of the fill, if any.
    * @param {number}  [fillAlpha=1]           Alpha of the fill, if any.
    */
-  shape(shape, { color = Draw.COLORS.black, width = 1, fill = null, fillAlpha = 1 } = {}) {
+  shape(shape, { color = Draw.COLORS.black, width = 1, alpha, fill = null, fillAlpha } = {}) {
+    alpha ??= 1;
+    fillAlpha ??= alpha;
     if ( fill ) this.g.beginFill(fill, fillAlpha);
-    this.g.lineStyle(width, color).drawShape(shape);
+    this.g.lineStyle(width, color, alpha).drawShape(shape);
     if ( fill ) this.g.endFill();
   }
 

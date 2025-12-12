@@ -461,6 +461,7 @@ export class MatrixFlat {
       M.setIndex(2, 2, -1);         // DIAG2
       M.setIndex(3, 2, -2 * zNear); // A
     }
+    return M;
 
     /*
       DIAG0,   0,    0,      0,
@@ -496,6 +497,7 @@ export class MatrixFlat {
       M.setIndex(2, 2, -1);         // DIAG2
       M.setIndex(3, 2, -zNear);     // A
     }
+    return M;
 
     /*
       DIAG0,   0,    0,      0,
@@ -564,8 +566,6 @@ export class MatrixFlat {
    * @returns {Matrix} 4x4 matrix
    */
   static lookAt(cameraPosition, targetPosition, up, M, Minv) {
-    const Point3d = Point3d;
-
     // NOTE: Foundry uses a left-hand coordinate system, with y reversed.
     const zAxis = Point3d.tmp;
     cameraPosition.subtract(targetPosition, zAxis); // ZAxis = forward

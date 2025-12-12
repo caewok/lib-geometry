@@ -1,4 +1,5 @@
-/* globals
+	/* globals
+foundry,
 PIXI,
 */
 "use strict";
@@ -7,10 +8,13 @@ import { GEOMETRY_CONFIG } from "../const.js";
 import { Polygon3d, Circle3d } from "./Polygon3d.js";
 import { Point3d } from "./Point3d.js";
 import { MatrixFlat } from "../MatrixFlat.js";
+import { almostBetween } from "../util.js";
 
 /* Sphere
 Represent a 3d sphere, with some functions to manipulate it.
 */
+
+Math.GOLDEN_RATIO = (1 + Math.sqrt(5)) / 2;
 
 export class Sphere {
 
@@ -84,6 +88,137 @@ export class Sphere {
     // Project onto the circle plane and test for overlap.
     const circle2d = circle3d.toPlanarCircle();
     return sphereCircle.overlaps(circle2d);
+  }
+
+  /**
+   * Locate the closest point on the line a|b to the sphere.
+   * @param {Point3d} a
+   * @param {Point3d} b
+   * @returns {Point3d}
+   */
+  closestPointToSegment(a, b) {
+    const { center } = this;
+    const closest2d = foundry.utils.closestPointToSegment(center, a, b);
+
+		// Test endpoints as needed.
+		if ( closest2d.x.almostEqual(a.x) && closest2d.y.almostEqual(a.y) ) {
+			closest2d.release();
+			return a.clone();
+		}
+		if ( closest2d.x.almostEqual(b.x) && closest2d.y.almostEqual(a.y) ) {
+			closest2d.release();
+			return b.clone();
+		}
+		if ( closest2d.x.almostEqual(center.x) && closest2d.y.almostEqual(center.y) ) {
+		  closest2d.release();
+		  return center.clone();
+		}
+
+		// Closest point is somewhere on the a|b line.
+		// Given x|y intersection on 3d line, find the z value. Use rate of change along each axis.
+		const delta = b.subtract(a);
+		const maxAxis = Math.abs(delta.x) > Math.abs(delta.y) ? "x" : "y";
+		const t = (closest2d[maxAxis] - a[maxAxis]) / delta[maxAxis];
+
+		const closest3d = Point3d.tmp;
+		a.add(delta.multiplyScalar(t, closest3d), closest3d); // From PIXI.Point#projectToward.
+    closest2d.release();
+    delta.release();
+    return closest3d;
+  }
+
+  /**
+   * Intersect this sphere with a line
+   */
+  lineIntersections(a, b) {
+ 		/*
+		a--ix0----cl-----ix1--b
+				\   |
+				 \  |
+					\ |
+					 \|
+						c
+
+		∆abc such that x|c is less than or equal to radius length. May also have an y|c
+
+		If a|b is a line, then closest point forms right triangle with a|ix|cl
+		If a|b runs through cl, then intersection is for the circle (sphere maximum extent) at appropriate z values.
+		if cl|ix greater than radius, no intersection.
+
+		We know length of c|x, c|ix, c|y. And length of c|x == length of c|y.
+		So use Pythagorean to get length from ix to x. (ix to y is same length)
+		x|ix ^ 2 + c|ix ^2 = c|x ^ 2
+		x|ix = sqrt(c|x ^ 2 - c|ix ^ 2)
+	  */
+
+		const { center, radiusSquared } = this;
+		const closest3d = this.closestPointToSegment(a, b);
+		const distSquared = Point3d.distanceSquaredBetween(closest3d, center);
+		if ( radiusSquared.almostEqual(distSquared) ) return [closest3d];
+		if ( radiusSquared > distSquared ) return [];
+		if ( distSquared.almostEqual(0) ) return center.clone();
+
+		// Determine length from closest point to the first intersection.
+		const xDistSquared = distSquared + radiusSquared;
+
+		// Depending on where a and b are located w/r/t ix, move in given direction.
+		// Treat segment as line
+		const aPrime = a.towardsPointSquared(b, Number.MIN_SAFE_INTEGER);
+		const bPrime = b.towardsPointSquared(a, Number.MIN_SAFE_INTEGER);
+		const ix0 = closest3d.towardsPointSquared(aPrime, xDistSquared);
+		const ix1 = closest3d.towardsPointSquared(bPrime, xDistSquared);
+
+		return [ix0, ix1];
+  }
+
+  /**
+   * Intersect this sphere with a segment.
+   * @param {Point3d} a
+   * @param {Point3d} b
+   * @returns {Point3d[]}
+   */
+  lineSegmentIntersections(a, b, { inside = false } = {}) {
+    const out = [...this.rayIntersectionTo(a, b.subtract(a)).filter(t => almostBetween(t, 0, 1))];
+    if ( inside ) {
+      if ( this.contains(a) ) out.push(a);
+      if ( this.contains(b) ) out.push(b);
+    }
+
+    return ;
+  }
+
+  /**
+   * Intersect this sphere with a ray.
+   * @param {Point3d} a
+   * @param {Point3d} b
+   * @returns {number[]}
+   */
+  rayIntersectionT(a, rayDirection) {
+    const b = a.add(rayDirection);
+    const ixs = this.lineIntersections(a, b);
+    b.release();
+    if ( !ixs.length ) return ixs;
+
+		// Determine if ix0 and ix1 are between a and b.
+		const delta = rayDirection;
+		const maxAxis = (delta.x > delta.y && delta.x > delta.z) ? "x"
+		  : (delta.y > delta.x && delta.y) > delta.z ? "y" : "z"
+		return ixs.map(ix => (ix[maxAxis] - a[maxAxis]) / delta[maxAxis]);
+  }
+
+  /**
+   * Does a line segment intersect this sphere?
+   * @param {Point3d} a
+   * @param {Point3d} b
+   * @returns {boolean}
+   */
+  lineSegmentIntersects(a, b) {
+    // Closest point on the line segment must be within the sphere; test using the sphere center and radius.
+    const { center, radiusSquared } = this;
+    const closest3d = this.closestPointToSegment(a, b);
+    const out = radiusSquared < Point3d.distanceSquaredBetween(center, closest3d);
+    closest3d.release();
+    return out;
   }
 
   /**
@@ -363,6 +498,289 @@ export class Sphere {
     out.radiusSquared = Point3d.distanceSquaredBetween(this.center, a);
     out.center.set(Dx * invDetA, Dy * invDetA, Dz * invDetA);
     return out;
+  }
+
+  /**
+   * Distribute points evenly around a sphere.
+   *
+   * https://stackoverflow.com/questions/9600801/evenly-distributing-n-points-on-a-sphere
+   * https://arxiv.org/pdf/0912.4540
+   * @param {number} count
+   * @returns {Point3d[]}
+   */
+  /*
+  static fibonacciLattice(count = 1000) {
+    const out = new Array(count);
+    const phi = Math.PI * (Math.sqrt(5) - 1); // Golden angle in radians.
+    const n = count - 1;
+    for ( let i = 0; i < count; i += 1 ) {
+      const y = 1 - (i / n) * 2; // y goes from 1 to -1.
+      const radius = Math.sqrt(1 - (y ** 2)); // Radius at y.
+      const theta = phi * i; // Golden angel increment.
+      const x = Math.cos(theta) * radius;
+      const z = Math.sin(theta) * radius;
+      out[i] = Point3d.tmp.set(x, y, z);
+    }
+    return out;
+  }
+  */
+
+  static pointsLattice(count, ...args) {
+    // Handle small counts special.
+    if ( count <= 0 ) return Point3d.tmp.set(0, 0, 0); // Special: Center point
+    if ( count === 1 ) return Point3d.tmp.set(0, 0, 1); // top
+    if ( count === 2 ) return [Point3d.tmp.set(0, 0, 1), Point3d.tmp.set(0, 0, -1)]; // Poles
+    if ( count < 7 ) return this.octahedron; // 3–6 points: return 6 points
+    if ( count < 9 ) return this.squareAntiprism; // 7–8 points: return 8 points
+    if ( count < 13 ) return this.icosahedron; // 9–12 points: return 12 points
+    if ( count < 21 ) return this.dodecahedron; // 13–20 points: return 20 points
+    return this.fibonacciLattice(count, ...args);
+  }
+
+  // https://extremelearning.com.au/evenly-distributing-points-on-a-sphere/
+  static fibonacciLattice(count = 1000, e = 7/2, poles = true) {
+    const out = new Array(count);
+    const denom = count - 1 + (2 * e);
+    for ( let i = 0; i < count; i += 1 ) {
+      const tx = (i + e) / denom;
+      const ty = i / Math.GOLDEN_RATIO;
+
+      const theta = Math.acos(2*tx - 1) - (Math.PI / 2);
+      const phi = 2 * Math.PI * ty;
+
+      const x = Math.cos(theta) * Math.cos(phi);
+      const y = Math.cos(theta) * Math.sin(phi);
+      const z = Math.sin(theta);
+
+      out[i] = Point3d.tmp.set(x, y, z);
+    }
+
+    // Define poles separately.
+    if ( poles ) {
+      out[0].set(0, 0, 1);
+      out[count - 1].set(0, 0, -1);
+    }
+
+    return out;
+  }
+
+  /*
+  count = 1000;
+  pts = Sphere.fibonacciLattice(count);
+  pts = Sphere.triangleLattice(count)
+
+  pts = fibonacciLattice4(count, 1/2, false);
+  pts = fibonacciLattice4(count, 3/2, false);
+  pts = fibonacciLattice4(count, 3/2, true);
+  pts = fibonacciLattice4(count, 7/2, false);
+  pts = fibonacciLattice4(count, 7/2, true);
+
+  score = function(pts) {
+    maxDistArr = new Array(pts.length)
+		for ( let i = 0; i < pts.length; i += 1 ) {
+			let minDist = Number.POSITIVE_INFINITY;
+			const a = pts[i];
+			for ( let j = 0; j < pts.length; j += 1 ) {
+				if ( i === j ) continue;
+				const b = pts[j];
+				minDist = Math.min(minDist, Point3d.distanceBetween(a, b));
+			}
+			maxDistArr[i] = minDist
+		}
+    return Math.min(...maxDistArr) * Math.sqrt(pts.length)
+  }
+
+  fn = fibonacciLattice4
+  e = 3/2
+  poles = true
+  res = {}
+  for ( const count of [25, 50, 75, 100, 200, 1000] ) {
+    const pts = fn(count, e, poles)
+    res[count] = score(pts)
+  }
+  console.table(res)
+  */
+
+
+
+  /**
+   * Diamond shape.
+   * https://en.wikipedia.org/wiki/Octahedron
+   * Evenly distributes 6 points on a sphere.
+   */
+  static get octahedron() {
+    return [
+      Point3d.tmp.set(0, 0, 1), // North pole.
+      Point3d.tmp.set(0, 0, -1), // South pole.
+      Point3d.tmp.set(1, 0, 0), // East
+      Point3d.tmp.set(-1, 0, 0), // West
+      Point3d.tmp.set(0, 1, 0), // North
+      Point3d.tmp.set(0, -1, 0), // South
+    ];
+  }
+
+  /**
+   * Triangle sides with square caps.
+   * https://en.wikipedia.org/wiki/Square_antiprism
+   * Evenly distributes 8 points on a sphere.
+   */
+  static get squareAntiprism() {
+    return [
+      // Top square
+      Point3d.tmp.set(0, 0, 1),
+      Point3d.tmp.set(0, 0, -1),
+      Point3d.tmp.set(1, 0, 0),
+      Point3d.tmp.set(-1, 0, 0), // West
+
+      // Bottom square
+      Point3d.tmp.set(0, 1, 0), // North
+      Point3d.tmp.set(0, -1, 0), // South
+      Point3d.tmp.set(0, 1, 0),
+      Point3d.tmp.set(0, 1, 0),
+    ];
+  }
+
+  /**
+   * 20-sided die (12 points).
+   * https://en.wikipedia.org/wiki/Icosahedron
+   * Evenly distributes 12 points on a sphere.
+   */
+  static get icosahedron() {
+    const out = [
+      Point3d.tmp.set(Math.GOLDEN_RATIO, 1, 0),
+      Point3d.tmp.set(Math.GOLDEN_RATIO, -1, 0),
+      Point3d.tmp.set(-Math.GOLDEN_RATIO, 1, 0),
+      Point3d.tmp.set(-Math.GOLDEN_RATIO, -1, 0),
+
+      Point3d.tmp.set(1, 0, Math.GOLDEN_RATIO),
+      Point3d.tmp.set(1, 0, -Math.GOLDEN_RATIO),
+      Point3d.tmp.set(-1, 0, Math.GOLDEN_RATIO),
+      Point3d.tmp.set(-1, 0, -Math.GOLDEN_RATIO),
+
+      Point3d.tmp.set(0, Math.GOLDEN_RATIO, 1),
+      Point3d.tmp.set(0, Math.GOLDEN_RATIO, -1),
+      Point3d.tmp.set(0, -Math.GOLDEN_RATIO, 1),
+      Point3d.tmp.set(0, -Math.GOLDEN_RATIO, -1),
+    ];
+
+    // Normalize to 1. (All points have same length here.)
+    const mult = 1 / out[0].magnitude();
+    out.forEach(pt => pt.multiplyScalar(mult, pt));
+    return out;
+  }
+
+  /**
+   * 20-point polyhedron.
+   * https://en.wikipedia.org/wiki/Regular_dodecahedron
+   * Evenly distributes 20 points on a sphere.
+   */
+  static get dodecahedron() {
+    // See Wikipedia diagram of vertices.
+    const invGR = 1 / Math.GOLDEN_RATIO;
+    const out = [
+      // Inscribed cube
+      Point3d.tmp.set(1, 1, 1),
+      Point3d.tmp.set(1, 1, -1),
+      Point3d.tmp.set(1, -1, 1),
+      Point3d.tmp.set(1, -1, -1),
+
+      Point3d.tmp.set(-1, 1, 1),
+      Point3d.tmp.set(-1, 1, -1),
+      Point3d.tmp.set(-1, -1, 1),
+      Point3d.tmp.set(-1, -1, -1),
+
+      // Green vertices
+      Point3d.tmp.set(0, Math.GOLDEN_RATIO, invGR),
+      Point3d.tmp.set(0, Math.GOLDEN_RATIO, -invGR),
+      Point3d.tmp.set(0, -Math.GOLDEN_RATIO, invGR),
+      Point3d.tmp.set(0, -Math.GOLDEN_RATIO, -invGR),
+
+      // Blue vertices
+      Point3d.tmp.set(invGR, 0, Math.GOLDEN_RATIO),
+      Point3d.tmp.set(invGR, 0, -Math.GOLDEN_RATIO),
+      Point3d.tmp.set(-invGR, 0, Math.GOLDEN_RATIO),
+      Point3d.tmp.set(-invGR, 0, -Math.GOLDEN_RATIO),
+
+      // Pink vertices
+      Point3d.tmp.set(Math.GOLDEN_RATIO, invGR, 0),
+      Point3d.tmp.set(Math.GOLDEN_RATIO, -invGR, 0),
+      Point3d.tmp.set(-Math.GOLDEN_RATIO, invGR, 0),
+      Point3d.tmp.set(-Math.GOLDEN_RATIO, -invGR, 0),
+    ];
+
+    // Normalize to 1. (All points have same length here.)
+    const mult = 1 / out[0].magnitude();
+    out.forEach(pt => pt.multiplyScalar(mult, pt));
+    return out;
+  }
+
+  /**
+   * Evenly split based on octahedron and then split the triangles to form pyramid shapes.
+   * Doesn't currently work well enough
+   * E.g., bowling pins.
+   * @param {number} maxPoints
+   * @returns {Point3d[]}
+   */
+  static triangulatedPointsLattice(minPoints = 6) {
+    if ( minPoints <= 6 ) return this.pointsLattice(minPoints);
+
+    // Store the initial triangulation. 0 and 1 are poles. 2–5 are E, W, N, S along equator.
+    const center = Point3d.tmp.set(0, 0, 0);
+    const radius2 = 1; // 1^2 = 1
+    const pointsMap = new Map();
+    const triSet = new Set();
+    this.octahedron.forEach((pt, idx) => pointsMap.set(`${idx}`, pt));
+
+    // Triangles are "a|b|c" where each letter is a point index.
+    // Northern hemisphere.
+    this.triSet.add("0|2|5"); // 0|W|S
+    this.triSet.add("0|5|2"); // 0|S|E
+    this.triSet.add("0|5|2"); // 0|E|N
+    this.triSet.add("0|5|2"); // 0|N|W
+
+    // Southern hemisphere.
+    this.triSet.add("1|2|5"); // 1|W|S
+    this.triSet.add("1|5|2"); // 1|S|E
+    this.triSet.add("1|5|2"); // 1|E|N
+    this.triSet.add("1|5|2"); // 1|N|W
+
+    const addMidpoint = (aLabel, bLabel) => {
+      const midLabel = `${aLabel}.${bLabel}`;
+      if ( pointsMap.has(midLabel) ) return midLabel;
+
+      // Get the point between a and b.
+      // Then extend a line from the center through that midpoint at radius length to locate new surface point.
+      const a = pointsMap.get(aLabel);
+      const b = pointsMap.get(bLabel);
+      const mid = b.subtract(a);
+      const newPt = center.towardsPointSquared(mid, radius2);
+      pointsMap.set(midLabel, newPt);
+      mid.release();
+      return midLabel;
+    }
+
+    // Split all the triangles until reaching at least minPoints.
+    while ( pointsMap.size < minPoints ) {
+      const tris = [...triSet.values()]; // So the map can be updated.
+      for ( const tri of tris ) {
+        const [aLabel, bLabel, cLabel] = tri.split("|");
+        const abLabel = addMidpoint(aLabel, bLabel);
+        const bcLabel = addMidpoint(bLabel, cLabel);
+        const caLabel = addMidpoint(cLabel, aLabel);
+
+        // Delete the outer triangle
+        this.triSet.delete(tri);
+
+        // Add the new midpoint triangle
+        triSet.add(`${abLabel}|${bcLabel}|${caLabel}`);
+
+        // Add 3 triangles; one from each corner of the original.
+        triSet.add(`${abLabel}|${bcLabel}|${bLabel}`);
+        triSet.add(`${bcLabel}|${caLabel}|${cLabel}`);
+        triSet.add(`${caLabel}|${abLabel}|${aLabel}`);
+      }
+    }
+    return [...pointsMap.values()]
   }
 }
 
