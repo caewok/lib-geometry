@@ -627,7 +627,7 @@ export class AABB3d extends AABB2d {
     if ( !poly3d.points || poly3d.points.length === 0 ) return false;
 
     // Check if any point is inside the AABB for early exit
-    for ( const point of poly3d.points ) {
+    for ( const point of poly3d.iteratePoints({ close: false }) ) {
       if ( this.containsPoint(point) ) return true;
     }
 
@@ -641,17 +641,21 @@ export class AABB3d extends AABB2d {
     // Test axis = Cross(PolygonEdge, BoxAxis) for all combinations.
     // BoxAxes are X(1,0,0), Y(0,1,0), Z(0,0,1).
     const axis = Point3d.tmp;
+    const edgeDir = Point3d.tmp;
     for ( const edge of poly3d.iterateEdges() ) {
+      edge.B.subtract(edge.A, edgeDir);
+
       // Cross with X axis (1, 0, 0) -> result is (0, edge.z, -edge.y)
-      if ( checkGap(this, poly3d, axis.set(0, -edge.z, edge.y)) ) return false;
+      if ( checkGap(this, poly3d, axis.set(0, -edgeDir.z, edgeDir.y)) ) return false;
 
       // Cross with Y axis (0, 1, 0) -> result is (-edge.z, 0, edge.x)
-      if ( checkGap(this, poly3d, axis.set(edge.z, 0, -edge.x)) ) return false;
+      if ( checkGap(this, poly3d, axis.set(edgeDir.z, 0, -edgeDir.x)) ) return false;
 
       // Cross with Z axis (0, 0, 1) -> result is (edge.y, -edge.x, 0)
-      if ( checkGap(this, poly3d, axis.set(-edge.y, edge.x, 0)) ) return false;
+      if ( checkGap(this, poly3d, axis.set(-edgeDir.y, edgeDir.x, 0)) ) return false;
     }
     axis.release();
+    edgeDir.release();
 
     // If no separating axis found, they overlap.
     return true;
