@@ -641,7 +641,7 @@ export class AABB3d extends AABB2d {
     // Test axis = Cross(PolygonEdge, BoxAxis) for all combinations.
     // BoxAxes are X(1,0,0), Y(0,1,0), Z(0,0,1).
     const axis = Point3d.tmp;
-    for ( const edge of poly3d.iterateEdge() ) {
+    for ( const edge of poly3d.iterateEdges() ) {
       // Cross with X axis (1, 0, 0) -> result is (0, edge.z, -edge.y)
       if ( checkGap(this, poly3d, axis.set(0, -edge.z, edge.y)) ) return false;
 
