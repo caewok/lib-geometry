@@ -480,6 +480,8 @@ export class Plane {
    * @returns {Point3d|null}
    */
   lineSegmentIntersection(p0, p1) {
+    if ( !this.lineSegmentIntersects(p0, p1) ) return null;
+
     const delta = p1.subtract(p0);
     const ix = this.lineIntersection(p0, delta);
     delta.release();
