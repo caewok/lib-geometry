@@ -157,7 +157,7 @@ export class AABB2d {
   }
 
   static fromTileAlpha(tile, alphaThreshold = 0, out) {
-    if ( !(alphaThreshold && tile.evPixelCache) ) return this.fromTile(tile, out);
+    if ( !(alphaThreshold && tile.texture && tile.evPixelCache) ) return this.fromTile(tile, out);
     const bbox = tile.evPixelCache.getThresholdCanvasBoundingBox(alphaThreshold);
     return bbox instanceof PIXI.Polygon ? this.fromPolygon(bbox, out) : this.fromRectangle(bbox, out);
   }
