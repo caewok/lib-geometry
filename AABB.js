@@ -46,11 +46,20 @@ export class AABB2d {
     return this.max.subtract(this.min, out);
   }
 
+  /**
+   * The half-width (extents) along each axis.
+   */
+  getExtents(out) {
+    out ??= this.constructor.POINT_CLASS.tmp;
+    this.getDelta(out);
+    out.multiplyScalar(0.5, out);
+    return out;
+  }
+
   getCenter(out) {
     out ??= this.constructor.POINT_CLASS.tmp;
-    const delta = this.getDelta();
-    this.min.add(delta.multiplyScalar(0.5, out), out);
-    delta.release();
+    this.getExtents(out);
+    this.min.add(out, out);
     return out;
   }
 
@@ -352,6 +361,35 @@ export class AABB2d {
     return out;
   }
 
+  /**
+   * Project this AABB onto an axis and return the min/max interval measurement.
+   * @param {Point3d|PIXI.Point} axis
+   * @returns {object}
+   *   - @prop {number} min
+   *   - @prop {number} max
+   */
+  projectOntoAxis(axis) {
+    // Use "extents" optimization for speed.
+    // Get center and extents (half-width).
+    const center = this.getCenter();
+    const extents = this.getExtents();
+
+    // Project the center.
+    const centerProj = center.dot(axis);
+
+    // Project the radius (sum of absolute dot products of extents).
+    // This works because the AABB axes are (1,0,0), (0,1,0), (0,0,1).
+    const absAxis = axis.abs();
+    const radius = extents.dot(absAxis);
+
+    // Release unused vars.
+    center.release();
+    extents.release();
+    absAxis.release();
+
+    return { min: centerProj - radius, max: centerProj + radius };
+  }
+
   // ----- NOTE: Debug ----- //
   draw2d({ draw, ...opts } = {}) {
     draw ??= new Draw();
@@ -593,33 +631,29 @@ export class AABB3d extends AABB2d {
       if ( this.containsPoint(point) ) return true;
     }
 
-    const testAxes = [
-       axes.x, axes.y, axes.z, // AABB face normals.
-       poly3d.plane.normal, // Plane N; already normalized.
-    ];
+    // Test 1: AABB axes. (Polygon bounding box.)
+    if ( !poly3d.aabb.overlapsAABB(this) ) return false;
 
-    // Test AABB face normals
-    for (const axis of testAxes) {
-      if ( !this.overlapsOnAxis(poly3d, axis) ) return false;
+    // Test 2: Polygon normal.
+    if ( checkGap(this, poly3d, poly3d.plane.normal) ) return false;
+
+    // Test 3: Edge cross products.
+    // Test axis = Cross(PolygonEdge, BoxAxis) for all combinations.
+    // BoxAxes are X(1,0,0), Y(0,1,0), Z(0,0,1).
+    const axis = Point3d.tmp;
+    for ( const edge of poly3d.iterateEdge() ) {
+      // Cross with X axis (1, 0, 0) -> result is (0, edge.z, -edge.y)
+      if ( checkGap(this, poly3d, axis.set(0, -edge.z, edge.y)) ) return false;
+
+      // Cross with Y axis (0, 1, 0) -> result is (-edge.z, 0, edge.x)
+      if ( checkGap(this, poly3d, axis.set(edge.z, 0, -edge.x)) ) return false;
+
+      // Cross with Z axis (0, 0, 1) -> result is (edge.y, -edge.x, 0)
+      if ( checkGap(this, poly3d, axis.set(-edge.y, edge.x, 0)) ) return false;
     }
+    axis.release();
 
-    // Test cross products of polygon edges with AABB edges
-    const iter = poly3d.iteratePoints({ close: true });
-    let a = iter.next().value;
-    const edge = Point3d.tmp;
-    for ( const b of iter ) {
-      b.subtract(a, edge);
-      if (edge.magnitudeSquared() < 1e-10) continue; // Skip degenerate edges
-
-      // Test cross products with AABB edges
-      for ( const axis of [axes.x, axes.y, axes.z] ) {
-          const testAxis = edge.cross(axis).normalize();
-          if ( testAxis.magnitudeSquared() < 1e-10 ) continue; // Skip parallel edges
-          if ( !this.overlapsOnAxis(poly3d, testAxis) ) { edge.release(); return false; }
-      }
-      a = b;
-    }
-    edge.release();
+    // If no separating axis found, they overlap.
     return true;
   }
 
@@ -690,7 +724,54 @@ export class AABB3d extends AABB2d {
       }
     }
   }
+
+  // ----- NOTE: Projection and Separating Axis Theorem ----- //
+
+
+
 }
 
 GEOMETRY_CONFIG.AABB2d = AABB2d;
 GEOMETRY_CONFIG.threeD.AABB3d = AABB3d;
+
+// Helper functions.
+
+/**
+ * Projects a Polygon3d onto an axis and returns the [min, max] interval.
+ * @param {Polygon3d|PIXI.Polygon} polygon
+ * @param {Point3d|PIXI.Point} axis
+ * @returns {object}
+ *   - @prop {number} min
+ *   - @prop {number} max
+ */
+function projectPolygon(polygon, axis) {
+  let min = Infinity;
+  let max = -Infinity;
+  polygon.iteratePoints({ close: false }).forEach(pt => {
+    const val = pt.dot(axis);
+    min = Math.min(min, val);
+    max = Math.max(max, val);
+  });
+  return { min, max };
+}
+
+/**
+ * Tests if two intervals overlap.
+ * @param {AABB3d|AABB2d} aabb
+ * @param {Polygon3d|PIXI.Polygon} polygon
+ * @param {Point3d|PIXI.Point} axis
+ * @returns {boolean} True if there is a gap (separating axis).
+ */
+function checkGap(aabb, polygon, axis) {
+  // Ignore zero-length axes (can happen with parallel cross products)
+  if ( axis.dot(axis).almostEqual(0) ) return false;
+
+  const aabbInt = aabb.projectOntoAxis(axis);
+  const polyInt = projectPolygon(polygon, axis);
+
+  // If there is a gap, return true (found a separating axis)
+  return (aabbInt.min > polyInt.max || polyInt.min > aabbInt.max);
+}
+
+
+
