@@ -1583,9 +1583,11 @@ export class Triangle3d extends Polygon3d {
     ixs[2] = plane.lineSegmentIntersection(this.c, this.a);
 
     // Drop identical intersections. When 0 equals 1 or 2; or 1 equals 2.
-    if ( ixs[1] && ixs[1].almostEqual(ixs[2]) ) ixs[2] = null;
-    else if ( ixs[0] && ixs[0].almostEqual(ixs[2]) ) ixs[2] = null;
-    if ( ixs[0] && ixs[0].almostEqual(ixs[1]) ) ixs[0] = null
+    if ( ixs[0] ) {
+      if ( ixs[1] && ixs[0].almostEqual(ixs[1]) ) ixs[1] = null;
+      if ( ixs[2] && ixs[0].almostEqual(ixs[2]) ) ixs[2] = null;
+    }
+    if ( ixs[1] && ixs[2] && ixs[1].almostEqual(ixs[2]) ) ixs[2] = null;
     ixs = ixs.filter(ixs => ixs !== null);
 
     switch ( ixs.length ) {
