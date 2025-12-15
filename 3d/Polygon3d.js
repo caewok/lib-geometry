@@ -1577,23 +1577,23 @@ export class Triangle3d extends Polygon3d {
     if ( this.plane.isParallelToPlane(plane) ) return null;
 
     // Instead of intersecting the planes, intersect the triangle segments with the plane directly.
-    const ixAB = plane.lineSegmentIntersection(this.a, this.b);
-    const ixBC = plane.lineSegmentIntersection(this.b, this.c);
-    const ixCA = plane.lineSegmentIntersection(this.c, this.a);
-    if ( ixAB && ixBC && ixCA ) console.error(`${this.constructor.name}|intersectPlane|Has three intersections with non-parallel plane.`, plane);
-    if ( !(ixAB || ixBC || ixCA) ) return null; // Triangle does not touch plane.
+    let ixs = [];
+    ixs[0] = plane.lineSegmentIntersection(this.a, this.b);
+    ixs[1] = plane.lineSegmentIntersection(this.b, this.c);
+    ixs[2] = plane.lineSegmentIntersection(this.c, this.a);
 
-    // Most of the time, a triangle that touches a plane should create a 3d segment on that plane.
-    if ( ixAB && ixBC ) return { a: ixAB, b: ixBC };
-    if ( ixAB && ixCA ) return { a: ixCA, b: ixAB };
-    if ( ixBC && ixCA ) return { a: ixBC, b: ixCA };
+    // Drop identical intersections. When 0 equals 1 or 2; or 1 equals 2.
+    if ( ixs[1] && ixs[1].almostEqual(ixs[2]) ) ixs[2] = null;
+    else if ( ixs[0] && ixs[0].almostEqual(ixs[2]) ) ixs[2] = null;
+    if ( ixs[0] && ixs[0].almostEqual(ixs[1]) ) ixs[0] = null
+    ixs = ixs.filter(ixs => ixs !== null);
 
-    // No segment intersects but perhaps a point touches the plane.
-    if ( ixAB ) return { a: ixAB, b: null };
-    if ( ixBC ) return { a: ixBC, b: null };
-    if ( ixCA ) return { a: ixCA, b: null };
-
-    console.error(`${this.constructor.name}|intersectPlane|Reached end of tests.`, plane);
+    switch ( ixs.length ) {
+      case 0: return null; // Triangle does not touch plane.
+      case 1: return { a: ixs[0], b: null }; // No segment intersects but perhaps a point touches the plane.
+      case 2: return { a: ixs[0], b: ixs[1] };
+      default: console.error(`${this.constructor.name}|intersectPlane|Has three intersections with non-parallel plane.`, plane);
+    }
     return null; // Should not happen.
 
     /*
