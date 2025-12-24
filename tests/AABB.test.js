@@ -82,6 +82,18 @@ describe('AABB3d.overlapsConvexPolygon3d', () => {
     return aabb;
   }
 
+  it('should return true when polygon overlaps AABB', () => {
+    const aabb = createAABB(0, 0, 0, 10, 10, 10);
+    const points = [
+      new Point3d(5, 5, 5),
+      new Point3d(15, 5, 5),
+      new Point3d(5, 15, 5),
+    ];
+    const polygon = Polygon3d.from3dPoints(points);
+
+    expect(aabb.overlapsConvexPolygon3d(polygon)).to.be.true;
+  });
+
   it('should return true when polygon is completely inside AABB', () => {
     const aabb = createAABB(0, 0, 0, 10, 10, 10);
     const points = [
