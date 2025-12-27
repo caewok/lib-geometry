@@ -1,16 +1,11 @@
 /* globals
 canvas,
-CONFIG,
 PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { GEOMETRY_CONFIG, GRID_DIAGONALS } from "./const.js";
-import {
-  gridDistanceBetween,
-  alternatingGridDistance,
-  getOffsetDistanceFn } from "./grid_distance.js";
+import { GEOMETRY_CONFIG } from "./const.js";
 import { Pool } from "./Pool.js";
 
 // ----- NOTE: Foundry typedefs  ----- //
@@ -30,7 +25,7 @@ import { Pool } from "./Pool.js";
 
 
 /**
- * A 2d point that can function as Point|GridOffset. For just a point, use PIXI.Point.
+ * A 2d point that can function as Point|GridOffset2D. For just a point, use PIXI.Point.
  */
 export class GridCoordinates extends PIXI.Point {
   static #pool = new Pool(this);
@@ -38,8 +33,6 @@ export class GridCoordinates extends PIXI.Point {
   static releaseObj(obj) { this.#pool.release(obj); }
 
   static get tmp() { return this.#pool.acquire(); }
-
-  static GRID_DIAGONALS = GRID_DIAGONALS;
 
   /**
    * Factory function that converts a GridOffset to GridCoordinates.
@@ -146,87 +139,58 @@ export class GridCoordinates extends PIXI.Point {
    * @returns {number}
    */
   static numDiagonal(aOffset, bOffset) {
-    if ( canvas.grid.isHexagonal ) return 0;
-    let di = Math.abs(aOffset.i - bOffset.i);
-    let dj = Math.abs(aOffset.j - bOffset.j);
-    return Math.min(di, dj);
+    const res = this.measurePath([aOffset, bOffset]);
+    return res.diagonals;
+  }
+
+  /**
+   * Returns the points for the shortest, direct path passing through the given waypoints.
+   * See canvas.grid.getDirectPath
+   * @param {GridCoordinates[]|GridCoordinates} waypoints    Either an array or a single point.
+   * @param {GridCoordinates} [end]                          If provided, this is the endpoint.
+   *   (For ease of use, backward compatibility)
+   * @returns {GridCoordinates[]}
+   */
+  static directPath(waypoints, end) {
+    if ( !Array.isArray(waypoints) ) waypoints = [waypoints];
+    if ( end ) waypoints.push(end);
+    const offsets = canvas.grid.getDirectPath(waypoints);
+    return offsets.map(offset => this.fromOffset(offset));
+  }
+
+  /**
+   * Measure a shortest, direct path through the given waypoints.
+   * See canvas.grid.measurePath
+   * @param {GridCoordinates[]} waypoints
+   * @param {object} options                  Additional measurement options
+   *   - @prop {GridMeasurePathCostFunction2D<SegmentData>} [options.cost] The function that returns the cost
+   *   for a given move between grid spaces (default is the distance travelled along the direct path)
+   * @returns {GridMeasurePathResult}
+   */
+  static measurePath(waypoints, options) {
+    return canvas.grid.measurePath(waypoints, options);
   }
 
   /**
    * Measure the distance between two points accounting for the current grid rules.
    * For square, this accounts for the diagonal rules. For hex, measures in number of hexes.
+   * A and B must be points only if point-to-point measurement intended.
+   * If they are offsets, the distance will use the offset distance.
    * @param {Point} a
    * @param {Point} b
-   * @param {function} [altGridDistFn]    Function generated from alternatingGridDistance; used for alternating rules
-   * @param {GRID_DIAGONALS} [diagonals]  Diagonal rule to use
+   * @param {object} options                  Additional measurement options
+   *   - @prop {GridMeasurePathCostFunction2D<SegmentData>} [options.cost] The function that returns the cost
+   *   for a given move between grid spaces (default is the distance travelled along the direct path)
    * @returns {number} Distance, in grid units
    */
-  static gridDistanceBetween = gridDistanceBetween;
-
-  /**
-   * Measure the distance between two offsets accounting for the current grid rules.
-   * Uses `gridDistanceBetween`.
-   * @param {GridOffset} aOffset
-   * @param {GridOffset} bOffset
-   * @param {object} [opts]
-   * @param {function} [opts.altGridDistFn]    Function generated from alternatingGridDistance; used for alternating rules
-   * @param {GRID_DIAGONALS} [opts.diagonals]  Diagonal rule to use
-   * @returns {number} Distance, in grid units
-   */
-  static gridDistanceBetweenOffsets(aOffset, bOffset, opts) {
-    return this.gridDistanceBetween(this.fromOffset(aOffset), this.fromOffset(bOffset), opts);
-  }
-
-  /**
-   * Return a function that can repeatedly measure segments, tracking the alternating diagonals.
-   * @param {Point} a
-   * @param {Point} b
-   * @param {object} [opts]
-   * @param {function} [opts.altGridDistFn]    Function generated from alternatingGridDistance; used for alternating rules
-   * @param {GRID_DIAGONALS} [opts.diagonals]  Diagonal rule to use
-   */
-  static alternatingGridDistanceFn = alternatingGridDistance;
-
-  /**
-   * Constructs a direct path grid, accounting for elevation and diagonal elevation.
-   * @param {Point} start
-   * @param {Point} end
-   * @returns {GridCoordinates[]}
-   */
-  static directPath(start, end) {
-    const path2d = canvas.grid.getDirectPath([start, end]);
-    return path2d.map(pt => this.fromObject(pt));
-  }
-
-  /**
-   * Measure distance, offset, and cost for a given 2d segment a|b.
-   * Uses `gridDistanceBetween`.
-   * @param {Point} a                   Start of the segment
-   * @param {Point} b                   End of the segment
-   * @param {object} [opts]
-   * @param {number} [opts.numPrevDiagonal=0]  Number of diagonals thus far
-   * @param {GRID_DIAGONALS} [opts.diagonals]  Diagonal rule to use
-   * @returns {object}
-   *   - @prop {number} distance          gridDistanceBetween for a|b
-   *   - @prop {number} offsetDistance    gridDistanceBetweenOffsets for a|b
-   *   - @prop {number} numDiagonal       Number of diagonals between the offsets if square or hex elevation
-   */
-  static gridMeasurementForSegment(a, b, opts) {
-    return CONFIG.GeometryLib.threeD.GridCoordinates3d.gridMeasurementForSegment(a, b, opts);
-  }
-
-  /**
-   * Get the function to measure the offset distance for a given distance with given previous diagonals.
-   * @param {number} [diagonals=0]
-   * @returns {function}
-   */
-  static getOffsetDistanceFn = getOffsetDistanceFn;
-
-  // Temporary instances for performance.
-  static _tmp = new this();
-  static _tmp2 = new this();
-  static _tmp3 = new this();
+  static gridDistanceBetween(a, b, options) {
+    const res = this.measurePath([a, b], options);
+    return res.distance;
+  };
 }
+
+// Synonyms
+GridCoordinates.getDirectPath = GridCoordinates.directPath; // Match Foundry's canvas.grid.getDirectPath.
 
 
 GEOMETRY_CONFIG.GridCoordinates ??= GridCoordinates;

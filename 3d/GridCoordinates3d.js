@@ -1,20 +1,13 @@
 /* globals
 canvas,
-CONST,
-game
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { roundNearWhole, pixelsToGridUnits, gridUnitsToPixels, bresenhamLine3d } from "../util.js";
+import { roundNearWhole, pixelsToGridUnits, gridUnitsToPixels } from "../util.js";
 import { ElevatedPoint } from "./ElevatedPoint.js";
 import { GridCoordinates } from "../GridCoordinates.js";
-import { GEOMETRY_CONFIG, GRID_DIAGONALS } from "../const.js";
-import {
-  gridDistanceBetween,
-  alternatingGridDistance,
-  getDirectPath,
-  getOffsetDistanceFn } from "../grid_distance.js";
+import { GEOMETRY_CONFIG } from "../const.js";
 import { Pool } from "../Pool.js";
 
 // ----- NOTE: 3d versions of Foundry typedefs ----- //
@@ -43,7 +36,7 @@ import { Pool } from "../Pool.js";
 
 
 /**
- * A 3d point that can function as Point3d|GridOffset3d|RegionMovementWaypoint.
+ * A 3d point that can function as Point3d|GridOffset3D|RegionMovementWaypoint.
  * Links z to the elevation property.
  */
 export class GridCoordinates3d extends ElevatedPoint {
@@ -55,9 +48,6 @@ export class GridCoordinates3d extends ElevatedPoint {
   static releaseObj(obj) { this.#pool.release(obj); }
 
   static get tmp() { return this.#pool.acquire(); }
-
-
-  static GRID_DIAGONALS = GRID_DIAGONALS;
 
   /**
    * Factory function that converts a GridOffset to GridCoordinates.
@@ -215,23 +205,6 @@ export class GridCoordinates3d extends ElevatedPoint {
   }
 
   /**
-   * Determine the number of diagonals based on two offsets.
-   * If hexagonal, only elevation diagonals count.
-   * @param {GridOffset} aOffset
-   * @param {GridOffset} bOffset
-   * @returns {number}
-   */
-  static numDiagonal(aOffset, bOffset) {
-    if ( canvas.grid.isHexagonal ) return Math.abs(aOffset.k - bOffset.k);
-    let di = Math.abs(aOffset.i - bOffset.i);
-    let dj = Math.abs(aOffset.j - bOffset.j);
-    let dk = Math.abs(aOffset.k - bOffset.k);
-    const midAxis = di.between(dj, dk) ? di
-      : dj.between(di, dk) ? dj : dk;
-    return midAxis;
-  }
-
-  /**
    * Calculate the unit elevation for a given set of coordinates.
    * @param {number} elevation    Elevation in grid units
    * @returns {number} Elevation in number of grid steps.
@@ -246,203 +219,6 @@ export class GridCoordinates3d extends ElevatedPoint {
    */
   static elevationForUnit(k) { return roundNearWhole(k * canvas.scene.dimensions.distance); }
 
-  /**
-   * Measure the distance between two points accounting for the current grid rules.
-   * For square, this accounts for the diagonal rules. For hex, measures in number of hexes.
-   * @param {Point3d} a
-   * @param {Point3d} b
-   * @param {function} [altGridDistFn]    Function generated from alternatingGridDistance; used for alternating rules
-   * @param {GRID_DIAGONALS} [diagonals]  Diagonal rule to use
-   * @returns {number} Distance, in grid units
-   */
-  static gridDistanceBetween = gridDistanceBetween;
-
-  /**
-   * Measure the distance between two offsets accounting for the current grid rules.
-   * Uses `gridDistanceBetween`.
-   * @param {GridOffset3d} aOffset
-   * @param {GridOffset3d} bOffset
-   * @param {function} [altGridDistFn]    Function generated from alternatingGridDistance; used for alternating rules
-   * @param {GRID_DIAGONALS} [diagonals]  Diagonal rule to use
-   * @returns {number} Distance, in grid units
-   */
-  static gridDistanceBetweenOffsets(aOffset, bOffset, opts) {
-    return this.gridDistanceBetween(this.fromOffset(aOffset), this.fromOffset(bOffset), opts);
-  }
-
-  /**
-   * Measure distance, offset, and cost for a given segment a|b.
-   * Uses `gridDistanceBetween`.
-   * @param {Point3d} a                   Start of the segment
-   * @param {Point3d} b                   End of the segment
-   * @param {object} [opts]
-   * @param {number} [opts.numPrevDiagonal=0]   Number of diagonals thus far
-   * @param {GRID_DIAGONALS} [opts.diagonals]   Diagonal rule to use
-   * @returns {object}
-   *   - @prop {number} distance          gridDistanceBetween for a|b
-   *   - @prop {number} offsetDistance    gridDistanceBetweenOffsets for a|b
-   *   - @prop {number} numDiagonal       Number of diagonals between the offsets if square or hex elevation
-   */
-  static gridMeasurementForSegment(a, b, { numPrevDiagonal = 0, diagonals }) {
-    // Simpler version of Elevation Ruler's _measurePath function.
-    diagonals ??= canvas.grid.diagonals;
-    a = this.fromObject(a);
-    b = this.fromObject(b);
-    const altGridDistanceFn = this.alternatingGridDistanceFn();
-    const offsetDistanceFn = this.getOffsetDistanceFn(numPrevDiagonal);
-    const path3d = this.directPath(a, b);
-    let distance = 0;
-    let offsetDistance = 0;
-    let prevPathPt = path3d[0];
-    for ( let i = 1, n = path3d.length; i < n; i += 1 ) {
-      const currPathPt = path3d[i];
-      distance += this.gridDistanceBetween(prevPathPt, currPathPt, { altGridDistanceFn, diagonals })
-      offsetDistance += offsetDistanceFn(prevPathPt, currPathPt);
-      prevPathPt = currPathPt;
-    }
-    return { distance, offsetDistance, numDiagonal: offsetDistanceFn.diagonals };
-  }
-
-  static gridMeasurementForSegment2(a, b, { numPrevDiagonal = 0, diagonals }) {
-    // Simpler version of Elevation Ruler's _measurePath function.
-    diagonals ??= canvas.grid.diagonals;
-    a = this.fromObject(a);
-    b = this.fromObject(b);
-    const altGridDistanceFn = this.alternatingGridDistanceFn();
-    const offsetDistanceFn = this.getOffsetDistanceFn(numPrevDiagonal);
-    const distance = this.gridDistanceBetween(a, b, { altGridDistanceFn, diagonals })
-    const offsetDistance = offsetDistanceFn(a, b);
-    return { distance, offsetDistance, numDiagonal: offsetDistanceFn.diagonals };
-  }
-
-  /**
-   * Get the function to measure the offset distance for a given distance with given previous diagonals.
-   * @param {number} [diagonals=0]
-   * @returns {function}
-   */
-  static getOffsetDistanceFn = getOffsetDistanceFn;
-
-  /**
-   * Return a function that can repeatedly measure segments, tracking the alternating diagonals.
-   */
-  static alternatingGridDistanceFn = alternatingGridDistance;
-
-  /**
-   * Constructs a direct path grid, accounting for elevation and diagonal elevation.
-   * @param {ElevatedPoint} start
-   * @param {ElevatedPoint} end
-   * @returns {GridCoordinates3d[]}
-   */
-  static directPath = getDirectPath
-
-  static _directPathSquare = directPath3dSquare;
-
-  static _directPathGridless = directPathGridless;
-
-  /**
-   * Construct a function to determine the offset cost for this canvas for a single 3d move on a square grid.
-   * @param {number} numDiagonals
-   * @returns {function}
-   *   - @param {GridCoordinates3d} prevOffset
-   *   - @param {GridCoordinates3d} currOffset
-   *   - @returns {number}
-   */
-  static _singleOffsetDistanceFn(numDiagonals = 0) {
-    const diagonals = canvas.grid.diagonals ?? game.settings.get("core", "gridDiagonals");
-    const D = CONST.GRID_DIAGONALS;
-    let nDiag = numDiagonals;
-    let fn;
-    if ( diagonals === D.ALTERNATING_1 || diagonals === D.ALTERNATING_2 ) {
-      const kFn = diagonals === D.ALTERNATING_2
-        ? () => nDiag & 1 ? 2 : 1
-        : () => nDiag & 1 ? 1 : 2;
-      fn = (prevOffset, currOffset) => {
-        const isElevationMove = prevOffset.k !== currOffset.k;
-        const isStraight2dMove = (prevOffset.i === currOffset.i) ^ (prevOffset.j === currOffset.j);
-        const isDiagonal2dMove = (prevOffset.i !== currOffset.i) && (prevOffset.j !== currOffset.j);
-        const s = isStraight2dMove ^ isElevationMove;
-        const d1 = (isDiagonal2dMove && !isElevationMove) || (isStraight2dMove && isElevationMove);
-        const d2 = isDiagonal2dMove && isElevationMove;
-        if ( d1 || d2 ) nDiag++;
-        const k = kFn();
-        return (s + (k * d1) + (k * d2)) * canvas.grid.distance;
-      };
-    } else {
-      let k = 1;
-      let k2 = 1;
-      switch ( diagonals ) {
-        case D.EQUIDISTANT: k = 1; k2 = 1; break;
-        case D.EXACT: k = Math.SQRT2; k2 = Math.SQRT3; break;
-        case D.APPROXIMATE: k = 1.5; k2 = 1.75; break;
-        case D.RECTILINEAR: k = 2; k2 = 3; break;
-      }
-      fn = (prevOffset, currOffset) => {
-        // Straight if moving horizontal, vertical, or elevation. (straight or elevation)
-        // Diagonal if moving *only* H + V, H + E, or V + E. (straight + elevation or diagonal2d)
-        // Diagonal2 if moving H, V, and E. (diagonal2d + elevation)
-        const isElevationMove = prevOffset.k !== currOffset.k;
-        const isStraight2dMove = (prevOffset.i === currOffset.i) ^ (prevOffset.j === currOffset.j);
-        const isDiagonal2dMove = (prevOffset.i !== currOffset.i) && (prevOffset.j !== currOffset.j);
-        const s = isStraight2dMove ^ isElevationMove;
-        const d1 = (isDiagonal2dMove && !isElevationMove) || (isStraight2dMove && isElevationMove);
-        const d2 = isDiagonal2dMove && isElevationMove;
-        return (s + (k * d1) + (k2 * d2)) * canvas.grid.distance;
-      };
-    }
-    Object.defineProperty(fn, "diagonals", {
-      get: () => nDiag
-    });
-    return fn;
-  }
-
-  // Temporary instances for performance.
-  static _tmp = new this();
-  static _tmp2 = new this();
-  static _tmp3 = new this();
 }
 
-// ----- NOTE: GridlessGrid ----- //
-
-/**
- * Constructs a direct path for a gridless scene.
- * @param {ElevatedPoint} start
- * @returns {GridCoordinates3d[]}                 The sequence of grid offsets of a shortest, direct path
- * @abstract
- */
-function directPathGridless(start, end) {
-  // Simply the start and end, in GridCoordinates.
-  start = GridCoordinates3d.fromObject(start);
-  end = GridCoordinates3d.fromObject(end);
-
-  // Center, although should be unnecessary in gridless.
-  return [start.center, end.center];
-}
-
-// ----- NOTE: SquareGrid ----- //
-
-/**
- * Constructs a direct path for a square grid, accounting for elevation and diagonal elevation.
- * @param {ElevatedPoint} start
- * @param {ElevatedPoint} end
- * @param {GridOffset[]} [path2d]             Optional path2d for the start and end waypoints.
- * @returns {GridCoordinates3d[]}
- */
-function directPath3dSquare(start, end) {
-  start = GridCoordinates3d.fromObject(start);
-  end = GridCoordinates3d.fromObject(end);
-  if ( start.offsetsEqual(end) ) return [start, end];
-  const points = bresenhamLine3d(start.i, start.j, start.k, end.i, end.j, end.k);
-  const path3d = [start];
-  // Convert points to GridCoordinates3d. Start and end repeat; skip.
-  for ( let i = 3, n = points.length - 3; i < n; i += 3 ) path3d.push(GridCoordinates3d.fromOffset({
-    i: points[i],
-    j: points[i + 1],
-    k: points[i + 2] }));
-  path3d.push(end);
-  return path3d;
-}
-
-
-
-
-GEOMETRY_CONFIG.threeD.GridCoordinates3d ??= GridCoordinates3d;
+GEOMETRY_CONFIG.GridCoordinates3d ??= GridCoordinates3d;
