@@ -14,40 +14,6 @@ PATCHES.CANVAS_EDGES_V13 = {};
 // ----- Wraps ----- //
 
 /**
- * Wrap CanvasEdges.initialize to set up the quadtree.
- */
-function initialize(wrapped) {
-  this.quadtree ??= new CanvasQuadtree();
-  return wrapped();
-}
-
-/**
- * Wrap CanvasEdges.set to add the edge to the quadtree.
- */
-function edgesSet(wrapped, key, value) {
-  const res = wrapped(key, value);
-  this.quadtree?.update?.({ r: value.bounds, t: value });
-  return res;
-}
-
-/**
- * Wrap CanvasEdges.delete to remove the edge from the quadtree.
- */
-function edgesDelete(wrapped, key) {
-  const edge = this.get(key);
-  if ( edge ) this.quadtree?.remove?.(edge);
-  return wrapped(key);
-}
-
-/**
- * Wrap CanvasEdges.clear to clear the quadtree.
- */
-function clear(wrapped) {
-  this.quadtree?.clear?.();
-  return wrapped();
-}
-
-/**
  * Wrap Edges.refresh to update the quadtree.
  * Requires updating every edge.
  */
@@ -67,6 +33,5 @@ function refreshV13(wrapped) {
   wrapped();
 }
 
-PATCHES.CANVAS_EDGES.WRAPS = { initialize, set: edgesSet, delete: edgesDelete, clear, refresh };
-PATCHES.CANVAS_EDGES_V13.WRAPS = { refresh: refreshV13 };
+PATCHES.CANVAS_EDGES.WRAPS = { refresh };
 
