@@ -1,3 +1,95 @@
+## 0.5.0
+Remove Elevated Vision implicit dependency in elevation code; use only Wall Height.
+Remove unused setting methods for elevation (rely again on Wall Height).
+
+
+## 0.4.8
+
+Refactor: Remove grid distance calculations and CanvasEdges wraps.
+
+This commit removes grid distance calculation functions from GridCoordinates and related 3D classes, consolidating distance measurement to the core Foundry methods. It also removes wraps around CanvasEdges functions.
+
+### Changes
+- Removed gridDistance.js, deleting functions like gridDistanceBetween, alternatingGridDistance, and getOffsetDistanceFn.
+- Removed static methods gridDistanceBetween, gridDistanceBetweenOffsets, alternatingGridDistanceFn, directPath, gridMeasurementForSegment, and getOffsetDistanceFn from GridCoordinates.js and GridCoordinates3d.js. directPath is renamed to getDirectPath (matches Foundry better).
+- Removed CanvasEdges wraps for initialize, set, delete, and clear in CanvasEdges.js. Only refresh is retained.
+- Added HexCoordinateMixin and HexGridCoordinates to HexGridCoordinates.js.
+
+### Impact
+- Distance measurements will now rely on Foundry's core methods.
+- Removes custom diagonal calculations; using Foundry's built-in methods, so may change measured paths, though likely negligibly.
+- Code relating to alternate grid distance calculations is removed.
+- Hex grid coordinate calculations are now encapsulated in the HexCoordinateMixin.
+
+## 0.4.7
+## Features
+Added new test cases in AABB.test.js to improve test coverage
+Updated registration.js to version 0.4.7
+
+## Fixes
+Fixed potential issues in 3d/Plane.js with 2 new lines of code
+Addressed edge cases in AABB.js with significant updates (145 lines changed)
+
+## Refactoring
+Improved code organization in 3d/Polygon3d.js with 36 lines changed
+Optimized AABB.js implementation (48 lines removed, 97 lines added)
+Minor update to Tile.js with a single line change
+
+## Potential Risks
+Breaking Changes: The refactoring in AABB.js might affect dependent code
+Performance Impact: Changes in AABB.js might affect performance for large datasets
+
+## 0.4.6
+### Features
+Added pointsLattice method to PIXI.Circle, PIXI.Polygon, and PIXI.Rectangle for generating grid points within shapes
+
+Enhanced PIXI.Polygon.pad() to modify in-place and updated default scalingFactor to 100 for better precision
+
+### Fixes
+Fixed Pool class to prevent duplicate objects in the pool
+
+Updated version number to 0.4.6 in registration.js
+
+### Refactoring
+Optimized MatrixFlat.lookAt() by removing redundant variable
+
+Improved code organization and comments
+
+### Potential Risks
+Breaking Change: PIXI.Polygon.pad() now modifies in-place and has a new default scalingFactor.
+
+Precision Issues: The increased scalingFactor may affect performance with large coordinates.
+
+Memory Usage: The pointsLattice method may consume significant memory for large shapes or small spacing.
+
+## 0.4.5
+
+
+## 0.4.4
+### Features
+Added unionPaths method to Clipper2Paths for combining multiple paths with configurable fill rules.
+Added AABB.test.js to the test suite.
+
+### Fixes
+Updated TilePixelCache to use foundry.canvas.TextureLoader instead of direct TextureLoader import.
+Fixed version number in registration.js to 0.4.4
+
+### Refactoring
+Simplified combine() method in Clipper2Paths to use the new union method.
+Removed redundant joinPaths and combinePaths methods in favor of more direct methods.
+Improved code organization and removed unused imports.
+
+### Potential Risks
+#### Breaking Changes:
+Removed joinPaths and combinePaths methods.
+Modified combine() method implementation.
+
+#### Dependency Changes:
+Updated TextureLoader import to use foundry.canvas.TextureLoader
+
+#### Testing:
+New AABB.test.js added.
+
 ## 0.4.3
 Refactor: Renames RegionMovementWaypoint3d to ElevatedPoint and fixes various bugs.
 
