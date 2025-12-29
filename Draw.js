@@ -23,6 +23,7 @@ export class Draw {
 
   // ----- Static properties ----- //
   static COLORS = {
+    brown: 0xA52A2A,
     orange: 0xFFA500,
     lightorange: 0xFFD580,
     yellow: 0xFFFF00,
@@ -94,11 +95,10 @@ export class Draw {
    * @param {Number}  alpha   Transparency level.
    * @param {Number}  radius  Radius of the point in pixels.
    */
-  point(p, { color = Draw.COLORS.red, alpha = 1, radius = 5 } = {}) {
-    this.g
-      .beginFill(color, alpha)
-      .drawCircle(p.x, p.y, radius)
-      .endFill();
+  point(p, { radius = 5, ...opts } = {}) {
+    opts.color ??= Draw.COLORS.red;
+    opts.fill ??= opts.color;
+    this.shape(new PIXI.Circle(p.x, p.y, radius), opts)
   }
 
   /**
