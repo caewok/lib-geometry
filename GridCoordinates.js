@@ -96,6 +96,11 @@ export class GridCoordinates extends PIXI.Point {
   }
 
   /**
+   * @returns {GridCoordinates}
+   */
+  clone() { return new this.constructor(this.x, this.y); }
+
+  /**
    * @returns {PIXI.Point}
    */
   toPoint() { return PIXI.Point.fromObject(this); }
