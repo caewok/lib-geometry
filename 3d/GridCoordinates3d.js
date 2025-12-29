@@ -221,4 +221,4 @@ export class GridCoordinates3d extends ElevatedPoint {
 
 }
 
-GEOMETRY_CONFIG.GridCoordinates3d ??= GridCoordinates3d;
+GEOMETRY_CONFIG.threeD.GridCoordinates3d ??= GridCoordinates3d;
