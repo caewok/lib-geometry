@@ -1,3 +1,58 @@
+## 0.4.8
+
+## 0.4.7
+
+## 0.4.6
+### Features
+Added pointsLattice method to PIXI.Circle, PIXI.Polygon, and PIXI.Rectangle for generating grid points within shapes
+
+Enhanced PIXI.Polygon.pad() to modify in-place and updated default scalingFactor to 100 for better precision
+
+### Fixes
+Fixed Pool class to prevent duplicate objects in the pool
+
+Updated version number to 0.4.6 in registration.js
+
+### Refactoring
+Optimized MatrixFlat.lookAt() by removing redundant variable
+
+Improved code organization and comments
+
+### Potential Risks
+Breaking Change: PIXI.Polygon.pad() now modifies in-place and has a new default scalingFactor.
+
+Precision Issues: The increased scalingFactor may affect performance with large coordinates.
+
+Memory Usage: The pointsLattice method may consume significant memory for large shapes or small spacing.
+
+## 0.4.5
+
+
+## 0.4.4
+### Features
+Added unionPaths method to Clipper2Paths for combining multiple paths with configurable fill rules.
+Added AABB.test.js to the test suite.
+
+### Fixes
+Updated TilePixelCache to use foundry.canvas.TextureLoader instead of direct TextureLoader import.
+Fixed version number in registration.js to 0.4.4
+
+### Refactoring
+Simplified combine() method in Clipper2Paths to use the new union method.
+Removed redundant joinPaths and combinePaths methods in favor of more direct methods.
+Improved code organization and removed unused imports.
+
+### Potential Risks
+#### Breaking Changes:
+Removed joinPaths and combinePaths methods.
+Modified combine() method implementation.
+
+#### Dependency Changes:
+Updated TextureLoader import to use foundry.canvas.TextureLoader
+
+#### Testing:
+New AABB.test.js added.
+
 ## 0.4.3
 Refactor: Renames RegionMovementWaypoint3d to ElevatedPoint and fixes various bugs.
 
