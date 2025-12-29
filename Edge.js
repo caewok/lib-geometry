@@ -91,4 +91,3 @@ function _setRampElevation(region, edge, e) {
 }
 
 PATCHES.CANVAS_EDGES.GETTERS = { elevationLibGeometry: getElevation };
-PATCHES.CANVAS_EDGES_V13.GETTERS = { elevationLibGeometry: getElevation };
