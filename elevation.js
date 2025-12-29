@@ -1,14 +1,16 @@
 /* globals
 canvas,
 CONFIG,
-foundry
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
 import { GEOMETRY_CONFIG } from "./const.js";
-import { gridUnitsToPixels, pixelsToGridUnits } from "./util.js";
-import { MODULE_KEYS } from "./const.js";
+import { gridUnitsToPixels } from "./util.js";
+import { OTHER_MODULES } from "./const.js";
+
+
+
 
 /* Elevation properties for Placeable Objects
 Generally:
@@ -98,60 +100,26 @@ function pointSourceElevationE() {
   return this.object?.elevationE ?? this.document.elevation ?? Number.MAX_SAFE_INTEGER;
 }
 
-async function setPointSourceElevationE(value) {
-  if ( !this.object ) return;
-  return this.object.setElevationE(value);
-}
-
 // Set VisionSource (but not MovementSource) to the top elevation of the token
 function visionSourceElevationE() {
   return this.object?.topE ?? this.object?.elevationE ?? this.document.elevation ?? 0;
 }
 
-async function setVisionSourceElevationE(_value) {
-  console.warn("Cannot set elevationE for a vision source because it is calculated from token height.");
-}
-
 // NOTE: PlaceableObject Elevation
 function placeableObjectElevationE() { return this.document.elevation; }
 
-async function setPlaceableObjectElevationE(value) {
-  return this.document.update({ elevation: value });
-}
-
 // NOTE: Wall Elevation
 function wallTopE() {
-  const { EV, WH } = MODULE_KEYS;
-
   // Previously used foundry.utils.getProperty but it is slow.
-  return this.document.flags[EV.ID]?.[EV.FLAGS.ELEVATION]?.top
-    ?? this.document.flags[WH.ID]?.top
+  const WH = OTHER_MODULES.WH;
+  return (WH ? this.document.flags[WH.ID]?.top : undefined)
     ?? Number.POSITIVE_INFINITY;
 }
 
 function wallBottomE() {
-  const { EV, WH } = MODULE_KEYS;
-  return this.document.flags[EV.ID]?.[EV.FLAGS.ELEVATION]?.bottom
-    ?? this.document.flags[WH.ID]?.bottom
+  const WH = OTHER_MODULES.WH;
+  return (WH ? this.document.flags[WH.ID]?.bottom : undefined)
     ?? Number.NEGATIVE_INFINITY;
-}
-
-async function setWallTopE(value) {
-  if ( !Number.isNumeric(value) ) {
-    console.err("setWallTopE value must be a number.");
-    return;
-  }
-  const { ID, FLAGS } = MODULE_KEYS.EV;
-  return this.document.update({ [`flags.${ID}.${FLAGS.ELEVATION}.top`]: value });
-}
-
-async function setWallBottomE(value) {
-  if ( !Number.isNumeric(value) ) {
-    console.err("setWallTopE value must be a number.");
-    return;
-  }
-  const { ID, FLAGS } = MODULE_KEYS.EV;
-  return this.document.update({ [`flags.${ID}.${FLAGS.ELEVATION}.bottom`]: value });
 }
 
 // ----- NOTE: Region elevation ----- //
@@ -161,22 +129,6 @@ function regionTopE() {
 
 function regionBottomE() {
   return this.document.elevation.bottom ?? Number.NEGATIVE_INFINITY;
-}
-
-async function setRegionTopE(value) {
- if ( !(value === null || Number.isNumeric(value)) ) {
-    console.err("setRegionTopE value must be a number or null.");
-    return;
-  }
-  return this.document.update({ "elevation.top": value });
-}
-
-async function setRegionBottomE(value) {
-  if ( !(value === null || Number.isNumeric(value)) ) {
-    console.err("setRegionTopE value must be a number or null.");
-    return;
-  }
-  return this.document.update({ "elevation.bottom": value });
 }
 
 // ----- NOTE: Token elevation ----- //
@@ -215,16 +167,15 @@ function tokenTopE() {
 function getIsProne() {
   const proneStatusId = CONFIG.GeometryLib.proneStatusId;
   return Boolean((proneStatusId !== "" && this.actor && this.actor.statuses?.has(proneStatusId))
-    || (MODULE_KEYS.LEVELSAUTOCOVER.ACTIVE
-    && this.document.flags?.[MODULE_KEYS.LEVELSAUTOCOVER.ID]?.[MODULE_KEYS.LEVELSAUTOCOVER.FLAGS.DUCKING]));
+    || (OTHER_MODULES.LEVELSAUTOCOVER
+    && this.document.flags?.[OTHER_MODULES.LEVELSAUTOCOVER.ID]?.[OTHER_MODULES.LEVELSAUTOCOVER.FLAGS.DUCKING]));
 }
 
 function getTokenHeight(token) {
   // Use || to ignore 0 height values.
-  // Previously used foundry.utils.getProperty but it is slow.
-  const { EV, WH } = MODULE_KEYS;
-  return token.document.flags[EV.ID]?.[EV.FLAGS.TOKEN_HEIGHT]
-    || token.document.flags[WH.ID]?.[WH.FLAGS.TOKEN_HEIGHT]
+  // Previously used foundry.utils.getProperty or getFlag but it is slow.
+  const WH = OTHER_MODULES.WH;
+  return (WH ? token.document.flags[WH.ID]?.[WH.FLAGS.TOKEN_HEIGHT] : 0)
     || calculateTokenHeightFromTokenShape(token);
 }
 
@@ -241,82 +192,6 @@ function calculateTokenHeightFromTokenShape(token) {
     * 0.5;
 }
 
-async function setTokenVerticalHeight(value) {
-  if ( !Number.isNumeric(value) || value < 0 ) {
-    console.err("token vertical height must be 0 or greater.");
-    return;
-  }
-  const { ID, FLAGS } = MODULE_KEYS.EV;
-  return this.document.update({ [`flags.${ID}.${FLAGS.TOKEN_HEIGHT}`]: value });
-}
-
-// NOTE: Hooks
-
-/**
- * Monitor token updates for updated losHeight and update the cached data property accordingly.
- * Sync Wall Height and Elevated Vision flags. Prefer EV.
- * @param {Document} document                       The existing Document which was updated
- * @param {object} change                           Differential data that was used to update the document
- * @param {DocumentModificationContext} options     Additional options which modified the update request
- * @param {string} userId                           The ID of the User who triggered the update workflow
- */
-function preUpdateTokenHook(tokenD, data, _options, _userId) {
-  const flatData = foundry.utils.flattenObject(data);
-  const changes = new Set(Object.keys(flatData));
-  const { EV, WH } = MODULE_KEYS;
-  const evFlag = `flags.${EV.ID}.${EV.FLAGS.TOKEN_HEIGHT}`;
-  const whFlag = `flags.${WH.ID}.${WH.FLAGS.TOKEN_HEIGHT}`;
-  const updates = {};
-  if ( changes.has(evFlag) ) {
-    const e = flatData[evFlag];
-    updates[whFlag] = e;
-  } else if ( changes.has(whFlag) ) {
-    const e = flatData[whFlag];
-    updates[evFlag] = e;
-  }
-  if ( !foundry.utils.isEmpty(updates) ) foundry.utils.mergeObject(data, updates);
-}
-
-/**
- * Monitor wall updates for updated top and bottom elevation and update the cached data property.
- * Sync Wall Height and Elevated Vision flags. Prefer EV
- * @param {Document} document                       The Document instance being updated
- * @param {object} changed                          Differential data that will be used to update the document
- * @param {Partial<DatabaseUpdateOperation>} options Additional options which modify the update request
- * @param {string} userId                           The ID of the requesting user, always game.user.id
- * @returns {boolean|void}                          Explicitly return false to prevent update of this Document
- */
-function preUpdateWallHook(wallD, changed, _options, _userId) {
-  const flatData = foundry.utils.flattenObject(changed);
-  const flatChanges = new Set(Object.keys(flatData));
-  const { EV, WH } = MODULE_KEYS;
-  const updates = {};
-  for ( const pos of ["top", "bottom"] ) {
-    const evFlag = `flags.${EV.ID}.${EV.FLAGS.ELEVATION}.${pos}`;
-    const whFlag = `flags.${WH.ID}.${WH.FLAGS.ELEVATION}.${pos}`;
-    let useEV;
-    if ( flatChanges.has(evFlag) && flatChanges.has(whFlag) ) {
-      // Use whichever was changed or default to EV.
-      const docEVValue = foundry.utils.getProperty(wallD, evFlag);
-      const docWHValue = foundry.utils.getProperty(wallD, whFlag);
-      useEV = docEVValue !== foundry.utils.getProperty(flatData, evFlag)
-        || docWHValue === foundry.utils.getProperty(flatData, whFlag);
-    } else if ( flatChanges.has(evFlag) ) useEV = true;
-    else if ( flatChanges.has(whFlag) ) useEV = false;
-    else continue; // No update.
-
-    if ( useEV ) {
-      const e = flatData[evFlag];
-      updates[whFlag] = e;
-    } else {
-      const e = flatData[whFlag];
-      updates[evFlag] = e;
-    }
-  }
-  if ( !foundry.utils.isEmpty(updates) ) foundry.utils.mergeObject(changed, updates);
-}
-
-
 // NOTE: Helper functions to convert to Z pixels.
 
 /**
@@ -324,21 +199,15 @@ function preUpdateWallHook(wallD, changed, _options, _userId) {
  */
 function zTop() { return gridUnitsToPixels(this.topE); }
 
-async function setZTop(value) { return this.setTopE(pixelsToGridUnits(value)); }
-
 /**
  * Helper to convert to Z value for a bottom elevation.
  */
 function zBottom() { return gridUnitsToPixels(this.bottomE); }
 
-async function setZBottom(value) { return this.setBottomE(pixelsToGridUnits(value)); }
-
 /**
  * Helper to convert to Z value for an elevationE.
  */
 function zElevation() { return gridUnitsToPixels(this.elevationE); }
-
-async function setZElevation(value) { return this.setElevationE(pixelsToGridUnits(value)); }
 
 
 // ---- NOTE: PointSource ----- //
@@ -347,26 +216,14 @@ PATCHES.PointSource.ELEVATION.GETTERS = {
   elevationZ: zElevation
 };
 
-PATCHES.PointSource.ELEVATION.METHODS = {
-  setElevationE: setPointSourceElevationE,
-  setElevationZ: setZElevation
-};
-
 // ---- NOTE: VisionSource ----- //
 PATCHES.VisionSource.ELEVATION.GETTERS = { elevationE: visionSourceElevationE };
-PATCHES.VisionSource.ELEVATION.METHODS = { setElevationE: setVisionSourceElevationE };
 
 // ---- NOTE: PlaceableObject ----- //
 PATCHES.PlaceableObject.ELEVATION.GETTERS = {
   elevationE: placeableObjectElevationE,
   elevationZ: zElevation
 };
-
-PATCHES.PlaceableObject.ELEVATION.METHODS = {
-  setElevationE: setPlaceableObjectElevationE,
-  setElevationZ: setZElevation
-};
-
 
 // ---- NOTE: Token ----- //
 PATCHES.Token.ELEVATION.GETTERS = {
@@ -385,27 +242,12 @@ PATCHES.Token.ELEVATION.GETTERS = {
   visionHeight: getTokenVisionHeight
 };
 
-PATCHES.Token.ELEVATION.METHODS = {
-  setBottomE: setPlaceableObjectElevationE, // Alias
-  setBottomZ: setZBottom, // Alias
-  setVerticalHeight: setTokenVerticalHeight // Async
-};
-
-PATCHES.Token.ELEVATION.HOOKS = { preUpdateToken: preUpdateTokenHook };
-
 // ---- NOTE: Wall ----- //
 PATCHES.Wall.ELEVATION.GETTERS = {
   topE: wallTopE,
   topZ: zTop,
   bottomE: wallBottomE,
   bottomZ: zBottom
-};
-
-PATCHES.Wall.ELEVATION.METHODS = {
-  setTopE: setWallTopE,
-  setTopZ: setZTop,
-  setBottomE: setWallBottomE,
-  setBottomZ: setZBottom
 };
 
 // ----- NOTE: Region ----- //
@@ -415,12 +257,3 @@ PATCHES.Region.ELEVATION.GETTERS = {
   bottomE: regionBottomE,
   bottomZ: zBottom
 };
-
-PATCHES.Region.ELEVATION.METHODS = {
-  setTopE: setRegionTopE,
-  setTopZ: setZTop,
-  setBottomE: setRegionBottomE,
-  setBottomZ: setZBottom
-};
-
-PATCHES.Wall.ELEVATION.HOOKS = { preUpdateWall: preUpdateWallHook };

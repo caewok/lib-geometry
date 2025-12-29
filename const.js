@@ -10,11 +10,17 @@ GEOMETRY_CONFIG.CenteredPolygons = {};
 GEOMETRY_CONFIG.Graph = {};
 GEOMETRY_CONFIG.RegularPolygons = {};
 GEOMETRY_CONFIG.threeD = {};
+GEOMETRY_CONFIG.placeableGeometry = {};
 
-export const MODULE_KEYS = {
+// Elevated Vision flags used
+export const MODULE_ID = "libGeometry";
+
+// The Wall Height keys
+
+// Track certain modules that complement features of this module.
+export const OTHER_MODULES = {
   EV: {
     ID: "elevatedvision",
-    ACTIVE: false,
     FLAGS: {
       TOKEN_HEIGHT: "tokenHeight",
       ELEVATION: "elevation",
@@ -23,21 +29,18 @@ export const MODULE_KEYS = {
 
   WH: {
     ID: "wall-height",
-    ACTIVE: false,
     FLAGS: {
       TOKEN_HEIGHT: "tokenHeight",
-      ELEVATION: "wall-height"
+      ELEVATION: "wall-height",
     }
   },
 
   LEVELS: {
     ID: "levels",
-    ACTIVE: false
   },
 
   LEVELSAUTOCOVER: {
     ID: "levelsautocover",
-    ACTIVE: false,
     FLAGS: {
       DUCKING: "ducking"
     }
@@ -45,11 +48,12 @@ export const MODULE_KEYS = {
 
   TERRAIN_MAPPER: {
     ID: "terrainmapper",
-    ACTIVE: false,
   }
 };
 
 // Hook init b/c game.modules is not initialized at start.
 Hooks.once("init", function() {
-  for ( const obj of Object.values(MODULE_KEYS) ) obj.ACTIVE = game.modules.get(obj.ID)?.active
+  for ( const [key, obj] of Object.entries(OTHER_MODULES) ) {
+    if ( !game.modules.get(obj.KEY)?.active ) delete OTHER_MODULES[key];
+  }
 });
