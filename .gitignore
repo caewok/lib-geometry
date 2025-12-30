@@ -4,3 +4,5 @@
 eslint.config.mjs
 
 .windsurf/workflows/
+
+*.sh
