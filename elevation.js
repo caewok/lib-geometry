@@ -140,7 +140,7 @@ function regionBottomE() {
  */
 function getTokenVerticalHeight() {
   const isProne = this.isProne;
-  const heightMult = isProne ? Math.clamp(CONFIG.GeometryLib.proneMultiplier, 0, 1) : 1;
+  const heightMult = isProne ? Math.clamp(CONFIG.GeometryLib.CONFIG.proneMultiplier, 0, 1) : 1;
   return (getTokenHeight(this) * heightMult) || 1; // Force at least 1 pixel high.
 }
 
@@ -148,7 +148,7 @@ function getTokenVerticalHeight() {
  * Calculated vision height.
  */
 function getTokenVisionHeight() {
-  return Math.max(1, this.verticalHeight * Math.clamp(CONFIG.GeometryLib.visionHeightMultiplier, 0, 1));
+  return Math.max(1, this.verticalHeight * Math.clamp(CONFIG.GeometryLib.CONFIG.visionHeightMultiplier, 0, 1));
 }
 
 function getTokenVisionE() { return this.bottomE + this.visionHeight; }
@@ -165,7 +165,7 @@ function tokenTopE() {
 
 /** @type {boolean} */
 function getIsProne() {
-  const proneStatusId = CONFIG.GeometryLib.proneStatusId;
+  const proneStatusId = CONFIG.GeometryLib.CONFIG.proneStatusId;
   return Boolean((proneStatusId !== "" && this.actor && this.actor.statuses?.has(proneStatusId))
     || (OTHER_MODULES.LEVELSAUTOCOVER
     && this.document.flags?.[OTHER_MODULES.LEVELSAUTOCOVER.ID]?.[OTHER_MODULES.LEVELSAUTOCOVER.FLAGS.DUCKING]));

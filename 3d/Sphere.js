@@ -4,7 +4,6 @@ PIXI,
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "../const.js";
 import { Polygon3d, Circle3d } from "./Polygon3d.js";
 import { Point3d } from "./Point3d.js";
 import { MatrixFlat } from "../MatrixFlat.js";
@@ -783,5 +782,3 @@ export class Sphere {
     return [...pointsMap.values()]
   }
 }
-
-GEOMETRY_CONFIG.threeD.Sphere = Sphere;

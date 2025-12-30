@@ -4,7 +4,6 @@ canvas,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "./const.js";
 import { roundNearWhole } from "./util.js";
 import { GridCoordinates } from "./GridCoordinates.js";
 import { Pool } from "./Pool.js";
@@ -120,5 +119,3 @@ export class HexGridCoordinates extends HexCoordinateMixin(GridCoordinates) {
 
 
 }
-
-GEOMETRY_CONFIG.HexGridCoordinates ??= HexGridCoordinates;

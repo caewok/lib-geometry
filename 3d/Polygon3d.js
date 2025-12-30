@@ -317,7 +317,7 @@ export class Polygon3d {
    * @returns {ClipperPaths}
    */
   toClipperPaths({ omitAxis = "z", scalingFactor = 1 } = {}) {
-    const clipperVersion = CONFIG.GeometryLib.clipperVersion === 2;
+    const clipperVersion = CONFIG.GeometryLib.CONFIG.clipperVersion === 2;
     let points;
     let cl;
     if ( clipperVersion === 2 ) {
@@ -2047,8 +2047,8 @@ export class Polygons3d extends Polygon3d {
    */
   toClipperPaths(opts) {
     const cpObjArr = this.#applyMethodToAllWithReturn("toClipperPaths", opts);
-    const cl = CONFIG.GeometryLib.clipperVersion === 2 ? Clipper2Paths : ClipperPaths;
-    return cl.joinPaths(cpObjArr); // TODO: Move to Clipper 2?
+    const cl = CONFIG.GeometryLib.CONFIG.ClipperPaths;
+    return cl.joinPaths(cpObjArr);
   }
 
   toPolygon2d(opts) { return this.#applyMethodToAllWithReturn("toPolygon2d", opts); }

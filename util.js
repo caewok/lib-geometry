@@ -7,64 +7,16 @@ PIXI
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "./const.js";
 import { extractPixels } from "./extract-pixels.js";
 
-// Functions that would go in foundry.utils if that object were extensible
-export function registerFoundryUtilsMethods() {
-  GEOMETRY_CONFIG.registered ??= new Set();
-  if ( GEOMETRY_CONFIG.registered.has("utils") ) return;
-
-  GEOMETRY_CONFIG.utils = {
-    orient3dFast,
-    quadraticIntersection,
-    lineCircleIntersection,
-    lineSegment3dPlaneIntersects,
-    lineSegmentCrosses,
-    gridUnitsToPixels,
-    pixelsToGridUnits,
-    perpendicularPoint,
-    centeredPolygonFromDrawing,
-    shortestRouteBetween3dLines,
-    isOnSegment,
-    categorizePointsInOutConvexPolygon,
-    bresenhamLine,
-    bresenhamLineIterator,
-    bresenhamLine3d,
-    bresenhamLine3dIterator,
-    bresenhamLine4d,
-    bresenhamLine3d_old,
-    bresenhamHexLine,
-    bresenhamHexLine3d,
-    trimLineSegmentToPixelRectangle,
-    doSegmentsOverlap,
-    pointsAreCollinear,
-    findOverlappingPoints,
-    IX_TYPES,
-    segmentCollision,
-    endpointIntersection,
-    segmentIntersection,
-    segmentOverlap,
-    roundDecimals,
-    cutaway,
-    extractPixels,
-    almostLessThan,
-    almostGreaterThan,
-    almostBetween,
-    instanceOrTypeOf,
-  };
-
-
-  // Simple extensions
-  Math.minMax = function(...args) {
-    return args.reduce((acc, curr) => {
-      acc.min = Math.min(acc.min, curr);
-      acc.max = Math.max(acc.max, curr);
-      return acc;
-    }, { min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY});
-  };
-  CONFIG.GeometryLib.registered.add("utils");
-}
+// Simple extensions
+Math.minMax = function(...args) {
+  return args.reduce((acc, curr) => {
+    acc.min = Math.min(acc.min, curr);
+    acc.max = Math.max(acc.max, curr);
+    return acc;
+  }, { min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY});
+};
 
 /**
  * Define a null set class and null set which always contains 0 elements.
@@ -77,6 +29,36 @@ class NullSet extends Set {
   }
 }
 export const NULL_SET = new NullSet();
+
+/**
+ * Efficiently combine multiple typed arrays.
+ * @param {TypedArray[]} args
+ * @returns {TypedArray}
+ */
+export function combineTypedArrays(arrs) {
+  const len = arrs.reduce((acc, curr) => acc + curr.length, 0);
+  const out = new arrs[0].constructor(len);
+  out.set(arrs[0]);
+  let idx = 0;
+  for ( let i = 0, n = arrs.length; i < n; i += 1 ) {
+    out.set(arrs[i], idx);
+    idx += arrs[i].length;
+  }
+  return out;
+}
+
+/**
+ * Sets a typed array to the values of another, in place if possible.
+ * If the source length differs from the destination, a new destination is created.
+ * @param {TypedArray} dst
+ * @param {TypedArray} src
+ * @returns {TypedArray} dst, possibly new
+ */
+export function setTypedArray(dst, src) {
+  if ( src.length !== dst.length ) dst = new dst.constructor(src);
+  else dst.set(src);
+  return dst;
+}
 
 /**
  * Round numbers that are close to 0 or 1.

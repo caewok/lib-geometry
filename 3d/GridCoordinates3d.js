@@ -7,7 +7,6 @@ canvas,
 import { roundNearWhole, pixelsToGridUnits, gridUnitsToPixels } from "../util.js";
 import { ElevatedPoint } from "./ElevatedPoint.js";
 import { GridCoordinates } from "../GridCoordinates.js";
-import { GEOMETRY_CONFIG } from "../const.js";
 import { Pool } from "../Pool.js";
 
 // ----- NOTE: 3d versions of Foundry typedefs ----- //
@@ -220,5 +219,3 @@ export class GridCoordinates3d extends ElevatedPoint {
   static elevationForUnit(k) { return roundNearWhole(k * canvas.scene.dimensions.distance); }
 
 }
-
-GEOMETRY_CONFIG.threeD.GridCoordinates3d ??= GridCoordinates3d;

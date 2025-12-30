@@ -5,7 +5,6 @@ PIXI
 "use strict";
 
 import { RegularPolygon } from "./RegularPolygon.js";
-import { GEOMETRY_CONFIG } from "../const.js";
 import { NULL_SET } from "../util.js";
 
 /**
@@ -204,6 +203,3 @@ export class RegularStar extends RegularPolygon {
   }
 
 }
-
-GEOMETRY_CONFIG.RegularPolygons.RegularStar ??= RegularStar;
-

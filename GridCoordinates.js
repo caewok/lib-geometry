@@ -5,7 +5,6 @@ PIXI,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "./const.js";
 import { Pool } from "./Pool.js";
 
 // ----- NOTE: Foundry typedefs  ----- //
@@ -196,6 +195,3 @@ export class GridCoordinates extends PIXI.Point {
 
 // Synonyms
 GridCoordinates.getDirectPath = GridCoordinates.directPath; // Match Foundry's canvas.grid.getDirectPath.
-
-
-GEOMETRY_CONFIG.GridCoordinates ??= GridCoordinates;

@@ -3,7 +3,6 @@ PIXI,
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "./const.js";
 import { Point3d } from "./3d/Point3d.js";
 import { cutaway, gridUnitsToPixels } from "./util.js";
 import { Draw } from "./Draw.js";
@@ -237,5 +236,3 @@ export class CutawayPolygon extends PIXI.Polygon {
     Draw.shape(invertedPoly, opts);
   }
 }
-
-GEOMETRY_CONFIG.CutawayPolygon = CutawayPolygon;

@@ -5,7 +5,6 @@ canvas,
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "./const.js";
 import { Draw } from "./Draw.js";
 import { NULL_SET } from "./util.js";
 
@@ -539,5 +538,3 @@ export class ClipperPaths {
     graphics.endFill();
   }
 }
-
-GEOMETRY_CONFIG.ClipperPaths ??= ClipperPaths;

@@ -4,7 +4,6 @@ PIXI
 "use strict";
 
 import { RegularPolygon } from "./RegularPolygon.js";
-import { GEOMETRY_CONFIG } from "../const.js";
 import { NULL_SET } from "../util.js";
 
 const squareRotations = new Set([45, 135, 225, 315]); // Oriented []
@@ -185,6 +184,3 @@ export class Square extends RegularPolygon {
     return super.overlaps(other);
   }
 }
-
-GEOMETRY_CONFIG.RegularPolygons.Square ??= Square;
-

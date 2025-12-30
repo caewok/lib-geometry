@@ -3,7 +3,6 @@ PIXI,
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "./const.js";
 import { Point3d } from "./3d/Point3d.js";
 
 // Basic matrix operations
@@ -1474,8 +1473,6 @@ export class MatrixFlat {
 MatrixFlat.fromFlatArray = MatrixFlat.fromRowMajorArray;
 MatrixFlat.prototype.copyTo = MatrixFlat.prototype.clone;
 
-GEOMETRY_CONFIG.MatrixFlat ??= MatrixFlat;
-
 
 // Example typed class
 
@@ -1508,8 +1505,6 @@ export class MatrixFloat32 extends MatrixFlat {
   }
 
 }
-GEOMETRY_CONFIG.MatrixFloat32 ??= MatrixFloat32;
-
 
 /* Tests
 Matrix = CONFIG.GeometryLib.Matrix

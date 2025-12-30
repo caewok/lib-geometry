@@ -11,7 +11,6 @@ import { extractPixels } from "./extract-pixels.js";
 import { roundFastPositive, bresenhamLine, bresenhamLineIterator, trimLineSegmentToPixelRectangle } from "./util.js";
 import { Draw } from "./Draw.js";
 import { MatrixFlat as Matrix } from "./MatrixFlat.js";
-import { GEOMETRY_CONFIG } from "./const.js";
 
 
 /* Pixel Cache
@@ -1831,11 +1830,3 @@ export class PixelMarker extends Marker {
  */
 const POW10_8 = Math.pow(10, 8);
 function fastFixed(x) { return Math.round(x * POW10_8) / POW10_8; }
-
-
-GEOMETRY_CONFIG.PixelCache ??= PixelCache;
-GEOMETRY_CONFIG.TrimmedPixelCache ??= TrimmedPixelCache;
-GEOMETRY_CONFIG.TilePixelCache ??= TilePixelCache;
-GEOMETRY_CONFIG.Marker ??= Marker;
-GEOMETRY_CONFIG.PixelMarker ??= PixelMarker;
-

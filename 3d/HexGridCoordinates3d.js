@@ -3,7 +3,6 @@
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "../const.js";
 import { GridCoordinates3d } from "./GridCoordinates3d.js";
 import { HexCoordinateMixin } from "../HexGridCoordinates.js";
 import { Pool } from "../Pool.js";
@@ -84,8 +83,5 @@ export class HexGridCoordinates3d extends HexCoordinateMixin(GridCoordinates3d) 
     const r = Math.round(this.r);
     return this.setToHexCube({ q, r }, this.elevation);
   }
-
-
 }
 
-GEOMETRY_CONFIG.threeD.HexGridCoordinates3d ??= HexGridCoordinates3d;

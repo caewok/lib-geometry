@@ -3,7 +3,6 @@ PIXI
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "../const.js";
 import { Point3d } from "./Point3d.js";
 import { MatrixFlat } from "../MatrixFlat.js";
 import { pointsAreCollinear } from "../util.js";
@@ -645,5 +644,3 @@ function numerator2dv3(pt) {
     numV: ((pt.z - point.z) * u.y) - ((pt.y - point.y) * u.z)
   };
 }
-
-GEOMETRY_CONFIG.threeD.Plane = Plane;

@@ -6,7 +6,6 @@ WeilerAthertonClipper
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "../const.js";
 import { NULL_SET } from "../util.js";
 
 /* Define a set of Regular Polygon shapes
@@ -468,5 +467,3 @@ export class RegularPolygon extends PIXI.Polygon {
   }
 
 }
-
-GEOMETRY_CONFIG.RegularPolygons.RegularPolygon ??= RegularPolygon;

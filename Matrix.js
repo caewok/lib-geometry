@@ -3,7 +3,6 @@ PIXI,
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "./const.js";
 import { Point3d } from "./3d/Point3d.js";
 
 // Basic matrix operations
@@ -1233,5 +1232,3 @@ export class Matrix {
    */
   print() { console.table(this.arr); }
 }
-
-GEOMETRY_CONFIG.Matrix ??= Matrix;

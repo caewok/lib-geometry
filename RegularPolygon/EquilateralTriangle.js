@@ -3,7 +3,6 @@ PIXI
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "../const.js";
 import { RegularPolygon } from "./RegularPolygon.js";
 import { NULL_SET } from "../util.js";
 
@@ -114,5 +113,3 @@ export class EquilateralTriangle extends RegularPolygon {
     return super.getBounds();
   }
 }
-
-GEOMETRY_CONFIG.RegularPolygons.EquilateralTriangle ??= EquilateralTriangle;

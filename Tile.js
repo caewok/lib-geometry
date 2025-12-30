@@ -57,7 +57,7 @@ PATCHES.PIXEL_CACHE.HOOKS = { updateTile };
 function evPixelCache() {
   if ( !this.texture ) return undefined;
   return this._evPixelCache
-    || (this._evPixelCache = TilePixelCache.fromOverheadTileAlpha(this, CONFIG.GeometryLib.pixelCacheResolution ?? 1)); // 1/4 resolution.
+    || (this._evPixelCache = TilePixelCache.fromOverheadTileAlpha(this, CONFIG.GeometryLib.CONFIG.pixelCacheResolution ?? 1)); // 1/4 resolution.
 }
 
 PATCHES.PIXEL_CACHE.GETTERS = { evPixelCache };

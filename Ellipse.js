@@ -3,7 +3,6 @@ PIXI,
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "./const.js";
 import { Draw } from "./Draw.js";
 import { NULL_SET } from "./util.js";
 
@@ -265,5 +264,3 @@ export class Ellipse extends PIXI.Ellipse {
     drawTool.shape(shape, opts);
   }
 }
-
-GEOMETRY_CONFIG.Ellipse ??= Ellipse;

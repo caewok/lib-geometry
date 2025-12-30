@@ -5,17 +5,23 @@ Hooks
 */
 "use strict";
 
+export const VERSION = "0.5.0";
+
+import { MODULE_ID as thisModuleId } from "../const.js";
+
+export const GEOMETRY_LIB_ID = "GeometryLib";
+
+export const MODULE_ID = thisModuleId;
+
+// Accessed at CONFIG.GeometryLib.
+// Add various groupings (folders).
 export const GEOMETRY_CONFIG = {};
 GEOMETRY_CONFIG.CenteredPolygons = {};
 GEOMETRY_CONFIG.Graph = {};
 GEOMETRY_CONFIG.RegularPolygons = {};
 GEOMETRY_CONFIG.threeD = {};
+GEOMETRY_CONFIG.placeableTrackers = {};
 GEOMETRY_CONFIG.placeableGeometry = {};
-
-// Elevated Vision flags used
-export const MODULE_ID = "libGeometry";
-
-// The Wall Height keys
 
 // Track certain modules that complement features of this module.
 export const OTHER_MODULES = {
@@ -48,7 +54,11 @@ export const OTHER_MODULES = {
 
   TERRAIN_MAPPER: {
     ID: "terrainmapper",
-  }
+  },
+
+  ATV: {
+    ID: "tokenvisibility",
+  },
 };
 
 // Hook init b/c game.modules is not initialized at start.

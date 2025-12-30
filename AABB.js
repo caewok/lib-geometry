@@ -3,7 +3,6 @@ PIXI,
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "./const.js";
 import { Point3d } from "./3d/Point3d.js";
 import { Draw } from "./Draw.js";
 import { almostLessThan, almostGreaterThan, almostBetween } from "./util.js";
@@ -735,8 +734,6 @@ export class AABB3d extends AABB2d {
 
 }
 
-GEOMETRY_CONFIG.AABB2d = AABB2d;
-GEOMETRY_CONFIG.threeD.AABB3d = AABB3d;
 
 // Helper functions.
 

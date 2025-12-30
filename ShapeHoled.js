@@ -7,7 +7,6 @@ PIXI,
 
 import { ClipperPaths } from "./ClipperPaths.js";
 import { Clipper2Paths} from "./Clipper2Paths.js";
-import { GEOMETRY_CONFIG } from "./const.js";
 
 /**
  * Class that holds an array of PIXI shapes (PIXI.Polygon, PIXI.Circle, etc.)
@@ -124,7 +123,7 @@ export class ShapeHoled {
     });
 
     const polygons = [...this.shapes, ...this.holes].map(s => s.toPolygon())
-    const cl = CONFIG.GeometryLib.clipperVersion === 2 ? Clipper2Paths : ClipperPaths;
+    const cl = CONFIG.GeometryLib.CONFIG.ClipperPaths;
     return cl.fromPolygons(polygons);
   }
 
@@ -212,6 +211,3 @@ export class ShapeHoled {
     return !this.holes.some(h => h.overlaps(other));
   }
 }
-
-GEOMETRY_CONFIG.ShapeHoled ??= ShapeHoled;
-

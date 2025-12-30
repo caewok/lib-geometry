@@ -9,7 +9,6 @@ CONFIG
 
 "use strict";
 
-import { GEOMETRY_CONFIG } from "./const.js";
 
 // Draw class for drawing shapes; primarily for debugging
 
@@ -232,6 +231,3 @@ export class Draw {
     this.g.clear();
   }
 }
-
-GEOMETRY_CONFIG.Draw ??= Draw;
-

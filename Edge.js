@@ -3,7 +3,7 @@ foundry,
 */
 "use strict";
 
-import { MODULE_KEYS } from "./const.js";
+import { OTHER_MODULES } from "./const.js";
 
 // Modify CanvasEdges class to add a quadtree and track adding and removing edges.
 // Patches for the CanvasEdges class.
@@ -60,9 +60,9 @@ function _setWallElevation(wall, e) {
  * @param {Edge} edge       Edge for which the elevation is applied; needed for ramps
  */
 function _setRegionElevation(region, edge, e) {
-  const TM = MODULE_KEYS.TERRAIN_MAPPER;
+  const TM = OTHER_MODULES.TERRAIN_MAPPER;
   let top = region.document.elevation.top;
-  if ( TM.ACTIVE && region[TM.ID].isElevated ) {
+  if ( TM && region[TM.ID].isElevated ) {
     if ( region[TM.ID].isRamp ) return _setRampElevation(region, edge, e);
     top = region[TM.ID].plateauElevation;
   }
@@ -81,7 +81,7 @@ function _setRegionElevation(region, edge, e) {
  */
 function _setRampElevation(region, edge, e) {
   // Assumes TM is active.
-  const TM = MODULE_KEYS.TERRAIN_MAPPER;
+  const TM = OTHER_MODULES.TERRAIN_MAPPER;
   const bottom = region.document.elevation.bottom;
   const { a, b } = e;
   a.top = region[TM.ID].elevationUponEntry(edge.a);

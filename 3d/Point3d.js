@@ -32,7 +32,6 @@ PIXI
  * @property {Point3d} bl
  * @property {Point3d} br
  */
-import { GEOMETRY_CONFIG } from "../const.js";
 import { Pool } from "../Pool.js";
 import { MatrixFlat } from "../MatrixFlat.js";
 import { NULL_SET, gridUnitsToPixels, roundDecimals } from "../util.js";
@@ -772,4 +771,3 @@ Point3d.prototype.toString = function() { return `{x: ${this.x}, y: ${this.y}, z
 Point3d.ZERO = new Point3d(0, 0, 0);
 Object.freeze(Point3d.ZERO);
 
-GEOMETRY_CONFIG.threeD.Point3d ??= Point3d;

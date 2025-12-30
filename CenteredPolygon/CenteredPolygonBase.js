@@ -3,8 +3,6 @@ PIXI,
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "../const.js";
-GEOMETRY_CONFIG.CenteredPolygons ??= {};
 import { NULL_SET } from "../util.js";
 
 /**
@@ -176,5 +174,3 @@ export class CenteredPolygonBase extends PIXI.Polygon {
     return outPoint;
   }
 }
-
-GEOMETRY_CONFIG.CenteredPolygons.CenteredPolygonBase ??= CenteredPolygonBase;

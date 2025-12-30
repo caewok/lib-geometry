@@ -4,7 +4,6 @@ canvas,
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "./const.js";
 import { Draw } from "./Draw.js";
 import { NULL_SET } from "./util.js";
 
@@ -13,10 +12,9 @@ import { NULL_SET } from "./util.js";
 import * as Clipper2 from "./clipper2_esm2020/clipper2-js.mjs";
 
 const { Path64, Paths64, Point64 } = Clipper2;
-GEOMETRY_CONFIG.clipperVersion = 1;
 
 /* Example from https://github.com/IRobot1/clipper2-ts
-Clipper2Paths = CONFIG.GeometryLib.Clipper2Paths
+Clipper2Paths = CONFIG.GeometryLib.CONFIG.Clipper2Paths
 Clipper2 = Clipper2Paths.Clipper2
 
 a = [ 100, 50, 10, 79, 65, 2, 65, 98, 10, 21 ]
@@ -593,4 +591,3 @@ export class Clipper2Paths {
   }
 }
 
-GEOMETRY_CONFIG.Clipper2Paths ??= Clipper2Paths;
