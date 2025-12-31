@@ -194,7 +194,7 @@ export class AbstractPlaceableTracker {
   }
 }
 
-/*
+/* Testing
 tracking = CONFIG.GeometryLib.lib.placeableTracking
 tracking.TilePositionTracker.registerPlaceableHooks()
 tracking.TilePositionTracker.registerExistingPlaceables()

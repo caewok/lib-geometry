@@ -1,0 +1,195 @@
+/* globals
+CONST,
+PIXI,
+*/
+/* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
+"use strict";
+
+import { AbstractPlaceableGeometryTracker, allGeometryMixin, noVertexGeometryMixin } from "./AbstractPlaceableGeometryTracker.js";
+import { WallUpdateTracker } from "./WallTracker.js";
+
+// LibGeometry
+import { GEOMETRY_LIB_ID } from "../const.js";
+import { AABB3d } from "../AABB.js";
+import { MatrixFloat32 } from "../MatrixFlat.js";
+import { Quad3d } from "../3d/Polygon3d.js";
+import { gridUnitsToPixels, almostBetween } from "../util.js";
+
+class AbstractWallGeometryTracker extends AbstractPlaceableGeometryTracker {
+  /** @type {string} */
+  static PLACEABLE_NAME = "Wall";
+
+  /** @type {string} */
+  static layer = "walls";
+
+  /** @type {TrackerKeys} */
+  static TRACKERS = {
+    shape: WallUpdateTracker,
+  };
+
+  get wall() { return this.placeable; }
+
+  get edge() { return this.placeable.edge; }
+
+  // ----- NOTE: AABB ----- //
+  calculateAABB(aabb) { return AABB3d.fromEdge(this.edge, aabb); }
+
+  // ----- NOTE: Matrices ---- //
+
+  calculateTranslationMatrix(mat) {
+    const edge = this.edge;
+    const pos = this.constructor.edgeCenter(edge);
+    const { top, bottom } = this.constructor.edgeElevation(edge);
+    const zHeight = top - bottom;
+    const z = top - (zHeight * 0.5);
+    return MatrixFloat32.translation(pos.x, pos.y, z, mat);
+  }
+
+  calculateRotationMatrix(mat) {
+    const rot = this.constructor.edgeAngle(this.edge);
+    return MatrixFloat32.rotationZ(rot, true, mat);
+  }
+
+  calculateScaleMatrix(mat) {
+    const edge = this.edge;
+    const ln = this.constructor.edgeLength(edge);
+    const { top, bottom } = this.constructor.edgeElevation(edge);
+    const scaleZ = top - bottom;
+    return MatrixFloat32.scale(ln, 1.0, scaleZ, mat);
+  }
+
+  // ----- NOTE: Polygon3d ---- //
+
+    /** @type {Faces} */
+  _prototypeFaces = {
+    top: new Quad3d(),
+    bottom: new Quad3d(),
+    sides: [],
+  }
+
+  /** @type {Faces} */
+  faces = {
+    top: new Quad3d(),
+    bottom: new Quad3d(),
+    sides: [],
+  }
+
+  /**
+   * Update the faces for this wall.
+   * Normal walls have front (top) and back (bottom). One-directional walls have only top.
+   */
+  _updateFaces() {
+    this.#updateFace(this.faces.top);
+    if ( this.constructor.isDirectional(this.edge) ) this.faces.bottom = null;
+    else {
+      this.faces.bottom ??= new Quad3d();
+      this.faces.top.clone(this.faces.bottom);
+      this.faces.bottom.reverseOrientation();
+    }
+  }
+
+  /**
+   * Define a Quad3d for this wall.
+   */
+  #updateFace(quad) {
+    const wall = this.placeable;
+    let topZ = wall.topZ;
+    let bottomZ = wall.bottomZ;
+    if ( !isFinite(topZ) ) topZ = 1e06;
+    if ( !isFinite(bottomZ) ) bottomZ = -1e06;
+
+    quad.points[0].set(...wall.edge.a, topZ);
+    quad.points[1].set(...wall.edge.a, bottomZ);
+    quad.points[2].set(...wall.edge.b, bottomZ);
+    quad.points[3].set(...wall.edge.b, topZ);
+    quad.clearCache();
+  }
+
+  /**
+   * Determine where a ray hits this object in 3d.
+   * Stops at the first hit for a triangle facing the correct direction.
+   * Ignores intersections behind the ray.
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @param {number} [cutoff=1]   Ignore hits further along the ray from this (treat ray as segment)
+   * @returns {number|null} The distance along the ray
+   */
+  rayIntersection(rayOrigin, rayDirection, minT = 0, maxT = Number.POSITIVE_INFINITY) {
+    // Top and bottom are the same (just opposite orientations) and so only need to test one.
+    const t = this.faces.top.intersectionT(rayOrigin, rayDirection);
+    return (t !== null && almostBetween(t, minT, maxT)) ? t : null;
+  }
+
+
+  // ----- NOTE: Wall characteristics ----- //
+
+  /**
+   * Determine the top and bottom edge elevations. Null values will be given large constants.
+   * @param {Edge} edge
+   * @returns {object}
+   * - @prop {number} top         1e05 if null
+   * - @prop {number} bottom      -1e05 if null
+   */
+  static edgeElevation(edge) {
+    let { top, bottom } = edge.elevationLibGeometry.a;
+    top ??= 1e05;
+    bottom ??= -1e05;
+    top = gridUnitsToPixels(top);
+    bottom = gridUnitsToPixels(bottom);
+    return { top, bottom };
+  }
+
+  /**
+   * Determine the 2d center point of the edge.
+   * @param {Edge} edge
+   * @returns {PIXI.Point}
+   */
+  static edgeCenter(edge) {
+    const ctr = new PIXI.Point();
+    return edge.a.add(edge.b, ctr).multiplyScalar(0.5, ctr);
+  }
+
+  /**
+   * Determine the 2d length of the edge.
+   * @param {Edge} edge
+   * @returns {number}
+   */
+  static edgeLength(edge) { return PIXI.Point.distanceBetween(edge.a, edge.b); }
+
+  /**
+   * Angle of the edge on the 2d canvas.
+   * @param {Edge} edge
+   * @returns {number} Angle in radians
+   */
+  static edgeAngle(edge) {
+    const delta = edge.b.subtract(edge.a, PIXI.Point.tmp);
+    const out = Math.atan2(delta.y, delta.x);
+    delta.release();
+    return out;
+  }
+
+  /**
+   * Is this a terrain (limited) edge?
+   * @param {Edge} edge
+   * @returns {boolean}
+   */
+  static isTerrain(edge, { senseType = "sight" } = {}) {
+    return edge[senseType] === CONST.WALL_SENSE_TYPES.LIMITED;
+  }
+
+  /**
+   * Is this a directional edge?
+   * @param {Edge} edge
+   * @returns {boolean}
+   */
+  static isDirectional(edge) { return Boolean(edge.direction); }
+}
+
+export class WallVertexGeometryTracker extends allGeometryMixin(AbstractWallGeometryTracker) {
+  constructor(placeable) {
+    const handler = placeable[GEOMETRY_LIB_ID]?.[WallVertexGeometryTracker.ID];
+    if ( handler && !(handler instanceof WallVertexGeometryTracker) ) handler.destroy(); // Remove inferior version.
+    super(placeable);
+  }
+}
+export class WallGeometryTracker extends noVertexGeometryMixin(AbstractWallGeometryTracker) {}
