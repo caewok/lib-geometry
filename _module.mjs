@@ -5,6 +5,10 @@ export * as CenteredPolygon from "./CenteredPolygon/_module.mjs";
 export * as RegularPolygon from "./RegularPolygon/_module.mjs";
 export * as bench from "./Benchmark.js";
 
+export * as placeableGeometry from "./placeable_geometry/_module.mjs";
+export * as placeableTracking from "./placeable_tracking/_module.mjs";
+export * as placeableGeometryTracking from "./placeable_tracking/_module_geometry.mjs";
+
 export { AABB2d } from "./AABB.js";
 export * from "./ClipperPaths.js";
 export * from "./Clipper2Paths.js";

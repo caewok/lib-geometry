@@ -4,6 +4,8 @@ foundry,
 */
 "use strict";
 
+import { GEOMETRY_LIB_ID } from "./const.js";
+
 // Patcher
 import { Patcher } from "../Patcher.js";
 
@@ -61,23 +63,24 @@ const PATCHES = {
 
 export function registerGeometryLibPatches() {
   // If older PATCHER is present, deregister it and remove it.
-  if ( CONFIG.GeometryLib.PATCHER ) deRegister();
+  if ( CONFIG[GEOMETRY_LIB_ID].PATCHER ) deRegister();
 
   // Create a new Patcher object and register the patches.
-  CONFIG.GeometryLib.PATCHER = new Patcher();
-  CONFIG.GeometryLib.PATCHER.addPatchesFromRegistrationObject(PATCHES);
-  CONFIG.GeometryLib.PATCHER.registerGroup("PIXI");
-  CONFIG.GeometryLib.PATCHER.registerGroup("CONSTRAINED_TOKEN_BORDER");
-  CONFIG.GeometryLib.PATCHER.registerGroup("PIXEL_CACHE");
-  CONFIG.GeometryLib.PATCHER.registerGroup("ELEVATION");
-  CONFIG.GeometryLib.PATCHER.registerGroup("CANVAS_EDGES");
+  const patcher = CONFIG[GEOMETRY_LIB_ID].PATCHER = new Patcher();
+  patcher.addPatchesFromRegistrationObject(PATCHES);
+  patcher.registerGroup("PIXI");
+  patcher.registerGroup("CONSTRAINED_TOKEN_BORDER");
+  patcher.registerGroup("PIXEL_CACHE");
+  patcher.registerGroup("ELEVATION");
+  patcher.registerGroup("CANVAS_EDGES");
 }
 
 export function deRegister() {
-  CONFIG.GeometryLib.registered?.clear();
-  CONFIG.GeometryLib.PATCHER.deregisterGroup("ELEVATION");
-  CONFIG.GeometryLib.PATCHER.deregisterGroup("PIXI");
-  CONFIG.GeometryLib.PATCHER.deregisterGroup("PIXEL_CACHE");
-  CONFIG.GeometryLib.PATCHER.deregisterGroup("CANVAS_EDGES");
-  CONFIG.GeometryLib.PATCHER.deregisterGroup("CONSTRAINED_TOKEN_BORDER");
+  CONFIG[GEOMETRY_LIB_ID].registered?.clear();
+  const patcher = CONFIG[GEOMETRY_LIB_ID].PATCHER
+  patcher.deregisterGroup("ELEVATION");
+  patcher.deregisterGroup("PIXI");
+  patcher.deregisterGroup("PIXEL_CACHE");
+  patcher.deregisterGroup("CANVAS_EDGES");
+  patcher.deregisterGroup("CONSTRAINED_TOKEN_BORDER");
 }
