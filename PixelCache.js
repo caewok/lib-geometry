@@ -1602,6 +1602,9 @@ export class TilePixelCache extends TrimmedPixelCache {
   /** @type {numeric} */
   get tileHeight() { return this.tile.document.height; }
 
+  /** @type {number} */
+  get alphaThreshold() { return this.tile.document.texture.alphaThreshold || 0; }
+
   /**
    * For backwards compatibility only.
    */
@@ -1728,6 +1731,27 @@ export class TilePixelCache extends TrimmedPixelCache {
       }
     }
   }
+
+  // ----- NOTE: Methods that rely on alphaThreshold ---- //
+  /**
+   * Test whether the pixel cache contains a specific canvas point.
+   * See Tile.prototype.containsPixel
+   * @param {number} x    Canvas x-coordinate
+   * @param {number} y    Canvas y-coordinate
+   * @param {number} [alphaThreshold=0.75]  Value required for the pixel to "count."
+   * @returns {boolean}
+   */
+  containsPixel(x, y, alphaThreshold) { return super.containsPixel(x, y, alphaThreshold ?? this.alphaThreshold); }
+
+  /**
+   * Trim a line segment to only the portion that intersects this cache bounds.
+   * @param {Point} a     Starting location, in local coordinates
+   * @param {Point} b     Ending location, in local coordinates
+   * @param {number} alphaThreshold   Value of threshold, if threshold bounds should be used.
+   * @returns {Point[2]|null}  Points, in local coordinates
+   */
+  _trimLocalRayToLocalBounds(a, b, alphaThreshold) { return super._trimLocalRayToLocalBounds(a, b, alphaThreshold ?? this.alphaThreshold); }
+
 }
 
 /**

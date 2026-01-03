@@ -41,17 +41,26 @@ const TILECACHE_CONFIG = {
 
 const PLACEABLE_TRACKING_CONFIG = {
   /**
+   * When constructing a region geometry, whether to include walls that are interior to the region.
+   * E.g., when two shapes that form a region overlap.
+   * @type {boolean}
+   */
+  allowInteriorWalls: true,
+
+  /**
    * Limit the tile alpha pixels by contiguous area.
    * Limits when a portion of the tile is considered an obstacle.
    * For points or geometric algorithm, this will not be considered blocking.
+   * @type {number}
    */
   alphaAreaThreshold: 25, // Area in pixels, e.g. 5x5 or ~ 8 x 3
+
 
   /**
    * The percent threshold under which a tile should be considered transparent at that pixel.
    * @type {number}
    */
-  alphaThreshold: 0.75,
+  // alphaThreshold: 0.75, // Now set in tile.document.texture.alphaThreshold.
 
   /**
    * Which clipper version to use: 1 or 2.
@@ -67,19 +76,19 @@ const PLACEABLE_TRACKING_CONFIG = {
   constrainTokens: false,
 
   /**
-   * When constructing a region geometry, whether to include walls that are interior to the region.
-   * E.g., when two shapes that form a region overlap.
-   * @type {boolean}
-   */
-  allowInteriorWalls: true,
-
-  /**
    * Spacing between points for the per-pixel calculator.
    * The per-pixel calculator tests a point lattice on the token shape to determine visibility.
    * Larger spacing means fewer points and better performance, sacrificing resolution.
    * @type {number} In pixel units
    */
   perPixelSpacing: 10,
+
+  /**
+   * Use the alpha polygon threshold when creating tile faces.
+   * Otherwise uses a rectangle.
+   * @type {boolean}
+   */
+  useAlphaPolygonBounds: false,
 
   version: VERSION,
 };
