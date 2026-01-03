@@ -25,15 +25,8 @@ GEOMETRY_CONFIG.placeableGeometry = {};
 
 // Track certain modules that complement features of this module.
 export const OTHER_MODULES = {
-  EV: {
-    ID: "elevatedvision",
-    FLAGS: {
-      TOKEN_HEIGHT: "tokenHeight",
-      ELEVATION: "elevation",
-    }
-  },
 
-  WH: {
+  WALL_HEIGHT: {
     ID: "wall-height",
     FLAGS: {
       TOKEN_HEIGHT: "tokenHeight",
@@ -45,7 +38,7 @@ export const OTHER_MODULES = {
     ID: "levels",
   },
 
-  LEVELSAUTOCOVER: {
+  LEVELS_AUTOCOVER: {
     ID: "levelsautocover",
     FLAGS: {
       DUCKING: "ducking"
@@ -56,7 +49,7 @@ export const OTHER_MODULES = {
     ID: "terrainmapper",
   },
 
-  ATV: {
+  ALTERNATIVE_TOKEN_VISIBILITY: {
     ID: "tokenvisibility",
   },
 };

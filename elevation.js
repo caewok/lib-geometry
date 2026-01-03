@@ -111,13 +111,13 @@ function placeableObjectElevationE() { return this.document.elevation; }
 // NOTE: Wall Elevation
 function wallTopE() {
   // Previously used foundry.utils.getProperty but it is slow.
-  const WH = OTHER_MODULES.WH;
+  const WH = OTHER_MODULES.WALL_HEIGHT;
   return (WH ? this.document.flags[WH.ID]?.top : undefined)
     ?? Number.POSITIVE_INFINITY;
 }
 
 function wallBottomE() {
-  const WH = OTHER_MODULES.WH;
+  const WH = OTHER_MODULES.WALL_HEIGHT;
   return (WH ? this.document.flags[WH.ID]?.bottom : undefined)
     ?? Number.NEGATIVE_INFINITY;
 }
@@ -167,14 +167,14 @@ function tokenTopE() {
 function getIsProne() {
   const proneStatusId = CONFIG.GeometryLib.CONFIG.proneStatusId;
   return Boolean((proneStatusId !== "" && this.actor && this.actor.statuses?.has(proneStatusId))
-    || (OTHER_MODULES.LEVELSAUTOCOVER
-    && this.document.flags?.[OTHER_MODULES.LEVELSAUTOCOVER.ID]?.[OTHER_MODULES.LEVELSAUTOCOVER.FLAGS.DUCKING]));
+    || (OTHER_MODULES.LEVELS_AUTOCOVER
+    && this.document.flags?.[OTHER_MODULES.LEVELS_AUTOCOVER.ID]?.[OTHER_MODULES.LEVELS_AUTOCOVER.FLAGS.DUCKING]));
 }
 
 function getTokenHeight(token) {
   // Use || to ignore 0 height values.
   // Previously used foundry.utils.getProperty or getFlag but it is slow.
-  const WH = OTHER_MODULES.WH;
+  const WH = OTHER_MODULES.WALL_HEIGHT;
   return (WH ? token.document.flags[WH.ID]?.[WH.FLAGS.TOKEN_HEIGHT] : 0)
     || calculateTokenHeightFromTokenShape(token);
 }
