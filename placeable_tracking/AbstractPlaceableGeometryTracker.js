@@ -449,31 +449,47 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
 
 
 /* Testing
+Draw = CONFIG.GeometryLib.lib.Draw;
+
 tracking = CONFIG.GeometryLib.lib.placeableGeometryTracking
 tracking.TileGeometryTracker.registerPlaceableHooks()
 tracking.TileGeometryTracker.registerExistingPlaceables()
-tile = canvas.tiles.placeables[0]
-geometry = tile.GeometryLib.geometry
-geometry.aabb.draw2d();
-geometry.iterateFaces().forEach(face => face.draw2d({ color: Draw.COLORS.red }))
 
 tracking.WallGeometryTracker.registerPlaceableHooks()
 tracking.WallGeometryTracker.registerExistingPlaceables()
-wall = canvas.walls.placeables[0]
-geometry = tile.GeometryLib.geometry
-geometry.aabb.draw2d();
-geometry.iterateFaces().forEach(face => face.draw2d({ color: Draw.COLORS.red }))
 
 tracking.TokenGeometryTracker.registerPlaceableHooks()
 tracking.TokenGeometryTracker.registerExistingPlaceables()
+
+tile = canvas.tiles.placeables[0]
+for ( const tile of canvas.tiles.placeables ) {
+  const geometry = tile.GeometryLib.geometry
+  geometry.aabb.draw2d();
+  // geometry.iterateFaces().forEach(face => face.draw2d({ color: Draw.COLORS.red }));
+  geometry._alphaThresholdPolygons.top.draw2d({ color: Draw.COLORS.orange })
+  geometry._alphaThresholdPolygons.bottom.draw2d({ color: Draw.COLORS.orange })
+  // geometry._alphaThresholdTriangles.top.draw2d({ color: Draw.COLORS.yellow })
+  // geometry._alphaThresholdTriangles.bottom.draw2d({ color: Draw.COLORS.yellow })
+}
+
+wall = canvas.walls.placeables[0]
+for ( const wall of canvas.walls.placeables ) {
+  const geometry = wall.GeometryLib.geometry
+  geometry.aabb.draw2d();
+  geometry.iterateFaces().forEach(face => face.draw2d({ color: Draw.COLORS.red }))
+}
+
+
+
 token = canvas.tokens.placeables[0]
-geometry = token.GeometryLib.geometry
-geometry.aabb.draw2d();
-geometry.iterateFaces().forEach(face => face.draw2d({ color: Draw.COLORS.red }))
+for ( const token of canvas.tokens.placeables ) {
+  const geometry = token.GeometryLib.geometry
+  geometry.aabb.draw2d();
+  geometry.iterateFaces().forEach(face => face.draw2d({ color: Draw.COLORS.red }))
 
-if ( geometry.isLit && geometry.isConstrainedLit ) geometry.iterateLitFaces().forEach(face => face.draw2d({ color: Draw.COLORS.orange }))
-if ( geometry.isBrightLit && geometry.isConstrainedBrightLit ) geometry.iterateBrightLitFaces().forEach(face => face.draw2d({ color: Draw.COLORS.yellow }))
-
+  if ( geometry.isLit && geometry.isConstrainedLit ) geometry.iterateConstrainedLitFaces().forEach(face => face.draw2d({ color: Draw.COLORS.orange }))
+  if ( geometry.isBrightLit && geometry.isConstrainedBrightLit ) geometry.iterateConstrainedBrightLitFaces().forEach(face => face.draw2d({ color: Draw.COLORS.yellow }))
+}
 
 */
 

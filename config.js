@@ -90,12 +90,15 @@ const PLACEABLE_TRACKING_CONFIG = {
    */
   useAlphaPolygonBounds: false,
 
+  /**
+   * Use a token sphere for the face test.
+   * @type {boolean}
+   */
+  useTokenSphere: false,
+
   version: VERSION,
 };
 
-Object.defineProperty(PLACEABLE_TRACKING_CONFIG, "ClipperPaths", {
-  get: () => CONFIG[GEOMETRY_LIB_ID].clipperVersion === 1 ? ClipperPaths : Clipper2Paths
-});
 
 export function mergeConfigs(maxVersion = VERSION) {
   const thisConfig = { ...ELEVATION_CONFIG, ...TILECACHE_CONFIG, ...PLACEABLE_TRACKING_CONFIG };
@@ -105,5 +108,12 @@ export function mergeConfigs(maxVersion = VERSION) {
   } else {
     // Existing config is newer or not yet defined.
     CONFIG[GEOMETRY_LIB_ID].CONFIG = { ...thisConfig, ...CONFIG[GEOMETRY_LIB_ID].CONFIG };
+  }
+
+  // Helper to retrieve the correct ClipperPaths class.
+  if ( !CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths ) {
+    Object.defineProperty(CONFIG[GEOMETRY_LIB_ID].CONFIG, "ClipperPaths", {
+      get: () => CONFIG[GEOMETRY_LIB_ID].CONFIG.clipperVersion === 1 ? ClipperPaths : Clipper2Paths
+    });
   }
 }
