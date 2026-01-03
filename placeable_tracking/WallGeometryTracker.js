@@ -21,8 +21,7 @@ import {
 import { AABB3d } from "../AABB.js";
 import { MatrixFloat32 } from "../MatrixFlat.js";
 import { Quad3d } from "../3d/Polygon3d.js";
-import { Point3d } from "../3d/Point3d.js";
-import { gridUnitsToPixels, almostBetween } from "../util.js";
+import { gridUnitsToPixels } from "../util.js";
 
 /**
  * Prototype order:
@@ -75,7 +74,7 @@ export class WallGeometryTracker extends mix(AbstractPlaceableGeometryTracker).w
     return MatrixFloat32.scale(ln, 1.0, scaleZ, mat);
   }
 
-  // ----- NOTE: Polygon3d ---- //
+  // ----- NOTE: Faces ---- //
 
   /** @type {Faces} */
   /* Handled in parent.
@@ -88,7 +87,7 @@ export class WallGeometryTracker extends mix(AbstractPlaceableGeometryTracker).w
 
   /** @type {Faces} */
   /* Handled in parent.
-  faces = {
+  _faces = {
     top: new Quad3d(),
     bottom: new Quad3d(),
     sides: [],
@@ -100,19 +99,14 @@ export class WallGeometryTracker extends mix(AbstractPlaceableGeometryTracker).w
    * Normal walls have front (top) and back (bottom). One-directional walls have only top.
    */
   _initializePrototypeFaces() {
-    Quad3d.from4Points(
-      Point3d.tmp.set(-0.5, 0, 0.5),
-      Point3d.tmp.set(-0.5, 0, -0.5),
-      Point3d.tmp.set(0.5, 0, -0.5),
-      Point3d.tmp.set(0.5, 0, 0.5),
-      this._prototypeFaces.top,
-    );
-
-    if ( this.constructor.isDirectional(this.edge) ) this.faces.bottom = null;
-    else {
-      this.faces.bottom ??= new Quad3d();
-      this.faces.top.clone(this.faces.bottom);
-      this.faces.bottom.reverseOrientation();
+    this.constructor.QUADS.south.clone(this._prototypeFaces.top);
+    if ( this.constructor.isDirectional(this.edge) ) {
+      this._prototypeFaces.bottom = null;
+      this._faces.bottom = null;
+    } else {
+      this._prototypeFaces.bottom ??= new Quad3d();
+      this._faces.bottom ??= new Quad3d();
+      this.constructor.QUADS.south.clone(this._prototypeFaces.bottom);
     }
   }
 
@@ -130,10 +124,9 @@ export class WallGeometryTracker extends mix(AbstractPlaceableGeometryTracker).w
    * @param {number} [cutoff=1]   Ignore hits further along the ray from this (treat ray as segment)
    * @returns {number|null} The distance along the ray
    */
-  rayIntersection(rayOrigin, rayDirection, minT = 0, maxT = Number.POSITIVE_INFINITY) {
+  rayIntersection(...opts) {
     // Top and bottom are the same (just opposite orientations) and so only need to test one.
-    const t = this.faces.top.intersectionT(rayOrigin, rayDirection);
-    return (t !== null && almostBetween(t, minT, maxT)) ? t : null;
+    return this.constructor.rayIntersection([this.faces.top], ...opts);
   }
 
   // ----- NOTE: Wall characteristics ----- //
