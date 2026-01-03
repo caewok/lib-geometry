@@ -664,22 +664,20 @@ function signedArea({ scalingFactor } = {}) {
   return -area * 0.5;
 }
 
-
-
-
 /**
  * Translate, shifting this polygon in the x and y direction.
  * @param {Number} dx  Movement in the x direction.
  * @param {Number} dy  Movement in the y direction.
  * @return {PIXI.Polygon} New PIXI.Polygon
  */
-function translate(dx, dy) {
-  const pts = [];
-  const ln = this.points.length;
-  for (let i = 0; i < ln; i += 2) {
-    pts.push(this.points[i] + dx, this.points[i + 1] + dy);
+function translate(dx, dy, out) {
+  // Keep out points in case out === this.
+  out ??= this.clone();
+  out.length = this.points.length;
+  for (let i = 0, ln = this.points.length; i < ln; i += 2) {
+    out.points[i] = this.points[i] + dx;
+    out.points[i+1] = this.points[i + 1] + dy;
   }
-  const out = new this.constructor(pts);
   out._isPositive = this._isPositive;
   if ( this.bounds ) out.bounds = out.getBounds(); // Bounds will have changed due to translate
   return out;
@@ -692,33 +690,34 @@ function translate(dx, dy) {
  * @param {Number} dy  Change along the x axis
  * @return {PIXI.Polygon} New PIXI.Polygon
  */
-function scale(scaleX, scaleY) {
-  const pts = [];
-  const ln = this.points.length;
-  for (let i = 0; i < ln; i += 2) {
-    pts.push(this.points[i] * scaleX, this.points[i + 1] * scaleY);
+function scale(scaleX, scaleY, out) {
+  // Keep out points in case out === this.
+  out ??= this.clone();
+  out.length = this.points.length;
+  for (let i = 0, ln = this.points.length; i < ln; i += 2) {
+    out.points[i] = this.points[i] * scaleX;
+    out.points[i+1] = this.points[i + 1] * scaleY;
   }
-  const out = new this.constructor(pts);
   out._isPositive = this._isPositive;
-  if ( this.bounds ) out.bounds = out.getBounds(); // Bounds will have changed due to scale
+  if ( this.bounds ) out.bounds = out.getBounds(); // Bounds will have changed due to translate
   return out;
 }
 
 /**
- * Translate and scale, shifting this polygon in the x and y direction and then
- * resizing this polygon in the x and y axis.
- * In most cases, you want to center the polygon at 0,0 first.
+ * Center this polygon at 0,0, apply a scale, and then translate back.
  * @param {Number} dx  Change along the x axis
  * @param {Number} dy  Change along the x axis
  * @return {PIXI.Polygon} New PIXI.Polygon
  */
-function translateScale({ dx = 0, dy = 0, scaleX = 1, scaleY = 1 } = {}) {
-  const pts = [];
-  const ln = this.points.length;
-  for (let i = 0; i < ln; i += 2) {
-    pts.push((this.points[i] + dx) * scaleX, (this.points[i + 1] + dy) * scaleY);
+function centerScale(scaleX = 1, scaleY = 1, out) {
+  // Keep out points in case out === this.
+  out ??= this.clone();
+  out.length = this.points.length;
+  const center = this.center;
+  for (let i = 0, ln = this.points.length; i < ln; i += 2) {
+    out.points[i] = ((this.points[i] - center.x) * scaleX) + center.x;
+    out.points[i+1] = ((this.points[i + 1] - center.y) * scaleY) + center.y;
   }
-  const out = new this.constructor(pts);
   out._isPositive = this._isPositive;
   if ( this.bounds ) out.bounds = out.getBounds(); // Bounds will have changed due to translate
   return out;
@@ -1210,6 +1209,11 @@ PATCHES.PIXI.METHODS = {
   triangulate,
   canUseFanTriangulation,
 
+  // Transform
+  translate,
+  scale,
+  centerScale,
+
   // Other methods
   toPolygon: function() { return this; },
   clean,
@@ -1222,9 +1226,6 @@ PATCHES.PIXI.METHODS = {
   lineIntersections,
   segmentIntersections,
   pointsBetween,
-  translate,
-  scale,
-  translateScale,
   viewablePoints,
   pointsLattice,
 

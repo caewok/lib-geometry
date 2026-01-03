@@ -102,6 +102,7 @@ export class PixelCache extends PIXI.Rectangle {
     this.#toLocalTransform = undefined;
     this.#toCanvasTransform = undefined;
     this.#thresholdCanvasBoundingBoxes.clear();
+    this.#thresholdCanvasBoundingPolygons.clear();
   }
 
   /**
@@ -111,9 +112,10 @@ export class PixelCache extends PIXI.Rectangle {
   _clearLocalThresholdBoundingBoxes() {
     this.#thresholdCanvasBoundingBoxes.clear();
     this.#thresholdLocalBoundingBoxes.clear();
+    this.#thresholdLocalBoundingPolygons.clear();
   }
 
-  _clearCanvasThresholdBoundingBoxes() { this.#thresholdCanvasBoundingBoxes.clear(); }
+  _clearCanvasThresholdBoundingBoxes() { this.#thresholdCanvasBoundingBoxes.clear(); this.#thresholdCanvasBoundingPolygons.clear(); }
 
   /**
    * Matrix that takes a canvas point and transforms to a local point.
@@ -150,6 +152,10 @@ export class PixelCache extends PIXI.Rectangle {
     const map = this.#thresholdCanvasBoundingBoxes;
     if ( !map.has(threshold) ) map.set(threshold, this.#calculateCanvasBoundingBox(threshold));
     return map.get(threshold);
+  }
+
+  _calculateCanvasBoundingBox(threshold=0.75) {
+    return this.#calculateCanvasBoundingBox(threshold);
   }
 
   /**
@@ -252,8 +258,85 @@ export class PixelCache extends PIXI.Rectangle {
     return (new PIXI.Rectangle(minLeft, minTop, maxRight - minLeft, maxBottom - minTop));
   }
 
-  _calculateCanvasBoundingBox(threshold=0.75) {
-    return this.#calculateCanvasBoundingBox(threshold);
+
+
+  /**
+   * Calculate a bounding polygon based on a specific threshold.
+   * @param {number} [threshold=0.75]   Values lower than this will be ignored around the edges.
+   * @returns {PIXI.Polygon} Polygon based on local coordinates.
+   */
+  #calculateLocalBoundingPolygon(threshold = 0.75) {
+    threshold = threshold * this.maximumPixelValue;
+
+    // Build each row in local space.
+    // Move from top to bottom on left side.
+    // Then move bottom to top on right side.
+    // Brute force.
+    const { left, right, top, bottom } = this;
+    const poly = new PIXI.Polygon();
+    for ( let y = top; y <= bottom; y += 1 ) {
+      // Scan each row from right to left.
+      for ( let x = right; x >= left; x -=  1 ) {
+        const a = this._pixelAtLocal(x, y);
+        if ( a > threshold ) {
+          poly.points.push(x, y);
+          break;
+        }
+      }
+    }
+
+    for ( let y = bottom; y >= top; y -= 1 ) {
+      // Scan each row from left to right.
+      for ( let x = left; x <= right; x +=  1 ) {
+        const a = this._pixelAtLocal(x, y);
+        if ( a > threshold ) {
+          poly.addPoint({x, y}); // Use addPoint to avoid repeats.
+          break;
+        }
+      }
+    }
+    return poly;
+  }
+
+  /**
+   * Calculate a canvas bounding polygon based on a specific threshold.
+   */
+  #calculateCanvasBoundingPolygon(threshold = 0.75) {
+    const TL = this._toCanvasCoordinates(left, top);
+  }
+
+  _calculateCanvasBoundingPolygon(threshold=0.75) {
+    const localPoly = this.getThresholdLocalBoundingPolygon(threshold);
+    return new PIXI.Polygon([...localPoly.iteratePoints({ close: false })].map(pt => this._toCanvasCoordinates(pt.x, pt.y, pt)))
+  }
+
+  /** @type {Map<number,PIXI.Rectangle>} */
+  #thresholdLocalBoundingPolygons = new Map();
+
+  /** @type {Map<number,PIXI.Rectangle>} */
+  #thresholdCanvasBoundingPolygons = new Map();
+
+
+  /**
+   * Get a local bounding box based on a specific threshold
+   * @param {number} [threshold=0.75]   Values lower than this will be ignored around the edges.
+   * @returns {PIXI.Rectangle} Rectangle based on local coordinates.
+   */
+  getThresholdLocalBoundingPolygon(threshold = 0.75) {
+    const map = this.#thresholdLocalBoundingPolygons;
+    if ( !map.has(threshold) ) map.set(threshold, this.#calculateLocalBoundingPolygon(threshold));
+    return map.get(threshold);
+  }
+
+  /**
+   * Get a canvas bounding polygon or box based on a specific threshold.
+   * If you require a rectangle, use getThresholdLocalBoundingBox
+   * @returns {PIXI.Rectangle|PIXI.Polygon}    Rectangle or polygon in canvas coordinates.
+   */
+  getThresholdCanvasBoundingPolygon(threshold = 0.75) {
+    const map = this.#thresholdCanvasBoundingPolygons;
+    if ( !map.has(threshold) ) map.set(threshold, this.#calculateCanvasBoundingPolygon(threshold));
+    return map.get(threshold);
   }
 
   // ----- NOTE: Neighbor indexing ----- //
@@ -1554,6 +1637,8 @@ export class TilePixelCache extends TrimmedPixelCache {
   /** @type {Tile} */
   tile;
 
+
+
   /**
    * @param {Tile} [options.tile]   Tile for which this cache applies
                                     If provided, scale will be updated
@@ -1566,40 +1651,40 @@ export class TilePixelCache extends TrimmedPixelCache {
 
   // ----- NOTE: Tile data getters ----- //
 
-  /** @type {numeric} */
+  /** @type {number} */
   get scaleX() { return this.tile.document.texture.scaleX; }
 
-  /** @type {numeric} */
+  /** @type {number} */
   get scaleY() { return this.tile.document.texture.scaleY; }
 
-  /** @type {numeric} */
+  /** @type {number} */
   get rotation() { return Math.toRadians(this.tile.document.rotation); }
 
-  /** @type {numeric} */
+  /** @type {number} */
   get rotationDegrees() { return this.tile.document.rotation; }
 
   /** @type {numeric} */
   get proportionalWidth() { return this.tile.document.width / this.tile.texture.width; }
 
-  /** @type {numeric} */
+  /** @type {number} */
   get proportionalHeight() { return this.tile.document.height / this.tile.texture.height; }
 
-  /** @type {numeric} */
+  /** @type {number} */
   get textureWidth() { return this.tile.texture.width; }
 
   /** @type {numeric} */
   get textureHeight() { return this.tile.texture.height; }
 
-  /** @type {numeric} */
+  /** @type {number} */
   get tileX() { return this.tile.document.x; }
 
-  /** @type {numeric} */
+  /** @type {number} */
   get tileY() { return this.tile.document.y; }
 
-  /** @type {numeric} */
+  /** @type {number} */
   get tileWidth() { return this.tile.document.width; }
 
-  /** @type {numeric} */
+  /** @type {number} */
   get tileHeight() { return this.tile.document.height; }
 
   /** @type {number} */

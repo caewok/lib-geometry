@@ -216,16 +216,6 @@ function _envelopsPolygon(poly) {
 }
 
 /**
- * Move this rectangle by given x,y delta.
- * @param {number} dx
- * @param {number} dy
- * @returns {PIXI.Rectangle} New rectangle.
- */
-function translate(dx, dy) {
-  return new PIXI.Rectangle(this.x + dx, this.y + dy, this.width, this.height);
-}
-
-/**
  * Area that matches clipper measurements, so it can be compared with Clipper Polygon versions.
  * Used to match what Clipper would measure as area, by scaling the points.
  * @param {object} [options]
@@ -502,6 +492,54 @@ function pointsLattice({ spacing = 1, startAtEdge = false } = {}) {
   return pts;
 }
 
+/**
+ * Translate, shifting this rectangle in the x and y direction.
+ * @param {Number} dx  Movement in the x direction.
+ * @param {Number} dy  Movement in the y direction.
+ * @return {PIXI.Polygon} New PIXI.Polygon
+ */
+function translate(dx, dy, out) {
+  out ??= this.clone();
+  out.x -= dx;
+  out.y -= dy;
+  return out;
+}
+
+/**
+ * Scale, resizing this rectangle in the x and y axis.
+ * In most cases, you want to center the rectangle at 0,0 first.
+ * Note that this scales but does not translate x,y, meaning the rectangle grows from its top left corner.
+ * @param {Number} dx  Change along the x axis
+ * @param {Number} dy  Change along the x axis
+ * @return {PIXI.Polygon} New PIXI.Polygon
+ */
+function scale(scaleX, scaleY, out) {
+  out ??= this.clone();
+  out.width *= scaleX;
+  out.height *= scaleY;
+  return out;
+}
+
+/**
+ * Center this rectangle at 0,0, apply a scale, and then translate back.
+ * @param {Number} dx  Change along the x axis
+ * @param {Number} dy  Change along the x axis
+ * @return {PIXI.Polygon} New PIXI.Polygon
+ */
+function centerScale(scaleX = 1, scaleY = 1, out) {
+  // For rectangle, we can simplify this by scaling width and height and then moving
+  // by half of the difference between old and new width/height.
+  // Keep in mind that out may equal this.
+  out ??= this.clone();
+
+  const oldW = this.width;
+  const oldH = this.height;
+  out.width *= scaleX;
+  out.height *= scaleY;
+  out.x -= (out.width - oldW) * 0.5;
+  out.y -= (out.height - oldH) * 0.5;
+  return out;
+}
 
 PATCHES.PIXI.STATIC_METHODS = { gridRectangles };
 
@@ -519,7 +557,6 @@ PATCHES.PIXI.METHODS = {
   // Other methods
   union,
   difference,
-  translate,
   viewablePoints,
   pointsLattice,
 
@@ -538,6 +575,11 @@ PATCHES.PIXI.METHODS = {
   // Used by Elevation Ruler and Terrain Mapper
   cutaway,
   rotateAroundCenter,
+
+  // Transforms
+  scale,
+  translate,
+  centerScale,
 
   // Helper methods
   scaledArea
