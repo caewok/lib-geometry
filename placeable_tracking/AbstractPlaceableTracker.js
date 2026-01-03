@@ -159,10 +159,7 @@ export class AbstractPlaceableTracker {
    */
   static registerExistingPlaceables(placeables) {
     placeables ??= canvas[this.layer].placeables;
-    placeables.forEach(placeable => {
-      const handler = new this(placeable);
-      handler.initialize();
-    });
+    placeables.forEach(placeable => this.create(placeable));
   }
 
   // ----- NOTE: Constructor ----- //
@@ -172,11 +169,19 @@ export class AbstractPlaceableTracker {
 
   constructor(placeable) {
     this.placeable = placeable;
-    placeable[GEOMETRY_LIB_ID] ??= {};
+  }
+
+  static create(placeable) {
+    const obj = placeable[GEOMETRY_LIB_ID] ??= {};
 
     // Singleton. If this tracker already exists, keep it.
-    if ( placeable[GEOMETRY_LIB_ID][this.constructor.ID] ) return placeable[GEOMETRY_LIB_ID][this.constructor.ID];
-    placeable[GEOMETRY_LIB_ID][this.constructor.ID] = this;
+    if ( obj[this.ID] ) return obj[this.ID];
+
+    const out = new this(placeable);
+    obj[this.ID] = out;
+    out.initialize();
+    out.update();
+    return out;
   }
 
   initialize() { this.update(); }

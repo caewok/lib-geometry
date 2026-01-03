@@ -45,3 +45,22 @@ export class TileRotationTracker extends AbstractTileTracker {
     "rotation",
   ]);
 }
+
+export class TileTextureTracker extends AbstractTileTracker {
+  /** @type {string} */
+  static ID = "textureTracker";
+
+  static DOCUMENT_KEYS = new Set([
+    "texture.alphaThreshold",
+    "texture.anchorX",
+    "texture.anchorY",
+    "texture.fit",
+    "texture.fill",
+    "texture.offsetX",
+    "texture.offsetY",
+    "texture.rotation",
+    "texture.scaleX",
+    "texture.scaleY",
+    "texture.src",
+  ]);
+}

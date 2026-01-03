@@ -5,17 +5,30 @@ PIXI,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { AbstractPlaceableGeometryTracker, allGeometryMixin, noVertexGeometryMixin } from "./AbstractPlaceableGeometryTracker.js";
-import { WallUpdateTracker } from "./WallTracker.js";
+// Trackers
+import { WallTypeTracker, WallPositionTracker } from "./WallTracker.js";
+
+// Mixing
+import { mix } from "../mixwith.js";
+import {
+  AbstractPlaceableGeometryTracker,
+  PlaceableAABBMixin,
+  PlaceableModelMatrixMixin,
+  PlaceableFacesMixin
+} from "./AbstractPlaceableGeometryTracker.js";
 
 // LibGeometry
-import { GEOMETRY_LIB_ID } from "../const.js";
 import { AABB3d } from "../AABB.js";
 import { MatrixFloat32 } from "../MatrixFlat.js";
 import { Quad3d } from "../3d/Polygon3d.js";
+import { Point3d } from "../3d/Point3d.js";
 import { gridUnitsToPixels, almostBetween } from "../util.js";
 
-class AbstractWallGeometryTracker extends AbstractPlaceableGeometryTracker {
+/**
+ * Prototype order:
+ * WallGeometryTracker -> PlaceableFacesMixin -> PlaceableMatricesMixin -> PlaceableAABBMixin -> AbstractPlaceableGeometryTracker
+ */
+export class WallGeometryTracker extends mix(AbstractPlaceableGeometryTracker).with(PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin) {
   /** @type {string} */
   static PLACEABLE_NAME = "Wall";
 
@@ -24,7 +37,8 @@ class AbstractWallGeometryTracker extends AbstractPlaceableGeometryTracker {
 
   /** @type {TrackerKeys} */
   static TRACKERS = {
-    shape: WallUpdateTracker,
+    shape: WallTypeTracker,
+    position: WallPositionTracker,
   };
 
   get wall() { return this.placeable; }
@@ -32,11 +46,12 @@ class AbstractWallGeometryTracker extends AbstractPlaceableGeometryTracker {
   get edge() { return this.placeable.edge; }
 
   // ----- NOTE: AABB ----- //
-  calculateAABB(aabb) { return AABB3d.fromEdge(this.edge, aabb); }
+  calculateAABB() { return AABB3d.fromEdge(this.edge, this._aabb); }
 
   // ----- NOTE: Matrices ---- //
 
-  calculateTranslationMatrix(mat) {
+  calculateTranslationMatrix() {
+    const mat = super.calculateTranslationMatrix();
     const edge = this.edge;
     const pos = this.constructor.edgeCenter(edge);
     const { top, bottom } = this.constructor.edgeElevation(edge);
@@ -45,12 +60,14 @@ class AbstractWallGeometryTracker extends AbstractPlaceableGeometryTracker {
     return MatrixFloat32.translation(pos.x, pos.y, z, mat);
   }
 
-  calculateRotationMatrix(mat) {
+  calculateRotationMatrix() {
+    const mat = super.calculateRotationMatrix();
     const rot = this.constructor.edgeAngle(this.edge);
     return MatrixFloat32.rotationZ(rot, true, mat);
   }
 
-  calculateScaleMatrix(mat) {
+  calculateScaleMatrix() {
+    const mat = super.calculateScaleMatrix();
     const edge = this.edge;
     const ln = this.constructor.edgeLength(edge);
     const { top, bottom } = this.constructor.edgeElevation(edge);
@@ -60,26 +77,37 @@ class AbstractWallGeometryTracker extends AbstractPlaceableGeometryTracker {
 
   // ----- NOTE: Polygon3d ---- //
 
-    /** @type {Faces} */
+  /** @type {Faces} */
+  /* Handled in parent.
   _prototypeFaces = {
     top: new Quad3d(),
     bottom: new Quad3d(),
     sides: [],
   }
+  */
 
   /** @type {Faces} */
+  /* Handled in parent.
   faces = {
     top: new Quad3d(),
     bottom: new Quad3d(),
     sides: [],
   }
+  */
 
   /**
-   * Update the faces for this wall.
+   * Create the initial face shapes for this wall, using a 0.5 x 0.5 x 0.5 unit cube.
    * Normal walls have front (top) and back (bottom). One-directional walls have only top.
    */
-  _updateFaces() {
-    this.#updateFace(this.faces.top);
+  _initializePrototypeFaces() {
+    Quad3d.from4Points(
+      Point3d.tmp.set(-0.5, 0, 0.5),
+      Point3d.tmp.set(-0.5, 0, -0.5),
+      Point3d.tmp.set(0.5, 0, -0.5),
+      Point3d.tmp.set(0.5, 0, 0.5),
+      this._prototypeFaces.top,
+    );
+
     if ( this.constructor.isDirectional(this.edge) ) this.faces.bottom = null;
     else {
       this.faces.bottom ??= new Quad3d();
@@ -88,21 +116,9 @@ class AbstractWallGeometryTracker extends AbstractPlaceableGeometryTracker {
     }
   }
 
-  /**
-   * Define a Quad3d for this wall.
-   */
-  #updateFace(quad) {
-    const wall = this.placeable;
-    let topZ = wall.topZ;
-    let bottomZ = wall.bottomZ;
-    if ( !isFinite(topZ) ) topZ = 1e06;
-    if ( !isFinite(bottomZ) ) bottomZ = -1e06;
-
-    quad.points[0].set(...wall.edge.a, topZ);
-    quad.points[1].set(...wall.edge.a, bottomZ);
-    quad.points[2].set(...wall.edge.b, bottomZ);
-    quad.points[3].set(...wall.edge.b, topZ);
-    quad.clearCache();
+  updateShape() {
+    this._initializePrototypeFaces(); // In case wall direction changed.
+    super.updateShape();
   }
 
   /**
@@ -119,7 +135,6 @@ class AbstractWallGeometryTracker extends AbstractPlaceableGeometryTracker {
     const t = this.faces.top.intersectionT(rayOrigin, rayDirection);
     return (t !== null && almostBetween(t, minT, maxT)) ? t : null;
   }
-
 
   // ----- NOTE: Wall characteristics ----- //
 
@@ -184,12 +199,3 @@ class AbstractWallGeometryTracker extends AbstractPlaceableGeometryTracker {
    */
   static isDirectional(edge) { return Boolean(edge.direction); }
 }
-
-export class WallVertexGeometryTracker extends allGeometryMixin(AbstractWallGeometryTracker) {
-  constructor(placeable) {
-    const handler = placeable[GEOMETRY_LIB_ID]?.[WallVertexGeometryTracker.ID];
-    if ( handler && !(handler instanceof WallVertexGeometryTracker) ) handler.destroy(); // Remove inferior version.
-    super(placeable);
-  }
-}
-export class WallGeometryTracker extends noVertexGeometryMixin(AbstractWallGeometryTracker) {}

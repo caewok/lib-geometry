@@ -16,14 +16,27 @@ class AbstractWallTracker extends AbstractPlaceableTracker {
   static layer = "walls";
 }
 
-export class WallUpdateTracker extends AbstractWallTracker {
+export class WallPositionTracker extends AbstractWallTracker {
   /** @type {string} */
-  static ID = "updateTracker";
+  static ID = "positionTracker";
 
   static DOCUMENT_KEYS = new Set([
     "flags.wall-height.top",
     "flags.wall-height.top",
     "c",
+    "dir",
+    "light",
+    "move",
+    "sight",
+    "sound",
+  ]);
+}
+
+export class WallTypeTracker extends AbstractWallTracker {
+  /** @type {string} */
+  static ID = "typeTracker";
+
+  static DOCUMENT_KEYS = new Set([
     "dir",
     "light",
     "move",
