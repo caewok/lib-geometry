@@ -30,11 +30,200 @@ import { almostBetween } from "../util.js";
 import { Polygon3dVertices } from "../placeable_geometry/BasicVertices.js";
 import * as MarchingSquares from "./marchingsquares-esm.js";
 
+
+const AbstractTileAlpha = superclass => class extends superclass {
+  /**
+   * Representation of the tile alpha iso bands as polygons in tile local pixel space.
+   * @type {ClipperPaths|Clipper2Paths}
+   */
+  #alphaThresholdPaths;
+
+  /** @type {ClipperPaths|Clipper2Paths} */
+  alphaThresholdPathsCanvas;
+
+  updateShape() {
+    super.updateShape();
+    this.#alphaThresholdPaths = this.convertTileToIsoBands();
+  }
+
+  _placeableUpdated() {
+    super._placeableUpdated();
+
+    // Convert alpha threshold paths from local to canvas space.
+    // Uses the evPixelCache matrix to do the transform.
+    const paths = this.#alphaThresholdPaths;
+    const pixelCache = this.tile.evPixelCache;
+    if ( !(paths && pixelCache) ) return;
+    this.alphaThresholdPathsCanvas = paths.transform(pixelCache.toCanvasTransform);
+  }
+
+  /**
+   * For a given tile, convert its pixels to an array of polygon isobands representing
+   * alpha values at or above the threshold. E.g., alpha between 0.75 and 1.
+   * @param {Tile} tile
+   * @returns {ClipperPaths|null} The polygon paths or, if error, the local alpha bounding box.
+   *   Coordinates returned are local to the tile pixels, between 0 and width/height of the tile pixels.
+   *   Null is returned if no alpha threshold is set or no evPixelCache is defined.
+   */
+  convertTileToIsoBands() {
+    const { tile, alphaThreshold } = this;
+    if ( !(alphaThreshold && tile.evPixelCache) ) return null;
+    const threshold = 255 * alphaThreshold;
+    const pixels = tile.evPixelCache.pixels;
+    const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
+
+    // Convert pixels to isobands.
+    const width = tile.evPixelCache.width
+    const height = tile.evPixelCache.height
+    const rowViews = new Array(height);
+    for ( let r = 0, start = 0, rMax = height; r < rMax; r += 1, start += width ) {
+      rowViews[r] = [...pixels.slice(start, start + width)];
+    }
+
+    let bands;
+    try {
+      bands = MarchingSquares.isoBands(rowViews, threshold, 256 - threshold);
+    } catch ( err ) {
+      console.error(err);
+      const poly = tile.evPixelCache.getThresholdLocalBoundingBox(alphaThreshold).toPolygon();
+      return ClipperPaths.fromPolygons([poly]);
+    }
+
+    /* Don't want to scale between 0 and 1 b/c using evPixelCache transform on the local coordinates.
+    // Create polygons scaled between 0 and 1, based on width and height.
+    const invWidth = 1 / width;
+    const invHeight = 1 / height;
+    const nPolys = lines.length;
+    const polys = new Array(nPolys);
+    for ( let i = 0; i < nPolys; i += 1 ) {
+      polys[i] = new PIXI.Polygon(bands[i].flatMap(pt => [pt[0] * invWidth, pt[1] * invHeight]))
+    }
+    */
+    const nPolys = bands.length;
+    const polys = new Array(nPolys);
+    for ( let i = 0; i < nPolys; i += 1 ) {
+      const poly = new PIXI.Polygon(bands[i].flatMap(pt => pt)); // TODO: Can we lose the flatMap?
+
+      // Polys from MarchingSquares are CW if hole; reverse
+      poly.reverseOrientation();
+      polys[i] = poly;
+    }
+
+    // Use Clipper to clean the polygons. Leave as clipper paths for earcut later.
+    const paths = ClipperPaths.fromPolygons(polys, { scalingFactor: 100 });
+    return paths.clean().trimByArea(CONFIG[GEOMETRY_LIB_ID].CONFIG.alphaAreaThreshold ?? 25);
+  }
+}
+
+
+/**
+ * @typedef {function} TileAlphaPolygonsMixin
+ *
+ * Add faces for the tile alpha polygons.
+ * @param {function} superclass
+ * @returns {function} A subclass of `superclass.`
+ */
+const TileAlphaPolygonsMixin = superclass => class extends superclass {
+
+  /** @type {object<Polygons3d>} */
+  _alphaThresholdPolygons = {
+    top: new Polygons3d(),
+    bottom: new Polygons3d(),
+  };
+
+  get alphaThresholdPolygons() {
+    this.update();
+    return this._alphaThresholdPolygons;
+  }
+
+  _placeableUpdated() {
+    super._placeableUpdated();
+    this._updatePathsToFacePolygons();
+  }
+
+  /**
+   * Convert clipper paths representing a tile shape to top and bottom faces.
+   * Bottom faces have opposite orientation.
+   */
+  _updatePathsToFacePolygons() {
+    const paths = this.alphaThresholdPathsCanvas;
+    if ( !paths ) return;
+
+    this.alphaThresholdPolygons.top = Polygons3d.fromClipperPaths(paths);
+    this.alphaThresholdPolygons.top.setZ(this.tile.elevationZ);
+    this.alphaThresholdPolygons.bottom  = this.alphaThresholdPolygons.top.clone().reverseOrientation(); // Reverse orientation but keep the hole designations.
+  }
+}
+
+/**
+ * @typedef {function} TileAlphaTrianglesMixin
+ *
+ * Add faces for the tile alpha triangles.
+ * @param {function} superclass
+ * @returns {function} A subclass of `superclass.`
+ */
+const TileAlphaTrianglesMixin = superclass => class extends superclass {
+
+  /** @type {object<Polygons3d>} */
+  _alphaThresholdTriangles = {
+    top: new Polygons3d(),
+    bottom: new Polygons3d(),
+  };
+
+  get alphaThresholdTriangles() {
+    this.update();
+    return this._alphaThresholdTriangles;
+  }
+
+  _placeableUpdated() {
+    super._placeableUpdated();
+    this._updatePathsToFaceTriangles();
+  }
+
+  /**
+   * Triangulate an array of polygons or clipper paths, then convert into 3d face triangles.
+   * Both top and bottom faces.
+   * @param {PIXI.Polygon|ClipperPaths} polys
+   * @returns {Triangle3d[]}
+   */
+  _updatePathsToFaceTriangles() {
+    const paths = this.alphaThresholdPathsCanvas;
+    if ( !paths ) return;
+
+    // Convert the polygons to top and bottom faces.
+    // Then make these into triangles.
+    // Trickier than leaving as polygons but can dramatically cut down the number of polys
+    // for more complex shapes.
+    const elev = this.placeable.elevationZ;
+    const { top, bottom } = Polygon3dVertices.polygonTopBottomFaces(paths, { topZ: elev, bottomZ: elev });
+
+    // Trim the UVs and Normals.
+    const topTrimmed = Polygon3dVertices.trimNormalsAndUVs(top);
+    const bottomTrimmed = Polygon3dVertices.trimNormalsAndUVs(bottom);
+
+    // Drop any triangles that are nearly collinear or have very small areas.
+    // Note: This works b/c the triangles all have z values of 0, which can be safely ignored.
+    this.alphaThresholdTriangles.top = Polygons3d.from3dPolygons(Triangle3d
+      .fromVertices(topTrimmed)
+      .filter(tri => !foundry.utils.orient2dFast(tri.a, tri.b, tri.c).almostEqual(0, 1e-06)));
+    this.alphaThresholdTriangles.bottom = Polygons3d.from3dPolygons(Triangle3d
+      .fromVertices(bottomTrimmed)
+      .filter(tri => !foundry.utils.orient2dFast(tri.a, tri.b, tri.c).almostEqual(0, 1e-06)));
+
+    this.alphaThresholdTriangles.top.setZ(this.tile.elevationZ);
+    this.alphaThresholdTriangles.bottom.setZ(this.tile.elevationZ);
+  }
+}
+
+
+
 /**
  * Prototype order:
  * TileGeometryTracker -> PlaceableFacesMixin -> PlaceableMatricesMixin -> PlaceableAABBMixin -> AbstractPlaceableGeometryTracker
  */
-export class TileGeometryTracker extends mix(AbstractPlaceableGeometryTracker).with(PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin) {
+export class TileGeometryTracker extends mix(AbstractPlaceableGeometryTracker).with(
+  PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin,
+  AbstractTileAlpha, TileAlphaPolygonsMixin, TileAlphaTrianglesMixin) {
   /** @type {string} */
   static PLACEABLE_NAME = "Tile";
 
@@ -170,164 +359,6 @@ export class TileGeometryTracker extends mix(AbstractPlaceableGeometryTracker).w
       if ( px > pxThreshold ) return t;
     }
     return null;
-  }
-
-  // ----- NOTE: Tile alpha polygons ----- //
-
-  /**
-   * Representation of the tile alpha iso bands as polygons in tile local pixel space.
-   * @type {ClipperPaths|Clipper2Paths}
-   */
-  #alphaThresholdPaths;
-
-  /** @type {ClipperPaths|Clipper2Paths} */
-  alphaThresholdPathsCanvas;
-
-  /** @type {object<Polygons3d>} */
-  _alphaThresholdPolygons = {
-    top: new Polygons3d(),
-    bottom: new Polygons3d(),
-  };
-
-  get alphaThresholdPolygons() {
-    this.update();
-    return this._alphaThresholdPolygons;
-  }
-
-  /** @type {object<Polygons3d>} */
-  _alphaThresholdTriangles = {
-    top: new Polygons3d(),
-    bottom: new Polygons3d(),
-  };
-
-  get alphaThresholdTriangles() {
-    this.update();
-    return this._alphaThresholdTriangles;
-  }
-
-  updateShape() {
-    this.#alphaThresholdPaths = this.convertTileToIsoBands();
-    super.updateShape();
-  }
-
-  _placeableUpdated() {
-    super._placeableUpdated();
-
-    // Convert alpha threshold paths from local to canvas space.
-    // Uses the evPixelCache matrix to do the transform.
-    const paths = this.#alphaThresholdPaths;
-    const pixelCache = this.tile.evPixelCache;
-    if ( !(paths && pixelCache) ) return;
-    this.alphaThresholdPathsCanvas = paths.transform(pixelCache.toCanvasTransform);
-
-    // Update face polygons for the alpha border.
-    // Represented as either polygons or triangles.
-    this._updatePathsToFacePolygons();
-    this._updatePathsToFaceTriangles();
-  }
-
-  /**
-   * Convert clipper paths representing a tile shape to top and bottom faces.
-   * Bottom faces have opposite orientation.
-   */
-  _updatePathsToFacePolygons() {
-    const paths = this.alphaThresholdPathsCanvas;
-    if ( !paths ) return;
-
-    this.alphaThresholdPolygons.top = Polygons3d.fromClipperPaths(paths);
-    this.alphaThresholdPolygons.top.setZ(this.tile.elevationZ);
-    this.alphaThresholdPolygons.bottom  = this.alphaThresholdPolygons.top.clone().reverseOrientation(); // Reverse orientation but keep the hole designations.
-  }
-
-  /**
-   * Triangulate an array of polygons or clipper paths, then convert into 3d face triangles.
-   * Both top and bottom faces.
-   * @param {PIXI.Polygon|ClipperPaths} polys
-   * @returns {Triangle3d[]}
-   */
-  _updatePathsToFaceTriangles() {
-    const paths = this.alphaThresholdPathsCanvas;
-    if ( !paths ) return;
-
-    // Convert the polygons to top and bottom faces.
-    // Then make these into triangles.
-    // Trickier than leaving as polygons but can dramatically cut down the number of polys
-    // for more complex shapes.
-    const elev = this.placeable.elevationZ;
-    const { top, bottom } = Polygon3dVertices.polygonTopBottomFaces(paths, { topZ: elev, bottomZ: elev });
-
-    // Trim the UVs and Normals.
-    const topTrimmed = Polygon3dVertices.trimNormalsAndUVs(top);
-    const bottomTrimmed = Polygon3dVertices.trimNormalsAndUVs(bottom);
-
-    // Drop any triangles that are nearly collinear or have very small areas.
-    // Note: This works b/c the triangles all have z values of 0, which can be safely ignored.
-    this.alphaThresholdTriangles.top = Polygons3d.from3dPolygons(Triangle3d
-      .fromVertices(topTrimmed)
-      .filter(tri => !foundry.utils.orient2dFast(tri.a, tri.b, tri.c).almostEqual(0, 1e-06)));
-    this.alphaThresholdTriangles.bottom = Polygons3d.from3dPolygons(Triangle3d
-      .fromVertices(bottomTrimmed)
-      .filter(tri => !foundry.utils.orient2dFast(tri.a, tri.b, tri.c).almostEqual(0, 1e-06)));
-
-    this.alphaThresholdTriangles.top.setZ(this.tile.elevationZ);
-    this.alphaThresholdTriangles.bottom.setZ(this.tile.elevationZ);
-  }
-
-  /**
-   * For a given tile, convert its pixels to an array of polygon isobands representing
-   * alpha values at or above the threshold. E.g., alpha between 0.75 and 1.
-   * @param {Tile} tile
-   * @returns {ClipperPaths|null} The polygon paths or, if error, the local alpha bounding box.
-   *   Coordinates returned are local to the tile pixels, between 0 and width/height of the tile pixels.
-   *   Null is returned if no alpha threshold is set or no evPixelCache is defined.
-   */
-  convertTileToIsoBands() {
-    const { tile, alphaThreshold } = this;
-    if ( !(alphaThreshold && tile.evPixelCache) ) return null;
-    const threshold = 255 * alphaThreshold;
-    const pixels = tile.evPixelCache.pixels;
-    const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
-
-    // Convert pixels to isobands.
-    const width = tile.evPixelCache.width
-    const height = tile.evPixelCache.height
-    const rowViews = new Array(height);
-    for ( let r = 0, start = 0, rMax = height; r < rMax; r += 1, start += width ) {
-      rowViews[r] = [...pixels.slice(start, start + width)];
-    }
-
-    let bands;
-    try {
-      bands = MarchingSquares.isoBands(rowViews, threshold, 256 - threshold);
-    } catch ( err ) {
-      console.error(err);
-      const poly = tile.evPixelCache.getThresholdLocalBoundingBox(alphaThreshold).toPolygon();
-      return ClipperPaths.fromPolygons([poly]);
-    }
-
-    /* Don't want to scale between 0 and 1 b/c using evPixelCache transform on the local coordinates.
-    // Create polygons scaled between 0 and 1, based on width and height.
-    const invWidth = 1 / width;
-    const invHeight = 1 / height;
-    const nPolys = lines.length;
-    const polys = new Array(nPolys);
-    for ( let i = 0; i < nPolys; i += 1 ) {
-      polys[i] = new PIXI.Polygon(bands[i].flatMap(pt => [pt[0] * invWidth, pt[1] * invHeight]))
-    }
-    */
-    const nPolys = bands.length;
-    const polys = new Array(nPolys);
-    for ( let i = 0; i < nPolys; i += 1 ) {
-      const poly = new PIXI.Polygon(bands[i].flatMap(pt => pt)); // TODO: Can we lose the flatMap?
-
-      // Polys from MarchingSquares are CW if hole; reverse
-      poly.reverseOrientation();
-      polys[i] = poly;
-    }
-
-    // Use Clipper to clean the polygons. Leave as clipper paths for earcut later.
-    const paths = ClipperPaths.fromPolygons(polys, { scalingFactor: 100 });
-    return paths.clean().trimByArea(CONFIG[GEOMETRY_LIB_ID].CONFIG.alphaAreaThreshold ?? 25);
   }
 
   // ----- NOTE: Tile characteristics ----- //
