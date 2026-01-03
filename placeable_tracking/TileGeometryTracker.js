@@ -83,11 +83,13 @@ export class TileGeometryTracker extends mix(AbstractPlaceableGeometryTracker).w
 
   /** @type {Faces} */
   // Handled by evPixelCache.
+  /*
   _prototypeFaces = {
     top: new Quad3d(),
     bottom: new Quad3d(),
     sides: [],
   }
+  */
 
   /** @type {Faces} */
   /* Handled in parent.
@@ -104,17 +106,12 @@ export class TileGeometryTracker extends mix(AbstractPlaceableGeometryTracker).w
    */
   _initializePrototypeFaces() {
     // Create the basic tile prototype face.
-    Quad3d.from4Points(
-      Point3d.tmp.set(-0.5, -0.5, 0),
-      Point3d.tmp.set(-0.5, 0.5, 0),
-      Point3d.tmp.set(0.5, 0.5, 0),
-      Point3d.tmp.set(0.5, -0.5, 0),
-      this._prototypeFaces.top,
-    );
-
-    this.faces.bottom ??= new Quad3d();
-    this.faces.top.clone(this.faces.bottom);
-    this.faces.bottom.reverseOrientation();
+    this.constructor.QUADS.up.clone(this._prototypeFaces.top);
+    this.constructor.QUADS.down.clone(this._prototypeFaces.bottom);
+    if ( !(this.tile.evPixelCache && this.alphaThreshold) ) {
+      this._faces.top = new Quad3d();
+      this._faces.bottom = new Quad3d();
+    }
   }
 
   /**
@@ -124,28 +121,28 @@ export class TileGeometryTracker extends mix(AbstractPlaceableGeometryTracker).w
   _updateFaces() {
     const tile = this.tile;
     const pixelCache = tile.evPixelCache;
-    if ( !pixelCache || !(this.useAlphaPolygonBounds || this.alphaThreshold) ) return super._updateFaces();
+    if ( !(pixelCache && this.alphaThreshold) ) return super._updateFaces();
 
     const alphaBoundsFn = this.useAlphaPolygonBounds ? "getThresholdCanvasBoundingPolygon" : "getThresholdCanvasBoundingBox";
     const alphaShape = pixelCache[alphaBoundsFn](this.alphaThreshold) || tile.bounds;
     const elevZ = tile.elevationZ;
     if ( alphaShape instanceof PIXI.Polygon ) {
-      if ( !(this.faces.top instanceof Polygon3d) ) {
-        this.faces.top = new Polygon3d();
-        this.faces.bottom = new Polygon3d();
+      if ( !(this._faces.top instanceof Polygon3d) ) {
+        this._faces.top = new Polygon3d();
+        this._faces.bottom = new Polygon3d();
       }
-      Polygon3d.fromPolygon(alphaShape, elevZ, this.faces.top);
+      Polygon3d.fromPolygon(alphaShape, elevZ, this._faces.top);
     } else { // Must be PIXI.Rectangle
-      if ( !(this.faces.top instanceof Quad3d) ) {
-        this.faces.top = new Quad3d();
-        this.faces.bottom = new Quad3d();
+      if ( !(this._faces.top instanceof Quad3d) ) {
+        this._faces.top = new Quad3d();
+        this._faces.bottom = new Quad3d();
       }
-      Quad3d.fromRectangle(alphaShape, elevZ, this.faces.top);
+      Quad3d.fromRectangle(alphaShape, elevZ, this._faces.top);
     }
 
     // Create the bottom as a mirror of the top.
-    this.faces.top.clone(this.faces.bottom);
-    this.faces.bottom.reverseOrientation();
+    this._faces.top.clone(this._faces.bottom);
+    this._faces.bottom.reverseOrientation();
   }
 
   /**
@@ -187,16 +184,26 @@ export class TileGeometryTracker extends mix(AbstractPlaceableGeometryTracker).w
   alphaThresholdPathsCanvas;
 
   /** @type {object<Polygons3d>} */
-  alphaThresholdPolygons = {
+  _alphaThresholdPolygons = {
     top: new Polygons3d(),
     bottom: new Polygons3d(),
   };
 
+  get alphaThresholdPolygons() {
+    this.update();
+    return this._alphaThresholdPolygons;
+  }
+
   /** @type {object<Polygons3d>} */
-  alphaThresholdTriangles = {
+  _alphaThresholdTriangles = {
     top: new Polygons3d(),
     bottom: new Polygons3d(),
   };
+
+  get alphaThresholdTriangles() {
+    this.update();
+    return this._alphaThresholdTriangles;
+  }
 
   updateShape() {
     this.#alphaThresholdPaths = this.convertTileToIsoBands();

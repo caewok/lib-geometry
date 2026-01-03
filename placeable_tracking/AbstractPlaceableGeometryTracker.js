@@ -13,7 +13,7 @@ import { MatrixFloat32 } from "../MatrixFlat.js";
 import { AABB3d } from "../AABB.js";
 import { Quad3d } from "../3d/Polygon3d.js";
 import { almostBetween } from "../util.js";
-
+import { Point3d } from "../3d/Point3d.js";
 
 
 /* Store key geometry information for each placeable, in 3d.
@@ -322,6 +322,33 @@ export const PlaceableModelMatrixMixin = superclass => class extends superclass 
  * @prop {Polygon3d[]} sides
  */
 
+const QUADS = {
+  up: Quad3d.from4Points( // E.g., tile top.
+    Point3d.tmp.set(-0.5, -0.5, 0),
+    Point3d.tmp.set(-0.5, 0.5, 0),
+    Point3d.tmp.set(0.5, 0.5, 0),
+    Point3d.tmp.set(0.5, -0.5, 0),
+  ),
+  down: null,
+  south: Quad3d.from4Points( // E.g., wall facing south.
+    Point3d.tmp.set(-0.5, 0, 0.5),
+    Point3d.tmp.set(-0.5, 0, -0.5),
+    Point3d.tmp.set(0.5, 0, -0.5),
+    Point3d.tmp.set(0.5, 0, 0.5),
+  ),
+  north: null,
+  west: Quad3d.from4Points( // E.g., wall facing west.
+    Point3d.tmp.set(0, -0.5, 0.5),
+    Point3d.tmp.set(0, -0.5, -0.5),
+    Point3d.tmp.set(0, 0.5, -0.5),
+    Point3d.tmp.set(0, 0.5, 0.5),
+  ),
+  east: null,
+}
+QUADS.down = QUADS.up.clone().reverseOrientation();
+QUADS.north = QUADS.south.clone().reverseOrientation();
+QUADS.east = QUADS.west.clone().reverseOrientation();
+
 /**
  * @typedef {function} PlaceableFacesMixin
  *
@@ -347,9 +374,10 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
    * Iterate over the faces.
    */
   *iterateFaces() {
-    if ( this.faces.top ) yield this.faces.top;
-    if ( this.faces.bottom ) yield this.faces.bottom;
-    for ( const side of this.faces.sides ) yield side;
+    this.update();
+    if ( this._faces.top ) yield this._faces.top;
+    if ( this._faces.bottom ) yield this._faces.bottom;
+    for ( const side of this._faces.sides ) yield side;
   }
 
   /**
@@ -382,13 +410,21 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
    * @param {number} [cutoff=1]   Ignore hits further along the ray from this (treat ray as segment)
    * @returns {number|null} The distance along the ray
    */
-  rayIntersection(rayOrigin, rayDirection, minT = 0, maxT = Number.POSITIVE_INFINITY) {
-    for ( const face of this.iterateFaces() ) {
+  rayIntersection(...opts) { return this.constructor.rayIntersectionForFaces(this.iterateFaces(), ...opts); }
+
+  static rayIntersectionForFaces(iter, rayOrigin, rayDirection, minT = 0, maxT = Number.POSITIVE_INFINITY) {
+    for ( const face of iter ) {
       const t = face.intersectionT(rayOrigin, rayDirection);
       if ( t !== null && almostBetween(t, minT, maxT) ) return t;
     }
     return null;
   }
+
+  // ----- NOTE: Polygon3d unit shapes ----- //
+  /**
+   * 0.5 x 0.5 x 0.5 Quads facing different directions.
+   */
+  static QUADS = QUADS;
 
   // ----- NOTE: Debug ----- //
 
@@ -399,6 +435,7 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
     for ( const face of this.iterateFaces() ) face.draw2d(opts);
   }
 }
+
 
 // export const allGeometryMixin = function(Base) {
 //   // The order for super will be outside --> inside --> base.
@@ -415,12 +452,28 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
 tracking = CONFIG.GeometryLib.lib.placeableGeometryTracking
 tracking.TileGeometryTracker.registerPlaceableHooks()
 tracking.TileGeometryTracker.registerExistingPlaceables()
-
 tile = canvas.tiles.placeables[0]
 geometry = tile.GeometryLib.geometry
+geometry.aabb.draw2d();
+geometry.iterateFaces().forEach(face => face.draw2d({ color: Draw.COLORS.red }))
 
 tracking.WallGeometryTracker.registerPlaceableHooks()
 tracking.WallGeometryTracker.registerExistingPlaceables()
+wall = canvas.walls.placeables[0]
+geometry = tile.GeometryLib.geometry
+geometry.aabb.draw2d();
+geometry.iterateFaces().forEach(face => face.draw2d({ color: Draw.COLORS.red }))
+
+tracking.TokenGeometryTracker.registerPlaceableHooks()
+tracking.TokenGeometryTracker.registerExistingPlaceables()
+token = canvas.tokens.placeables[0]
+geometry = token.GeometryLib.geometry
+geometry.aabb.draw2d();
+geometry.iterateFaces().forEach(face => face.draw2d({ color: Draw.COLORS.red }))
+
+if ( geometry.isLit && geometry.isConstrainedLit ) geometry.iterateLitFaces().forEach(face => face.draw2d({ color: Draw.COLORS.orange }))
+if ( geometry.isBrightLit && geometry.isConstrainedBrightLit ) geometry.iterateBrightLitFaces().forEach(face => face.draw2d({ color: Draw.COLORS.yellow }))
+
 
 */
 
