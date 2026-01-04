@@ -108,6 +108,17 @@ export class CenteredPolygon extends CenteredPolygonBase {
   }
 
   /**
+   * Construct a centered polygon from a PIXI polygon.
+   * Assumes the polygon points have not yet been rotated.
+   */
+  static fromPIXIPolygon(poly) {
+    // Recenter the polygon to center at 0, 0.
+    const polyCenter = poly.center;
+    poly = poly.translate(-polyCenter.x, -polyCenter.y);
+    return new this(polyCenter, poly.points);
+  }
+
+  /**
    * Construct a centered polygon using the values in drawing shape.
    * @param {Drawing} drawing
    * @returns {CenteredPolygon}

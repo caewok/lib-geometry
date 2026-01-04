@@ -66,8 +66,26 @@ export class CenteredPolygonBase extends PIXI.Polygon {
     super([]);
 
     this.origin.copyFrom(origin);
-    this.rotation = Math.normalizeDegrees(rotation);
-    this.radians = Math.toRadians(this.rotation);
+    if ( rotation ) this.rotation = rotation;
+  }
+
+  /** @type {number} */
+  #rotation = 0;
+
+  #radians = 0;
+
+  get rotation() { return this.#rotation; }
+
+  set rotation(value) {
+    this.#rotation = Math.normalizeDegrees(value);
+    this.#radians = Math.toRadians(this.#rotation);
+  }
+
+  get radians() { return this.#radians; }
+
+  set radians(value) {
+    this.#radians = Math.normalizeRadians(value);
+    this.#rotation = Math.toDegrees(value);
   }
 
   // Getters/setters for x and y for backwards compatibility.
