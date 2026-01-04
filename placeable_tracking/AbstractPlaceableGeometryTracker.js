@@ -56,8 +56,7 @@ export class AbstractPlaceableGeometryTracker {
    * @param {PlaceableObject} object    The object instance being drawn
    */
   static _onPlaceableDraw(placeable) {
-    const handler = new this(placeable);
-    handler.initialize();
+    const handler = this.create(placeable);
   }
 
   static _onPlaceableDestroy(placeable) {
@@ -238,13 +237,6 @@ export const PlaceableModelMatrixMixin = superclass => class extends superclass 
    */
   static modelMatrixTracker = new FixedLengthTrackingBuffer( { facetLengths: 16, numFacets: 0, type: Float32Array });
 
-  /**
-   * Create an id used for the model matrix tracking.
-   * @param {PlaceableDocument}
-   * @returns {string}
-   */
-  static _sourceIdForPlaceableDocument(placeableD) { return placeableD.id; }
-
   /** @type {ArrayBuffer} */
   #matrixBuffer = new ArrayBuffer(Float32Array.BYTES_PER_ELEMENT * 16 * 3);
 
@@ -270,6 +262,10 @@ export const PlaceableModelMatrixMixin = superclass => class extends superclass 
     return this._modelMatrix;
   }
 
+  /**
+   * Create an id used for the model matrix tracking.
+   * @type {string}
+   */
   get placeableId() { return this.placeable.sourceId; }
 
   updatePosition() { this.calculateTranslationMatrix(this.#matrices.translation); super.updatePosition(); }
@@ -306,7 +302,7 @@ export const PlaceableModelMatrixMixin = superclass => class extends superclass 
   }
 
   destroy() {
-    this.constructor.modelMatrixTracker.deleteFacet(this._sourceIdForPlaceableDocument(this.placeable.document));
+    this.constructor.modelMatrixTracker.deleteFacet(this.placeableId);
     super.destroy();
   }
 }
@@ -360,10 +356,10 @@ QUADS.east = QUADS.west.clone().reverseOrientation();
  */
 export const PlaceableFacesMixin = superclass => class extends superclass {
   /** @type {Faces} */
-  _prototypeFaces = { top: new Quad3d(), bottom: new Quad3d(), sides: [] };
+  _prototypeFaces = { top: null, bottom: null, sides: [] };
 
   /** @type {Faces} */
-  _faces = { top: new Quad3d(), bottom: new Quad3d(), sides: [] };
+  _faces = { top: null, bottom: null, sides: [] };
 
   get faces() {
     this.update();
@@ -386,6 +382,14 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
   initialize() {
     super.initialize();
     this._initializePrototypeFaces();
+  }
+
+  _initializePrototypeFaces() {
+    if ( this._prototypeFaces.top ) this._faces.top = new this._prototypeFaces.top.constructor();
+    if ( this._prototypeFaces.bottom ) this._faces.bottom = new this._prototypeFaces.bottom.constructor();
+    const numSides = this._prototypeFaces.sides.length;
+    this._faces.sides.length = numSides;
+    for ( let i = 0; i < numSides; i += 1 ) this._faces.sides[i] ??= new this._prototypeFaces.sides[i].constructor();
   }
 
   /**
@@ -426,6 +430,13 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
    */
   static QUADS = QUADS;
 
+  static RECT_SIDES = {
+    north: 0,
+    west: 1,
+    south: 2,
+    east: 3,
+  };
+
   // ----- NOTE: Debug ----- //
 
   /**
@@ -461,6 +472,9 @@ tracking.WallGeometryTracker.registerExistingPlaceables()
 tracking.TokenGeometryTracker.registerPlaceableHooks()
 tracking.TokenGeometryTracker.registerExistingPlaceables()
 
+tracking.RegionGeometryTracker.registerPlaceableHooks()
+tracking.RegionGeometryTracker.registerExistingPlaceables()
+
 tile = canvas.tiles.placeables[0]
 for ( const tile of canvas.tiles.placeables ) {
   const geometry = tile.GeometryLib.geometry
@@ -479,8 +493,6 @@ for ( const wall of canvas.walls.placeables ) {
   geometry.iterateFaces().forEach(face => face.draw2d({ color: Draw.COLORS.red }))
 }
 
-
-
 token = canvas.tokens.placeables[0]
 for ( const token of canvas.tokens.placeables ) {
   const geometry = token.GeometryLib.geometry
@@ -490,6 +502,18 @@ for ( const token of canvas.tokens.placeables ) {
   if ( geometry.isLit && geometry.isConstrainedLit ) geometry.iterateConstrainedLitFaces().forEach(face => face.draw2d({ color: Draw.COLORS.orange }))
   if ( geometry.isBrightLit && geometry.isConstrainedBrightLit ) geometry.iterateConstrainedBrightLitFaces().forEach(face => face.draw2d({ color: Draw.COLORS.yellow }))
 }
+
+region = canvas.regions.placeables[0]
+for ( const region of canvas.regions.placeables ) {
+  const geometry = region.GeometryLib.geometry
+  geometry.aabb.draw2d();
+  geometry.iterateFaces().forEach(face => face.draw2d({ color: Draw.COLORS.red }))
+
+  // geometry.shapes.forEach(shape => shape.aabb.draw2d({ color: Draw.COLORS.blue }))
+  // geometry.shapes.forEach(shape => shape.iterateFaces().forEach(face => face.draw2d({ color: Draw.COLORS.blue })))
+}
+
+
 
 */
 
