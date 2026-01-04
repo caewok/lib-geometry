@@ -255,5 +255,5 @@ PATCHES.Region.ELEVATION.GETTERS = {
   topE: regionTopE,
   topZ: zTop,
   bottomE: regionBottomE,
-  bottomZ: zBottom
+  bottomZ: zBottom,
 };

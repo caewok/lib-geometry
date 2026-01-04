@@ -47,6 +47,9 @@ export const OTHER_MODULES = {
 
   TERRAIN_MAPPER: {
     ID: "terrainmapper",
+    FLAGS: {
+      PLATEAU_ELEVATION: "plateauElevation",
+    }
   },
 
   ALTERNATIVE_TOKEN_VISIBILITY: {
