@@ -17,7 +17,7 @@ export class ClipperPaths {
    * @param paths {ClipperLib.Path[]|Set<ClipperLib.Path>|Map<ClipperLib.Path>}
    * @returns {ClipperPaths}
    */
-  constructor(paths = [], { scalingFactor = 1 } = {}) {
+  constructor(paths = [], { scalingFactor = CONST.CLIPPER_SCALING_FACTOR } = {}) {
     this.paths = [...paths]; // Ensure these are arrays
     this.#scalingFactor = scalingFactor;
   }
@@ -46,7 +46,7 @@ export class ClipperPaths {
 
 
   /** @type {number} */
-  #scalingFactor = 1;
+  #scalingFactor = CONST.CLIPPER_SCALING_FACTOR;
 
   get scalingFactor() { return this.#scalingFactor; }
 
@@ -71,12 +71,12 @@ export class ClipperPaths {
 
   // ----- NOTE: Static conversion helpers ----- //
 
-  static pathToPoints(path, scalingFactor = 1) {
+  static pathToPoints(path, scalingFactor = CONST.CLIPPER_SCALING_FACTOR) {
     const invScale = 1 / scalingFactor;
     return path.map(pt => PIXI.Point.tmp.set(pt.X * invScale, pt.Y * invScale));
   }
 
-  static pointsToPath(pts, scalingFactor = 1) {
+  static pointsToPath(pts, scalingFactor = CONST.CLIPPER_SCALING_FACTOR) {
     return pts.map(pt => { return { X: pt.x * scalingFactor, Y: pt.y * scalingFactor }; });
   }
 
@@ -105,7 +105,7 @@ export class ClipperPaths {
    * @param {PIXI.Polygon[]}
    * @returns {ClipperPaths}
    */
-  static fromPolygons(polygons, { scalingFactor = 1 } = {}) {
+  static fromPolygons(polygons, { scalingFactor = CONST.CLIPPER_SCALING_FACTOR } = {}) {
     const out = new this(polygons.map(p => p.toClipperPoints({scalingFactor})), { scalingFactor });
     return out;
   }
@@ -279,7 +279,7 @@ export class ClipperPaths {
    * @param {number} [scalingFactor]  Scale like with PIXI.Polygon.prototype.toClipperPoints.
    * @returns {number}  Positive if clockwise. (b/c y-axis is reversed in Foundry)
    */
-  scaledArea({scalingFactor = 1} = {}) {
+  scaledArea({scalingFactor = CONST.CLIPPER_SCALING_FACTOR} = {}) {
     if ( scalingFactor !== this.scalingFactor ) console.warn("ClipperPaths|scaledArea requested scalingFactor does not match.");
     return this.area;
   }
