@@ -104,7 +104,7 @@ export class Polygon3d {
   /**
    * Sets the z value in place. Clears the cached properties.
    */
-  setZ(z = 0) { this.points.forEach(pt => pt.z = z); this.clearCache(); }
+  setZ(z = 0) { this.points.forEach(pt => pt.z = z); this.clearCache(); return this; }
 
   /**
    * Reverse the orientation of this polygon. Done in place.
@@ -448,16 +448,13 @@ export class Polygon3d {
   /**
    * Build a set of vertical Quad3ds representing sides of a polygon shape.
    * Built facing outwards from the polygon, with polygon on top.
-   * @param {number} elevZ        Fixed elevation to use for the sides
-   * @param {number} heightZ      Relative elevation to the top; subtracted from topZ
+   * @param {number} elevZ            Fixed elevation to use for the sides
+   * @param {number} [heightZ=0]      Relative elevation to the top; subtracted from topZ
+   * @param {number} [density]        If provided, used instead of result of approximateVertexDensity for circles and ellipses
+   * @returns {Quad3d[]}
    */
-  buildTopSides(bottomZ, heightZ = 0) {
-    let numSides = 0;
-    switch ( this.constructor.name ) {
-      case "Circle3d": numSides = PIXI.Circle.approximateVertexDensity(this.radius); break;
-      case "Ellipse3d": numSides = PIXI.Circle.approximateVertexDensity(Math.max(this.radiusX, this.radiusY)); break;
-      default: numSides = this.points.length;
-    }
+  buildTopSides(bottomZ, { heightZ = 0 } = {}) {
+    const numSides = this.points.length;
     const sides = new Array(numSides);
     let i = 0;
     const a = Point3d.tmp;
@@ -596,6 +593,15 @@ export class Polygon3d {
     poly3d ??= this.clone();
     poly3d.points.forEach(pt => pt.multiplyScalar(multiplier, pt));
     poly3d.clearCache();
+    return poly3d;
+  }
+
+  translate({ x = 0, y = 0, z = 0} = {}, poly3d) {
+    poly3d ??= this.clone();
+    const txPt = Point3d.tmp.set(x, y, z);
+    poly3d.points.forEach(pt => pt.add(txPt, pt));
+    poly3d.clearCache();
+    txPt.release();
     return poly3d;
   }
 
@@ -846,7 +852,7 @@ export class Ellipse3d extends Polygon3d {
 
   clean() { return; }
 
-  setZ(z = 0) { this.center.z = z; super.setZ(z); }
+  setZ(z = 0) { this.center.z = z; super.setZ(z); return this; }
 
   reverseOrientation() {
     // No points to reverse.
@@ -1028,6 +1034,20 @@ export class Ellipse3d extends Polygon3d {
   triangulate(opts) {
     opts.useFan ??= true;
     return this.toPolygon3d(opts).triangulate(opts);
+  }
+
+  /**
+   * Build a set of vertical Quad3ds representing sides of a polygon shape.
+   * Built facing outwards from the polygon, with polygon on top.
+   * @param {number} elevZ            Fixed elevation to use for the sides
+   * @param {number} [heightZ=0]      Relative elevation to the top; subtracted from topZ
+   * @param {number} [density]        If provided, used instead of result of approximateVertexDensity for circles and ellipses
+   * @returns {Quad3d[]}
+   */
+  buildTopSides(bottomZ, { density, ...opts } = {}) {
+    density ||= PIXI.Circle.approximateVertexDensity(Math.max(this.radiusX, this.radiusY));
+    const poly3d = this.toPolygon3d({ density });
+    return poly3d.buildTopSides(bottomZ, opts);
   }
 
   // ----- NOTE: Iterators ----- //
@@ -1250,6 +1270,20 @@ export class Circle3d extends Ellipse3d {
     const out = this._convert2dPointsTo3d(latticePoints);
     PIXI.Point.release(...latticePoints);
     return out;
+  }
+
+  /**
+   * Build a set of vertical Quad3ds representing sides of a polygon shape.
+   * Built facing outwards from the polygon, with polygon on top.
+   * @param {number} elevZ            Fixed elevation to use for the sides
+   * @param {number} [heightZ=0]      Relative elevation to the top; subtracted from topZ
+   * @param {number} [density]        If provided, used instead of result of approximateVertexDensity for circles and ellipses
+   * @returns {Quad3d[]}
+   */
+  buildTopSides(bottomZ, { density, ...opts } = {}) {
+    density ||= PIXI.Circle.approximateVertexDensity(this.radius);
+    const poly3d = this.toPolygon3d({ density });
+    return poly3d.buildTopSides(bottomZ, opts);
   }
 
   // ----- NOTE: Intersection ----- //
@@ -1957,6 +1991,7 @@ export class Polygons3d extends Polygon3d {
   setZ(z) {
     this.#applyMethodToAll("setZ", z);
     this.clearCache();
+    return this;
   }
 
   reverseOrientation() { this.#applyMethodToAll("reverseOrientation"); return this; }
@@ -2067,9 +2102,9 @@ export class Polygons3d extends Polygon3d {
     return out;
   }
 
-  buildTopSides(bottomZ, heightZ = 0) {
+  buildTopSides(bottomZ, opts) {
     const sides = [];
-    for ( const poly3d of this.polygons ) sides.push(...poly3d.buildTopSides(bottomZ, heightZ));
+    for ( const poly3d of this.polygons ) sides.push(...poly3d.buildTopSides(bottomZ, opts));
     return sides;
   }
 
