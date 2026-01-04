@@ -242,24 +242,6 @@ export class TokenGeometryTracker extends mix(AbstractPlaceableGeometryTracker).
 
   // ----- NOTE: Faces ----- //
 
-  /** @type {Faces} */
-  /* Handled in parent.
-  _prototypeFaces = {
-    top: new Quad3d(),
-    bottom: new Quad3d(),
-    sides: [],
-  };
-
-
-  /** @type {Faces} */
-  /* Handled in parent.
-  _faces = {
-    top: new Quad3d(),
-    bottom: new Quad3d(),
-    sides: [],
-  };
-  */
-
   /**
    * Create the initial face shapes for this token, using a 0.5 x 0.5 x 0.5 unit cube.
    */
@@ -269,7 +251,7 @@ export class TokenGeometryTracker extends mix(AbstractPlaceableGeometryTracker).
       this._prototypeFaces.top = Sphere.fromCenterPoint(Point3d.tmp.set(0, 0, 0), 0.5);
       this._prototypeFaces.bottom = null;
       this._prototypeFaces.sides.length = 0;
-      return;
+      return super._initializePrototypeFaces();
     }
 
     // For hexagonal, center token shape and scale to unit cube (0.5 x 0.5 x 0.5).
@@ -278,11 +260,6 @@ export class TokenGeometryTracker extends mix(AbstractPlaceableGeometryTracker).
       if ( !(this._prototypeFaces.top instanceof Polygon3d) ) {
         this._prototypeFaces.top = new Polygon3d;
         this._prototypeFaces.bottom = new Polygon3d;
-        this._prototypeFaces.sides.length = 4;
-
-        this._faces.top = new Polygon3d;
-        this._faces.bottom = new Polygon3d;
-        this._faces.sides.length = 4;
       }
       const shape = this.token.shape
         .translate(-shape.center.x, -shape.center.y) // Center at 0,0.
@@ -293,7 +270,7 @@ export class TokenGeometryTracker extends mix(AbstractPlaceableGeometryTracker).
 
       // Construct sides.
       this._prototypeFaces.sides = this._prototypeFaces.top.buildTopSides(-0.5);
-      return;
+      return super._initializePrototypeFaces();
     }
 
     // For square grids, use token cube.
@@ -302,17 +279,22 @@ export class TokenGeometryTracker extends mix(AbstractPlaceableGeometryTracker).
       this._prototypeFaces.bottom = new Quad3d;
       this._prototypeFaces.sides.length = 4;
       for ( let i = 0; i < 4; i += 1 ) this._prototypeFaces.sides[i] ??= new Quad3d(); // Hex or square grids both use Quad3d sides.
-
-      this._faces.top = new Quad3d;
-      this._faces.bottom = new Quad3d;
-      this._faces.sides.length = 4;
-      for ( let i = 0; i < 4; i += 1 ) this._faces.sides[i] ??= new Quad3d(); // Hex or square grids both use Quad3d sides.
     }
     this.constructor.QUADS.up.clone(this._prototypeFaces.top);
     this.constructor.QUADS.down.clone(this._prototypeFaces.bottom);
+    this._prototypeFaces.top.setZ(0.5);
+    this._prototypeFaces.bottom.setZ(-0.5);
 
-    let i = 0
-    for ( const side of ["north", "west", "south", "east"] ) this.constructor.QUADS[side].clone(this._prototypeFaces.sides[i++]);
+    const RECT_SIDES = this.constructor.RECT_SIDES;
+    for ( const side of Object.keys(RECT_SIDES) ) this.constructor.QUADS[side].clone(this._prototypeFaces.sides[RECT_SIDES[side]]);
+
+    // Adjust sides so they are 0.5 from center in each direction.
+    this._prototypeFaces.sides[RECT_SIDES.north].translate({ y: -0.5 }, this._prototypeFaces.sides[RECT_SIDES.north]);
+    this._prototypeFaces.sides[RECT_SIDES.south].translate({ y: 0.5 }, this._prototypeFaces.sides[RECT_SIDES.south]);
+    this._prototypeFaces.sides[RECT_SIDES.west].translate({ x: -0.5 }, this._prototypeFaces.sides[RECT_SIDES.west]);
+    this._prototypeFaces.sides[RECT_SIDES.east].translate({ x: 0.5 }, this._prototypeFaces.sides[RECT_SIDES.east]);
+
+    super._initializePrototypeFaces()
   }
 
   // ----- NOTE: Token properties ----- //

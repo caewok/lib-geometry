@@ -271,23 +271,11 @@ export class TileGeometryTracker extends mix(AbstractPlaceableGeometryTracker).w
   // ----- NOTE: Polygon3d ---- //
 
   /** @type {Faces} */
-  // Handled by evPixelCache.
-  /*
   _prototypeFaces = {
     top: new Quad3d(),
     bottom: new Quad3d(),
     sides: [],
   }
-  */
-
-  /** @type {Faces} */
-  /* Handled in parent.
-  faces = {
-    top: new Quad3d(),
-    bottom: new Quad3d(),
-    sides: [],
-  }
-  */
 
   /**
    * Create the initial face shapes for this tile, assuming a 0.5 x 0.5 flat planar rectangle.
@@ -297,10 +285,7 @@ export class TileGeometryTracker extends mix(AbstractPlaceableGeometryTracker).w
     // Create the basic tile prototype face.
     this.constructor.QUADS.up.clone(this._prototypeFaces.top);
     this.constructor.QUADS.down.clone(this._prototypeFaces.bottom);
-    if ( !(this.tile.evPixelCache && this.alphaThreshold) ) {
-      this._faces.top = new Quad3d();
-      this._faces.bottom = new Quad3d();
-    }
+    super._initializePrototypeFaces();
   }
 
   /**
@@ -310,7 +295,11 @@ export class TileGeometryTracker extends mix(AbstractPlaceableGeometryTracker).w
   _updateFaces() {
     const tile = this.tile;
     const pixelCache = tile.evPixelCache;
-    if ( !(pixelCache && this.alphaThreshold) ) return super._updateFaces();
+    if ( !(pixelCache && this.alphaThreshold) ) {
+      this._faces.top = new Quad3d();  // TODO: Is this necessary or will this already be a Quad3d given initialization?
+      this._faces.bottom = new Quad3d();
+      return super._updateFaces();
+    }
 
     const alphaBoundsFn = this.useAlphaPolygonBounds ? "getThresholdCanvasBoundingPolygon" : "getThresholdCanvasBoundingBox";
     const alphaShape = pixelCache[alphaBoundsFn](this.alphaThreshold) || tile.bounds;

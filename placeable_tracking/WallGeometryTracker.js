@@ -77,22 +77,11 @@ export class WallGeometryTracker extends mix(AbstractPlaceableGeometryTracker).w
   // ----- NOTE: Faces ---- //
 
   /** @type {Faces} */
-  /* Handled in parent.
   _prototypeFaces = {
     top: new Quad3d(),
     bottom: new Quad3d(),
     sides: [],
   }
-  */
-
-  /** @type {Faces} */
-  /* Handled in parent.
-  _faces = {
-    top: new Quad3d(),
-    bottom: new Quad3d(),
-    sides: [],
-  }
-  */
 
   /**
    * Create the initial face shapes for this wall, using a 0.5 x 0.5 x 0.5 unit cube.
@@ -100,14 +89,12 @@ export class WallGeometryTracker extends mix(AbstractPlaceableGeometryTracker).w
    */
   _initializePrototypeFaces() {
     this.constructor.QUADS.south.clone(this._prototypeFaces.top);
-    if ( this.constructor.isDirectional(this.edge) ) {
-      this._prototypeFaces.bottom = null;
-      this._faces.bottom = null;
-    } else {
+    if ( this.constructor.isDirectional(this.edge) ) this._prototypeFaces.bottom = null;
+    else {
       this._prototypeFaces.bottom ??= new Quad3d();
-      this._faces.bottom ??= new Quad3d();
       this.constructor.QUADS.south.clone(this._prototypeFaces.bottom);
     }
+    super._initializePrototypeFaces();
   }
 
   updateShape() {
