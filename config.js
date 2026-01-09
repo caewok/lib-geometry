@@ -91,10 +91,16 @@ const PLACEABLE_TRACKING_CONFIG = {
   useAlphaPolygonBounds: false,
 
   /**
-   * Use a token sphere for the face test.
+   * Use a token sphere for the token shape. Overrides all other shape choices.
    * @type {boolean}
    */
   useTokenSphere: false,
+
+  /**
+   * Always use the chosen token shape in the token config.
+   * If false, will use the grid shape or for gridless, will use either rectangle or ellipse.
+   */
+  useChosenTokenShape: false,
 
   version: VERSION,
 };
