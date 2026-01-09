@@ -14,6 +14,7 @@ import { AABB3d } from "../AABB.js";
 import { Quad3d } from "../3d/Polygon3d.js";
 import { almostBetween } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
+import { ModelMatrix } from "../placeable_geometry/BasicVertices.js";
 
 
 /* Store key geometry information for each placeable, in 3d.
@@ -56,7 +57,7 @@ export class AbstractPlaceableGeometryTracker {
    * @param {PlaceableObject} object    The object instance being drawn
    */
   static _onPlaceableDraw(placeable) {
-    const handler = this.create(placeable);
+    this.create(placeable);
   }
 
   static _onPlaceableDestroy(placeable) {
@@ -222,6 +223,25 @@ const identityM = MatrixFloat32.identity(4, 4);
 Object.freeze(identityM);
 
 /**
+ * Matrix model that uses a provided callback to access the model matrix buffer.
+ */
+export class PlaceableModelMatrix extends ModelMatrix {
+
+  /** @type {function} */
+  #modelMatrixCallback;
+
+  get _model() { return this.#modelMatrixCallback(); }
+
+  get model() { return super.model; }
+
+  constructor(modelMatrixCallback) {
+    super();
+    if ( !modelMatrixCallback ) this.#modelMatrixCallback = () => super._model;
+    else this.#modelMatrixCallback = modelMatrixCallback;
+  }
+}
+
+/**
  * @typedef {function} PlaceableModelMatrixMixin
  *
  * Adds a model matrix for this placeable.
@@ -229,81 +249,102 @@ Object.freeze(identityM);
  * @param {function} superclass
  * @returns {function} A subclass of `superclass.`
  */
-export const PlaceableModelMatrixMixin = superclass => class extends superclass {
-  /**
-   * Store the entire model matrix as a single typed array.
-   * Each 16-element matrix (per placeable) is accessed using an id.
-   * @type {FixedLengthTrackingBuffer}
-   */
-  static modelMatrixTracker = new FixedLengthTrackingBuffer( { facetLengths: 16, numFacets: 0, type: Float32Array });
+export const PlaceableModelMatrixMixin = superclass => {
 
-  /** @type {ArrayBuffer} */
-  #matrixBuffer = new ArrayBuffer(Float32Array.BYTES_PER_ELEMENT * 16 * 3);
+  // Must define some objects here so they are not repeated between classes.
+  let trackerCounter = 0;
 
-  /** @type {object<MatrixFloat32>} */
-  #matrices = {
-    rotation: MatrixFloat32.identity(4, 4, new MatrixFloat32(new Float32Array(this.#matrixBuffer, 0, 16), 4, 4)),
-    translation: MatrixFloat32.identity(4, 4, new MatrixFloat32(new Float32Array(this.#matrixBuffer, 16 * Float32Array.BYTES_PER_ELEMENT, 16), 4, 4)),
-    scale: MatrixFloat32.identity(4, 4, new MatrixFloat32(new Float32Array(this.#matrixBuffer, 32 * Float32Array.BYTES_PER_ELEMENT, 16), 4, 4)),
-  };
+  return class extends superclass {
+    /**
+     * Store the entire model matrix as a single typed array.
+     * Each 16-element matrix (per placeable) is accessed using an id.
+     * @type {FixedLengthTrackingBuffer}
+     */
+    static modelMatrixTracker = new FixedLengthTrackingBuffer( { facetLengths: 16, numFacets: 0, type: Float32Array });
 
-  get matrices() {
-    this.update();
-    return this.#matrices;
-  }
+    /**
+     * Indicate that the underlying model matrix tracker may have changed, due to
+     * a placeable getting added or removed.
+     */
+    static _incrementTrackerCounter() { trackerCounter += 1; }
 
-  get _modelMatrix() { // Allow access so update can be called separately first.
-    const arr = this.constructor.modelMatrixTracker.viewFacetById(this.placeableId);
-    return new MatrixFloat32(arr, 4, 4);
-  }
+    static get _trackerCounter() { return trackerCounter; }
 
-  get modelMatrix() {
-    this.update();
-    return this._modelMatrix;
-  }
+    /** @type {number} */
+    #trackerUpdateCounter = -1;
 
-  /**
-   * Create an id used for the model matrix tracking.
-   * @type {string}
-   */
-  get placeableId() { return this.placeable.sourceId; }
+    /** @type {number} */
+    get _trackerUpdateCounter() { return this.#trackerUpdateCounter; }
 
-  updatePosition() { this.calculateTranslationMatrix(this.#matrices.translation); super.updatePosition(); }
+    /**
+     * Placeholder to use as the model matrix. Will be updated by modelMatrixCallback.
+     * @type {MatrixFloat32}
+     */
+    #modelMatrixData = MatrixFloat32.empty(4, 4);
 
-  updateRotation() { this.calculateRotationMatrix(this.#matrices.rotation); super.updateRotation(); }
+    /** @type {function} */
+    #modelMatrixCallback() {
+      if ( this.#trackerUpdateCounter < this.constructor._trackerCounter ) {
+        this.#modelMatrixData.arr = this.constructor.modelMatrixTracker.viewFacetById(this.placeableId);
+        this.#trackerUpdateCounter = this.constructor._trackerCounter;
+      }
+      return this.#modelMatrixData;
+    }
 
-  updateScale() { this.calculateScaleMatrix(this.#matrices.scale); super.updateScale(); }
+    /** @type {PlaceableModelMatrix} */
+    _modelMatrix = new PlaceableModelMatrix(this.#modelMatrixCallback.bind(this));
 
-  updateShape() {
-    this.calculateTranslationMatrix(this.#matrices.translation);
-    this.calculateRotationMatrix(this.#matrices.rotation);
-    this.calculateScaleMatrix(this.#matrices.scale);
-  }
+    get modelMatrix() {
+      this.update();
+      return this._modelMatrix;
+    }
 
-  _placeableUpdated() { super._placeableUpdated(); this.updateModelMatrix();  }
+    /**
+     * Create an id used for the model matrix tracking.
+     * @type {string}
+     */
+    get placeableId() { return this.placeable.sourceId; }
 
-  updateModelMatrix() {
-    const { rotation, translation, scale } = this.#matrices;
-    const M = this._modelMatrix;
-    scale
-      .multiply4x4(rotation, M)
-      .multiply4x4(translation, M);
-  }
+    updatePosition() {
+      this.calculateTranslationMatrix();
+      super.updatePosition();
+    }
 
-  calculateTranslationMatrix() { return this.#matrices.translation; }
+    updateRotation() {
+      this.calculateRotationMatrix();
+      super.updateRotation();
+    }
 
-  calculateRotationMatrix() { return this.#matrices.rotation; }
+    updateScale() {
+      this.calculateScaleMatrix();
+      super.updateScale();
+    }
 
-  calculateScaleMatrix() { return this.#matrices.scale; }
+    updateShape() {
+      const mm = this._modelMatrix;
+      this.calculateTranslationMatrix(mm.translation);
+      this.calculateRotationMatrix(mm.rotation);
+      this.calculateScaleMatrix(mm.scale);
+    }
 
-  initialize() {
-    super.initialize();
-    this.constructor.modelMatrixTracker.addFacet({ id: this.placeableId, newValues: identityM.arr });
-  }
+    calculateTranslationMatrix() { return this._modelMatrix.translation; }
 
-  destroy() {
-    this.constructor.modelMatrixTracker.deleteFacet(this.placeableId);
-    super.destroy();
+    calculateRotationMatrix() { return this._modelMatrix.rotation; }
+
+    calculateScaleMatrix() { return this._modelMatrix.scale; }
+
+    initialize() {
+      super.initialize();
+      this.constructor.modelMatrixTracker.addFacet({ id: this.placeableId, newValues: identityM.arr });
+      this.constructor._incrementTrackerCounter();
+    }
+
+    destroy() {
+      this.constructor.modelMatrixTracker.deleteFacet(this.placeableId);
+      this.constructor._incrementTrackerCounter();
+      this.modelMatrix = null;
+      super.destroy();
+    }
   }
 }
 
@@ -397,7 +438,7 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
    * Always updates using the model matrix.
    */
   _updateFaces() {
-    const M = this._modelMatrix; // Avoid triggering infinite update loop. Note this must come after the matrix has been updated.
+    const M = this._modelMatrix.model;
     if ( this._prototypeFaces.top ) this._prototypeFaces.top.transform(M, this._faces.top)
     if ( this._prototypeFaces.bottom ) this._prototypeFaces.bottom.transform(M, this._faces.bottom)
     for ( let i = 0, iMax = this._prototypeFaces.sides.length; i < iMax; i += 1 ) this._prototypeFaces.sides[i].transform(M, this._faces.sides[i]);
