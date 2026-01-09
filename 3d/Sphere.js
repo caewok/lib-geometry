@@ -57,7 +57,7 @@ export class Sphere {
     return Point3d.distanceSquaredBetween(pt, this.center) < (this.radiusSquared + epsilon);
   }
 
-  toCircle2d() { return new PIXI.Circle(this.x, this.y, this.radius); }
+  toCircle2d() { return new PIXI.Circle(this.center.x, this.center.y, this.radius); }
 
   /**
    * Does a planar polygon overlap?
