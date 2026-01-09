@@ -264,7 +264,7 @@ export class TileGeometryTracker extends mix(AbstractPlaceableGeometryTracker).w
 
   calculateScaleMatrix() {
     const mat = super.calculateScaleMatrix();
-    const { width, height } = this.constructor.tileDimensions(this.tile);
+    const { width, height } = this.tile.document;
     return MatrixFloat32.scale(width, height, 1.0, mat);
   }
 
@@ -360,35 +360,12 @@ export class TileGeometryTracker extends mix(AbstractPlaceableGeometryTracker).w
   static tileRotation(tile) { return Math.toRadians(tile.document.rotation); }
 
   /**
-   * Determine the tile 3d dimensions, in pixel units.
-   * Omits alpha border.
-   * @param {Tile} tile
-   * @returns {object}
-   * @prop {number} width       In x direction
-   * @prop {number} height      In y direction
-   * @prop {number} elevation   In z direction
-   */
-  static tileDimensions(tile) {
-    const { x, y, width, height } = tile.document;
-    return {
-      x, y, width, height,
-      elevation: tile.elevationZ,
-    };
-  }
-
-  /**
    * Determine the center of the tile, in pixel units.
    * @param {Tile} tile
    * @returns {Point3d}
    */
   static tileCenter(tile) {
-    const out = new Point3d();
-    const { x, y, width, height, elevation } = this.tileDimensions(tile);
-    const dims = Point3d.tmp.set(width, height, 0);
-    const TL = Point3d.tmp.set(x, y, elevation);
-    const BR = TL.add(dims, Point3d.tmp);
-    TL.add(BR, out).multiplyScalar(0.5, out);
-    Point3d.release(dims, TL, BR);
-    return out;
+    const ctr = tile.center;
+    return Point3d.tmp.set(ctr.x, ctr.y, tile.elevationZ);
   }
 }
