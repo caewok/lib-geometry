@@ -126,11 +126,9 @@ export class RegionGeometryTracker extends mix(AbstractPlaceableGeometryTracker)
     shapeTracker.initialize();
   }
 
-
-
-  /**
-   * Combine shapes for this region to 1 or more 3d shapes.
-   */
+  _updateFaces() {
+    this.buildRegionPolygons3d();
+  }
 
   // ----- NOTE: Update underlying shapes ----- //
 
@@ -153,8 +151,7 @@ export class RegionGeometryTracker extends mix(AbstractPlaceableGeometryTracker)
 
   _placeableUpdated() {
     this.#applyToShapes("_placeableUpdated");
-    this.buildRegionPolygons3d();
-    super._placeableUpdated(); // For AABB.
+    super._placeableUpdated(); // For AABB and faces.
   }
 
   #applyToShapes(fnName) {
@@ -188,7 +185,7 @@ export class RegionGeometryTracker extends mix(AbstractPlaceableGeometryTracker)
   }
 
   buildRegionPolygons3d() {
-    const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
+    const shapePaths = this.buildRegionPaths();
 
     // Clear prior data.
     this.combinedFaces.length = 0;
@@ -197,29 +194,48 @@ export class RegionGeometryTracker extends mix(AbstractPlaceableGeometryTracker)
     // TODO: Handle steps.
     // TODO: Handle multi-plane ramps. this.hasMultiPlaneRamp
     // TODO: Handle multi-plane steps. this.hasMultiPlaneRamp
-
+    const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
     const { topZ, bottomZ } = this.constructor.regionElevation(this.region);
+    for ( const shapePath of shapePaths ) {
+      if ( shapePath instanceof ClipperPaths ) {
+        const polys = Polygons3d.fromClipperPaths(shapePath, topZ);
+        const face = {
+          top: polys,
+          bottom: polys.clone().reverseOrientation().setZ(bottomZ),
+          sides: [],
+        };
+        // Build all the side polys.
+        face.sides = face.top.buildTopSides(bottomZ);
+        this.combinedFaces.push(face);
+
+      } else {
+        const geometry = shapePath[GEOMETRY_LIB_ID][this.constructor.ID];
+        this.combinedFaces.push(geometry._faces);
+      }
+    }
+  }
+
+  buildRegionPaths() {
+    const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
+    const pathShapes = [];
+
+    // TODO: Handle ramps.
+    // TODO: Handle steps.
+    // TODO: Handle multi-plane ramps. this.hasMultiPlaneRamp
+    // TODO: Handle multi-plane steps. this.hasMultiPlaneRamp
     try {
       const uniqueShapes = this.combineRegionShapes();
       for ( const shapeGroup of uniqueShapes ) {
         if ( shapeGroup.length === 1 ) {
           const geometry = shapeGroup[0][GEOMETRY_LIB_ID][this.constructor.ID];
           if ( geometry.isHole ) continue;
-          this.combinedFaces.push(geometry._faces);
+          pathShapes.push(shapeGroup[0]);
         } else {
           // Combine and convert to Polygons3d.
           const paths = shapeGroup.map(shape => shape[GEOMETRY_LIB_ID][this.constructor.ID].toClipperPath());
           const combinedPaths = paths.length === 1 ? paths[0] : ClipperPaths.joinPaths(paths);
           const path = combinedPaths.union();
-          const polys = Polygons3d.fromClipperPaths(path, topZ);
-          const face = {
-            top: polys, // topZ already set above.
-            bottom: polys.clone().reverseOrientation().setZ(bottomZ),
-            sides: [],
-          };
-          // Build all the side polys.
-          face.sides = face.top.buildTopSides(bottomZ);
-          this.combinedFaces.push(face);
+          pathShapes.push(path);
         }
       }
     } catch (error) {
@@ -231,16 +247,9 @@ export class RegionGeometryTracker extends mix(AbstractPlaceableGeometryTracker)
         case 1: cp.paths = this.region.document.clipperPaths; break;
         case 2: this.region.document.clipperPaths.forEach(path => cp.addPathClipper1Points(path)); break;
       }
-      const polys = Polygons3d.fromClipperPaths(cp, topZ);
-      const face = {
-        top: polys, // topZ already set above.
-        bottom: polys.clone().reverseOrientation().setZ(bottomZ),
-        sides: [],
-      };
-      // Build all the side polys.
-      face.sides = face.top.buildTopSides(bottomZ);
-      this.combinedFaces.push(face);
+      pathShapes.push(cp);
     }
+    return pathShapes;
   }
 
   combineRegionShapes() {
