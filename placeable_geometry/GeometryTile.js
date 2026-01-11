@@ -1,19 +1,17 @@
 /* globals
-PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { GeometryInstanced } from "./GeometryDesc.js";
+import { AbstractInstancedVertices } from "./GeometryDesc.js";
 import { HorizontalQuadVertices } from "./BasicVertices.js";
 
-export class GeometryTile extends GeometryInstanced {
+export class TileInstancedVertices extends AbstractInstancedVertices {
 
-  get addUVs() { return true; } // Always add UVs for tiles.
+  static type = "Tile";
 
-  get tile() { return this.placeable; }
+  static addUVs = true;
 
-  _defineInstanceVertices() {
-    return HorizontalQuadVertices.calculateVertices(undefined, { type: "doubleUp"} );
-  }
+  static calculateVertices() { return HorizontalQuadVertices.getUnitVertices("doubleUp"); }
+
 }

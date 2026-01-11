@@ -1,34 +1,28 @@
 /* globals
-CONST,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { GEOMETRY_LIB_ID, GEOMETRY_ID } from "../const.js";
-import { GeometryInstanced } from "./GeometryDesc.js";
+import { AbstractInstancedVertices } from "./GeometryDesc.js";
 import { VerticalQuadVertices } from "./BasicVertices.js";
-import { MatrixFloat32 } from "../MatrixFlat.js";
 
-export class GeometryWall extends GeometryInstanced {
+export class WallInstancedVertices extends AbstractInstancedVertices {
 
-  get wallDirection() { return this.type; }
+  static type = "Wall";
 
-  constructor(type, opts) {
-    opts.type = type === "double" ? "double" : "directional";
-    super(type, opts);
+  static labelArr({ direction = "double", ...opts } = {}) {
+    const arr = super.labelArr(opts);
+    arr.push(VerticalQuadVertices.DIRECTIONS[direction]);
+    return arr;
   }
 
-  _defineInstanceVertices() {
+  static _optionsForPlaceable(wall, opts = {}) {
+    opts.direction = wall.document.direction ? "directional" : "double";
+    return opts;
+  }
+
+  static calculateVertices({ direction = "double" } = {}) {
     // Directional south walls will be rotated 180º to match north.
-    return VerticalQuadVertices.calculateVertices(undefined, undefined, { type: this.wallDirection } );
-  }
-
-  _modelMatrix(wall) {
-    let modelMatrix = wall[GEOMETRY_LIB_ID][GEOMETRY_ID].modelMatrix;
-    if ( this.wall.document.dir ===  CONST.WALL_DIRECTIONS.RIGHT ) {
-      const rotateM = MatrixFloat32.rotationZ(Math.PI); // 180º
-      modelMatrix = modelMatrix.multiply4x4(rotateM);
-    }
-    return modelMatrix;
+    return VerticalQuadVertices.getUnitVertices(direction);
   }
 }
