@@ -792,10 +792,10 @@ export class Polygon3d {
   }
 }
 
-function pointFromVertices(i, vertices, indices, stride = 3, outPoint) {
+function pointFromVertices(i, vertices, indices, stride = 3, offset = 0, outPoint) {
   outPoint ??= Point3d.tmp;
-  const idx = indices[i];
-  const v = vertices.slice(idx * stride, (idx * stride) + 3);
+  const idx = (indices[i] * stride) + offset;
+  const v = vertices.slice(idx , idx + 3);
   outPoint.set(v[0], v[1], v[2]);
   return outPoint;
 }
@@ -1427,7 +1427,7 @@ export class Triangle3d extends Polygon3d {
    * @param {Number[]} [indices]    Indices to determine order in which triangles are created from vertices
    * @returns {Triangle[]}
    */
-  static fromVertices(vertices, indices, stride = 3) {
+  static fromVertices(vertices, indices, { positionOffset = 0, stride = 3 } = {}) {
     if ( vertices.length % stride !== 0 ) console.error(`${this.name}.fromVertices|Length of vertices is not divisible by stride ${stride}: ${vertices.length}`);
     indices ??= Array.fromRange(Math.floor(vertices.length / 3));
     if ( indices.length % 3 !== 0 ) console.error(`${this.name}.fromVertices|Length of indices is not divisible by 3: ${indices.length}`);
@@ -1435,15 +1435,13 @@ export class Triangle3d extends Polygon3d {
     const a = Point3d.tmp;
     const b = Point3d.tmp;
     const c = Point3d.tmp;
-    for ( let i = 0, j = 0, jMax = tris.length; j < jMax; j += 1 ) {
-      pointFromVertices(i++, vertices, indices, stride, a);
-      pointFromVertices(i++, vertices, indices, stride, b);
-      pointFromVertices(i++, vertices, indices, stride, c);
-      tris[j] = this.from3Points(a, b, c);
+    for ( let i = 0, j = 0, jMax = tris.length; j < jMax; ) {
+      pointFromVertices(i++, vertices, indices, stride, positionOffset, a);
+      pointFromVertices(i++, vertices, indices, stride, positionOffset, b);
+      pointFromVertices(i++, vertices, indices, stride, positionOffset, c);
+      tris[j++] = this.from3Points(a, b, c);
     }
-    a.release();
-    b.release();
-    c.release();
+    Point3d.release(a, b, c);
     return tris;
   }
 

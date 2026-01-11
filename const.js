@@ -11,6 +11,8 @@ import { MODULE_ID as thisModuleId } from "../const.js";
 
 export const GEOMETRY_LIB_ID = "GeometryLib";
 
+export const GEOMETRY_ID = "geometry";
+
 export const MODULE_ID = thisModuleId;
 
 // Accessed at CONFIG.GeometryLib.

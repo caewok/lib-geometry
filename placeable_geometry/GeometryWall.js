@@ -4,7 +4,7 @@ CONST,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { GEOMETRY_LIB_ID } from "../const.js";
+import { GEOMETRY_LIB_ID, GEOMETRY_ID } from "../const.js";
 import { GeometryInstanced } from "./GeometryDesc.js";
 import { VerticalQuadVertices } from "./BasicVertices.js";
 import { MatrixFloat32 } from "../MatrixFlat.js";
@@ -24,7 +24,7 @@ export class GeometryWall extends GeometryInstanced {
   }
 
   _modelMatrix(wall) {
-    let modelMatrix = wall[GEOMETRY_LIB_ID].geometry.modelMatrix;
+    let modelMatrix = wall[GEOMETRY_LIB_ID][GEOMETRY_ID].modelMatrix;
     if ( this.wall.document.dir ===  CONST.WALL_DIRECTIONS.RIGHT ) {
       const rotateM = MatrixFloat32.rotationZ(Math.PI); // 180º
       modelMatrix = modelMatrix.multiply4x4(rotateM);

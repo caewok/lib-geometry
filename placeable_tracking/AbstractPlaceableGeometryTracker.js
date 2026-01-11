@@ -8,7 +8,7 @@ Hooks,
 import { FixedLengthTrackingBuffer } from "./TrackingBuffer.js";
 
 // LibGeometry
-import { GEOMETRY_LIB_ID } from "../const.js";
+import { GEOMETRY_LIB_ID, GEOMETRY_ID } from "../const.js";
 import { MatrixFloat32 } from "../MatrixFlat.js";
 import { AABB3d } from "../AABB.js";
 import { Quad3d } from "../3d/Polygon3d.js";
@@ -48,7 +48,7 @@ export class AbstractPlaceableGeometryTracker {
    * The tracker will be saved at placeable[GEOMETRY_LIB_ID][ID] with updateId property.
    * @type {string}
    */
-  static ID = "geometry";
+  static ID = GEOMETRY_ID;
 
   // ----- NOTE: Hooks ----- //
 

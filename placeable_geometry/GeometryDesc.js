@@ -7,10 +7,20 @@ foundry,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { GEOMETRY_LIB_ID } from "../const.js";
-import { ModelMatrix, BasicVertices, HorizontalQuadVertices, VerticalQuadVertices, Hex3dVertices, SphereVertices } from "./BasicVertices.js";
+import { GEOMETRY_LIB_ID, GEOMETRY_ID } from "../const.js";
+import { Triangle3d } from "../3d/Polygon3d.js";
 import { setTypedArray } from "../util.js";
-
+import { mix } from "../mixwith.js";
+import {
+  BasicVertices,
+  HorizontalQuadVertices,
+  VerticalQuadVertices,
+  Rectangle3dVertices,
+  Hex3dVertices,
+  Ellipse3dVertices,
+  SphereVertices,
+  Polygon3dVertices,
+} from "./BasicVertices.js";
 
 const STATIC_VERTEX_KEY = {
   0: "position",
@@ -33,7 +43,6 @@ const STATIC_VERTEX_KEY = {
  * @type {number} stride          Stride for the vertices
  */
 export class VertexObject {
-  type = "";
 
   hasUVs = true;
 
@@ -41,15 +50,12 @@ export class VertexObject {
 
   vertices = new Float32Array();
 
-  indices = new Uint16Array();
+  indices = null;
 
-  get key() { return `${this.type}${this.hasNormals ? ".normals" : ""}${this.hasUVs ? ".uvs" : ""}`; }
-
-  get stride() { return 3 + (this.hasUVs * 3) + (this.hasNormals * 2); }
+  get stride() { return 3 + (this.hasUVs * 2) + (this.hasNormals * 3); }
 
   _lightCopy(out) {
-    out ??= new this();
-    out.type = this.type;
+    out ??= new this.constructor();
     out.hasUVs = this.hasUVs;
     out.hasNormals = this.hasNormals;
     return out;
@@ -58,22 +64,28 @@ export class VertexObject {
   clone(out) {
     out ??= this._lightCopy();
     out.vertices = new Float32Array(this.vertices);
-    out.indices = new Uint16Array(this.indices);
+    out.indices = this.indices ? new Uint16Array(this.indices) : null;
     return out;
   }
 
   transformToModel(modelMatrix, out) {
-    out ??= this.clone();
-    BasicVertices.transformVertexPositions(out.vertices, modelMatrix.model, this.stride);
+    out ??= this._lightCopy();
+    out.vertices = new Float32Array(this.vertices); // Copy the vertices b/c transformVertexPositions will overwrite them.
+    out.indices = this.indices;
+    BasicVertices.transformVertexPositions(out.vertices, modelMatrix.model, { stride: this.stride });
     return out;
   }
 
   dropNormalsAndUVs({ keepNormals = false, keepUVs = false, out } = {}) {
-    if ( !(this.hasNormals || this.hasUVs) ) return out ?? this.clone();
-    if ( keepNormals && keepUVs ) return out ?? this.clone();
-    out.vertices = BasicVertices.trimUVs(this.vertices, { stride: this.stride, keepNormals, keepUVs } = {});
-    out.hasNormals = false;
-    out.hasUVs = false;
+    if ( !(this.hasNormals || this.hasUVs) || (keepNormals && keepUVs) ) return this.clone(out);
+    out ??= this._lightCopy();
+
+    const deletionLength = ((!keepNormals && this.hasNormals) * 3) + ((!keepUVs && this.hasUVs) * 2);
+    const startingOffset = (keepNormals && this.hasNormals) ? 6 : 3;  // position (3), normals (3), uvs(2)
+
+    out.vertices = BasicVertices.cutVertexData(this.vertices, { startingOffset, deletionLength, stride: this.stride });
+    out.hasNormals &&= keepNormals;
+    out.hasUVs &&= keepUVs;
     return out;
   }
 
@@ -83,6 +95,13 @@ export class VertexObject {
     out.vertices = res.vertices;
     out.indices = res.indices;
     return out;
+  }
+
+  toTriangles() { return Triangle3d.fromVertices(this.vertices, this.indices, { stride: this.stride }); }
+
+  debugDraw(opts = {}) {
+    opts.stride = this.stride;
+    BasicVertices.debugDraw(this.vertices, this.indices, opts);
   }
 }
 
@@ -95,31 +114,51 @@ export class VertexObject {
  */
 export class AbstractInstancedVertices {
 
+  static type = "Abstract"; // Use type instead of this.name so subclasses may share instances.
+
   static addUVs = false;
 
   /** @type {Map<string, VertexIndexObject} */
   static instanceMap = new Map();
 
-  get vertexObject() { return this._getInstanceVertexObject({ addNormals: false, addUVs: this.addUVs }); }
-
-  get vertexObjectWithNormals() { return this._getInstanceVertexObject({ addNormals: true, addUVs: this.addUVs }); }
-
-  static _getInstanceVertexObject(opts) {
-    const key = this.instanceKey(opts);
+  /**
+   * @param {boolean} [addNormals=false]        Add normal values to each vetex
+   * @param {boolean} [addUVs]                  Add uv values to each vertex; default depends on object
+   * @returns {VertexIndexObject}
+   */
+  static getVertexObject({ addNormals = false, addUVs = this.addUVs, ...opts } = {}) {
+    const key = this._instanceKey(addNormals, addUVs, opts);
     if ( this.instanceMap.has(key) ) return this.instanceMap.get(key);
-    else return this._addInstance(opts);
+    else return this._addInstance(addNormals, addUVs, opts);
   }
 
-  static _instanceKey(opts = {}) {
-    return `${this._baseKey}${opts.addNormals ? ".normals" : ""}${opts.addUVs ? ".uvs" : ""}`;
+  static getVertexObjectForPlaceable(placeable, opts = {}) {
+    opts = this._optionsForPlaceable(placeable, opts);
+    opts.addNormals ??= false;
+    opts.addUVs ??= this.addUVs;
+    return this.getVertexObject(opts);
   }
 
-  static _baseKey(opts) { return `${this.name}_${opts.type}`}
+  static _optionsForPlaceable(placeable, opts) { return opts; }
 
-  static _addInstance(opts = {}) {
+  static labelArr(_opts) { return [this.type]; }
+
+  static _instanceKey(addNormals = false, addUVs = this.addUVs, opts) {
+    const labelArr = this.labelArr(opts);
+    if ( addNormals ) labelArr.push("normals");
+    if ( addUVs ) labelArr.push("uvs");
+    return labelArr.join(".");
+  }
+
+  static _baseKey(opts) {
+    const labelArr = this.labelArr(opts);
+    labelArr.push("base");
+    return labelArr.join(".");
+  }
+
+  static _addInstance(addNormals, addUVs, opts) {
     const base = this._getBaseInstance(opts);
-    const out = this._getCondensedInstance(base, opts);
-    return out;
+    return this._getCondensedInstance(base, addNormals, addUVs, opts);
   }
 
   /**
@@ -127,8 +166,9 @@ export class AbstractInstancedVertices {
    * @param {object} [opts]       Options used to create the instance
    * @returns {VertexObject}
    */
-  _getBaseInstance(opts = {}) {
-    const baseKey = this._baseKey(opts);
+  static _getBaseInstance(opts) {
+    const labelArr = this.labelArr(opts);
+    const baseKey = this._baseKey(labelArr, opts);
     if ( this.instanceMap.has(baseKey) ) return this.instanceMap.get(baseKey);
     const base = this._buildBaseInstance(opts);
     this.instanceMap.set(baseKey, base);
@@ -140,9 +180,8 @@ export class AbstractInstancedVertices {
    * @param {object} [opts]       Options used to create the instance
    * @returns {VertexObject}
    */
-  _buildBaseInstance(opts = {}) {
+  static _buildBaseInstance(opts) {
     const base = new VertexObject();
-    base.type = opts.type;
     base.vertices = this.calculateVertices(opts);
     return base;
   }
@@ -152,105 +191,247 @@ export class AbstractInstancedVertices {
    * @param {object} [opts]       Options used to create the instance
    * @returns {VertexObject}
    */
-  _getCondensedInstance(base, opts = {}) {
-    const instanceKey = this._instanceKey(opts);
+  static _getCondensedInstance(base, addNormals, addUVs, opts) {
+    const instanceKey = this._instanceKey(addNormals, addUVs, opts);
     if ( this.instanceMap.has(instanceKey) ) return this.instanceMap.get(instanceKey);
-    const out = this._buildCondensedInstance(base, opts);
-    this.instanceMap.set(baseKey, out);
+    const out = this._buildCondensedInstance(base, addNormals, addUVs);
+    this.instanceMap.set(instanceKey, out);
     return out;
   }
 
-  _buildCondensedInstance(base, opts = {}) {
-    const out = base.dropNormalsAndUVs({ keepNormals: opts.addNormals, keepUVs: opts.addUVs });
+  static _buildCondensedInstance(base, addNormals = false, addUVs = this.addUVs) {
+    const out = base.dropNormalsAndUVs({ keepNormals: addNormals, keepUVs: addUVs });
     out.condense(out);
     return out;
   }
 
-
   static calculateVertices(_opts) { return new Float32Array(); }
+
+  static calculateModelForPlaceable(placeable, opts = {}) {
+    opts = this._optionsForPlaceable(placeable, {...opts}); // Shallow copy; avoid modifying the opts directly.
+    const vo = this.getVertexObject(opts);
+    return vo.transformToModel(placeable[GEOMETRY_LIB_ID][GEOMETRY_ID].modelMatrix);
+  }
 }
-
-export class AbstractModelVertices extends AbstractInstancedVertices {
-
-}
-
-
 
 
 export class GeometryInstancedTile extends AbstractInstancedVertices {
 
+  static type = "Tile";
+
   static addUVs = true;
 
-  static _baseKey(opts = {}) { return `${this.name}`; }
-
   static calculateVertices() { return HorizontalQuadVertices.getUnitVertices("doubleUp"); }
-
 }
 
 export class GeometryInstancedWall extends AbstractInstancedVertices {
 
-  static instanceKey({ direction, ...opts } = {}) {
+  static type = "Wall";
 
-
-    direction ??= "double"; // double or directional.
-    opts.type = `Wall_${direction}`;
-    return super.instanceKey(opts);
+  static labelArr({ direction = "double", ...opts } = {}) {
+    const arr = super.labelArr(opts);
+    arr.push(VerticalQuadVertices.DIRECTIONS[direction]);
+    return arr;
   }
 
-  static instanceKeyForPlaceable(wall, opts) {
+  static _optionsForPlaceable(wall, opts = {}) {
     opts.direction = wall.document.direction ? "directional" : "double";
-    return this.instanceKey(opts);
+    return opts;
   }
 
   static calculateVertices({ direction = "double" } = {}) {
     // Directional south walls will be rotated 180º to match north.
-    return VerticalQuadVertices[VerticalQuadVertices.DIRECTIONS[direction]];
+    return VerticalQuadVertices.getUnitVertices(direction);
   }
 }
 
 export class GeometryInstancedToken extends AbstractInstancedVertices {
-  static instanceKey({ direction, ...opts } = {}) {
-    direction ??= "double"; // double or directional.
-    opts.type = `Wall_${direction}`;
-    return super.instanceKey(opts);
-  }
 
-  static instanceKeyForPlaceable(token, opts) {
-    // Allow spherical to overide other settings.
-    if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.useTokenSphere ) opts.shapeType = "spherical";
+  static type = "Token";
 
-    // Allow config to always use the chosen token shape.
-    else if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.useChosenTokenShape ) opts.shapeType = token.document.shape;
+  static shapeForToken(token) {
+    if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.useTokenSphere ) return "spherical";
+    if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.useChosenTokenShape ) return token.document.shape;
 
-    // Otherwise, follow token.getShape approach.
-    // Gridless: ellipse or rectangle.
-    // Square or Hex: use grid shape.
-    // Allow either ellipse or rectangle, but not hexes (higher numbers).
-    else if ( canvas.grid.isGridless ) opts.shapeType = Math.min(token.shape.document, CONST.TOKEN_SHAPES.RECTANGLE_2);
-    else if ( canvas.grid.isHex ) opts.shapeType = CONST.TOKEN_SHAPES.TRAPEZOID_1;
-    else opts.shapeType = CONST.TOKEN_SHAPES.RECTANGLE_1;
-
-    // opts.width =
-
-    return super.instanceKey(opts);
-  }
-
-  static calculateVertices({ shapeType, hexagonalShape = 0, width = 1, height = 1 } = {}) {
+    // Per token#getShape
+    // Gridless: ellipses or rectangles.
     const TS = CONST.TOKEN_SHAPES;
-    switch ( shapeType ) {
-      case TS.RECTANGLE_1:
-      case TS.RECTANGLE_2: return this.Rectangle3dVertices.calculateVertices();
+    if ( canvas.grid.isGridless ) {
+      if ( token.document.shape === TS.TRAPEZOID_1
+        || token.document.shape === TS.TRAPEZOID_2 ) return TS.RECTANGLE_1;
+      return token.document.shape;
+    }
 
+    // Hex grids: only hexes.
+    if ( canvas.grid.isHexagonal ) return token.document.shape === TS.TRAPEZOID_2
+      ? TS.TRAPEZOID_2 : TS.TRAPEZOID_1;
+
+    // Square grids: only rectangles.
+    return token.document.shape === TS.RECTANGLE_2 ? TS.RECTANGLE_2 : TS.RECTANGLE_1;
+  }
+
+  static _optionsForPlaceable(token, opts = {}) {
+    const TS = CONST.TOKEN_SHAPES;
+    opts.shape = this.shapeForToken(token);
+    switch ( opts.shape ) {
       case "spherical":
+        opts.density = SphereVertices.defaultDensityForDimensions(opts.width, opts.height, token.topZ - token.bottomZ);
+        break;
+
       case TS.ELLIPSE_1:
-      case TS.ELLIPSE_2: return SphereVertices.calculateSphericalVertices();
+      case TS.ELLIPSE_2:
+        opts.density = Ellipse3dVertices.defaultDensityForDimensions(opts.width, opts.height, token.topZ - token.bottomZ);
+        break;
 
       case TS.TRAPEZOID_1:
-      case TS.TRAPEZOID_2: return Hex3dVertices.calculateVertices(hexagonalShape, { width, height });
+      case TS.TRAPEZOID_2:
+        opts.width = token.document.width;
+        opts.height = token.document.height;
+        break;
+
+      /* Nothing to add for basic rectangles.
+      case TS.RECTANGLE_1:
+      case TS.RECTANGLE_2:
+      */
     }
+    return opts;
   }
 
+  static labelArr({ shape, width = 1, height = 1, density, ...opts } = {}) {
+    const arr = super.labelArr(opts);
+
+    const TS = CONST.TOKEN_SHAPES;
+    shape ??= TS.RECTANGLE_1;
+
+    // Allow spherical to overide other settings.
+    if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.useTokenSphere ) shape = "spherical";
+
+    arr.push(`shape_${shape}`);
+    switch ( shape ) {
+      case "spherical": density ??= SphereVertices.defaultDensityForDimensions(width, height, Math.max(width, height));
+      case TS.ELLIPSE_1: /* eslint-disable-line no-fallthrough */
+      case TS.ELLIPSE_2: {
+        density ??= Ellipse3dVertices.defaultDensityForDimensions(width, height);
+        arr.push(`density_${density}`);
+        break;
+      }
+
+      case TS.TRAPEZOID_1:
+      case TS.TRAPEZOID_2: {
+        arr.push(`width_${width.toPrecision(2)}`, `height_${height.toPrecision(2)}`)
+        break;
+      }
+
+      /* Nothing to add for basic rectangles.
+      case TS.RECTANGLE_1:
+      case TS.RECTANGLE_2:
+      */
+    }
+    return arr;
+  }
+
+  static calculateVertices({ shape, width = 1, height = 1, density } = {}) {
+    const TS = CONST.TOKEN_SHAPES;
+    shape ??= TS.RECTANGLE_1;
+    switch ( shape ) {
+      case TS.RECTANGLE_1:
+      case TS.RECTANGLE_2: return Rectangle3dVertices._getUnitVertices();
+
+      case "spherical": return SphereVertices._getUnitVertices(density);
+
+      case TS.ELLIPSE_1:
+      case TS.ELLIPSE_2: return Ellipse3dVertices._getUnitVertices(density);
+
+      case TS.TRAPEZOID_1:
+      case TS.TRAPEZOID_2: return Hex3dVertices.calculateVertices(shape, { width, height });
+    }
+  }
 }
+
+/**
+ * Instantiated object that tracks vertices and indices for one-off shapes, like constrained tokens.
+ */
+export const AbstractModelVerticesMixin = superclass => class extends superclass {
+  /** @type {PlaceableObject} */
+  placeable;
+
+  constructor(placeable) {
+    super();
+    this.placeable = placeable;
+  }
+
+  calculateModel(opts) {
+    // Default to the instance vertices.
+    return this.constructor.calculateModelForPlaceable(this.placeable, opts);
+  }
+}
+
+export class ConstrainedTokenModelVertices extends mix(GeometryInstancedToken).with(AbstractModelVerticesMixin) {
+
+  get token() { return this.placeable; }
+
+  get instanced() { return !this.token.isConstrainedTokenBorder; }
+
+  calculateModel(opts = {}) {
+    if ( this.instanced ) return super.calculateModel(opts);
+
+    // Get vertices for the constrained token polygon.
+    const { topZ, bottomZ, constrainedTokenBorder } = this.token;
+    const vo = new VertexObject();
+    vo.vertices = Polygon3dVertices.calculateVertices(constrainedTokenBorder.toPolygon(), { topZ, bottomZ });
+    vo.dropNormalsAndUVs({ keepNormals: opts.hasNormals, keepUVs: opts.hasUVs, out: vo });
+    vo.condense(vo);
+    return vo;
+  }
+}
+
+export class LitTokenModelVertices extends mix(GeometryInstancedToken).with(AbstractModelVerticesMixin) {
+
+  get token() { return this.placeable; }
+
+  get instanced() {
+    const { litTokenBorder, tokenBorder } = this.token;
+    return litTokenBorder && litTokenBorder.equals(tokenBorder);
+  }
+
+  calculateModel(opts = {}) {
+    if ( this.instanced ) return this.constructor.calculateModelForPlaceable(this.token, opts);
+
+    // Get vertices for the constrained token polygon.
+    const { litTokenBorder, topZ, bottomZ } = this.token;
+    const border = litTokenBorder || this.placeable.constrainedTokenBorder;
+    const vo = new VertexObject();
+    vo.vertices = Polygon3dVertices.calculateVertices(border.toPolygon(), { topZ, bottomZ });
+    vo.dropNormalsAndUVs({ keepNormals: opts.hasNormals, keepUVs: opts.hasUVs, out: vo });
+    vo.condense(vo);
+    return vo;
+  }
+}
+
+export class BrightLitTokenModelVertices extends mix(GeometryInstancedToken).with(AbstractModelVerticesMixin) {
+
+  get token() { return this.placeable; }
+
+  get instanced() {
+    const { litTokenBorder, tokenBorder } = this.token;
+    return litTokenBorder && litTokenBorder.equals(tokenBorder);
+  }
+
+  calculateModel(opts = {}) {
+    if ( this.instanced ) return this.constructor.calculateModelForPlaceable(this.token, opts);
+
+    // Get vertices for the constrained token polygon.
+    const { litTokenBorder, topZ, bottomZ } = this.token;
+    const border = litTokenBorder || this.placeable.constrainedTokenBorder;
+    const vo = new VertexObject();
+    vo.vertices = Polygon3dVertices.calculateVertices(border.toPolygon(), { topZ, bottomZ });
+    vo.dropNormalsAndUVs({ keepNormals: opts.hasNormals, keepUVs: opts.hasUVs, out: vo });
+    vo.condense(vo);
+    return vo;
+  }
+}
+
+
 
 
 
@@ -463,6 +644,8 @@ export class GeometryNonInstanced extends AbstractGeometry {
   _calculateModel(vertices, _indices, _placeable) {
      const { addNormals, addUVs } = this;
      const vs = this._calculateModelVertices(vertices);
+
+
      return BasicVertices.trimVertexData(vs, { addNormals, addUVs });
   }
 
@@ -545,12 +728,54 @@ export class GeometryInstanced extends AbstractGeometry {
   _calculateModel(vertices, _indices, placeable) {
     vertices = setTypedArray(vertices, this.instanceVertices);
     return {
-      vertices: BasicVertices.transformVertexPositions(vertices, this._modelMatrix(placeable), this.stride),
+      vertices: BasicVertices.transformVertexPositions(vertices, this._modelMatrix(placeable), { stride: this.stride }),
       indices: this.instanceIndices,
     }
   }
 
-  _modelMatrix(placeable) { return placeable[GEOMETRY_LIB_ID].geometry.modelMatrix; }
+  _modelMatrix(placeable) { return placeable[GEOMETRY_LIB_ID][GEOMETRY_ID].modelMatrix; }
 }
 
+/* Testing
+Draw = CONFIG.GeometryLib.lib.Draw;
 
+tracking = CONFIG.GeometryLib.lib.placeableGeometryTracking
+tracking.TileGeometryTracker.registerPlaceableHooks()
+tracking.TileGeometryTracker.registerExistingPlaceables()
+
+tracking.WallGeometryTracker.registerPlaceableHooks()
+tracking.WallGeometryTracker.registerExistingPlaceables()
+
+tracking.TokenGeometryTracker.registerPlaceableHooks()
+tracking.TokenGeometryTracker.registerExistingPlaceables()
+
+tracking.RegionGeometryTracker.registerPlaceableHooks()
+tracking.RegionGeometryTracker.registerExistingPlaceables()
+
+placeableGeometry = CONFIG.GeometryLib.lib.placeableGeometry;
+
+GeometryInstancedTile = placeableGeometry.GeometryInstancedTile
+GeometryInstancedTile.getVertexObject({ addNormals: true, addUVs: true })
+tile = canvas.tiles.placeables[0]
+vo = GeometryInstancedTile.calculateModelForPlaceable(tile)
+vo.debugDraw({ color: Draw.COLORS.orange })
+
+GeometryInstancedWall = placeableGeometry.GeometryInstancedWall
+wall = canvas.walls.placeables[0]
+vo = GeometryInstancedWall.calculateModelForPlaceable(wall)
+vo.debugDraw({ color: Draw.COLORS.orange })
+
+GeometryInstancedToken = placeableGeometry.GeometryInstancedToken
+token = canvas.tokens.placeables[0]
+vo = GeometryInstancedToken.calculateModelForPlaceable(token)
+vo.debugDraw({ color: Draw.COLORS.orange })
+
+
+ConstrainedTokenModelVertices = placeableGeometry.ConstrainedTokenModelVertices
+token = canvas.tokens.placeables[0]
+vModel = new ConstrainedTokenModelVertices(token);
+vo = vModel.calculateModel()
+vo.debugDraw({ color: Draw.COLORS.orange })
+
+
+*/

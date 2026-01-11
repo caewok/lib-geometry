@@ -13,7 +13,6 @@ import { combineTypedArrays } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
 import { Sphere } from "../3d/Sphere.js";
 import { MatrixFloat32 } from "../MatrixFlat.js";
-import { Draw } from "../Draw.js";
 import { Triangle3d } from "../3d/Polygon3d.js";
 import { ClipperPaths } from "../ClipperPaths.js";
 import { Clipper2Paths } from "../Clipper2Paths.js";
@@ -163,11 +162,12 @@ export class BasicVertices {
    * @param {Float32Array} vertices
    * @param {MatrixFloat32} M
    * @param {number} [stride=8]       The number of elements representing each vertex
+   * @param {}
    * @returns {Float32Array} The vertices, modified in place
    */
-  static transformVertexPositions(vertices, M, stride = this.NUM_VERTEX_ELEMENTS) {
+  static transformVertexPositions(vertices, M, { stride = this.NUM_VERTEX_ELEMENTS, positionOffset = 0 } = {}) {
     const pt = Point3d.tmp;
-    for ( let i = 0, iMax = vertices.length; i < iMax; i += stride ) {
+    for ( let i = positionOffset, iMax = vertices.length; i < iMax; i += stride ) {
       pt.set(vertices[i], vertices[i+1], vertices[i+2]);
       M.multiplyPoint3d(pt, pt);
       vertices.set([...pt], i);
@@ -201,21 +201,47 @@ export class BasicVertices {
     // Convert unit edge to match this edge.
     const modelMatrix = this.modelMatrixFromShape(shape, opts);
     const vertices = new Float32Array(this.getUnitVertices(opts.type)); // Clone vertices before transform.
-    return this.transformVertexPositions(vertices, modelMatrix.model);
+    return this.transformVertexPositions(vertices, modelMatrix.model, { stride: 8 });
   }
+
   /**
-   * Trim an array of vertices, removing duplicates and defining indices to match.
+   * Omit a portion of each vertex element. For example, trim the 3 normal coordinates from each vertex.
    * @param {number[]|Float32Array} arr      1D array of vertices
    * @param {object} [opts]
-   * @param {}
-   * @returns {object}
-   * - @prop {Float32Array} vertices
-   * - @prop {Uint16Array} indices
+   * @param {number} [opts.startingOffset=3]    Delete from this point onward
+   * @param {number} [opts.deletionLength=5]    Delete this number of values
+   * @param {number} [opts.stride=8]            Original stride (new stride is stride - deletionLength)
+   * @param {number[]|Float32Array} outArr
+   * @returns number[]|Float32Array
    */
-  static trimVertexData(arr, { addNormals = false, addUVs = false } = {}) {
-    const stride = 3 + (3 * addNormals) + (2 * addUVs);
-    const vertices = this.trimNormalsAndUVs(arr, { keepNormals: addNormals, keepUVs: addUVs });
-    return this.condenseVertexData(vertices, { stride });
+  static cutVertexData(src, { startingOffset = 3, deletionLength = 5, stride = 8, outArr } = {}) {
+    const newStride = stride - deletionLength;
+    const vLength = src.length;
+    const nVertices =  Math.floor(vLength / stride);
+    const newLength = nVertices * newStride;
+    outArr ||= new Float32Array(newLength);
+
+    // How to cut depends on starting offset.
+    let pullFn;
+
+    // cut, ...
+    if ( !startingOffset ) pullFn = (oldStartIndex, newStartIndex) =>
+      outArr.set(src.subarray(oldStartIndex + deletionLength, oldStartIndex + stride), newStartIndex);
+
+    // ..., cut
+    else if ( startingOffset === (stride - deletionLength) ) pullFn = (oldStartIndex, newStartIndex) =>
+      outArr.set(src.subarray(oldStartIndex, oldStartIndex + startingOffset), newStartIndex);
+
+    // ..., cut, ...
+    else pullFn = (oldStartIndex, newStartIndex) => {
+      const old0 = src.subarray(oldStartIndex, oldStartIndex + startingOffset);
+      const old1 = src.subarray(oldStartIndex + startingOffset + deletionLength, oldStartIndex + stride);
+      outArr.set(old0, newStartIndex);
+      outArr.set(old1, newStartIndex + old0.length);
+    }
+
+    for ( let oldI = 0, newI = 0; oldI < vLength; oldI += stride, newI += newStride ) pullFn(oldI, newI);
+    return outArr;
   }
 
   static condenseVertexData(vertices, { stride = 3 } = {}) {
@@ -275,80 +301,6 @@ export class BasicVertices {
       outArr.set(vertices.subarray(idx, idx + stride), j)
     }
     return outArr;
-  }
-
-  /**
-   * For a vertex of [position (3), normal (3), uv (2), ...],
-   * drop the normals, uvs, or both.
-   * @param {Float32Array} arr
-   * @param {object} [opts]
-   * @param {boolean} [opts.keepNormals=false]
-   * @param {boolean} [opts.keepUVs=false]
-   * @returns {Float32Array} Same array if both are kept; new array otherwise
-   */
-  static trimNormalsAndUVs(arr, { keepNormals = false, keepUVs = false, outArr } = {}) {
-    if ( keepNormals && keepUVs ) {
-      if ( !outArr ) return arr;
-      outArr.set(arr);
-      return outArr;
-    }
-
-    const stride = 8;
-    const newStride = 3 + (3 * keepNormals) + (2 * keepUVs);
-    const oldLn = arr.length;
-    const nVertices = Math.floor(oldLn / stride);
-    outArr ??= new Float32Array(nVertices * newStride);
-
-    let pullFn;
-    switch ( newStride ) {
-      case 3: pullFn = (oldOffset, newOffset) => outArr.set(arr.subarray(oldOffset, oldOffset + 3), newOffset); break; // Position
-      case 5: pullFn = (oldOffset, newOffset) => {
-        outArr.set(arr.subarray(oldOffset, oldOffset + 3), newOffset); // Position
-        outArr.set(arr.subarray(oldOffset + 6, oldOffset + 8), newOffset + 3); // UV
-      }; break;
-      case 6: pullFn = (oldOffset, newOffset) => outArr.set(arr.subarray(oldOffset, oldOffset + 6), newOffset); break; // Position + normal
-      // case 8 handled by early return.
-      default: console.error("trimNormalsAndUVs|stride length not recognized", { arr, newStride });
-    }
-    for ( let i = 0, j = 0; i < oldLn; i += stride, j += newStride ) pullFn(i, j);
-    return outArr;
-  }
-
-  static trimVertices(arr, { stride = 8, offset = 3, trimWidth = 3 } = {}) {
-    const newStride = stride - trimWidth;
-    const oldLn = arr.length;
-    const nVertices = Math.floor(oldLn / stride);
-    const outArr = new Float32Array(nVertices * newStride);
-
-    // Options
-    // trimWidth, ...        offset === 0
-    // ..., trimWidth, ...   stride - offset >= trimWidth
-    // ..., trimWidth        stride - offset === trimWidth
-
-    let pullFn;
-    // trimWidth, ...
-    if ( !offset ) pullFn = (oldStartIndex, newStartIndex) => outArr.set(arr.subarray(oldStartIndex + trimWidth, oldStartIndex + stride), newStartIndex);
-
-    // ..., trimWidth
-    else if ( (stride - offset) === trimWidth ) pullFn = (oldStartIndex, newStartIndex) => outArr.set(arr.subarray(oldStartIndex, oldStartIndex + stride - trimWidth), newStartIndex);
-
-    // ..., Normal, ...
-    else pullFn = (oldStartIndex, newStartIndex) => {
-      outArr.set(arr.subarray(oldStartIndex, oldStartIndex + trimWidth), newStartIndex); // Everything before the cut.
-      outArr.set(arr.subarray(oldStartIndex + offset + trimWidth, oldStartIndex + stride), newStartIndex + offset); // Everything after the cut.
-    };
-    for ( let i = 0, j = 0; i < oldLn; i += stride, j += newStride ) pullFn(i, j);
-    return outArr;
-  }
-
-  static trimNormals(arr, { stride = 8 } = {}) { return this.trimVertices(arr, { stride, offset: 3, trimWidth: 3 }); }
-
-  static trimUVs(arr, { stride = 8 } = {}) {
-    switch ( stride ) {
-      case 5: return this.trimVertices(arr, { stride, offset: 3, trimWidth: 2 });
-      case 8: return this.trimVertices(arr, { stride, offset: 6, trimWidth: 2 });
-      default: return new arr.constructor(arr);
-    }
   }
 
   /**
@@ -638,32 +590,9 @@ export class BasicVertices {
     return outArr;
   }
 
-  static debugDraw(vertices, indices, { draw, omitAxis = "z", addNormals = false, addUVs = false, ...opts} = {}) {
-    draw ??= new Draw();
-    const triangles = this.toTriangles(vertices, indices, { addNormals, addUVs });
-    triangles.forEach(tri => tri.draw2d({ draw, omitAxis, ...opts }));
-    return triangles;
-  }
-
-  static toTriangles(vertices, indices, { addNormals = false, addUVs = false } = {}) {
-    indices ??= Array.fromRange(vertices.length);
-    const offset = 3 + (addNormals * 3) + (addUVs * 2);
-
-    const triangles = Array(indices.length / 3 );
-    const a = Point3d.tmp;
-    const b = Point3d.tmp;
-    const c = Point3d.tmp;
-    for ( let i = 0, j = 0, iMax = indices.length; i < iMax;) {
-      const idx1 = indices[i++] * offset;
-      const idx2 = indices[i++] * offset;
-      const idx3 = indices[i++] * offset;
-
-      a.set(vertices[idx1], vertices[idx1+1], vertices[idx1+2]);
-      b.set(vertices[idx2], vertices[idx2+1], vertices[idx2+2]);
-      c.set(vertices[idx3], vertices[idx3+1], vertices[idx3+2]);
-      triangles[j++] = Triangle3d.from3Points(a, b, c);
-    }
-    Point3d.release(a, b, c);
+  static debugDraw(vertices, indices, { positionOffset = 0, stride = 8, ...opts} = {}) {
+    const triangles = Triangle3d.fromVertices(vertices, indices, { positionOffset, stride });
+    triangles.forEach(tri => tri.draw2d(opts));
     return triangles;
   }
 }
@@ -1338,7 +1267,8 @@ export class Hex3dVertices extends Polygon3dVertices {
    * @param {boolean} [opts.useFan]       Force fan or force no fan
    * @returns {Float32Array} The vertices, untrimmed
    */
-  static calculateVertices(shape, { width = 1, height = 1, hexColumns = false, ...opts } = {}) {
+  static calculateVertices(shape, { width = 1, height = 1, hexColumns, ...opts } = {}) {
+    hexColumns ??= canvas.scene.grid.columns;
     const hexRes = getHexagonalShape(width, height, shape, hexColumns);
     let poly;
     if ( hexRes ) {
@@ -1378,6 +1308,7 @@ export class Hex3dVertices extends Polygon3dVertices {
   }
 
   static hexKeyForProperties({ shape = 0, width = 1, height = 1, hexColumns } = {}) {
+    hexColumns ??= canvas.scene.grid.columns;
     return `${shape}_${width}_${height}_${hexColumns}`;
   }
 }
@@ -1413,6 +1344,10 @@ export class Ellipse3dVertices extends Polygon3dVertices {
 
   static get defaultDensity() { return PIXI.Circle.approximateVertexDensity(canvas.grid?.size || 100); }
 
+  static defaultDensityForDimensions(w = 1, h = 1, z = 1) {
+    return PIXI.Circle.approximateVertexDensity((canvas.grid?.size || 100) * Math.max(w, h, z));
+  }
+
   static _cacheType(type = this.defaultDensity) { return super._cacheType(type); }
 
   static _getUnitVertices(density = this.defaultDensity) { return this.calculateVertices(undefined, { density }); }
@@ -1438,6 +1373,10 @@ export class Ellipse3dVertices extends Polygon3dVertices {
 export class Circle3dVertices extends Ellipse3dVertices {
 
   static get defaultDensity() { return PIXI.Circle.approximateVertexDensity(canvas.grid?.size || 100); }
+
+  static defaultDensityForDimensions(w = 1, h = 1, z = 1) {
+    return PIXI.Circle.approximateVertexDensity((canvas.grid?.size || 100) * Math.max(w, h, z));
+  }
 
   static unitCircle = new PIXI.Circle(0, 0, 1); // Radius of 1; scales upwards by provided radius.
 
@@ -1472,16 +1411,18 @@ export class Circle3dVertices extends Ellipse3dVertices {
 
 export class SphereVertices extends BasicVertices {
 
-  static get defaultDensity() {
+  static get defaultDensity() { return this.defaultDensityForDimensions(); }
+
+  static defaultDensityForDimensions(w = 1, h = 1, z = 1) {
     /*
-    // Assume a 1x1 token is sufficient resolution for a decent sphere.
-    // The following is approximately 87 from center to far 3d corner for a 100x100x100 token.
-    // Point3d.distanceBetween(Point3d.tmp.set(0,0,0), Point3d.tmp.set(50, 50 ,50))
+    Assume a 1x1 token is sufficient resolution for a decent sphere.
+    The following is approximately 87 from center to far 3d corner for a 100x100x100 token.
+    Point3d.distanceBetween(Point3d.tmp.set(0,0,0), Point3d.tmp.set(50, 50 ,50))
     */
-    const w = canvas.grid.sizeX;
-    const h = canvas.grid.sizeY;
-    const z = canvas.grid.size;
-    const r = Point3d.distanceBetween(Point3d.tmp.set(0,0,0), Point3d.tmp.set(w * 0.5, h * 0.5, z * 0.5)); // Want the radius, not the diameter.
+    w = canvas.grid.sizeX * w * 0.5;
+    h = canvas.grid.sizeY * h * 0.5;
+    z = canvas.grid.size * z * 0.5;
+    const r = Point3d.distanceBetween(Point3d.tmp.set(0,0,0), Point3d.tmp.set(w, h, z)); // Want the radius, not the diameter.
     return this.numberOfSphericalPointsForSpacing(r);
   }
 
@@ -1942,6 +1883,7 @@ function cartesianToLonLat(pt) {
 /* Testing
 Draw = CONFIG.GeometryLib.lib.Draw;
 vertices = CONFIG.GeometryLib.lib.placeableGeometry.vertices;
+BasicVertices = vertices.BasicVertices
 
 vertices.HorizontalQuadVertices.getUnitVertices()
 vertices.HorizontalQuadVertices.getUnitVertices("down")
@@ -2021,8 +1963,12 @@ v = vertices.SphereVertices.calculateVerticesForShape(cir)
 Draw.shape(cir, { color: Draw.COLORS.blue, width: 5, alpha: 0.25 })
 vertices.BasicVertices.debugDraw(v, undefined, { color: Draw.COLORS.orange, addNormals: true, addUVs: true })
 
-
-
+// Trimming
+v = vertices.HorizontalQuadVertices.getUnitVertices("doubleUp")
+res = BasicVertices.condenseVertexData(v, { stride: 8 });
+v1 = BasicVertices.cutVertexData(v, { stride: 8, startingOffset: 3, deletionLength: 5 })
+v1 = BasicVertices.cutVertexData(v, { stride: 8, startingOffset: 6, deletionLength: 2 })
+v1 = BasicVertices.cutVertexData(v, { stride: 8, startingOffset: 3, deletionLength: 3 })
 
 */
 

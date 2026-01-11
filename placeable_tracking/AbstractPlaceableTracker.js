@@ -78,6 +78,7 @@ export class AbstractPlaceableTracker {
     const placeable = placeableD.object;
     if ( !placeable ) return;
     const changeKeys = Object.keys(foundry.utils.flattenObject(changed));
+    if ( !placeable[GEOMETRY_LIB_ID][this.ID] ) console.error(`Placeable ID not defined for ${placeable.name}, ${placeable.id}`);
     if ( changeKeys.some(key => this.DOCUMENT_KEYS.has(key)) ) placeable[GEOMETRY_LIB_ID][this.ID].update();
   }
 
@@ -107,6 +108,7 @@ export class AbstractPlaceableTracker {
     // TODO: Can flags be set to false? Need this filter if so.
     // const changeKeys = Object.entries(flags).filter([key, value] => value).map([key, value] => key);
     const changeKeys = Object.keys(flags);
+    if ( !placeable[GEOMETRY_LIB_ID][this.ID] ) console.error(`Placeable ID not defined for ${placeable.name}, ${placeable.id}`);
     if ( changeKeys.some(key => this.REFRESH_FLAGS.has(key)) ) placeable[GEOMETRY_LIB_ID][this.ID].update();
   }
 

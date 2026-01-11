@@ -198,8 +198,8 @@ const TileAlphaTrianglesMixin = superclass => class extends superclass {
     const { top, bottom } = Polygon3dVertices.polygonTopBottomFaces(paths, { topZ: elev, bottomZ: elev });
 
     // Trim the UVs and Normals.
-    const topTrimmed = Polygon3dVertices.trimNormalsAndUVs(top);
-    const bottomTrimmed = Polygon3dVertices.trimNormalsAndUVs(bottom);
+    const topTrimmed = Polygon3dVertices.cutVertexData(top, { startingOffset: 3, deletionLength: 5, stride: 8 });
+    const bottomTrimmed = Polygon3dVertices.cutVertexData(bottom, { startingOffset: 3, deletionLength: 5, stride: 8 });
 
     // Drop any triangles that are nearly collinear or have very small areas.
     // Note: This works b/c the triangles all have z values of 0, which can be safely ignored.
