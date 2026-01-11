@@ -1,6 +1,6 @@
 /** @module threeD */
 
-export { AABB3d } from "../AABB.js";
+export * from "./AABB3d.js";
 export * from "./Barycentric.js";
 export * from "./ElevatedPoint.js";
 export * from "./GridCoordinates3d.js";

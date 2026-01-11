@@ -18,7 +18,7 @@ import {
 } from "./AbstractPlaceableGeometryTracker.js";
 
 // LibGeometry
-import { AABB3d } from "../AABB.js";
+import { AABB3d } from "../3d/AABB3d.js";
 import { MatrixFloat32 } from "../MatrixFlat.js";
 import { Quad3d } from "../3d/Polygon3d.js";
 import { gridUnitsToPixels } from "../util.js";

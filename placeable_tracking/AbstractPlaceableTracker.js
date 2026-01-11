@@ -61,8 +61,7 @@ export class AbstractPlaceableTracker {
    */
   static _onPlaceableDocumentCreation(placeableD, _options, _userId) {
     if ( !placeableD.object ) return;
-    const handler = new this(placeableD.object);
-    handler.initialize();
+    this.create(placeableD.object);
   }
 
   /**
@@ -95,8 +94,7 @@ export class AbstractPlaceableTracker {
    * @param {PlaceableObject} object    The object instance being drawn
    */
   static _onPlaceableDraw(placeable) {
-    const handler = new this(placeable);
-    handler.initialize();
+    this.create(placeable);
   }
 
   /**
@@ -108,7 +106,10 @@ export class AbstractPlaceableTracker {
     // TODO: Can flags be set to false? Need this filter if so.
     // const changeKeys = Object.entries(flags).filter([key, value] => value).map([key, value] => key);
     const changeKeys = Object.keys(flags);
-    if ( !placeable[GEOMETRY_LIB_ID][this.ID] ) console.error(`Placeable ID not defined for ${placeable.name}, ${placeable.id}`);
+
+    // Previews of placeable do not necessarily trigger the draw hook, so add here.
+    if ( !placeable[GEOMETRY_LIB_ID]?.[this.ID] ) this.create(placeable);
+    if ( !placeable[GEOMETRY_LIB_ID]?.[this.ID] ) console.error(`Placeable ID not defined for ${placeable.name}, ${placeable.id}`);
     if ( changeKeys.some(key => this.REFRESH_FLAGS.has(key)) ) placeable[GEOMETRY_LIB_ID][this.ID].update();
   }
 
@@ -182,7 +183,7 @@ export class AbstractPlaceableTracker {
     const out = new this(placeable);
     obj[this.ID] = out;
     out.initialize();
-    out.update();
+    // out.update();
     return out;
   }
 

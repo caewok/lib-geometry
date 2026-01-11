@@ -12,7 +12,7 @@ import { GEOMETRY_CONFIG } from "../const.js";
 import { Point3d } from "./Point3d.js";
 import { Plane } from "./Plane.js";
 import { pointsAreCollinear, NULL_SET, almostBetween } from "../util.js";
-import { AABB3d } from "../AABB.js";
+import { AABB3d } from "./AABB3d.js";
 import { ClipperPaths } from "../ClipperPaths.js";
 import { Clipper2Paths } from "../Clipper2Paths.js";
 import { Draw } from "../Draw.js";
