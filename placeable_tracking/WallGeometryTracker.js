@@ -117,7 +117,7 @@ export class WallGeometryTracker extends mix(AbstractPlaceableGeometryTracker).w
     if ( edge.direction && (edge.orientPoint(opts.rayOrigin) === edge.direction) ) return false;
 
     // Top and bottom are the same (just opposite orientations) and so only need to test one.
-    return this.constructor.rayIntersection([this.faces.top], ...opts);
+    return this.constructor.rayIntersectionForFaces([this.faces.top], ...opts);
   }
 
   // ----- NOTE: Wall characteristics ----- //
