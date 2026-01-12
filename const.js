@@ -51,17 +51,30 @@ export const OTHER_MODULES = {
     ID: "terrainmapper",
     FLAGS: {
       PLATEAU_ELEVATION: "plateauElevation",
-    }
+    },
+    API: "api",
   },
 
   ALTERNATIVE_TOKEN_VISIBILITY: {
     ID: "tokenvisibility",
   },
+
+  RIDEABLE: {
+    ID: "Rideable",
+    API: "api",
+  }
 };
 
 // Hook init b/c game.modules is not initialized at start.
 Hooks.once("init", function() {
   for ( const [key, obj] of Object.entries(OTHER_MODULES) ) {
     if ( !game.modules.get(obj.KEY)?.active ) delete OTHER_MODULES[key];
+  }
+});
+
+// API not necessarily available until ready hook. (Likely added at init.)
+Hooks.once("ready", function() {
+  for ( const module of Object.values(OTHER_MODULES) ) {
+    if ( module.API ) module.API = game.modules.get(module.KEY)[module.API];
   }
 });

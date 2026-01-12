@@ -10,3 +10,4 @@ export * from "./Point3d.js";
 export * from "./Polygon3d.js";
 export * from "./Ray3d.js";
 export * from "./Sphere.js";
+export * from "./Frustum.js";

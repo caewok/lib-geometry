@@ -84,6 +84,18 @@ const PLACEABLE_TRACKING_CONFIG = {
   perPixelSpacing: 10,
 
   /**
+   * Function to determine if a token is alive.
+   * @type {function}
+   */
+  tokenIsAlive,
+
+  /**
+   * Function to determine if a token is dead
+   * @type {function}
+   */
+  tokenIsDead,
+
+  /**
    * Use the alpha polygon threshold when creating tile faces.
    * Otherwise uses a rectangle.
    * @type {boolean}
@@ -123,3 +135,26 @@ export function mergeConfigs(maxVersion = VERSION) {
     });
   }
 }
+
+/**
+ * Test if a token is dead. Usually, but not necessarily, the opposite of tokenIsDead.
+ * @param {Token} token
+ * @returns {boolean} True if dead.
+ */
+function tokenIsAlive(token) { return !tokenIsDead(token); }
+
+/**
+ * Test if a token is dead. Usually, but not necessarily, the opposite of tokenIsAlive.
+ * @param {Token} token
+ * @returns {boolean} True if dead.
+ */
+function tokenIsDead(token) {
+  const deadStatus = CONFIG.statusEffects.find(status => status.id === "dead");
+  if ( deadStatus && token.actor.statuses.has(deadStatus.id) ) return true;
+
+  const tokenHPAttribute = CONFIG.GeometryLib.tokenHPId;
+  const hp = getObjectProperty(token.actor, tokenHPAttribute);
+  if ( typeof hp !== "number" ) return false;
+  return hp <= 0;
+}
+

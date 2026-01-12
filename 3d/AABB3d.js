@@ -235,6 +235,26 @@ export class AABB3d extends AABB2d {
   }
 
   /**
+   * Does this AABB overlap a wall or edge?
+   * @param {Wall|Edge} edge
+   * @returns {boolean}
+   */
+  overlapsEdge(edge) {
+    if ( edge instanceof foundry.canvas.placeables.Wall ) edge = edge.edge;
+    const a = Point3d.tmp.copyFrom(edge.a);
+    const b = Point3d.tmp.copyFrom(edge.a);
+    const c = Point3d.tmp.copyFrom(edge.b);
+    const d = Point3d.tmp.coypFrom(edge.b);
+    const elev = edge.elevationLibGeometry;
+    a.z = elev.a.top ?? Number.MAX_SAFE_INTEGER;
+    b.z = elev.a.bottom ?? Number.MIN_SAFE_INTEGER;
+    c.z = elev.b.bottom ?? Number.MIN_SAFE_INTEGER;
+    d.z = elev.b.top ?? Number.MAX_SAFE_INTEGER;
+    const quad = Quad3d.from4Points(a, b, c, d);
+    return this.overlapsConvexPolygon3d(quad);
+  }
+
+  /**
    * Test if a convex planar shape overlaps the bounds.
    * @param {Polygon3d} poly3d
    * @return {boolean}

@@ -22,4 +22,5 @@ export * from "./MatrixFlat.js";
 export * from "./PixelCache.js";
 export * from "./RadixSort.js";
 export * from "./Graph.js";
+export * from "./ObstacleOcclusionTest.js";
 export * as utils from "./util.js";

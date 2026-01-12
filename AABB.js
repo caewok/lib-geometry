@@ -1,4 +1,5 @@
 /* globals
+foundry,
 PIXI,
 */
 "use strict";
@@ -280,6 +281,16 @@ export class AABB2d {
   }
 
   /**
+   * Does this AABB overlap a wall or edge?
+   * @param {Wall|Edge} edge
+   * @returns {boolean}
+   */
+  overlapsEdge(edge) {
+    if ( edge instanceof foundry.canvas.placeables.Wall ) edge = edge.edge;
+    return this.overlapsSegment(edge.a, edge.b);
+  }
+
+  /**
    * Does the segment cross the aabb bounds or is contained within?
    * @param {PIXI.Point|Point3d} a
    * @param {PIXI.Point|Point3d} b
@@ -358,7 +369,7 @@ export class AABB2d {
     return dmin <= sphere.radiusSquared;
   }
 
-  toPIXIRectangle(out) {
+  toRectangle(out) {
     out ??= new PIXI.Rectangle();
     out.x = this.min.x;
     out.y = this.min.y;

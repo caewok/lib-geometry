@@ -112,6 +112,10 @@ export class WallGeometryTracker extends mix(AbstractPlaceableGeometryTracker).w
    * @returns {number|null} The distance along the ray
    */
   rayIntersection(...opts) {
+    // Ignore one-directional walls facing away from the viewpoint.
+    const edge = this.edge;
+    if ( edge.direction && (edge.orientPoint(opts.rayOrigin) === edge.direction) ) return false;
+
     // Top and bottom are the same (just opposite orientations) and so only need to test one.
     return this.constructor.rayIntersection([this.faces.top], ...opts);
   }
