@@ -1425,3 +1425,16 @@ export const cutaway = {
   convertFromElevation: convertFromElevationCutaway
 };
 
+/**
+ * Retrieve an embedded property from an object using a string.
+ * @param {object} obj
+ * @param {string} str
+ * @returns {object}
+ */
+export function getObjectProperty(obj, str) {
+  return str
+    .replace(/\[([^\[\]]*)\]/g, ".$1.") // eslint-disable-line no-useless-escape
+    .split(".")
+    .filter(t => t !== "")
+    .reduce((prev, cur) => prev && prev[cur], obj);
+}
