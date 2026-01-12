@@ -1,5 +1,6 @@
 /* globals
 CONFIG,
+CONST,
 foundry,
 */
 "use strict";
@@ -7,6 +8,7 @@ foundry,
 import { GEOMETRY_LIB_ID, VERSION } from "./const.js";
 
 // LibGeometry
+import { getObjectProperty } from "./util.js";
 import { ClipperPaths } from "./ClipperPaths.js";
 import { Clipper2Paths } from "./Clipper2Paths.js";
 
@@ -83,17 +85,6 @@ const PLACEABLE_TRACKING_CONFIG = {
    */
   perPixelSpacing: 10,
 
-  /**
-   * Function to determine if a token is alive.
-   * @type {function}
-   */
-  tokenIsAlive,
-
-  /**
-   * Function to determine if a token is dead
-   * @type {function}
-   */
-  tokenIsDead,
 
   /**
    * Use the alpha polygon threshold when creating tile faces.
@@ -117,9 +108,46 @@ const PLACEABLE_TRACKING_CONFIG = {
   version: VERSION,
 };
 
+const OBSTACLE_TEST_CONFIG = {
+  /**
+   * Function to determine if a token is alive.
+   * @type {function}
+   * @param {Token} token
+   * @returns {boolean} True if alive.
+   */
+  tokenIsAlive,
+
+  /**
+   * Function to determine if a token is dead
+   * @type {function}
+   * @param {Token} token
+   * @returns {boolean} True if dead.
+   */
+  tokenIsDead,
+
+  /**
+   * Function to determine if token is enemy in relation to another.
+   * @type {function}
+   * @param {Token} subjectToken
+   * @param {Token} testToken
+   * @returns {boolean} True if test token is enemy of subject token, from perspective of subject token.
+   */
+  tokenIsEnemy,
+
+  /**
+   * Function to determine if token is ally in relation to another.
+   * @type {function}
+   * @param {Token} subjectToken
+   * @param {Token} testToken
+   * @returns {boolean} True if test token is ally of subject token, from perspective of subject token.
+   */
+  tokenIsAlly,
+
+}
+
 
 export function mergeConfigs(maxVersion = VERSION) {
-  const thisConfig = { ...ELEVATION_CONFIG, ...TILECACHE_CONFIG, ...PLACEABLE_TRACKING_CONFIG };
+  const thisConfig = { ...ELEVATION_CONFIG, ...TILECACHE_CONFIG, ...PLACEABLE_TRACKING_CONFIG, ...OBSTACLE_TEST_CONFIG };
   if ( foundry.utils.isNewerVersion(VERSION, maxVersion) ) {
     // This config is newer.
     CONFIG[GEOMETRY_LIB_ID].CONFIG = { ...CONFIG[GEOMETRY_LIB_ID].CONFIG, ...thisConfig };
@@ -152,9 +180,59 @@ function tokenIsDead(token) {
   const deadStatus = CONFIG.statusEffects.find(status => status.id === "dead");
   if ( deadStatus && token.actor.statuses.has(deadStatus.id) ) return true;
 
-  const tokenHPAttribute = CONFIG.GeometryLib.tokenHPId;
+  const tokenHPAttribute = "system.attributes.hp.value";
   const hp = getObjectProperty(token.actor, tokenHPAttribute);
   if ( typeof hp !== "number" ) return false;
   return hp <= 0;
 }
 
+/**
+ * Test if a token is an enemy with respect to another.
+ * @param {Token} subjectToken
+ * @param {Token} testToken
+ * @returns {boolean} True if:
+ *  subject           |  test
+ *  friendly/neutral  |  hostile/secret
+ *  hostile           |  friendly/neutral/secret
+ *  secret            |  friendly/neutral/hostile/secret
+ */
+function tokenIsEnemy(subjectToken, testToken) {
+  const sD = subjectToken.document.disposition;
+
+  // All secret tokens presumed enemies.
+  if ( sD === CONST.TOKEN_DISPOSITIONS.SECRET ) return true;
+  const tD = testToken.document.disposition;
+  if ( tD === CONST.TOKEN_DISPOSITIONS.SECRET ) return true;
+
+  // Hostiles are enemies to non-hostiles and vice-versa.
+  if ( tD === CONST.TOKEN_DISPOSITIONS.HOSTILE && sD >= 0 ) return true;
+  if ( sD === CONST.TOKEN_DISPOSITIONS.HOSTILE && tD >= 0 ) return true;
+
+  // Everyone else are not enemies.
+  return false;
+}
+
+/**
+ * Test if a token is an ally with respect to another.
+ * Two hostiles are assumed allies.
+ * @param {Token} subjectToken
+ * @param {Token} testToken
+ * @returns {boolean} True if:
+ *  subject           |  test
+ *  friendly/neutral  |  friendly/neutral
+ *  hostile           |  hostile
+ */
+function tokenIsAlly(subjectToken, testToken) {
+  const sD = subjectToken.document.disposition;
+  const tD = testToken.document.disposition;
+
+  // Friendly/neutrals are allies
+  if ( sD >= 0 && tD >= 0 ) return true;
+
+  // Hostiles are allies
+  if ( sD === CONST.TOKEN_DISPOSITIONS.HOSTILE && tD === CONST.TOKEN_DISPOSITIONS.HOSTILE ) return true;
+
+  // By default, no one is an ally.
+  // All secret tokens have no allies.
+  return false;
+}

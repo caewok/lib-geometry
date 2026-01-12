@@ -49,7 +49,9 @@ export class ObstacleOcclusionTest {
 
   #setFrustumRect() {
     const f = this.#frustum;
-    if ( f.aabb ) f.aabb.toRectangle(this.#frustumRect);
+    if ( f instanceof PIXI.Rectangle ) this.#frustumRect = f;
+    else if ( f.toRectangle ) this.#frustumRect = f.toRectangle();
+    else if ( f.aabb ) f.aabb.toRectangle(this.#frustumRect);
     else if ( f.getBounds ) this.#frustumRect = f.getBounds();
     else this.#frustumRect = f;
   }
@@ -64,7 +66,11 @@ export class ObstacleOcclusionTest {
       tokens: {
         dead: false,
         live: false,
-        prone: false,
+
+        // If live, token may block when:
+        prone: false,       // False: only non-prone tokens block.
+        enemies: true,      // False: enemies do not block.
+        allies: false,      // False: allies do not block.
       }
     },
   };
@@ -72,15 +78,34 @@ export class ObstacleOcclusionTest {
   get config() { return structuredClone(this._config); }
 
   /**
-   * Tokens to exclude from the tests. Typically viewer and target.
+   * Subject token for which obstacles are being tested.
+   * A Subject token are excluded from obstacle tests and other tokens may be excluded
+   * based on disposition vis-a-vis subject token.
+   * @type {Token}
+   */
+  subjectToken = null;
+
+  /**
+   * Tokens to exclude from the tests. Typically viewer (subject) and target.
    * @type {Set<Token>}
    */
-  tokensToExclude = new WeakSet();
+  #tokensToExclude = new WeakSet();
+
+  get tokensToExclude() { return this.#tokensToExclude; }
+
+  set tokensToExclude(tokens) {
+    if ( !tokens ) {
+      this.#tokensToExclude = new WeakSet();
+      return;
+    }
+    if ( !tokens[Symbol.iterator] ) tokens = [tokens];
+    this.#tokensToExclude = new WeakSet(tokens);
+  }
 
   /**
    * For multiple tests, the ray origin or viewpoint can be set.
    */
-  viewpoint = new Point3d();
+  rayOrigin = new Point3d();
 
   /**
    * Update the obstacles in preparation for ray collision testing.
@@ -89,9 +114,8 @@ export class ObstacleOcclusionTest {
    * @param {Point3d} [viewpoint]             Used for _rayIsOccluded as the starting viewpoint
    * @param {Token[]} [tokensToExclude=[]]    Exclude these tokens from collision testing
    */
-  _initialize({ viewpoint, tokensToExclude = [] } = {}) {
-    this.tokensToExclude = new WeakSet(tokensToExclude);
-    if ( viewpoint ) this.viewpoint.copyFrom(viewpoint);
+  _initialize({ rayOrigin } = {}) {
+    if ( rayOrigin ) this.rayOrigin.copyFrom(rayOrigin);
     this.updateObstacles();
     this.constructObstacleTester();
   }
@@ -104,7 +128,7 @@ export class ObstacleOcclusionTest {
    * @returns {boolean} True if collision occurs
    */
   rayIsOccluded(rayOrigin, rayDirection, opts = {}) {
-    this._initialize({ viewpoint: rayOrigin, ...opts });
+    this._initialize({ rayOrigin, ...opts });
     return this._rayIsOccluded(rayDirection);
   }
 
@@ -154,7 +178,7 @@ export class ObstacleOcclusionTest {
       // This is slower but preserves the weak set.
       // Drop any token with a riding connection to an excluded token.
       for ( const t of canvas.tokens.placeable ) {
-        if ( this.tokensToExclude.has(t) ) {
+        if ( this.subjectToken === t || this.tokensToExclude.has(t) ) {
           tokens.filter(token => !RIDEABLE.API.RidingConnection(token, t));
         }
       }
@@ -183,11 +207,19 @@ export class ObstacleOcclusionTest {
   }
 
   includeToken(token) {
-    if ( this.tokensToExclude.has(token) ) return false;
-    if ( this._config.blocking.tokens.dead && CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsDead(token) ) return true;
-    if ( this._config.blocking.tokens.live && CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsAlive(token) ) return true;
-    if ( this._config.blocking.tokens.prone && token.isProne ) return true;
-    return false;
+    if ( token === this.subjectToken || this.tokensToExclude.has(token) ) return false;
+    if ( !this._config.blocking.tokens.dead && CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsDead(token) ) return false;
+
+    // Tests for live tokens.
+    if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsAlive(token) ) {
+      if ( !this._config.blocking.tokens.live ) return false;
+      if ( !this._config.blocking.tokens.prone && token.isProne ) return false;
+      if ( this.subjectToken ) {
+        if ( !this._config.blocking.tokens.enemies && CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsEnemy(this.subjectToken, token) ) return false;
+        if ( !this._config.blocking.tokens.allies && CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsAlly(this.subjectToken, token) ) return false;
+      }
+    };
+    return true;
   }
 
   // ---- NOTE: Test ray intersection with obstacles ----- //
