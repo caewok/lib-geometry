@@ -2192,6 +2192,21 @@ export class Polygons3d extends Polygon3d {
     return ixNum > 0 ? ix : null;
   }
 
+
+  /**
+   * Is a 3d point that is on the plane within the polygon?
+   * Does not check bounding box or if it is in fact on the plane.
+   * @param {Point3d} ix
+   * @returns {boolean}
+   */
+  _isIntersectionWithinPolygon(ix) {
+    for ( const poly of this.polygons ) {
+      if ( !poly.aabb.almostContainsPoint(ix) ) continue;
+      if ( poly._isIntersectionWithinPolygon(ix) ) return true;
+    }
+    return false;
+  }
+
   /**
    * Intersect this Polygons3d against a plane, noting holes.
    * @param {Plane} plane
