@@ -46,7 +46,7 @@ export class Frustum {
     const zMinMax = Math.minMax(viewpoint.z, this.top.b.z, this.bottom.b.z);
     this.aabb.min.set(xMinMax.min, yMinMax.min, zMinMax.min);
     this.aabb.max.set(xMinMax.max, yMinMax.max, zMinMax.max);
-    this.aabb.toPIXIRectangle(this.bounds2d);
+    this.aabb.toRectangle(this.bounds2d);
   }
 
   /**
