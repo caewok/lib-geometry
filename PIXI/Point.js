@@ -324,6 +324,33 @@ function abs(outPoint) {
 }
 
 /**
+ * Get the floor of the coordinates.
+ * @param {PIXI.Point} [outPoint]    A point-like object in which to store the value.
+ *   (Will create new point if none provided.)
+ * @returns {PIXI.Point}
+ */
+function floor(outPoint) {
+  outPoint ??= this.constructor.tmp;
+  outPoint.x = Math.floor(this.x);
+  outPoint.y = Math.floor(this.y);
+  return outPoint;
+}
+
+/**
+ * Get the ceiling of the coordinates.
+ * @param {PIXI.Point} [outPoint]    A point-like object in which to store the value.
+ *   (Will create new point if none provided.)
+ * @returns {PIXI.Point}
+ */
+function ceil(outPoint) {
+  outPoint ??= this.constructor.tmp;
+  outPoint.x = Math.ceil(this.x);
+  outPoint.y = Math.ceil(this.y);
+  return outPoint;
+}
+
+
+/**
  * Dot product of this point with another.
  * (Sum of the products of the components)
  * @param {PIXI.Point} other
@@ -547,6 +574,8 @@ PATCHES.PIXI.METHODS = {
   max,
   copyPartial,
   abs,
+  floor,
+  ceil,
   dot,
   magnitude,
   magnitudeSquared,

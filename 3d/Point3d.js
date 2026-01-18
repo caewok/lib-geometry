@@ -641,14 +641,40 @@ export class Point3d extends PIXI.Point {
 
   /**
    * Get the absolute of the coordinates.
-   * @param {PIXI.Point} [outPoint]    A point-like object in which to store the value.
+   * @param {Point3d} [outPoint]    A point-like object in which to store the value.
    *   (Will create new point if none provided.)
-   * @returns {PIXI.Point}
+   * @returns {Point3d}
    */
   abs(outPoint) {
     outPoint ??= this.constructor.tmp;
     super.abs(outPoint);
     outPoint.z = Math.abs(this.z);
+    return outPoint;
+  }
+
+  /**
+   * Get the floor of the coordinates.
+   * @param {Point3d} [outPoint]    A point-like object in which to store the value.
+   *   (Will create new point if none provided.)
+   * @returns {Point3d}
+   */
+  floor(outPoint) {
+    outPoint ??= this.constructor.tmp;
+    super.abs(outPoint);
+    outPoint.z = Math.floor(this.z);
+    return outPoint;
+  }
+
+  /**
+   * Get the ceil of the coordinates.
+   * @param {Point3d} [outPoint]    A point-like object in which to store the value.
+   *   (Will create new point if none provided.)
+   * @returns {Point3d}
+   */
+  ceil(outPoint) {
+    outPoint ??= this.constructor.tmp;
+    super.abs(outPoint);
+    outPoint.z = Math.ceil(this.z);
     return outPoint;
   }
 
