@@ -155,7 +155,7 @@ export class ObstacleOcclusionTest {
     let walls = canvas.walls.quadtree.getObjects(this.#frustumRect);
 
     // Specialized exclusion tests
-    if ( this.#frustum.aabb ) walls = walls.filter(wall => this.#frustum.aabb.overlapsAABB(wall.GeometryLib.geometry.aabb));
+    if ( this.#frustum.aabb ) walls = walls.filter(wall => this.#frustum.aabb.overlapsAABB(placeableAABB(wall)));
     if ( this.#frustum.overlapsEdge ) walls = walls.filter(wall => this.#frustum.overlapsEdge(wall));
     return walls;
   }
@@ -168,7 +168,7 @@ export class ObstacleOcclusionTest {
     });
 
     // Specialized exclusion tests
-    if ( this.#frustum.aabb ) tokens = tokens.filter(token => this.#frustum.aabb.overlapsAABB(token.GeometryLib.geometry.aabb));
+    if ( this.#frustum.aabb ) tokens = tokens.filter(token => this.#frustum.aabb.overlapsAABB(placeableAABB(token)));
     if ( this.#frustum.overlapsToken ) tokens = tokens.filter(token => this.#frustum.overlapsToken(token));
 
     // Module-specific
@@ -191,7 +191,7 @@ export class ObstacleOcclusionTest {
     let tiles = canvas.tiles.quadtree.getObjects(this.#frustumRect);
 
     // Specialized exclusion tests
-    if ( this.#frustum.aabb ) tiles = tiles.filter(tile => this.#frustum.aabb.overlapsAABB(tile.GeometryLib.geometry.aabb));
+    if ( this.#frustum.aabb ) tiles = tiles.filter(tile => this.#frustum.aabb.overlapsAABB(placeableAABB(tile)));
     if ( this.#frustum.overlapsTile ) tiles = tiles.filter(tile => this.#frustum.overlapsTile(tile));
     return tiles;
   }
@@ -201,25 +201,33 @@ export class ObstacleOcclusionTest {
     let regions = canvas.regions.placeables; // No quadtree for regions.
 
     // Specialized exclusion tests
-    if ( this.#frustum.aabb ) regions = regions.filter(region => this.#frustum.aabb.overlapsAABB(region.GeometryLib.geometry.aabb));
+    if ( this.#frustum.aabb ) regions = regions.filter(region => this.#frustum.aabb.overlapsAABB(placeableAABB(region)));
     if ( this.#frustum.overlapsToken ) regions = regions.filter(region => this.#frustum.overlapsRegion(region));
     return regions;
   }
 
-  includeToken(token) {
-    if ( token === this.subjectToken || this.tokensToExclude.has(token) ) return false;
-    if ( !this._config.blocking.tokens.dead && CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsDead(token) ) return false;
+  static includeToken(token, { blockingCfg = {}, subjectToken, tokensToExclude = NULL_SET }) {
+    if ( token === subjectToken || tokensToExclude.has(token) ) return false;
+    if ( !blockingCfg.dead && CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsDead(token) ) return false;
 
     // Tests for live tokens.
     if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsAlive(token) ) {
-      if ( !this._config.blocking.tokens.live ) return false;
-      if ( !this._config.blocking.tokens.prone && token.isProne ) return false;
-      if ( this.subjectToken ) {
-        if ( !this._config.blocking.tokens.enemies && CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsEnemy(this.subjectToken, token) ) return false;
-        if ( !this._config.blocking.tokens.allies && CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsAlly(this.subjectToken, token) ) return false;
+      if ( !blockingCfg.live ) return false;
+      if ( !blockingCfg.prone && token.isProne ) return false;
+      if ( subjectToken ) {
+        if ( !blockingCfg.enemies && CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsEnemy(subjectToken, token) ) return false;
+        if ( !blockingCfg.allies && CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsAlly(subjectToken, token) ) return false;
       }
     };
     return true;
+  }
+
+  includeToken(token) {
+    return this.constructor.includeToken(token, {
+      blockingCfg: this._config.blocking.tokens,
+      subjectToken: this.subjectToken,
+      tokensToExclude: this.tokensToExclude
+    });
   }
 
   // ---- NOTE: Test ray intersection with obstacles ----- //
@@ -244,14 +252,14 @@ export class ObstacleOcclusionTest {
   }
 
   wallsOcclude(rayOrigin, rayDirection) {
-    return this.obstacles.walls.some(wall => wall[GEOMETRY_LIB_ID][GEOMETRY_ID].rayIntersection(rayOrigin, rayDirection, 0, 1) !== null);
+    return this.obstacles.walls.some(wall => placeableIntersection(wall, rayOrigin, rayDirection));
   }
 
   terrainWallsOcclude(rayOrigin, rayDirection) {
     // console.debug(`rayOrigin ${rayOrigin}, rayDirection ${rayDirection} for ${this.obstacles.terrainWalls.size} terrain walls.`);
     let limitedOcclusion = 0;
     for ( const wall of this.obstacles.terrainWalls ) {
-      if ( wall[GEOMETRY_LIB_ID][GEOMETRY_ID].rayIntersection(rayOrigin, rayDirection, 0, 1) === null ) continue;
+      if ( placeableIntersection(wall, rayOrigin, rayDirection) ) continue;
       if ( limitedOcclusion++ ) return true;
     }
     return false;
@@ -261,21 +269,21 @@ export class ObstacleOcclusionTest {
     for ( const wall of [...this.obstacles.proximateWalls, ...this.obstacles.reverseProximateWalls] ) {
       // If the proximity threshold is met, this edge excluded from perception calculations.
       if ( wall.edge.applyThreshold(this._config.senseType, rayOrigin) ) continue;
-      if ( wall[GEOMETRY_LIB_ID][GEOMETRY_ID].rayIntersection(rayOrigin, rayDirection, 0, 1) !== null ) return true;
+      if ( placeableIntersection(wall, rayOrigin, rayDirection) ) return true;
     }
     return false;
   }
 
   tilesOcclude(rayOrigin, rayDirection) {
-    return this.obstacles.tiles.some(tile => tile[GEOMETRY_LIB_ID][GEOMETRY_ID].rayIntersection(rayOrigin, rayDirection, 0, 1));
+    return this.obstacles.tiles.some(tile => placeableIntersection(tile, rayOrigin, rayDirection));
   }
 
   tokensOcclude(rayOrigin, rayDirection) {
-    return this.obstacles.tokens.some(token => token[GEOMETRY_LIB_ID][GEOMETRY_ID].rayIntersection(rayOrigin, rayDirection, 0, 1));
+    return this.obstacles.tokens.some(token => placeableIntersection(token, rayOrigin, rayDirection));
   }
 
   regionsOcclude(rayOrigin, rayDirection) {
-    return this.obstacles.regions.some(region => region[GEOMETRY_LIB_ID][GEOMETRY_ID].rayIntersection(rayOrigin, rayDirection, 0, 1));
+    return this.obstacles.regions.some(region => placeableIntersection(region, rayOrigin, rayDirection));
   }
 
   // ----- NOTE: Static methods ----- //
@@ -298,4 +306,16 @@ export class ObstacleOcclusionTest {
       });
     return wallSubset;
   }
+}
+
+function placeableIntersection(placeable, rayOrigin, rayDirection) {
+  const geom = placeable[GEOMETRY_LIB_ID][GEOMETRY_ID];
+  geom.update();
+  return geom.rayIntersection(rayOrigin, rayDirection, 0, 1)
+}
+
+function placeableAABB(placeable) {
+  const geom = placeable[GEOMETRY_LIB_ID][GEOMETRY_ID];
+  geom.update();
+  return geom.aabb;
 }
