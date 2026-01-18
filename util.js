@@ -85,6 +85,17 @@ export function isEven(n) { return  ~n & 1; }
 export function isOdd(n) { return n & 1; }
 
 /**
+ * Clamp number between low and high values.
+ * @param {number} n
+ * @param {number} [min=-∞]
+ * @param {number} [max=∞]
+ * @returns {number}
+ */
+export function clamp(n, min = Number.NEGATIVE_INFINITY, max = Number.POSITIVE_INFINITY) {
+  return Math.min(Math.max(n, min), max);
+}
+
+/**
  * Calculate the unit elevation for a given set of coordinates.
  * @param {number} elevation    Elevation in grid units
  * @returns {number} Elevation in number of grid steps.

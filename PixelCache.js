@@ -8,7 +8,7 @@ Ray,
 "use strict";
 
 import { extractPixels } from "./extract-pixels.js";
-import { roundFastPositive, bresenhamLine, bresenhamLineIterator, trimLineSegmentToPixelRectangle } from "./util.js";
+import { roundFastPositive, bresenhamLine, bresenhamLineIterator, trimLineSegmentToPixelRectangle, clamp } from "./util.js";
 import { Draw } from "./Draw.js";
 import { MatrixFlat as Matrix } from "./MatrixFlat.js";
 import { AABB2d } from "./AABB.js";
@@ -1860,7 +1860,7 @@ export class PixelCache extends PIXI.Rectangle {
   draw({ color = Draw.COLORS.blue, gammaCorrect = false, local = false, skip = 10, radius = 1, maximumPixelValue, colorFn, alphaFn } = {}) {
     maximumPixelValue ??= this.maximumPixelValue;
     colorFn ??= _value => color;
-    alphaFn ??= value => value / maximumPixelValue;
+    alphaFn ??= value => clamp(value / maximumPixelValue, 0, 1);
 
     // Gamma correction for alpha.
     let gammaFn;
@@ -1890,7 +1890,7 @@ export class PixelCache extends PIXI.Rectangle {
   drawFromCoords({color = Draw.COLORS.blue, gammaCorrect = false, skip = 10, radius = 1, local = false, maximumPixelValue, colorFn, alphaFn } = {}) {
     maximumPixelValue ??= this.maximumPixelValue;
     colorFn ??= _value => color;
-    alphaFn ??= value => value / maximumPixelValue;
+    alphaFn ??= value => clamp(value / maximumPixelValue, 0, 1);
 
     // Gamma correction for alpha.
     let gammaFn;
