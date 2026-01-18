@@ -287,21 +287,25 @@ export class Frustum {
     return false;
   }
 
-  containsEdge(edge) {
+  overlapsEdge(edge) {
     // TODO: Could assume vertical walls and avoid a generic convex polygon test.
-    return this.poly3dWithinFrustum(edge.object[GEOMETRY_LIB_ID][GEOMETRY_ID].faces.top);
+    const geom = edge.object[GEOMETRY_LIB_ID][GEOMETRY_ID];
+    geom.update();
+    return this.poly3dWithinFrustum(geom.faces.top);
   }
 
-  containsWall(wall) { return this.containsEdge(wall.edge); }
+  overlapsWall(wall) { return this.overlapsEdge(wall.edge); }
 
-  containsTile(tile) {
+  overlapsTile(tile) {
     // If the elevations don't change, the tile cannot be an obstacle.
     if ( this.aabb.min.z === this.aabb.max.z ) return false;
 
     // Only overhead tiles count for blocking vision
     if ( tile.elevationE < tile.document.parent?.foregroundElevation ) return false;
 
-    return this.poly3dWithinFrustum(tile[GEOMETRY_LIB_ID][GEOMETRY_ID].faces.top);
+    const geom = tile[GEOMETRY_LIB_ID][GEOMETRY_ID];
+    geom.update();
+    return this.poly3dWithinFrustum(geom.faces.top);
   }
 
   overlapsRegion(region) {
@@ -319,7 +323,10 @@ export class Frustum {
 
   overlapsRegionShape(shape) {
     if ( shape.data.hole ) return false;
-    return this.aabb.overlapsAABB(shape[GEOMETRY_LIB_ID][GEOMETRY_ID].aabb);
+
+    const geom = shape[GEOMETRY_LIB_ID][GEOMETRY_ID];
+    geom.update();
+    return this.aabb.overlapsAABB(geom.aabb);
   }
 
 
