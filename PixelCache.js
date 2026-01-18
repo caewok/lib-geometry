@@ -11,7 +11,7 @@ import { extractPixels } from "./extract-pixels.js";
 import { roundFastPositive, bresenhamLine, bresenhamLineIterator, trimLineSegmentToPixelRectangle } from "./util.js";
 import { Draw } from "./Draw.js";
 import { MatrixFlat as Matrix } from "./MatrixFlat.js";
-
+import { AABB2d } from "./AABB.js";
 
 /* Pixel Cache
   Rectangle in local pixel coordinates that contains an array of values ("pixels").
@@ -58,7 +58,6 @@ export class PixelCache extends PIXI.Rectangle {
     y: 0
   };
 
-
   /**
    * Construct the local rectangle based on a provided pixel array.
    * @param {number[]} pixels     Array of pixel values
@@ -75,6 +74,18 @@ export class PixelCache extends PIXI.Rectangle {
     super(0, 0, pixelWidth, pixelHeight);
     this.pixels = pixels;
     if ( opts.scale ) foundry.utils.mergeObject(this.scale, opts.scale);
+    this.maximumPixelValue = opts.maximumPixelValue ?? this.constructor.maximumPixelValue(pixels);
+  }
+
+  clone(out) {
+    if ( !out ) {
+      const N = this.pixels.length;
+      const pixels = new this.pixels.constructor(N);
+      out = new this.constructor(pixels, this.width, { scale: this.scale });
+    }
+    out.clearTransforms();
+    out.pixels.set(this.pixels);
+    return out;
   }
 
   // ----- NOTE: Getters and setters ----- //
@@ -301,11 +312,7 @@ export class PixelCache extends PIXI.Rectangle {
   /**
    * Calculate a canvas bounding polygon based on a specific threshold.
    */
-  #calculateCanvasBoundingPolygon(threshold = 0.75) {
-    const TL = this._toCanvasCoordinates(left, top);
-  }
-
-  _calculateCanvasBoundingPolygon(threshold=0.75) {
+  #calculateCanvasBoundingPolygon(threshold=0.75) {
     const localPoly = this.getThresholdLocalBoundingPolygon(threshold);
     return new PIXI.Polygon([...localPoly.iteratePoints({ close: false })].map(pt => this._toCanvasCoordinates(pt.x, pt.y, pt)))
   }
@@ -425,7 +432,7 @@ export class PixelCache extends PIXI.Rectangle {
    * @returns {PIXI.Point} The outPoint, for convenience
    */
   _localAtIndex(i, outPoint) {
-    outPoint ??= new PIXI.Point();
+    outPoint ??= PIXI.Point.tmp;
     const width = this.width;
     const col = i % width;
     const row = ~~(i / width); // Floor the row.
@@ -439,7 +446,7 @@ export class PixelCache extends PIXI.Rectangle {
    * @returns {PIXI.Point} The outPoint, for convenience
    */
   _canvasAtIndex(i, outPoint) {
-    outPoint ??= new PIXI.Point();
+    outPoint ??= PIXI.Point.tmp;
     const local = this._localAtIndex(i, PIXI.Point.tmp);
     const out = this._toCanvasCoordinates(local.x, local.y, outPoint);
     local.release();
@@ -465,7 +472,7 @@ export class PixelCache extends PIXI.Rectangle {
    * @returns {PIXI.Point} The outPoint, for convenience
    */
   _fromCanvasCoordinates(x, y, outPoint) {
-    outPoint ??= new PIXI.Point();
+    outPoint ??= PIXI.Point.tmp;
     outPoint.set(x, y);
     const local = this.toLocalTransform.multiplyPoint2d(outPoint, outPoint);
 
@@ -484,7 +491,7 @@ export class PixelCache extends PIXI.Rectangle {
    * @returns {PIXI.Point} The outPoint, for convenience
    */
   _toCanvasCoordinates(x, y, outPoint) {
-    outPoint ??= new PIXI.Point();
+    outPoint ??= PIXI.Point.tmp;
     outPoint.set(x, y);
     const canvas = this.toCanvasTransform.multiplyPoint2d(outPoint, outPoint);
 
@@ -603,14 +610,93 @@ export class PixelCache extends PIXI.Rectangle {
    * @returns {PIXI.Rectangle|PIXI.Polygon|PIXI.Circle|PIXI.Ellipse}
    */
   _shapeToLocalCoordinates(shape) {
-    if ( shape instanceof PIXI.Rectangle ) return this._rectangleToLocalCoordinates(shape);
-    else if ( shape instanceof PIXI.Polygon ) return this._polygonToLocalCoordinates(shape);
-    else if ( shape instanceof PIXI.Circle ) return this._circleToLocalCoordinates(shape);
-    else if ( shape instanceof PIXI.Ellipse ) return this._ellipseToLocalCoordinates(shape);
-    else console.error("applyFunctionToShape: shape not recognized.");
+    switch ( shape.constructor ) {
+      case PIXI.Rectangle: return this._rectangleToLocalCoordinates(shape);
+      case PIXI.Polygon: return this._polygonToLocalCoordinates(shape);
+      case PIXI.Circle: return this._circleToLocalCoordinates(shape);
+      case PIXI.Ellipse: return this._ellipseToLocalCoordinates(shape);
+      default: throw new Error("applyFunctionToShape|Shape not recognized.");
+    }
+  }
+
+  // ----- NOTE: Pixel Setting ----- //
+
+  /**
+   * Set a single local pixel.
+   * @param {PIXI.Point} a      Point, in local coordinates.
+   * @param {number} value      Value to set at each pixel.
+   */
+  _setPixelUnderLocalPoint(pt, value = 0) {
+     this.pixels[this._indexAtLocal(pt.x, pt.y)] = value;
+  }
+
+  /**
+   * Set a single canvas pixel.
+   * @param {PIXI.Point} a      Point, in canvas coordinates.
+   * @param {number} value      Value to set at each pixel.
+   */
+  setPixelUnderCanvasPoint(pt, value = 0) {
+    this.pixels[this._indexAtCanvas(pt.x, pt.y)] = value;
+  }
+
+  /**
+   * Use grid traversal to set pixels under a local segment.
+   * @param {PIXI.Point} a      Starting location, in local coordinates.
+   * @param {PIXI.Point} b      Ending location, in local coordinates.
+   * @param {number} value      Value to set at each pixel.
+   */
+  _setPixelsUnderLocalSegment(a, b, value = 0) {
+    const indices = this.constructor.pixelsUnderSegment(a, b);
+    indices.forEach(idx => {
+      this._setPixelUnderLocalPoint(idx, value);
+      idx.release();
+    });
+  }
+
+  /**
+   * Use grid traversal to set pixels under a canvas segment.
+   * @param {PIXI.Point} a      Starting location, in canvas coordinates.
+   * @param {PIXI.Point} b      Ending location, in canvas coordinates.
+   * @param {number} value      Value to set at each pixel.
+   */
+  setPixelsUnderCanvasSegment(a, b, value = 0) {
+    a = this._fromCanvasCoordinates(a.x, a.y);
+    b = this._fromCanvasCoordinates(b.x, b.y);
+    this._setPixelsUnderLocalSegment(a, b, value);
+    PIXI.Point.release(a, b);
+  }
+
+  /**
+   * Set pixels under a local shape.
+   * @param {PIXI.Rectangle|PIXI.Circle|PIXI.Ellipse|PIXI.Polygon} shape       Shape in local coordinates
+   * @param {number} value                Value to set at each pixel.
+   */
+  _setPixelsUnderLocalShape(shape, value = 0) {
+    let indices;
+    switch ( shape.constructor ) {
+      case PIXI.Rectangle: indices = this.constructor.pixelsUnderRectangle(shape); break;
+      case PIXI.Polygon: indices = this.constructor.pixelsUnderPolygon(shape); break;
+      case PIXI.Circle: indices = this.constructor.pixelsUnderCircle(shape); break;
+      case PIXI.Ellipse: indices = this.constructor.pixelsUnderEllipse(shape); break;
+    }
+    indices.forEach(idx => {
+      this.pixels[this._indexAtLocal(idx.x, idx.y)] = value;
+      idx.release();
+    });
+  }
+
+  /**
+   * Set pixels under a canvas rectangle.
+   * @param {PIXI.Rectangle} rect       Rectangle in local coordinates
+   * @param {number} value              Value to set at each pixel.
+   */
+  setPixelsUnderCanvasShape(shape, value = 0) {
+    const localShape = this._shapeToLocalCoordinates(shape);
+    this._setPixelsUnderLocalShape(localShape, value);
   }
 
   // ----- NOTE: Segment pixel extraction ----- //
+
   /**
    * Trim a line segment to only the portion that intersects this cache bounds.
    * @param {Point} a     Starting location, in canvas coordinates
@@ -676,7 +762,7 @@ export class PixelCache extends PIXI.Rectangle {
     const nPts = bresPts.length;
     const pixels = Array(nPts * 0.5);
     for ( let i = 0, j = 0; i < nPts; i += 2, j += 1 ) {
-      const pt = new PIXI.Point(bresPts[i], bresPts[i + 1]);
+      const pt = PIXI.Point.tmp.set(bresPts[i], bresPts[i + 1]);
       const pixelsAtPoint = this._pixelsForRelativePointsFromLocal(pt.x, pt.y, localOffsets);
       const currPixel = reducerFn(pixelsAtPoint);
       pt.currPixel = currPixel
@@ -747,7 +833,7 @@ export class PixelCache extends PIXI.Rectangle {
 
     const nPts = bresPts.length;
     for ( let i = 0; i < nPts; i += 2 ) {
-      const pt = new PIXI.Point(bresPts[i], bresPts[i + 1]);
+      const pt = PIXI.Point.tmp.set(bresPts[i], bresPts[i + 1]);
       const pixelsAtPoint = this._pixelsForRelativePointsFromLocal(pt.x, pt.y, localOffsets);
       const currPixel = reducerFn(pixelsAtPoint);
       if ( markPixelFn(currPixel, prevPixel) ) {
@@ -759,7 +845,7 @@ export class PixelCache extends PIXI.Rectangle {
     }
 
     if ( forceLast ) {
-      const pt = new PIXI.Point(bresPts.at(-2), bresPts.at(-1));
+      const pt = PIXI.Point.tmp.set(bresPts.at(-2), bresPts.at(-1));
       pt.currPixel = prevPixel;
       pt.forceLast = forceLast;
       // Add the last pixel regardless.
@@ -1254,7 +1340,12 @@ export class PixelCache extends PIXI.Rectangle {
     const canvasOrigin = this._toCanvasCoordinates(0, 0);
     const xShift = this._fromCanvasCoordinates(canvasOrigin.x + 1, canvasOrigin.y);
     const yShift = this._fromCanvasCoordinates(canvasOrigin.x, canvasOrigin.y + 1);
-    if ( xShift.equals(new PIXI.Point(1, 0)) && yShift.equals(new PIXI.Point(0, 1)) ) return canvasOffsets;
+    const xFixed = PIXI.Point.tmp.set(1, 0);
+    const yFixed = PIXI.Point.tmp.set(0, 1);
+    if ( xShift.equals(xFixed) && yShift.equals(yFixed) ) {
+      PIXI.Point.release(xShift, yShift, xFixed, yFixed);
+      return canvasOffsets;
+    }
 
     const nOffsets = canvasOffsets.length;
     const localOffsets = Array(nOffsets);
@@ -1266,7 +1357,320 @@ export class PixelCache extends PIXI.Rectangle {
       localOffsets[i] = (xOffset * xShift.x) + (xOffset * yShift.x);
       localOffsets[i + 1] = (yOffset * xShift.y) + (yOffset * yShift.y);
     }
+    PIXI.Point.release(xShift, yShift, xFixed, yFixed);
     return localOffsets;
+  }
+
+  // ----- NOTE: Static methods ----- //
+  static maximumPixelValue(arr) {
+    if ( Array.isArray(arr) ) return Number.MAX_SAFE_INTEGER;
+
+    // 1. Check if the input is actually a TypedArray
+    if (!ArrayBuffer.isView(arr) || arr instanceof DataView) {
+      throw new Error("Input must be a standard TypedArray (e.g., new Int8Array())");
+    }
+
+    // 2. Define maximums for each TypedArray type
+    // Note: We map the constructor directly to the logic or value
+    const constructor = arr.constructor;
+    switch (constructor) {
+      case Int8Array: return 127; // 2^7 - 1
+      case Uint8Array:
+      case Uint8ClampedArray: return 255; // 2^8 - 1
+      case Int16Array: return 32767; // 2^15 - 1
+      case Uint16Array: return 65535; // 2^16 - 1
+      case Int32Array: return 2147483647; // 2^31 - 1
+      case Uint32Array: return 4294967295; // 2^32 - 1
+
+      // 3. Handle BigInt types (Return values as BigInts, denoted by 'n')
+      case BigInt64Array: return 9223372036854775807n;  // 2^63 - 1
+      case BigUint64Array: return 18446744073709551615n; // 2^64 - 1
+
+      // 4. Handle Float types
+      case Float32Array:
+      case Float64Array: return Number.MAX_SAFE_INTEGER; // While floats technically go higher, this is the max safe INTEGER
+
+      default: throw new Error("Unknown TypedArray type");
+    }
+  }
+
+  /**
+   * Identifies all pixels (grid cells) intersected by a segment.
+   * Uses Grid Traversal Algorithm, a.k.a. Digital Differential Analyzer.
+   * This algorithm works by calculating exactly when the line crosses the vertical
+   * and horizontal grid lines (the boundaries of the "pixels"),
+   * identifying every single pixel the segment touches.
+   * @param {PIXI.Point} a      Starting coordinate
+   * @param {PIXI.Point} b      Ending coordinate
+   * @returns {PIXI.Point[]} Array of points representing grid indices
+   */
+  static pixelsUnderSegment(a, b) {
+    const pixels = [];
+
+    // 1. Convert start and end points to grid coordinates
+    const current = PIXI.Point.tmp;
+    const end = PIXI.Point.tmp;
+    a.floor(current);
+    b.floor(end);
+
+    // 2. Determine step direction (+1 or -1)
+    const step = PIXI.Point.tmp.set(
+      (b.x > a.x) ? 1 : -1,
+      (b.y > a.y) ? 1 : -1,
+    );
+
+    // 3. Calculate the distance (t) required to move 1 pixel unit
+    // We avoid division by zero by using Infinity if delta is 0
+    const delta = b.subtract(a);
+
+    // How far along the ray we must move for the component to change 1 unit
+    // pixelSize / |delta| gives us the scale factor per grid cell
+    const tDelta = PIXI.Point.tmp.set(
+      (delta.x !== 0) ? Math.abs(1 / delta.x) : Infinity,
+      (delta.y !== 0) ? Math.abs(1 / delta.y) : Infinity,
+    );
+
+    // 4. Calculate the distance to the *first* grid boundary
+    const tMax = PIXI.Point.tmp;
+
+    // Distance from current position to right edge of the pixel
+    if ( delta.x > 0 ) tMax.x = (current.x + 1 - a.x) / delta.x;
+
+    // Distance from current position to left edge of the pixel
+    else if ( delta.x < 0 ) tMax.x = (a.x - current.x) / -delta.x; // simplified
+    else tMax.x = Infinity;
+
+    if ( delta.y > 0 ) tMax.y = (current.y + 1 - a.y) / delta.y;
+    else if ( delta.y < 0 ) tMax.y = (a.y - current.y) / -delta.y;
+    else tMax.y = Infinity;
+
+    // 5. Traverse the grid
+    // We loop until we pass the end grid cell
+    let iter = 0;
+    while (true) {
+      if ( iter++ > 100000 ) throw new Error("Iterations exceeded.");
+
+      // Add current pixel
+      pixels.push(current.clone());
+
+      // If we reached the target grid cell, break
+      if ( current.equals(end) ) break;
+
+      // Move to the next grid cell based on which boundary is closer
+      if (tMax.x < tMax.y) {
+        tMax.x += tDelta.x;
+        current.x += step.x;
+      } else {
+        tMax.y += tDelta.y;
+        current.y += step.y;
+      }
+    }
+    PIXI.Point.release(step, delta, current, end);
+    return pixels;
+  }
+
+  /**
+   * Identifies all pixels (grid cells) intersected by a PIXI.Rectangle.
+   * @param {PIXI.Rectangle} rect - The source rectangle (world space)
+   * @param {number} [pixelSize=1] - The size of each grid cell
+   * @returns {PIXI.Point[]} Array of points representing grid indices
+   */
+  static pixelsUnderRectangle(rect) {
+    const pixels = [];
+
+    // 1. Calculate the starting grid index (Top-Left)
+    // We use Math.floor to snap to the grid coordinate
+    const start = PIXI.Point.tmp.set(rect.x, rect.y);
+    start.floor(start);
+
+    // 2. Calculate the ending grid index (Bottom-Right)
+    // We subtract a tiny epsilon (0.0001) from the right/bottom edge.
+    // Why? If a rectangle ends exactly at 20 (and pixelSize is 10), it occupies
+    // pixels 0 and 1, but NOT 2. Without the epsilon, 20/10 = 2, which would
+    // wrongly include the next pixel.
+    const EPSILON = 0.0001;
+    const end = PIXI.Point.tmp.set(
+      rect.x + rect.width - EPSILON,
+      rect.y + rect.height - EPSILON,
+    );
+    end.floor(end);
+
+    // 3. Loop through the range
+    for ( let y = start.y; y <= end.y; y += 1 ) {
+      for ( let x = start.x; x <= end.x; x += 1 ) pixels.push(PIXI.Point.tmp.set(x, y));
+    }
+    PIXI.Point.release(start, end);
+    return pixels;
+  }
+
+  /**
+   * Identifies all pixels (grid cells) intersected by a PIXI.Circle.
+   * Uses a Bounding Box scan with a Distance Check.
+   * Examines every pixel within the square area that encloses the circle, and then calculate
+   * if the center of that pixel (or its closest edge) falls within the circle's radius.
+   * @param {PIXI.Circle} circle      The source circle (world space)
+   * @returns {PIXI.Point[]} Array of points representing grid indices
+   */
+  static pixelsUnderCircle(circle) {
+    const pixels = [];
+
+    // 1. Define the Bounding Box of the circle in grid coordinates
+    const radiusSq = circle.radius * circle.radius;
+    const center = PIXI.Point.fromObject(circle);
+    const radius = PIXI.Point.tmp.set(circle.radius, circle.radius)
+    const start = PIXI.Point.tmp;
+    const end = PIXI.Point.tmp;
+
+    // E.g,
+    // Math.floor((circle.x - circle.radius) / pixelSize)
+    // Math.floor((circle.x + circle.radius) / pixelSize)
+    center.subtract(radius, start).floor(start);
+    center.add(radius, end).floor(end);
+
+    // 2. Iterate through the bounding box
+
+    const closest = PIXI.Point.tmp;
+    const next = PIXI.Point.tmp;
+    const delta = PIXI.Point.tmp;
+    for ( let y = start.y; y <= end.y; y += 1 ) {
+      for ( let x = start.x; x <= end.x; x += 1 ) {
+        // 3. Find the point within the pixel closest to the circle center
+        // This ensures we catch pixels even if only a tiny corner is inside.
+        closest.set(x, y);
+        next.set(x+1, y+1).min(center, next);
+        closest.max(next, closest);
+
+        // const closestX = Math.max(x * pixelSize, Math.min(circle.x, (x + 1) * pixelSize));
+        // const closestY = Math.max(y * pixelSize, Math.min(circle.y, (y + 1) * pixelSize));
+
+        // 4. Calculate squared distance (faster than Math.sqrt)
+        center.subtract(closest, delta);
+        const distanceSq = delta.dot(delta);
+
+        /*
+        const dx = circle.x - closestX;
+        const dy = circle.y - closestY;
+        const distanceSq = (dx * dx) + (dy * dy);
+        */
+
+        if ( distanceSq <= radiusSq ) pixels.push(PIXI.Point.tmp.set(x, y));
+      }
+    }
+
+    PIXI.Point.release(center, radius, start, end, closest, next, delta);
+    return pixels;
+  }
+
+  /**
+   * Identifies all pixels (grid cells) intersected by a PIXI.Ellipse.
+   * Uses a Bounding Box scan with a Distance Check.
+   * Examines every pixel within the square area that encloses the ellipse, and then calculate
+   * if the center of that pixel (or its closest edge) falls within the ellipse's radius.
+   * @param {PIXI.Ellipse} ellipse      The source ellipse (world space)
+   * @returns {PIXI.Point[]} Array of points representing grid indices
+   */
+  static pixelsUnderEllipse(ellipse) {
+    const pixels = [];
+
+    // 1. Define the Bounding Box in grid coordinates.
+    const center = PIXI.Point.fromObject(ellipse);
+    const start = PIXI.Point.tmp;
+    const end = PIXI.Point.tmp;
+    const radius = PIXI.Point.tmp.set(ellipse.width, ellipse.height); // In PIXI, width and height are radii (semi-axes)
+
+    // E.g., Math.floor((ellipse.x - a) / pixelSize);
+    center.subtract(radius, start).floor(start);
+    center.add(radius, end).floor(end);
+
+    // Pre-calculate squares to save operations in the loop
+    radius.multiply(radius, radius);
+
+    // 2. Iterate through the bounding box
+    const closest = PIXI.Point.tmp;
+    const next = PIXI.Point.tmp;
+    const delta = PIXI.Point.tmp;
+    for ( let y = start.y; y <= end.y; y += 1 ) {
+      for ( let x = start.x; x <= end.x; x += 1 ) {
+        // 3. Find the point within the pixel closest to the ellipse center
+        closest.set(x, y);
+        next.set(x+1, y+1).min(center, next);
+        closest.max(next, closest);
+
+        // const closestX = Math.max(x * pixelSize, Math.min(ellipse.x, (x + 1) * pixelSize));
+        // const closestY = Math.max(y * pixelSize, Math.min(ellipse.y, (y + 1) * pixelSize));
+
+        // 4. Apply the Ellipse Equation
+        // If the result is <= 1, the point is inside or on the boundary
+        center.subtract(closest, delta);
+        delta.multiply(delta, delta);
+        delta.divide(radius, delta);
+
+        if ( (delta.x + delta.y) <= 1 ) pixels.push(PIXI.Point.tmp.set(x, y));
+        // const dx = closestX - ellipse.x;
+        // const dy = closestY - ellipse.y;
+        // if ( (dx * dx) / radius2.x + (dy * dy) / radius2.y <= 1 ) pixels.push(PIXI.Point.tmp.set(x, y));
+
+      }
+    }
+    PIXI.Point.release(center, radius, start, end, closest, next, delta);
+    return pixels;
+  }
+
+  /**
+   * Identifies all pixels (grid cells) intersected by a PIXI.Polygon.
+   * Uses Scanline Fill Algorithm. This is more complex than a circle or rectangle because
+   * polygons can be irregular, concave, or have many vertices.  Checks each horizontal "row" (scanline)
+   * of pixels that the polygon covers and find where the polygon's edges intersect that row.
+   * @param {PIXI.Polygon} polygon      The source polygon (world space)
+   * @returns {PIXI.Point[]} Array of points representing grid indices
+   */
+  static pixelsUnderPolygon(polygon) {
+    const pixels = [];
+
+    // 1. Convert flat array to objects and find the bounding box
+    // Find the vertical range (minY to maxY) so we don't scan the entire world.
+    const aabb = AABB2d.fromPolygon(polygon);
+
+    // 2. Convert Y bounds to grid indices
+    const startY = Math.floor(aabb.min.y);
+    const endY = Math.floor(aabb.max.y);
+    aabb.release();
+
+    // 3. Process each horizontal scanline
+    for ( let gridY = startY; gridY <= endY; gridY += 1 ) {
+      // Find the center Y of the current pixel row for intersection testing
+      const y = (gridY + 0.5);
+
+      // 4. Find where the scanline intersects each edge of the polygon
+      // For every row of pixels, draw an imaginary horizontal line.
+      // Calculate where this line hits the "walls" (edges) of the polygon
+      const intersections = [];
+      for ( const edge of polygon.iterateEdges({ close: true }) ) {
+        const p1 = edge.A;
+        const p2 = edge.B;
+
+        // Check if the edge crosses the current Y level
+        if ( (p1.y <= y && p2.y > y) || (p2.y <= y && p1.y > y) ) {
+          // Calculate the X coordinate of the intersection
+          const intersectX = p1.x + (y - p1.y) * (p2.x - p1.x) / (p2.y - p1.y);
+          intersections.push(intersectX);
+        }
+      }
+
+      // 5. Sort intersections from left to right
+      intersections.sort((a, b) => a - b);
+
+      // 6. Fill the pixels between pairs of intersections (even-odd rule)
+      // The Even-Odd Rule: In geometry, if you start outside a shape and cross an edge,
+      // you are now inside. Cross another, and you are outside.
+      // This is why we sort the intersections and process them in pairs (i += 2).
+      for ( let i = 0, iMax = intersections.length; i < iMax; i += 2 ) {
+        const startX = Math.floor(intersections[i]);
+        const endX = Math.floor(intersections[i + 1]);
+        for ( let gridX = startX; gridX <= endX; gridX += 1 ) pixels.push(PIXI.Point.tmp.set(gridX, gridY));
+      }
+    }
+    return pixels;
   }
 
   // ----- NOTE: Static constructors ----- //
@@ -1453,17 +1857,29 @@ export class PixelCache extends PIXI.Rectangle {
    * Draw a representation of this pixel cache on the canvas, where alpha channel is used
    * to represent values. For debugging.
    */
-  draw({color = Draw.COLORS.blue, gammaCorrect = false, local = false, skip = 10, radius = 1 } = {}) {
+  draw({ color = Draw.COLORS.blue, gammaCorrect = false, local = false, skip = 10, radius = 1, maximumPixelValue, colorFn, alphaFn } = {}) {
+    maximumPixelValue ??= this.maximumPixelValue;
+    colorFn ??= _value => color;
+    alphaFn ??= value => value / maximumPixelValue;
+
+    // Gamma correction for alpha.
+    let gammaFn;
+    if ( gammaCorrect ) {
+      const GAMMA_EXP = 1 / 2.2;
+      gammaFn = alpha => Math.pow(alpha, GAMMA_EXP);
+    } else gammaFn = alpha => alpha;
+
     const ln = this.pixels.length;
     const coordFn = local ? this._localAtIndex : this._canvasAtIndex;
-    const gammaExp = gammaCorrect ? 1 / 2.2 : 1;
     skip += 1; // For incrementing i.
     for ( let i = 0; i < ln; i += skip ) {
       const value = this.pixels[i];
       if ( !value ) continue;
-      const alpha = Math.pow(value / this.maximumPixelValue, gammaExp);
+      const color = colorFn(value);
+      const alpha = gammaFn(alphaFn(value));
       const pt = coordFn.call(this, i);
       Draw.point(pt, { color, alpha, radius });
+      pt.release();
     }
   }
 
@@ -1471,19 +1887,31 @@ export class PixelCache extends PIXI.Rectangle {
    * For debugging, to test coordinate conversion.
    * Use `pixelAtLocal` or `pixelAtCanvas` to get the value. Unlike `draw`, which iterates from the pixel indices directly.
    */
-  drawFromCoords({color = Draw.COLORS.blue, gammaCorrect = false, skip = 10, radius = 1, local = false } = {}) {
-    const gammaExp = gammaCorrect ? 1 / 2.2 : 1;
+  drawFromCoords({color = Draw.COLORS.blue, gammaCorrect = false, skip = 10, radius = 1, local = false, maximumPixelValue, colorFn, alphaFn } = {}) {
+    maximumPixelValue ??= this.maximumPixelValue;
+    colorFn ??= _value => color;
+    alphaFn ??= value => value / maximumPixelValue;
+
+    // Gamma correction for alpha.
+    let gammaFn;
+    if ( gammaCorrect ) {
+      const GAMMA_EXP = 1 / 2.2;
+      gammaFn = alpha => Math.pow(alpha, GAMMA_EXP);
+    } else gammaFn = alpha => alpha;
+
     const { right, left, top, bottom } = this;
     let coordFn;
     let valueFn;
     if ( local ) {
-      coordFn = (localX, localY) => new PIXI.Point(localX, localY);
+      coordFn = (localX, localY) => PIXI.Point.tmp.set(localX, localY);
       valueFn = this._pixelAtLocal;
     } else {
       coordFn = (localX, localY) => this._toCanvasCoordinates(localX, localY);
       valueFn = (localX, localY) => {
         const canvasPt = this._toCanvasCoordinates(localX, localY);
-        return this.pixelAtCanvas(canvasPt.x, canvasPt.y);
+        const px = this.pixelAtCanvas(canvasPt.x, canvasPt.y);
+        canvasPt.release();
+        return px;
       }
     }
 
@@ -1492,9 +1920,11 @@ export class PixelCache extends PIXI.Rectangle {
       for ( let localY = top; localY <= bottom; localY += skip ) {
         const value = valueFn.call(this, localX, localY);
         if ( !value ) continue;
-        const alpha = Math.pow(value / 255, gammaExp);
+        const color = colorFn(value);
+        const alpha = gammaFn(alphaFn(value));
         const pt = coordFn.call(this, localX, localY);
         Draw.point(pt, { color, alpha, radius });
+        pt.release();
       }
     }
   }
