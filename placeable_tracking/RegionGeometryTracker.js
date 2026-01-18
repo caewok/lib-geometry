@@ -57,7 +57,7 @@ export class RegionGeometryTracker extends mix(AbstractPlaceableGeometryTracker)
 
   // ----- NOTE: AABB ----- //
   calculateAABB() {
-    AABB3d.union(this.shapes.map(shape => shape[GEOMETRY_LIB_ID][this.constructor.ID].aabb), this._aabb);
+    AABB3d.union(this.shapes.map(shape => shape[GEOMETRY_LIB_ID][this.constructor.ID].aabb), this.aabb);
   }
 
   // ----- NOTE: Matrices ---- //
@@ -210,7 +210,7 @@ export class RegionGeometryTracker extends mix(AbstractPlaceableGeometryTracker)
 
       } else {
         const geometry = shapePath[GEOMETRY_LIB_ID][this.constructor.ID];
-        this.combinedFaces.push(geometry._faces);
+        this.combinedFaces.push(geometry.faces);
       }
     }
   }
@@ -329,7 +329,7 @@ class AbstractRegionShapeGeometryTracker extends mix(AbstractPlaceableGeometryTr
 
   // ----- NOTE: AABB ----- //
 
-  calculateAABB() { return AABB3d.fromShape(this.shapePIXI, this._aabb); }
+  calculateAABB() { return AABB3d.fromShape(this.shapePIXI, this.aabb); }
 
   // ----- NOTE: PIXI Shape ----- //
 

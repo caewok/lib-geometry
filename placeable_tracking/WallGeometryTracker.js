@@ -45,7 +45,7 @@ export class WallGeometryTracker extends mix(AbstractPlaceableGeometryTracker).w
   get edge() { return this.placeable.edge; }
 
   // ----- NOTE: AABB ----- //
-  calculateAABB() { return AABB3d.fromEdge(this.edge, this._aabb); }
+  calculateAABB() { return AABB3d.fromEdge(this.edge, this.aabb); }
 
   // ----- NOTE: Matrices ---- //
 
@@ -111,13 +111,13 @@ export class WallGeometryTracker extends mix(AbstractPlaceableGeometryTracker).w
    * @param {number} [cutoff=1]   Ignore hits further along the ray from this (treat ray as segment)
    * @returns {number|null} The distance along the ray
    */
-  rayIntersection(...opts) {
+  rayIntersection(rayOrigin, rayDirection, opts) {
     // Ignore one-directional walls facing away from the viewpoint.
     const edge = this.edge;
-    if ( edge.direction && (edge.orientPoint(opts.rayOrigin) === edge.direction) ) return false;
+    if ( edge.direction && (edge.orientPoint(rayOrigin) === edge.direction) ) return false;
 
     // Top and bottom are the same (just opposite orientations) and so only need to test one.
-    return this.constructor.rayIntersectionForFaces([this.faces.top], ...opts);
+    return this.constructor.rayIntersectionForFaces([this.faces.top], rayOrigin, rayDirection, opts);
   }
 
   // ----- NOTE: Wall characteristics ----- //

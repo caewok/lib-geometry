@@ -205,12 +205,7 @@ export class AbstractPlaceableGeometryTracker {
  * @returns {function} A subclass of `superclass.`
  */
 export const PlaceableAABBMixin = superclass => class extends superclass {
-  _aabb = new AABB3d(); // Allow non-private access so update can be called separately first.
-
-  get aabb() {
-    this.update();
-    return this._aabb;
-  }
+  aabb = new AABB3d(); // Allow non-private access so update can be called separately first.
 
   // AABB is fairly basic, so no need to handle position/rotation/scale separately.
   _placeableUpdated() { super._placeableUpdated(); this.calculateAABB(); }
@@ -292,12 +287,7 @@ export const PlaceableModelMatrixMixin = superclass => {
     }
 
     /** @type {PlaceableModelMatrix} */
-    _modelMatrix = new PlaceableModelMatrix(this.#modelMatrixCallback.bind(this));
-
-    get modelMatrix() {
-      this.update();
-      return this._modelMatrix;
-    }
+    modelMatrix = new PlaceableModelMatrix(this.#modelMatrixCallback.bind(this));
 
     /**
      * Create an id used for the model matrix tracking.
@@ -321,17 +311,17 @@ export const PlaceableModelMatrixMixin = superclass => {
     }
 
     updateShape() {
-      const mm = this._modelMatrix;
+      const mm = this.modelMatrix;
       this.calculateTranslationMatrix(mm.translation);
       this.calculateRotationMatrix(mm.rotation);
       this.calculateScaleMatrix(mm.scale);
     }
 
-    calculateTranslationMatrix() { return this._modelMatrix.translation; }
+    calculateTranslationMatrix() { return this.modelMatrix.translation; }
 
-    calculateRotationMatrix() { return this._modelMatrix.rotation; }
+    calculateRotationMatrix() { return this.modelMatrix.rotation; }
 
-    calculateScaleMatrix() { return this._modelMatrix.scale; }
+    calculateScaleMatrix() { return this.modelMatrix.scale; }
 
     initialize() {
       super.initialize();
@@ -400,21 +390,15 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
   _prototypeFaces = { top: null, bottom: null, sides: [] };
 
   /** @type {Faces} */
-  _faces = { top: null, bottom: null, sides: [] };
-
-  get faces() {
-    this.update();
-    return this._faces;
-  }
+  faces = { top: null, bottom: null, sides: [] };
 
   /**
    * Iterate over the faces.
    */
   *iterateFaces() {
-    this.update();
-    if ( this._faces.top ) yield this._faces.top;
-    if ( this._faces.bottom ) yield this._faces.bottom;
-    for ( const side of this._faces.sides ) yield side;
+    if ( this.faces.top ) yield this.faces.top;
+    if ( this.faces.bottom ) yield this.faces.bottom;
+    for ( const side of this.faces.sides ) yield side;
   }
 
   /**
@@ -426,11 +410,11 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
   }
 
   _initializePrototypeFaces() {
-    if ( this._prototypeFaces.top ) this._faces.top = new this._prototypeFaces.top.constructor();
-    if ( this._prototypeFaces.bottom ) this._faces.bottom = new this._prototypeFaces.bottom.constructor();
+    if ( this._prototypeFaces.top ) this.faces.top = new this._prototypeFaces.top.constructor();
+    if ( this._prototypeFaces.bottom ) this.faces.bottom = new this._prototypeFaces.bottom.constructor();
     const numSides = this._prototypeFaces.sides.length;
-    this._faces.sides.length = numSides;
-    for ( let i = 0; i < numSides; i += 1 ) this._faces.sides[i] ??= new this._prototypeFaces.sides[i].constructor();
+    this.faces.sides.length = numSides;
+    for ( let i = 0; i < numSides; i += 1 ) this.faces.sides[i] ??= new this._prototypeFaces.sides[i].constructor();
   }
 
   /**
@@ -438,10 +422,10 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
    * Always updates using the model matrix.
    */
   _updateFaces() {
-    const M = this._modelMatrix.model;
-    if ( this._prototypeFaces.top ) this._prototypeFaces.top.transform(M, this._faces.top)
-    if ( this._prototypeFaces.bottom ) this._prototypeFaces.bottom.transform(M, this._faces.bottom)
-    for ( let i = 0, iMax = this._prototypeFaces.sides.length; i < iMax; i += 1 ) this._prototypeFaces.sides[i].transform(M, this._faces.sides[i]);
+    const M = this.modelMatrix.model;
+    if ( this._prototypeFaces.top ) this._prototypeFaces.top.transform(M, this.faces.top)
+    if ( this._prototypeFaces.bottom ) this._prototypeFaces.bottom.transform(M, this.faces.bottom)
+    for ( let i = 0, iMax = this._prototypeFaces.sides.length; i < iMax; i += 1 ) this._prototypeFaces.sides[i].transform(M, this.faces.sides[i]);
   }
 
   _placeableUpdated() { super._placeableUpdated(); this._updateFaces(); }
@@ -455,9 +439,9 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
    * @param {number} [cutoff=1]   Ignore hits further along the ray from this (treat ray as segment)
    * @returns {number|null} The distance along the ray
    */
-  rayIntersection(...opts) { return this.constructor.rayIntersectionForFaces(this.iterateFaces(), ...opts); }
+  rayIntersection(rayOrigin, rayDirection, opts) { return this.constructor.rayIntersectionForFaces(this.iterateFaces(), rayOrigin, rayDirection, opts); }
 
-  static rayIntersectionForFaces(iter, rayOrigin, rayDirection, minT = 0, maxT = Number.POSITIVE_INFINITY) {
+  static rayIntersectionForFaces(iter, rayOrigin, rayDirection, { minT = 0, maxT = Number.POSITIVE_INFINITY } = {}) {
     for ( const face of iter ) {
       const t = face.intersectionT(rayOrigin, rayDirection);
       if ( t !== null && almostBetween(t, minT, maxT) ) return t;

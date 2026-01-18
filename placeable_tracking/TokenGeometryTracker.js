@@ -55,19 +55,17 @@ const TokenConstrainedFacesMixin = superclass => class extends superclass {
   };
 
   get constrainedFaces() {
-    if ( !this.isConstrained ) return this.faces;
-    this.update();
-    return this._constrainedFaces;
+    return this.isConstrained ? this._constrainedFaced : this.faces;
   }
 
   /**
    * Iterate over the faces.
    */
   *iterateConstrainedFaces() {
-    this.update();
-    yield this._constrainedFaces.top;
-    yield this._constrainedFaces.bottom;
-    for ( const side of this._constrainedFaces.sides ) yield side;
+    const faces = this.constrainedFaces;
+    yield faces.top;
+    yield faces.bottom;
+    for ( const side of faces.sides ) yield side;
   }
 
   _placeableUpdated() {
@@ -82,8 +80,8 @@ const TokenConstrainedFacesMixin = superclass => class extends superclass {
     buildPolygonCube(poly, token.topZ * SPACER, token.bottomZ * SPACER, this._constrainedFaces);
   }
 
-  rayIntersectionConstrained(...opts) {
-    return this.constructor.rayIntersectionForFaces(this.iterateConstrainedFaces(), ...opts);
+  rayIntersectionConstrained(rayOrigin, rayDirection, opts) {
+    return this.constructor.rayIntersectionForFaces(this.iterateConstrainedFaces(), rayOrigin, rayDirection, opts);
   }
 }
 
@@ -99,9 +97,9 @@ const TokenConstrainedFacesMixin = superclass => class extends superclass {
  */
 const TokenConstrainedLitFacesMixin = superclass => class extends superclass {
 
-   get isLit() { return Boolean(this.token.litTokenBorder); }
+  get isLit() { return Boolean(this.token.litTokenBorder); }
 
-   get isConstrainedLit() { return !this.token.constrainedTokenBorder.equals(this.token.litTokenBorder); }
+  get isConstrainedLit() { return !this.token.constrainedTokenBorder.equals(this.token.litTokenBorder); }
 
   _constrainedLitFaces = {
     top: new Polygon3d(),
@@ -110,19 +108,17 @@ const TokenConstrainedLitFacesMixin = superclass => class extends superclass {
   };
 
   get constrainedLitFaces() {
-    if ( !this.isConstrainedLit ) return this.faces;
-    this.update();
-    return this._constrainedLitFaces;
+    return this.isConstrainedLit ? this._constrainedLitFaces : this.faces;
   }
 
   /**
    * Iterate over the faces.
    */
   *iterateConstrainedLitFaces() {
-    this.update();
-    yield this._constrainedLitFaces.top;
-    yield this._constrainedLitFaces.bottom;
-    for ( const side of this._constrainedLitFaces.sides ) yield side;
+    const faces = this.constrainedLitFaces;
+    yield faces.top;
+    yield faces.bottom;
+    for ( const side of faces.sides ) yield side;
   }
 
   _placeableUpdated() {
@@ -138,8 +134,8 @@ const TokenConstrainedLitFacesMixin = superclass => class extends superclass {
     buildPolygonCube(poly, token.topZ * SPACER, token.bottomZ * SPACER, this._constrainedLitFaces);
   }
 
-  rayIntersectionLit(...opts) {
-    return this.constructor.rayIntersectionForFaces(this.iterateConstrainedLitFaces(), ...opts);
+  rayIntersectionLit(rayOrigin, rayDirection, opts) {
+    return this.constructor.rayIntersectionForFaces(this.iterateConstrainedLitFaces(), rayOrigin, rayDirection, opts);
   }
 }
 
@@ -165,19 +161,17 @@ const TokenConstrainedBrightLitFacesMixin = superclass => class extends supercla
   };
 
   get constrainedBrightLitFaces() {
-    if ( !this.isConstrainedBrightLit ) return this.faces;
-    this.update();
-    return this._constrainedBrightLitFaces;
+    return this.isConstrainedBrightLit ? this._constrainedBrightLitFaces : this.faces;
   }
 
   /**
    * Iterate over the faces.
    */
   *iterateConstrainedBrightLitFaces() {
-    this.update();
-    yield this._constrainedBrightLitFaces.top;
-    yield this._constrainedBrightLitFaces.bottom;
-    for ( const side of this._constrainedBrightLitFaces.sides ) yield side;
+    const faces = this.constrainedBrightLitFaces;
+    yield faces.top;
+    yield faces.bottom;
+    for ( const side of faces.sides ) yield side;
   }
 
   _placeableUpdated() {
@@ -193,8 +187,8 @@ const TokenConstrainedBrightLitFacesMixin = superclass => class extends supercla
     buildPolygonCube(poly, token.topZ * SPACER, token.bottomZ * SPACER, this._constrainedBrightLitFaces);
   }
 
-  rayIntersectionBrightLit(...opts) {
-    return this.constructor.rayIntersectionForFaces(this.iterateConstrainedBrightLitFaces(), ...opts);
+  rayIntersectionBrightLit(rayOrigin, rayDirection, opts) {
+    return this.constructor.rayIntersectionForFaces(this.iterateConstrainedBrightLitFaces(), rayOrigin, rayDirection, opts);
   }
 }
 
@@ -222,7 +216,7 @@ export class TokenGeometryTracker extends mix(AbstractPlaceableGeometryTracker).
 
   // ----- NOTE: AABB ----- //
 
-  calculateAABB() { return AABB3d.fromToken(this.token, this._aabb); }
+  calculateAABB() { return AABB3d.fromToken(this.token, this.aabb); }
 
   // ----- NOTE: Matrices ---- //
 
@@ -299,7 +293,7 @@ export class TokenGeometryTracker extends mix(AbstractPlaceableGeometryTracker).
 
   // ----- NOTE: Token properties ----- //
 
-  static SPACER = 0.99; // Shrink tokens slightly to avoid z-fighting with walls and tiles.
+  static SPACER = 2; // Shrink tokens slightly to avoid z-fighting with walls and tiles.
 
   /**
    * Determine the token 3d dimensions, in pixel units.
@@ -313,9 +307,9 @@ export class TokenGeometryTracker extends mix(AbstractPlaceableGeometryTracker).
     const { width, height } = token.document; // Multiplier, e.g. 1, 2, or 3.
     const zHeight = token.topZ - token.bottomZ;
     return {
-      width: width * this.SPACER * canvas.dimensions.size,
-      height: height * this.SPACER * canvas.dimensions.size,
-      zHeight: zHeight * this.SPACER,
+      width: (width * canvas.dimensions.size) - this.SPACER,
+      height: (height * canvas.dimensions.size) - this.SPACER,
+      zHeight: zHeight - this.SPACER,
     };
   }
 }

@@ -112,6 +112,7 @@ export class RegionVertices {
    */
   combineShapes() {
     const geom = this.region[GEOMETRY_LIB_ID][GEOMETRY_ID];
+    geom.update();
     const shapePaths = geom.buildRegionPaths();
     const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
     const out = [];

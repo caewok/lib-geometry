@@ -126,15 +126,10 @@ const AbstractTileAlpha = superclass => class extends superclass {
 const TileAlphaPolygonsMixin = superclass => class extends superclass {
 
   /** @type {object<Polygons3d>} */
-  _alphaThresholdPolygons = {
+  alphaThresholdPolygons = {
     top: new Polygons3d(),
     bottom: new Polygons3d(),
   };
-
-  get alphaThresholdPolygons() {
-    this.update();
-    return this._alphaThresholdPolygons;
-  }
 
   _placeableUpdated() {
     super._placeableUpdated();
@@ -165,15 +160,10 @@ const TileAlphaPolygonsMixin = superclass => class extends superclass {
 const TileAlphaTrianglesMixin = superclass => class extends superclass {
 
   /** @type {object<Polygons3d>} */
-  _alphaThresholdTriangles = {
+  alphaThresholdTriangles = {
     top: new Polygons3d(),
     bottom: new Polygons3d(),
   };
-
-  get alphaThresholdTriangles() {
-    this.update();
-    return this._alphaThresholdTriangles;
-  }
 
   _placeableUpdated() {
     super._placeableUpdated();
@@ -246,7 +236,7 @@ export class TileGeometryTracker extends mix(AbstractPlaceableGeometryTracker).w
 
 
   // ----- NOTE: AABB ----- //
-  calculateAABB() { return AABB3d.fromTileAlpha(this.tile, this.alphaThreshold, this._aabb); }
+  calculateAABB() { return AABB3d.fromTileAlpha(this.tile, this.alphaThreshold, this.aabb); }
 
   // ----- NOTE: Matrices ----- //
 
@@ -296,8 +286,8 @@ export class TileGeometryTracker extends mix(AbstractPlaceableGeometryTracker).w
     const tile = this.tile;
     const pixelCache = tile.evPixelCache;
     if ( !(pixelCache && this.alphaThreshold) ) {
-      this._faces.top = new Quad3d();  // TODO: Is this necessary or will this already be a Quad3d given initialization?
-      this._faces.bottom = new Quad3d();
+      this.faces.top = new Quad3d();  // TODO: Is this necessary or will this already be a Quad3d given initialization?
+      this.faces.bottom = new Quad3d();
       return super._updateFaces();
     }
 
@@ -305,22 +295,22 @@ export class TileGeometryTracker extends mix(AbstractPlaceableGeometryTracker).w
     const alphaShape = pixelCache[alphaBoundsFn](this.alphaThreshold) || tile.bounds;
     const elevZ = tile.elevationZ;
     if ( alphaShape instanceof PIXI.Polygon ) {
-      if ( !(this._faces.top instanceof Polygon3d) ) {
-        this._faces.top = new Polygon3d();
-        this._faces.bottom = new Polygon3d();
+      if ( !(this.faces.top instanceof Polygon3d) ) {
+        this.faces.top = new Polygon3d();
+        this.faces.bottom = new Polygon3d();
       }
-      Polygon3d.fromPolygon(alphaShape, elevZ, this._faces.top);
+      Polygon3d.fromPolygon(alphaShape, elevZ, this.faces.top);
     } else { // Must be PIXI.Rectangle
-      if ( !(this._faces.top instanceof Quad3d) ) {
-        this._faces.top = new Quad3d();
-        this._faces.bottom = new Quad3d();
+      if ( !(this.faces.top instanceof Quad3d) ) {
+        this.faces.top = new Quad3d();
+        this.faces.bottom = new Quad3d();
       }
-      Quad3d.fromRectangle(alphaShape, elevZ, this._faces.top);
+      Quad3d.fromRectangle(alphaShape, elevZ, this.faces.top);
     }
 
     // Create the bottom as a mirror of the top.
-    this._faces.top.clone(this._faces.bottom);
-    this._faces.bottom.reverseOrientation();
+    this.faces.top.clone(this.faces.bottom);
+    this.faces.bottom.reverseOrientation();
   }
 
   /**
@@ -332,7 +322,7 @@ export class TileGeometryTracker extends mix(AbstractPlaceableGeometryTracker).w
    * @param {number} [cutoff=1]   Ignore hits further along the ray from this (treat ray as segment)
    * @returns {number|null} The distance along the ray
    */
-  rayIntersection(rayOrigin, rayDirection, minT = 0, maxT = Number.POSITIVE_INFINITY) {
+  rayIntersection(rayOrigin, rayDirection, { minT = 0, maxT = Number.POSITIVE_INFINITY } = {}) {
     // Top and bottom are the same (just opposite orientations) and so only need to test one.
     const t = this.faces.top.intersectionT(rayOrigin, rayDirection);
     if ( t !== null && almostBetween(t, minT, maxT) ) {

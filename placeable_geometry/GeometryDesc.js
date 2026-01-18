@@ -188,7 +188,9 @@ export class AbstractInstancedVertices {
   static calculateModelForPlaceable(placeable, opts = {}) {
     opts = this._optionsForPlaceable(placeable, {...opts}); // Shallow copy; avoid modifying the opts directly.
     const vo = this.getVertexObject(opts);
-    return vo.transformToModel(placeable[GEOMETRY_LIB_ID][GEOMETRY_ID].modelMatrix);
+    const geom = placeable[GEOMETRY_LIB_ID][GEOMETRY_ID];
+    geom.update();
+    return vo.transformToModel(geom.modelMatrix);
   }
 }
 
