@@ -114,8 +114,10 @@ export class ObstacleOcclusionTest {
    * @param {Point3d} [viewpoint]             Used for _rayIsOccluded as the starting viewpoint
    * @param {Token[]} [tokensToExclude=[]]    Exclude these tokens from collision testing
    */
-  _initialize({ rayOrigin } = {}) {
+  _initialize({ rayOrigin, subjectToken, tokensToExclude } = {}) {
     if ( rayOrigin ) this.rayOrigin.copyFrom(rayOrigin);
+    if ( subjectToken ) this.subjectToken = subjectToken;
+    if ( tokensToExclude ) this.tokensToExclude = tokensToExclude;
     this.updateObstacles();
     this.constructObstacleTester();
   }
