@@ -672,13 +672,7 @@ export class PixelCache extends PIXI.Rectangle {
    * @param {number} value                Value to set at each pixel.
    */
   _setPixelsUnderLocalShape(shape, value = 0) {
-    let indices;
-    switch ( shape.constructor ) {
-      case PIXI.Rectangle: indices = this.constructor.pixelsUnderRectangle(shape); break;
-      case PIXI.Polygon: indices = this.constructor.pixelsUnderPolygon(shape); break;
-      case PIXI.Circle: indices = this.constructor.pixelsUnderCircle(shape); break;
-      case PIXI.Ellipse: indices = this.constructor.pixelsUnderEllipse(shape); break;
-    }
+    const indices = this.constructor.pixelsUnderShape(shape);
     indices.forEach(idx => {
       this.pixels[this._indexAtLocal(idx.x, idx.y)] = value;
       idx.release();
@@ -1671,6 +1665,22 @@ export class PixelCache extends PIXI.Rectangle {
       }
     }
     return pixels;
+  }
+
+
+  /**
+   * Identifies all pixels (grid cells) intersected by a PIXI shape.
+   * @param {PIXI.Polygon|PIXI.Rectangle|PIXI.Circle|PIXI.Ellipse} shape      The source shape (world space)
+   * @returns {PIXI.Point[]} Array of points representing grid indices
+   */
+  static pixelsUnderShape(shape) {
+    switch ( shape.constructor ) {
+      case PIXI.Rectangle: return this.pixelsUnderRectangle(shape);
+      case PIXI.Polygon: return this.pixelsUnderPolygon(shape);
+      case PIXI.Circle: return this.pixelsUnderCircle(shape);
+      case PIXI.Ellipse: return this.pixelsUnderEllipse(shape);
+      default: throw new Error(`this.name|Shape ${shape.constructor.name} not recognized`, shape);
+    }
   }
 
   // ----- NOTE: Static constructors ----- //
