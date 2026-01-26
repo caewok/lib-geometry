@@ -13,8 +13,6 @@ import { Point3d } from "./Point3d.js";
 import { Plane } from "./Plane.js";
 import { pointsAreCollinear, NULL_SET, almostBetween } from "../util.js";
 import { AABB3d } from "./AABB3d.js";
-import { ClipperPaths } from "../ClipperPaths.js";
-import { Clipper2Paths } from "../Clipper2Paths.js";
 import { Draw } from "../Draw.js";
 
 /*
@@ -311,35 +309,23 @@ export class Polygon3d {
   // ----- NOTE: Conversions to ----- //
 
   /**
+   * Drop a single axis and project to the plane.
    * @param {"x"|"y"|"z"} omitAxis    Which of the three axes to omit to drop this to 2d.
    * @param {object} [opts]
    * @param {number} [opts.scalingFactor]   How to scale the clipper points
    * @returns {ClipperPaths}
    */
   toClipperPaths({ omitAxis = "z", scalingFactor = 1 } = {}) {
-    const clipperVersion = CONFIG.GeometryLib.CONFIG.clipperVersion === 2;
-    let points;
-    let cl;
-    if ( clipperVersion === 2 ) {
-      cl = Clipper2Paths;
-      const Point64 = Clipper2Paths.Clipper2.Point64;
-      switch ( omitAxis ) {
-        case "x": points = this.points.map(pt => new Point64(pt.to2d({x: "y", y: "z"}), scalingFactor)); break;
-        case "y": points = this.points.map(pt => new Point64(pt.to2d({x: "x", y: "z"}), scalingFactor)); break;
-        case "z": points = this.points.map(pt => new Point64(pt.to2d({x: "x", y: "y"}), scalingFactor)); break;
-      }
-
-    } else {
-      cl = ClipperPaths;
-      const IntPoint = ClipperLib.IntPoint;
-      switch ( omitAxis ) {
-        case "x": points = this.points.map(pt => new IntPoint(pt.y * scalingFactor, pt.z * scalingFactor)); break;
-        case "y": points = this.points.map(pt => new IntPoint(pt.x * scalingFactor, pt.z * scalingFactor)); break;
-        case "z": points = this.points.map(pt => new IntPoint(pt.x * scalingFactor, pt.y * scalingFactor)); break;
-      }
+    let axes;
+    switch ( omitAxis ) {
+      case "x": axes = { x: "y", y: "z" }; break;
+      case "y": axes = { x: "x", y: "z" }; break;
+      case "z": axes = { x: "x", y: "y" }; break;
+      default: throw new Error(`${this.constructor.name}|toClipperPaths omitAxis not recognized.`);
     }
-    const out = new cl([points], { scalingFactor });
-    return out;
+    const poly = new PIXI.Polygon(this.points.map(pt => pt.to2d(axes)));
+    if ( !this.isHole ^ poly.isPositive ) poly.reverseOrientation();
+    return CONFIG.GeometryLib.CONFIG.ClipperPaths.fromPolygons([poly], { scalingFactor });
   }
 
   /**
@@ -347,21 +333,14 @@ export class Polygon3d {
    * @returns {PIXI.Polygon}
    */
   toPolygon2d({ omitAxis = "z" } = {}) {
-    if ( omitAxis === "z" ) return new PIXI.Polygon(this.points); // PIXI.Polygon ignores "z" attribute.
-
-    const [x, y] = omitAxis === "x" ? ["y", "z"] : ["x", "z"];
-    return new PIXI.Polygon(this.points.map(pt3d => { return { x: pt3d[x], y: pt3d[y] } }));
-    /*
-    const n = this.points.length;
-    const points = Array(n * 2);
-
-    for ( let i = 0; i < n; i += 1 ) {
-      const pt = this.points[i];
-      points[i * 2] = pt[x];
-      points[i * 2 + 1] = pt[y];
+    let poly;
+    if ( omitAxis === "z" ) poly = new PIXI.Polygon(this.points); // PIXI.Polygon ignores "z" attribute.
+    else {
+      const [x, y] = omitAxis === "x" ? ["y", "z"] : ["x", "z"];
+      poly = new PIXI.Polygon(this.points.map(pt3d => { return { x: pt3d[x], y: pt3d[y] } }));
     }
-    return new PIXI.Polygon(points);
-    */
+    if ( !this.isHole ^ poly.isPositive ) poly.reverseOrientation();
+    return poly;
   }
 
   /**
@@ -369,14 +348,18 @@ export class Polygon3d {
    * @returns {PIXI.Polygon}
    */
   toPerspectivePolygon() {
-    return new PIXI.Polygon(this.points.flatMap(pt => {
+    const poly = new PIXI.Polygon(this.points.flatMap(pt => {
       const invZ = 1 / pt.z;
       return [pt.x * invZ, pt.y * invZ];
     }));
+    if ( !this.isHole ^ poly.isPositive ) poly.reverseOrientation();
+    return poly;
   }
 
   toPlanarPolygon() {
-    return new PIXI.Polygon(this.planarPoints);
+    const poly = new PIXI.Polygon(this.planarPoints);
+    if ( !this.isHole ^ poly.isPositive ) poly.reverseOrientation();
+    return poly;
   }
 
   /**
@@ -429,7 +412,12 @@ export class Polygon3d {
   _convert3dPointsTo2d(pts) {
     // Convert using plane's matrix.
     const to2dM = this.plane.conversion2dMatrix;
-    return pts.map(pt => to2dM.multiplyPoint3d(pt));
+    const pts2d = pts.map(pt => to2dM.multiplyPoint3d(pt));
+
+    const cw = pts2d.length > 2 && foundry.utils.orient2dFast(pts2d[0], pts2d[1], pts2d[2]) < 0;
+    if ( !this.isHole ^ cw ) pts2d.reverse();
+    // Poly equivalent: if ( !this.isHole ^ poly.isPositive ) poly.reverseOrientation();
+    return pts2d;
   }
 
   /**

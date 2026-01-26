@@ -381,7 +381,10 @@ class AbstractRegionShapeGeometryTracker extends mix(AbstractPlaceableGeometryTr
     if ( this.isHole ) {
       this._prototypeFaces.top.reverseOrientation();
       this._prototypeFaces.bottom.reverseOrientation();
+      this._prototypeFaces.top.isHole = true;
+      this._prototypeFaces.bottom.isHole = true;
       this._prototypeFaces.sides.forEach(side => side.reverseOrientation());
+      // Don't mark sides as holes as they are supposed to be solid (marking the inside side walls for the hole).
     }
     super._initializePrototypeFaces();
   }

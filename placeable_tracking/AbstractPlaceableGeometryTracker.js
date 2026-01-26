@@ -348,7 +348,7 @@ export const PlaceableModelMatrixMixin = superclass => {
  * @prop {Polygon3d|null} bottom
  * @prop {Polygon3d[]} sides
  */
-
+// All CCW because default GPU test is counter-clockwise
 const QUADS = {
   up: Quad3d.from4Points( // E.g., tile top.
     Point3d.tmp.set(-0.5, -0.5, 0),
@@ -410,11 +410,11 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
   }
 
   _initializePrototypeFaces() {
-    if ( this._prototypeFaces.top ) this.faces.top = new this._prototypeFaces.top.constructor();
-    if ( this._prototypeFaces.bottom ) this.faces.bottom = new this._prototypeFaces.bottom.constructor();
+    if ( this._prototypeFaces.top ) this.faces.top = this._prototypeFaces.top._cloneEmpty(); // Preserves hole status.
+    if ( this._prototypeFaces.bottom ) this.faces.bottom = this._prototypeFaces.bottom._cloneEmpty();
     const numSides = this._prototypeFaces.sides.length;
     this.faces.sides.length = numSides;
-    for ( let i = 0; i < numSides; i += 1 ) this.faces.sides[i] ??= new this._prototypeFaces.sides[i].constructor();
+    for ( let i = 0; i < numSides; i += 1 ) this.faces.sides[i] ??= this._prototypeFaces.sides[i]._cloneEmpty();
   }
 
   /**
