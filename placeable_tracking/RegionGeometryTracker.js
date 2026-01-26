@@ -171,7 +171,6 @@ export class RegionGeometryTracker extends mix(AbstractPlaceableGeometryTracker)
    * Iterate over the faces.
    */
   *iterateFaces() {
-    this.update();
     for ( const face of this.combinedFaces ) {
       yield face.top;
       yield face.bottom;
@@ -179,10 +178,7 @@ export class RegionGeometryTracker extends mix(AbstractPlaceableGeometryTracker)
     }
   }
 
-  get faces() {
-    this.update();
-    return this.combinedFaces;
-  }
+  get faces() { return this.combinedFaces; }
 
   buildRegionPolygons3d() {
     const shapePaths = this.buildRegionPaths();
