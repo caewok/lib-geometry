@@ -1016,8 +1016,6 @@ export class Ellipse3d extends Polygon3d {
    */
   toClipperPaths(opts) { return this.toPolygon3d(opts).toClipperPaths(opts); }
 
-
-
   /**
    * Convert to 2d polygon by perspective transform, dividing each point by z.
    * @returns {PIXI.Polygon}
@@ -1031,7 +1029,7 @@ export class Ellipse3d extends Polygon3d {
 
   toVertices(opts) { return this.toPolygon3d(opts).toVertices(opts); }
 
-  triangulate(opts) {
+  triangulate(opts = {}) {
     opts.useFan ??= true;
     return this.toPolygon3d(opts).triangulate(opts);
   }
