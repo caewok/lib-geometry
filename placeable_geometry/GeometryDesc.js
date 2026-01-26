@@ -4,6 +4,7 @@
 "use strict";
 
 import { GEOMETRY_LIB_ID, GEOMETRY_ID } from "../const.js";
+import { combineTypedArrays } from "../util.js";
 import { Triangle3d } from "../3d/Polygon3d.js";
 import { BasicVertices } from "./BasicVertices.js";
 
@@ -75,7 +76,29 @@ export class VertexObject {
     return out;
   }
 
+  expand(out) {
+    out ??= this._lightCopy();
+    out.vertices = BasicVertices.expandVertexData(this.indices, this.vertices, { stride: this.stride });
+    return out;
+  }
+
   toTriangles() { return Triangle3d.fromVertices(this.vertices, this.indices, { stride: this.stride }); }
+
+  combine(...others) {
+    let curr = this;
+    if ( curr.indices ) curr = curr.expand();
+    const vertices = [curr.vertices];
+    for ( const other of others ) {
+      if ( this.hasUVs ^ other.hasUVs ) return console.error(`${this.constructor.name}|Cannot combine UVs with no UVs.`);
+      if ( this.hasNormals ^ other.hasNormals ) return console.error(`${this.constructor.name}|Cannot combine UVs with no UVs.`);
+      const vs = other.indices ? other.expand().vertices : other.vertices;
+      vertices.push(vs);
+    }
+
+    const out = this._lightCopy;
+    out.vertices = combineTypedArrays(...vertices)
+    return out;
+  }
 
   debugDraw(opts = {}) {
     opts.stride = this.stride;
@@ -89,6 +112,7 @@ export class VertexObject {
  * Includes region shapes.
  * Includes variations such as custom tokens and different hex-shapes for tokens.
  * Includes options for UVs, Normals.
+ * Placeable is described by its top, then sides, then bottom. So that top vertices can be extracted.
  */
 export class AbstractInstancedVertices {
 
