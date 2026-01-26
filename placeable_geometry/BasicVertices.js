@@ -919,36 +919,9 @@ Ex: 6 points, 6 outer edges.
    * @returns {Float32Array} The vertices, untrimmed
    */
   static calculateVertices(poly, { topZ = T, bottomZ = B, useFan, centroid } = {}) {
-    let bounds;
-    let center;
-
-    // Attempt to convert various shapes to a polygon.
-    if ( this.isClipper(poly) ) poly = poly.simplify();
-    if ( poly instanceof PIXI.Rectangle
-      || poly instanceof PIXI.Ellipse
-      || poly instanceof PIXI.Circle ) {
-      bounds = poly.getBounds();
-      center = poly.center;
-      poly = poly.toPolygon();
-   }
-
-    useFan ??= this.canUseFan(poly, centroid);
-    if ( useFan ) {
-      // At this point, the shape should be a polygon.
-      if ( !(poly instanceof PIXI.Polygon) ) console.error("calculateVertices|Polygon is not a PIXI.Polygon", poly);
-      const { vertices, top, bottom, sides } = this.buildVertexBufferViews(this.topLength(poly), this.sidesLength(poly));
-      bounds ??= poly.getBounds();
-      center ??= poly.center;
-      const opts = { top, bottom, sides, bounds, center, topZ, bottomZ }
-      this.polygonTopBottomFacesFan(poly, opts);
-      this.polygonSideFaces(poly, opts);
-      return vertices;
-    }
-
     // Shape could be a more complex polygon or ClipperPaths.
-
     // The top/bottom face lengths may vary due to earcut. Calculate first.
-    const { top, bottom } = this.polygonTopBottomFaces(poly, { topZ, bottomZ });
+    const { top, bottom } = this.polygonTopBottomFaces(poly, { topZ, bottomZ, useFan, centroid });
     const res = this.buildVertexBufferViews(top.length, this.sidesLength(poly));
     res.top.set(top);
     res.bottom.set(bottom);
@@ -994,86 +967,58 @@ Ex: 6 points, 6 outer edges.
     return !poly.linesCross(lines); // Lines cross ignores lines that only share endpoints.
   }
 
-  static polygonTopBottomFacesFan(poly, { bounds, center, top, bottom, topZ = T, bottomZ = B } = {}) {
+  static simplifyPoly(poly, centroid) {
+    // Attempt to convert various shapes to a polygon.
+    let bounds;
     if ( this.isClipper(poly) ) poly = poly.simplify();
+    if ( poly instanceof PIXI.Rectangle
+      || poly instanceof PIXI.Ellipse
+      || poly instanceof PIXI.Circle ) {
+      bounds = poly.getBounds();
+      centroid ??= poly.center;
+      poly = poly.toPolygon();
+    }
+    return { poly, centroid, bounds };
+  }
+
+  static _polygonTopFaceFan(poly, { topZ = T, stride = 8, centroid } = {}) {
+    const sp = this.simplifyPoly(poly, centroid);
+    poly = sp.poly;
+    if ( !(poly instanceof PIXI.Polygon) ) console.error("calculateVertices|Polygon is not a PIXI.Polygon", poly);
+    centroid = sp.centroid ?? poly.center;
     if ( poly.isHole ^ poly.isClockwise ) poly.reverseOrientation();
 
-    top ??= new Float32Array(this.topLength(poly));
-    bottom ??= new Float32Array(top.length);
-    bounds ??= poly.getBounds();
-    center ??= poly.center;
+    const numElems = this.topLength(poly) * (stride / 8);
+    const top = new Float32Array(numElems);
 
     // Start by copy the x,y from the polygon to an array with 8 vertex "slots" per vertex.
     // Copy the center and two points of the polygon to the array.
     // Triangles should match poly orientation (typically ccw). If poly is ccw, triangles will be ccw.
-    center = [center.x, center.y];
+    centroid = [centroid.x, centroid.y];
     const ln = poly.points.length;
     let a = poly.points.slice(ln - 2, ln); // i, i + 2 for the very last point; cycle through to beginning.
     for ( let i = 0, j = 0; i < ln; ) {
-      top.set(center, j);
-      bottom.set(center, j);
-      j += 8;
+      top.set(centroid, j);
+      j += stride;
 
       top.set(a, j);
-      bottom.set(a, j);
-      j += 8;
+      j += stride;
 
       const b = poly.points.slice(i, i + 2);
       top.set(b, j);
-      bottom.set(b, j);
-      i += 2; j += 8; // Only increment i once; next triangle shares one point (and center) with this one.
+      i += 2; j += stride; // Only increment i once; next triangle shares one point (and center) with this one.
       a = b;
     }
-
-    // Add in elevation in place.
-    // Note that after expandArrayStride, the stride is now 8.
-    this.overwriteAtOffset(top, [topZ], { stride: 8, offset: 2, outArr: top });
-    this.overwriteAtOffset(bottom, [bottomZ], { stride: 8, offset: 2, outArr: bottom });
-
-    // Add in Normals in place.
-    this.overwriteAtOffset(top, [0, 0, 1], { stride: 8, offset: 3, dataStride: 3, outArr: top});
-    this.overwriteAtOffset(bottom, [0, 0, -1], { stride: 8, offset: 3, dataStride: 3, outArr: top});
-
-    // Add in UVs in place.
-    this.appendUVs(top, { stride: 8, uvsOffset: 6, overwrite: true, outArr: top });
-    this.appendUVs(bottom, { stride: 8, uvsOffset: 6, overwrite: true, outArr: bottom });
-
-    // Flip the bottom.
-    this.flipVertexArrayOrientation(bottom)
-    return { top, bottom };
+    // Append elevation in place.
+    this.overwriteAtOffset(top, [topZ], { stride, offset: 2, outArr: top });
+    return top;
   }
 
-  /**
-   * Return vertices for the top or bottom of the polygon.
-   * Requires that the polygon be sufficiently convex that it can be described by a fan of
-   * polygons joined at its centroid.
-   * @param {PIXI.Polygon} poly
-   * @param {object} [opts]
-   * @param {number} [opts.elevation]     Elevation of the face
-   * @param {boolean} [opts.flip]         If true, treat as bottom face
-   * @returns {object}
-   * - @prop {Float32Array} vertices
-   * - @prop {Uint16Array} indices
-   */
-  static polygonTopBottomFaces(poly, { topZ = T, bottomZ = B } = {}) {
-    /* Testing
-    poly = _token.constrainedTokenBorder
-    vs = PIXI.utils.earcut(poly.points)
-    pts = [...poly.iteratePoints({ close: false })]
-    tris = [];
-    for ( let i = 0; i < vs.length; i += 3 ) {
-     const a = pts[vs[i]];
-     const b = pts[vs[i+1]];
-     const c = pts[vs[i+2]];
-     Draw.connectPoints([a, b, c], { color: Draw.COLORS.red })
-     tris.push({a, b, c})
-    }
-    // Earcut appears to keep the counterclockwise order.
-    tris.map(tri => foundry.utils.orient2dFast(tri.a, tri.b, tri.c))
-    */
-
+  static _polygonTopFace(poly, { topZ = T, stride = 8 } = {}) {
     let vertices2d;
     let holes = [];
+    const sp = this.simplifyPoly(poly);
+    poly = sp.poly;
 
     // Earcut to determine indices. Then construct the vertices.
     if ( this.isClipper(poly) ) {
@@ -1090,74 +1035,60 @@ Ex: 6 points, 6 outer edges.
     // Earcut the polygon to determine the indices and construct empty arrays to hold top and bottom vertex information.
     const indices = new Uint16Array(PIXI.utils.earcut(vertices2d, holes)); // Note: dimensions = 2.
 
-    /* Testing
-    // Draw the vertex points.
-    const numIndices = indices.length;
-    for ( let i = 0; i < vertices2d.length; i += 2 ) {
-      const x = vertices2d[i];
-      const y = vertices2d[i + 1];
-      Draw.point({ x, y }, { radius: 3 })
-    }
-
-    // Draw the points.
-    stride = 2;
-    for ( let i = 0; i < numIndices; i += 1 ) {
-      const idx = indices[i] * stride; // Number of the vertex.
-      const x = vertices2d[idx];
-      const y = vertices2d[idx + 1];
-      Draw.point({ x, y }, { radius: 3 })
-    }
-
-    // Draw the triangles.
-    stride = 2;
-    for ( let i = 0; i < numIndices; ) {
-      const idx0 = indices[i++] * stride; // Number of the vertex.
-      const x0 = vertices2d[idx0];
-      const y0 = vertices2d[idx0 + 1];
-      const pt0 = new PIXI.Point(x0, y0);
-      Draw.point(pt0, { radius: 3 })
-
-      const idx1 = indices[i++] * stride; // Number of the vertex.
-      const x1 = vertices2d[idx1];
-      const y1 = vertices2d[idx1 + 1];
-      const pt1 = new PIXI.Point(x1, y1);
-      Draw.point(pt1, { radius: 3 })
-
-      const idx2 = indices[i++] * stride; // Number of the vertex.
-      const x2 = vertices2d[idx2];
-      const y2 = vertices2d[idx2 + 1];
-      const pt2 = new PIXI.Point(x2, y2);
-      Draw.point(pt2, { radius: 3 })
-
-      Draw.connectPoints([pt0, pt1, pt2])
-    }
-
-    */
-
-    // Construct a full vertex array with 8 vertex "slots" per vertex.
-    const top = this.expandArrayStride(vertices2d, { stride: 2, outArr: 8 });
-    const bottom = this.expandArrayStride(vertices2d, { stride: 2, outArr: 8 });
+    // Construct a full vertex array with stride vertex "slots" per vertex.
+    const top = this.expandArrayStride(vertices2d, { stride: 2, outArr: stride });
 
     // Add in elevation in place.
-    // Note that after expandArrayStride, the stride is now 8.
-    this.overwriteAtOffset(top, [topZ], { stride: 8, offset: 2, outArr: top });
-    this.overwriteAtOffset(bottom, [bottomZ], { stride: 8, offset: 2, outArr: bottom });
-
-    // Add in Normals in place.
-    this.overwriteAtOffset(top, [0, 0, 1], { stride: 8, offset: 3, dataStride: 3, outArr: top});
-    this.overwriteAtOffset(bottom, [0, 0, -1], { stride: 8, offset: 3, dataStride: 3, outArr: top});
-
-    // Add in UVs in place.
-    this.appendUVs(top, { stride: 8, uvsOffset: 6, overwrite: true, outArr: top });
-    this.appendUVs(bottom, { stride: 8, uvsOffset: 6, overwrite: true, outArr: bottom });
+    this.overwriteAtOffset(top, [topZ], { stride, offset: 2, outArr: top });
 
     // Expand the vertex array based on earcut indices.
-    const topExpanded = this.expandVertexData(indices, top, { stride: 8 });
-    const bottomExpanded = this.expandVertexData(indices, bottom, { stride: 8 });
+    const topExpanded = this.expandVertexData(indices, top, { stride });
+    return topExpanded;
+  }
 
-    // Flip the bottom to be counterclockwise.
-    this.flipVertexArrayOrientation(bottomExpanded)
-    return { top: topExpanded, bottom: bottomExpanded };
+  static polygonTopFace(poly, { topZ, centroid, stride, useFan } = {}) {
+    useFan ??= this.canUseFan(poly, centroid);
+    const fnName = useFan ? "_polygonTopFaceFan" : "_polygonTopFace";
+    return this[fnName](poly, { topZ, centroid, stride });
+  }
+
+  /**
+   * Return vertices for the top or bottom of the polygon.
+   * Requires that the polygon be sufficiently convex that it can be described by a fan of
+   * polygons joined at its centroid.
+   * @param {PIXI.Polygon} poly
+   * @param {object} [opts]
+   * @returns {object}
+   * - @prop {Float32Array} vertices
+   * - @prop {Uint16Array} indices
+   */
+  static polygonTopBottomFaces(poly, { topZ = T, bottomZ = B, baseStride = 3, addNormals = true, addUVs = true, useFan, centroid } = {}) {
+    const stride = baseStride + (addNormals * 3) + (addUVs * 2);
+    const top = this.polygonTopFace(poly, { topZ, centroid, stride, useFan });
+
+    // Bottom mirrors the top.
+    const bottom = top.slice(0);
+
+    // Add in elevation in place.
+    this.overwriteAtOffset(bottom, [bottomZ], { stride, offset: 2, outArr: bottom });
+
+    // Add in Normals in place.
+    let offset = baseStride;
+    if ( addNormals ) {
+      this.overwriteAtOffset(top, [0, 0, 1], { stride, offset, dataStride: 3, outArr: top});
+      this.overwriteAtOffset(bottom, [0, 0, -1], { stride, offset, dataStride: 3, outArr: top});
+      offset += 3;
+    }
+
+    // Add in UVs in place.
+    if ( addUVs ) {
+      this.appendUVs(top, { stride, uvsOffset: offset, overwrite: true, outArr: top });
+      this.appendUVs(bottom, { stride, uvsOffset: offset, overwrite: true, outArr: bottom });
+    }
+
+    // Flip the bottom.
+    this.flipVertexArrayOrientation(bottom)
+    return { top, bottom };
   }
 
   static polygonSideFaces(poly, { topZ = T, bottomZ = B, sides } = {}) {
@@ -1327,14 +1258,14 @@ export class Ellipse3dVertices extends Polygon3dVertices {
 
   static canUseFan(_ellipse) { return true; }
 
-  static polygonTopBottomFacesFan(ellipse = this.unitEllipse, opts = {}) {
+  static _polygonTopFaceFan(ellipse = this.unitEllipse, opts = {}) {
     const density = opts.density ?? this.defaultDensity;
     const poly = ellipse.toPolygon({ density });
     opts.center ??= ellipse.center;
-    return Polygon3dVertices.polygonTopBottomFacesFan(poly, opts); // Cannot use super here b/c we want to pretend it is a polygon class.
+    return Polygon3dVertices.polygonTopFace(poly, opts); // Cannot use super here b/c we want to pretend it is a polygon class.
   }
 
-  static polygonTopBottomFaces(ellipse, opts) { return this.polygonTopBottomFacesFan(ellipse, opts); }
+  static polygonTopFace(ellipse, opts) { return this._polygonTopFaceFan(ellipse, opts); }
 
   static polygonSideFaces(ellipse, opts = {}) {
     const density = opts.density ?? this.defaultDensity;
@@ -1380,8 +1311,8 @@ export class Circle3dVertices extends Ellipse3dVertices {
 
   static unitCircle = new PIXI.Circle(0, 0, 1); // Radius of 1; scales upwards by provided radius.
 
-  static polygonTopBottomFacesFan(circle = this.unitCircle, opts) {
-    return super.polygonTopBottomFacesFan(circle, opts);
+  static _polygonTopFaceFan(circle = this.unitCircle, opts) {
+    return super._polygonTopFaceFan(circle, opts);
   }
 
   static calculateVertices(circle = this.unitCircle, { density = this.defaultDensity, topZ = T, bottomZ = B } = {}) {

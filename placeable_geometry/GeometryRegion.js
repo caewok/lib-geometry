@@ -22,11 +22,15 @@ export class RegionRectangleInstancedVertices extends AbstractInstancedVertices 
 export class RegionCircleInstancedVertices extends AbstractInstancedVertices {
   static type = "RegionCircle";
 
+  static numTopVertices = 6; // 2 triangles, 3 points each.
+
   static calculateVertices() { return Circle3dVertices._getUnitVertices(); }
 }
 
 export class RegionEllipseInstancedVertices extends AbstractInstancedVertices {
   static type = "RegionEllipse";
+
+  static numTopVertices = 6; // 2 triangles, 3 points each.
 
   static calculateVertices() { return Ellipse3dVertices._getUnitVertices(); }
 }

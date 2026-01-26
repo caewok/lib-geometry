@@ -30,8 +30,7 @@ function area() {
  */
 function centroid() {
   const pts = this.iteratePoints({close: true});
-  const ln = pts.length;
-  switch ( ln ) {
+  switch ( this.points.length ) {
     case 0: return undefined;
     case 1: return pts.next().value; // Should not happen if close is true
     case 2: {
@@ -1117,7 +1116,7 @@ function pixiEdges({ close = true } = {}) {
  * @returns {boolean}
  */
 function canUseFanTriangulation(centroid) {
-  centroid ??= this.center();
+  centroid ??= this.center;
   if ( !this.contains(centroid.x, centroid.y) ) return false;
   const lines = [...this.iteratePoints({ close: false })].map(B => {
     return { A: centroid, B };
@@ -1135,17 +1134,16 @@ function canUseFanTriangulation(centroid) {
  */
 function triangulate({ useFan, centroid } = {}) {
   const pts = this.points;
-  centroid ??= this.center();
+  centroid ??= this.center;
   if ( typeof useFan === "undefined" ) useFan = this.canUseFanTriangulation(centroid);
   if ( useFan ) {
     const center = [centroid.x, centroid.y];
     const ln = pts.length;
-    const polys = new Array(ln);
+    const polys = new Array(ln / 2);
     let a = pts.slice(ln - 2, ln); // i, i + 2 for the very last point; cycle through to beginning.
-    for ( let i = 0, j = 0; i < ln; ) {
+    for ( let i = 0, j = 0; i < ln; i += 2) {
       const b = pts.slice(i, i + 2);
-      const pts = [...center, ...a, ...b];
-      polys[j++] = new PIXI.Polygon(pts);
+      polys[j++] = new PIXI.Polygon(...center, ...a, ...b);
       a = b;
     }
     return polys;
