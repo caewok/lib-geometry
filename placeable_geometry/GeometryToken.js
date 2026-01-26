@@ -131,7 +131,6 @@ export class ConstrainedTokenModelVertices extends mix(TokenInstancedVertices).w
     const vo = new VertexObject();
     vo.vertices = Polygon3dVertices.calculateVertices(constrainedTokenBorder.toPolygon(), { topZ, bottomZ });
     vo.dropNormalsAndUVs({ keepNormals: opts.hasNormals, keepUVs: opts.hasUVs, out: vo });
-    vo.condense(vo);
     return vo;
   }
 }

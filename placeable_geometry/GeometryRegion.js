@@ -62,7 +62,6 @@ export class RegionPolygonModelVertices extends mix(AbstractRegionVertices).with
     const vo = new VertexObject();
     vo.vertices = Polygon3dVertices.calculateVertices(tmpPoly, elev);
     vo.dropNormalsAndUVs({ keepNormals: opts.hasNormals, keepUVs: opts.hasUVs, out: vo });
-    vo.condense(vo);
     return vo;
   }
 }
