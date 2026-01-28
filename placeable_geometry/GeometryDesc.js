@@ -31,7 +31,11 @@ export class VertexObject {
 
   indices = null;
 
-  get stride() { return 3 + (this.hasUVs * 2) + (this.hasNormals * 3); }
+  #positionStride = 3;
+
+  get positionStride() { return this.#positionStride; }
+
+  get stride() { return this.#positionStride + (this.hasUVs * 2) + (this.hasNormals * 3); }
 
   _lightCopy(out) {
     out ??= new this.constructor();
@@ -82,6 +86,16 @@ export class VertexObject {
     return out;
   }
 
+  /**
+   * Drop the z position component in place.
+   */
+  dropZ() {
+    // Must be in place to set the private positionStride property.
+    if ( this.#positionStride === 2 ) return;
+    this.vertices = BasicVertices.cutVertexData(this.vertices, { startingOffset: 2, deletionLength: 1, stride: this.stride });
+    this.#positionStride = 2;
+  }
+
   toTriangles() { return Triangle3d.fromVertices(this.vertices, this.indices, { stride: this.stride }); }
 
   combine(...others) {
@@ -89,8 +103,7 @@ export class VertexObject {
     if ( curr.indices ) curr = curr.expand();
     const vertices = [curr.vertices];
     for ( const other of others ) {
-      if ( this.hasUVs ^ other.hasUVs ) return console.error(`${this.constructor.name}|Cannot combine UVs with no UVs.`);
-      if ( this.hasNormals ^ other.hasNormals ) return console.error(`${this.constructor.name}|Cannot combine UVs with no UVs.`);
+      if ( this.stride !== other.stride ) return console.error(`${this.constructor.name}|Cannot combine different strides.`, this, other);
       const vs = other.indices ? other.expand().vertices : other.vertices;
       vertices.push(vs);
     }

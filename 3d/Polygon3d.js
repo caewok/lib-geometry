@@ -252,26 +252,6 @@ export class Polygon3d {
     return cpObj.toPolygons().map(poly => this.fromPolygon(poly, elevation));
   }
 
-  /**
-   * Create a polygon from given indices and vertices
-   * @param {Number[]} vertices     Array of vertices, 3 coordinates per vertex
-   * @param {Number[]} [indices]    Indices to determine order in which polygon points are created from vertices
-   * @returns {Triangle[]}
-   */
-  static fromVertices(vertices, indices, stride = 3, out) {
-    const n = indices.length;
-    if ( vertices.length % stride !== 0 ) console.error(`${this.name}.fromVertices|Length of vertices is not divisible by stride ${stride}: ${vertices.length}`);
-    indices ??= Array.fromRange(Math.floor(vertices.length / 3));
-    if ( n % 3 !== 0 ) console.error(`${this.name}.fromVertices|Length of indices is not divisible by 3: ${indices.length}`);
-    if ( out ) out.points.length = n;
-    else out = new this(n);
-    for ( let i = 0, j = 0, jMax = n; j < jMax; j += 1 ) {
-      const outPt = out.points[j] ??= new Point3d()
-      pointFromVertices(i++, vertices, indices, stride, outPt);
-    }
-    return out;
-  }
-
   static fromPlanarPolygon(poly2d, plane) {
     const invM2d = plane.conversion2dMatrixInverse;
     const ln = poly2d.points.length;
@@ -783,8 +763,8 @@ export class Polygon3d {
 function pointFromVertices(i, vertices, indices, stride = 3, offset = 0, outPoint) {
   outPoint ??= Point3d.tmp;
   const idx = (indices[i] * stride) + offset;
-  const v = vertices.slice(idx , idx + 3);
-  outPoint.set(v[0], v[1], v[2]);
+  const v = vertices.slice(idx , idx + stride);
+  outPoint.set(v[0], v[1] || 0, v[2] || 0);
   return outPoint;
 }
 
@@ -1413,7 +1393,7 @@ export class Triangle3d extends Polygon3d {
    * @param {Number[]} [indices]    Indices to determine order in which triangles are created from vertices
    * @returns {Triangle[]}
    */
-  static fromVertices(vertices, indices, { positionOffset = 0, stride = 3 } = {}) {
+  static fromVertices(vertices, indices, { positionOffset = 0, stride = 3, out } = {}) {
     if ( vertices.length % stride !== 0 ) console.error(`${this.name}.fromVertices|Length of vertices is not divisible by stride ${stride}: ${vertices.length}`);
     indices ??= Array.fromRange(Math.floor(vertices.length / 3));
     if ( indices.length % 3 !== 0 ) console.error(`${this.name}.fromVertices|Length of indices is not divisible by 3: ${indices.length}`);
