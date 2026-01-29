@@ -108,8 +108,8 @@ export class VertexObject {
       vertices.push(vs);
     }
 
-    const out = this._lightCopy;
-    out.vertices = combineTypedArrays(...vertices)
+    const out = this._lightCopy();
+    out.vertices = combineTypedArrays(vertices)
     return out;
   }
 
