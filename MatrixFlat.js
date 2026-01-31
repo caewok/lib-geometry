@@ -1523,28 +1523,30 @@ export class MatrixFloat32 extends MatrixFlat {
 export class ModelMatrix2d {
   static DIM = 3;
 
+  static multiplyName = "multiply3x3";
+
   static DIM2 = this.DIM * this.DIM; // 9
 
+  static BUFFER_LENGTH = this.DIM2 * 3; // 9 values * 3 matrices.
+
   /** @type {ArrayBuffer} */
-  #matrixBuffer = new ArrayBuffer(
-    Float32Array.BYTES_PER_ELEMENT * this.constructor.DIM2 * this.constructor.DIM  // 4 * 9 * 3
-  );
+  _matrixBuffer = new ArrayBuffer(Float32Array.BYTES_PER_ELEMENT * this.constructor.BUFFER_LENGTH);
 
   /** @type {object<MatrixFloat32>} */
   #rotation = (new MatrixFloat32(
-      new Float32Array(this.#matrixBuffer, 0, this.constructor.DIM2), // (buffer, 0 * 4, 9)
+      new Float32Array(this._matrixBuffer, 0, this.constructor.DIM2), // (buffer, 0 * 4, 9)
       this.constructor.DIM,
       this.constructor.DIM))
     .identity();
 
   #translation = (new MatrixFloat32(
-      new Float32Array(this.#matrixBuffer, this.constructor.DIM2 * Float32Array.BYTES_PER_ELEMENT, this.constructor.DIM2), // (buffer, 9 * 4, 9)
+      new Float32Array(this._matrixBuffer, this.constructor.DIM2 * Float32Array.BYTES_PER_ELEMENT, this.constructor.DIM2), // (buffer, 9 * 4, 9)
       this.constructor.DIM,
       this.constructor.DIM))
     .identity();
 
   #scale = (new MatrixFloat32(
-      new Float32Array(this.#matrixBuffer, (this.constructor.DIM2 * 2) * Float32Array.BYTES_PER_ELEMENT, this.constructor.DIM2), // (buffer, 18 * 4, 9)
+      new Float32Array(this._matrixBuffer, this.constructor.DIM2 * 2 * Float32Array.BYTES_PER_ELEMENT, this.constructor.DIM2), // (buffer, 18 * 4, 9)
       this.constructor.DIM,
       this.constructor.DIM))
     .identity();
@@ -1573,16 +1575,11 @@ export class ModelMatrix2d {
   set updated(value) { this.#updated ||= value; }
 
   update() {
-    this._update();
-    this.#updated = false;
-  }
-
-  _update() {
     const { rotation, translation, scale } = this;
     const M = this._model;
-    scale
-      .multiply3x3(rotation, M)
-      .multiply3x3(translation, M);
+    scale[this.constructor.multiplyName](rotation, M)
+    M[this.constructor.multiplyName](translation, M);
+    this.#updated = false;
   }
 
   clone(out) {
@@ -1600,39 +1597,72 @@ export class ModelMatrix2d {
 export class ModelMatrix extends ModelMatrix2d {
   static DIM = 4;
 
-  _update() {
-    const { rotation, translation, scale } = this;
-    const M = this._model;
-    scale
-      .multiply4x4(rotation, M)
-      .multiply4x4(translation, M);
-  }
+  static multiplyName = "multiply4x4";
 }
 
-export const ModelInverseMixin = superclass => {
-
+/**
+ * Center the model using a separate translation matrix before applying scale and rotation.
+ */
+export const ModelCenterMixin = superclass => {
   return class extends superclass {
+    static BUFFER_IDX = super.BUFFER_LENGTH / this.DIM2;
+
+    static BUFFER_LENGTH = super.BUFFER_LENGTH + this.DIM2;
+
     /** @type {MatrixFloat32} */
-    #modelInverse = MatrixFloat32.identity(this.constructor.DIM);
+    #center = (new MatrixFloat32(
+      new Float32Array(this._matrixBuffer, (this.constructor.DIM2 * this.constructor.BUFFER_IDX) * Float32Array.BYTES_PER_ELEMENT, this.constructor.DIM2), // (buffer, 18 * 4, 9)
+      this.constructor.DIM,
+      this.constructor.DIM))
+    .identity();
 
-    get _modelInverse() { return this.#modelInverse; }
-
-    get modelInverse() {
-      if ( this.updated ) this.update();
-      return this._modelInverse;
-    }
+    get modelCenter() { this.updated = true; return this.#center; }
 
     update() {
       super.update();
-      this._model.invert(this.#modelInverse);
+      this.#center[this.constructor.multiplyName](this._model, this._model);
+    }
+  }
+}
+
+
+/**
+ * Store the model inverse along with the model matrix.
+ */
+export const ModelInverseMixin = superclass => {
+
+  return class extends superclass {
+    static BUFFER_IDX = super.BUFFER_LENGTH / this.DIM2;
+
+    static BUFFER_LENGTH = super.BUFFER_LENGTH + this.DIM2;
+
+    /** @type {MatrixFloat32} */
+    #inverse = (new MatrixFloat32(
+      new Float32Array(this._matrixBuffer, (this.constructor.DIM2 * this.constructor.BUFFER_IDX) * Float32Array.BYTES_PER_ELEMENT, this.constructor.DIM2), // (buffer, 18 * 4, 9)
+      this.constructor.DIM,
+      this.constructor.DIM))
+    .identity();
+
+    get modelInverse() { this.updated = true; return this.#inverse; }
+
+    update() {
+      super.update();
+      this._model.invert(this.#inverse);
     }
   }
 }
 
 export class ModelMatrix2dInverse extends mix(ModelMatrix2d).with(ModelInverseMixin) {}
 
+export class ModelMatrix2dCenter extends mix(ModelMatrix2d).with(ModelCenterMixin) {}
+
+export class ModelMatrix2dCenterInverse extends mix(ModelMatrix2d).with(ModelCenterMixin, ModelInverseMixin) {}
+
 export class ModelMatrixInverse extends mix(ModelMatrix).with(ModelInverseMixin) {}
 
+export class ModelMatrixCenter extends mix(ModelMatrix).with(ModelCenterMixin) {}
+
+export class ModelMatrixCenterInverse extends mix(ModelMatrix).with(ModelCenterMixin, ModelInverseMixin) {}
 
 /* Tests
 Matrix = CONFIG.GeometryLib.Matrix
