@@ -12,7 +12,7 @@ import { GEOMETRY_LIB_ID } from "../const.js";
 import { combineTypedArrays } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
 import { Sphere } from "../3d/Sphere.js";
-import { MatrixFloat32 } from "../MatrixFlat.js";
+import { MatrixFloat32, ModelMatrix } from "../MatrixFlat.js";
 import { Triangle3d } from "../3d/Polygon3d.js";
 import { ClipperPaths } from "../ClipperPaths.js";
 import { Clipper2Paths } from "../Clipper2Paths.js";
@@ -66,55 +66,6 @@ if ( !Array.prototype.subarray ) Array.prototype.subarray = Array.prototype.slic
 if ( !Array.prototype.set ) Array.prototype.set = function(array, targetOffset = 0) {
   this.splice(targetOffset, 0, ...array);
 }
-
-
-/**
- * Stores the rotation, translation, and scale matrices along with the model matrix.
- */
-export class ModelMatrix {
-  /** @type {ArrayBuffer} */
-  #matrixBuffer = new ArrayBuffer(Float32Array.BYTES_PER_ELEMENT * 16 * 3);
-
-  /** @type {object<MatrixFloat32>} */
-  #rotation = MatrixFloat32.identity(4, 4, new MatrixFloat32(new Float32Array(this.#matrixBuffer, 0, 16), 4, 4));
-
-  #translation = MatrixFloat32.identity(4, 4, new MatrixFloat32(new Float32Array(this.#matrixBuffer, 16 * Float32Array.BYTES_PER_ELEMENT, 16), 4, 4));
-
-  #scale = MatrixFloat32.identity(4, 4, new MatrixFloat32(new Float32Array(this.#matrixBuffer, 32 * Float32Array.BYTES_PER_ELEMENT, 16), 4, 4));
-
-  get rotation() { this.#updated ||= true; return this.#rotation; }
-
-  get translation() { this.#updated ||= true; return this.#translation; }
-
-  get scale() { this.#updated ||= true; return this.#scale; }
-
-  /** @type {MatrixFloat32} */
-  #model = MatrixFloat32.empty(4, 4);
-
-  get _model() { return this.#model; }
-
-  get model() {
-    if ( this.#updated ) this.update();
-    return this._model;
-  }
-
-  /** @type {boolean} */
-  #updated = true;
-
-  get updated() { return this.#updated; }
-
-  set updated(value) { this.#updated ||= value; }
-
-  update() {
-    const { rotation, translation, scale } = this;
-    const M = this._model;
-    scale
-      .multiply4x4(rotation, M)
-      .multiply4x4(translation, M);
-    this.#updated = false;
-  }
-}
-
 
 export class BasicVertices {
   /** @type {number} */

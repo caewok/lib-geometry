@@ -9,12 +9,11 @@ import { FixedLengthTrackingBuffer } from "./TrackingBuffer.js";
 
 // LibGeometry
 import { GEOMETRY_LIB_ID, GEOMETRY_ID } from "../const.js";
-import { MatrixFloat32 } from "../MatrixFlat.js";
+import { MatrixFloat32, ModelMatrix } from "../MatrixFlat.js";
 import { AABB3d } from "../3d/AABB3d.js";
 import { Quad3d } from "../3d/Polygon3d.js";
 import { almostBetween } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
-import { ModelMatrix } from "../placeable_geometry/BasicVertices.js";
 
 
 /* Store key geometry information for each placeable, in 3d.
