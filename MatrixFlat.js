@@ -4,6 +4,7 @@ PIXI,
 "use strict";
 
 import { Point3d } from "./3d/Point3d.js";
+import { mix } from "./mixwith.js";
 
 // Basic matrix operations
 // May eventually replace with math.js (when installed, call "math" to get functions)
@@ -1515,6 +1516,123 @@ export class MatrixFloat32 extends MatrixFlat {
   }
 
 }
+
+/**
+ * Stores the rotation, translation, and scale matrices along with the model matrix.
+ */
+export class ModelMatrix2d {
+  static DIM = 3;
+
+  static DIM2 = this.DIM * this.DIM; // 9
+
+  /** @type {ArrayBuffer} */
+  #matrixBuffer = new ArrayBuffer(
+    Float32Array.BYTES_PER_ELEMENT * this.constructor.DIM2 * this.constructor.DIM  // 4 * 9 * 3
+  );
+
+  /** @type {object<MatrixFloat32>} */
+  #rotation = (new MatrixFloat32(
+      new Float32Array(this.#matrixBuffer, 0, this.constructor.DIM2), // (buffer, 0 * 4, 9)
+      this.constructor.DIM,
+      this.constructor.DIM))
+    .identity();
+
+  #translation = (new MatrixFloat32(
+      new Float32Array(this.#matrixBuffer, this.constructor.DIM2 * Float32Array.BYTES_PER_ELEMENT, this.constructor.DIM2), // (buffer, 9 * 4, 9)
+      this.constructor.DIM,
+      this.constructor.DIM))
+    .identity();
+
+  #scale = (new MatrixFloat32(
+      new Float32Array(this.#matrixBuffer, (this.constructor.DIM2 * 2) * Float32Array.BYTES_PER_ELEMENT, this.constructor.DIM2), // (buffer, 18 * 4, 9)
+      this.constructor.DIM,
+      this.constructor.DIM))
+    .identity();
+
+  get rotation() { this.#updated ||= true; return this.#rotation; }
+
+  get translation() { this.#updated ||= true; return this.#translation; }
+
+  get scale() { this.#updated ||= true; return this.#scale; }
+
+  /** @type {MatrixFloat32} */
+  #model = MatrixFloat32.identity(this.constructor.DIM);
+
+  get _model() { return this.#model; }
+
+  get model() {
+    if ( this.#updated ) this.update();
+    return this._model;
+  }
+
+  /** @type {boolean} */
+  #updated = true;
+
+  get updated() { return this.#updated; }
+
+  set updated(value) { this.#updated ||= value; }
+
+  update() {
+    this._update();
+    this.#updated = false;
+  }
+
+  _update() {
+    const { rotation, translation, scale } = this;
+    const M = this._model;
+    scale
+      .multiply3x3(rotation, M)
+      .multiply3x3(translation, M);
+  }
+
+  clone(out) {
+    out ??= new this();
+    this.rotation.clone(out.rotation);
+    this.scale.clone(out.scale);
+    this.translation.clone(out.translation);
+    return out;
+  }
+}
+
+/**
+ * Stores the rotation, translation, and scale matrices along with the model matrix.
+ */
+export class ModelMatrix extends ModelMatrix2d {
+  static DIM = 4;
+
+  _update() {
+    const { rotation, translation, scale } = this;
+    const M = this._model;
+    scale
+      .multiply4x4(rotation, M)
+      .multiply4x4(translation, M);
+  }
+}
+
+export const ModelInverseMixin = superclass => {
+
+  return class extends superclass {
+    /** @type {MatrixFloat32} */
+    #modelInverse = MatrixFloat32.identity(this.constructor.DIM);
+
+    get _modelInverse() { return this.#modelInverse; }
+
+    get modelInverse() {
+      if ( this.updated ) this.update();
+      return this._modelInverse;
+    }
+
+    update() {
+      super.update();
+      this._model.invert(this.#modelInverse);
+    }
+  }
+}
+
+export class ModelMatrix2dInverse extends mix(ModelMatrix2d).with(ModelInverseMixin) {}
+
+export class ModelMatrixInverse extends mix(ModelMatrix).with(ModelInverseMixin) {}
+
 
 /* Tests
 Matrix = CONFIG.GeometryLib.Matrix
