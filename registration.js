@@ -11,6 +11,10 @@ import { GEOMETRY_LIB_ID, VERSION } from "./const.js";
 import { mergeConfigs } from "./config.js";
 import { registerGeometryLibPatches } from "./patching.js";
 
+// Import tests
+import "./tests/AABB.test.js";
+import "./tests/PixelCache.test.js";
+
 // Execute immediately on load to identify modules using lib geometry.
 (() => {
   CONFIG[GEOMETRY_LIB_ID] ??= {};
