@@ -227,34 +227,33 @@ export class MatrixFlat {
   /**
    * Create an empty matrix.
    * @param {number} rows
-   * @param {number} cols
+   * @param {number} [cols]
    * @returns {Matrix}
    */
-  static empty(rows, cols) { return new this(new this.arrayClass(rows * cols), rows, cols); }
+  static empty(rows, cols = rows) {
+    return new this(new this.arrayClass(rows * cols), rows, cols);
+  }
 
   /**
    * Create a matrix filled with zeroes.
-   * @param {number} rows
-   * @param {number} cols
-   * @param {Matrix} [outMatrix]
+   * @param {number|Matrix} rows        Number of rows or the matrix to fill
+   * @param {number} [cols]
    * @returns {Matrix}
    */
-  static zeroes(rows, cols, outMatrix) {
-    outMatrix ??= this.empty(rows, cols);
-    outMatrix.arr.fill(0);
-    return outMatrix;
+  static zeroes(rows, cols) {
+    const out = this.empty(rows, cols);
+    out.arr.fill(0);
+    return out;
   }
 
   /**
    * Create an identity matrix
-   * @param {number} rows
-   * @param {number} cols
-   * @param {Matrix} [outMatrix]
+   * @param {number|Matrix} rows        Number of rows or the matrix to fill
+   * @param {number} [cols]
    * @returns {Matrix}
    */
-  static identity(rows, cols, outMatrix) {
-    cols ??= rows;
-    const mat = this.zeroes(rows, cols, outMatrix);
+  static identity(rows, cols) {
+    const mat = this.zeroes(rows, cols);
     mat.setDiagonal(() => 1);
     return mat;
   }
@@ -303,6 +302,12 @@ export class MatrixFlat {
   * @returns {this} For convenience.
   */
  zero() { this.arr.fill(0); return this; }
+
+ /**
+  * Set every element except the diagonal to 0. Diagonals set to 1.
+  * @returns {this} For convenience.
+  */
+ identity() { this.arr.fill(0); this.setDiagonal(() => 1); return this; }
 
  /**
   * Set diagonal to a constant.
@@ -386,7 +391,7 @@ export class MatrixFlat {
     const nf = 1 / (near - far);
 
     if ( M ) M.zero();
-    else M = this.zeroes(4, 4);
+    else M = this.zeroes(4);
 
     // Diagonals.
     M.setIndex(0, 0, -2 * lr);
@@ -447,7 +452,7 @@ export class MatrixFlat {
     const f = Math.tan((Math.PI * 0.5) - (0.5 * fovRadians));
 
     if ( M ) M.zero();
-    else M = this.zeroes(4, 4);
+    else M = this.zeroes(4);
     M.setIndex(0, 0, f / aspect); // DIAG0
     M.setIndex(1, 1, f);          // f
     M.setIndex(2, 3, -1);         // -1
@@ -483,7 +488,7 @@ export class MatrixFlat {
     const f = Math.tan((Math.PI * 0.5) - (0.5 * fovRadians));
 
     if ( M ) M.zero();
-    else M = this.zeroes(4, 4);
+    else M = this.zeroes(4);
     M.setIndex(0, 0, f / aspect); // DIAG1
     M.setIndex(1, 1, f);          // f
     M.setIndex(2, 3, -1);         // -1
@@ -531,7 +536,7 @@ export class MatrixFlat {
     const D = -((2 * zFar * zNear) / (zFar - zNear));
 
     if ( M ) M.zero();
-    else M = this.zeroes(4, 4);
+    else M = this.zeroes(4);
 
     M.setIndex(0, 0, (2 * zNear) / (right - left));
     M.setIndex(1, 1, (2 * zNear) / (top - bottom));
@@ -591,9 +596,9 @@ export class MatrixFlat {
 
 
     if ( M ) M.zero();
-    else M = this.zeroes(4, 4);
+    else M = this.zeroes(4);
     if ( Minv ) Minv.zero();
-    else Minv = this.zeroes(4, 4);
+    else Minv = this.zeroes(4);
 
     M.setIndex(0, 0, xAxis.x);
     M.setIndex(0, 1, xAxis.y);
@@ -657,7 +662,8 @@ export class MatrixFlat {
    */
   static rotationX(angle, d3 = true, outMatrix) {
     const n = 3 + d3;
-    outMatrix = this.identity(n, n, outMatrix);
+    outMatrix ??= this.empty(n);
+    outMatrix.identity();
     if ( !angle ) return outMatrix;
 
     let c = Math.cos(angle);
@@ -694,7 +700,8 @@ export class MatrixFlat {
    */
   static rotationY(angle, d3 = true, outMatrix) {
     const n = 3 + d3;
-    outMatrix = this.identity(n, n, outMatrix);
+    outMatrix ??= this.empty(n);
+    outMatrix.identity();
     if ( !angle ) return outMatrix;
 
     let c = Math.cos(angle);
@@ -730,7 +737,8 @@ export class MatrixFlat {
    */
   static rotationZ(angle, d3 = true, outMatrix) {
     const n = 3 + d3;
-    outMatrix = this.identity(n, n, outMatrix);
+    outMatrix ??= this.empty(n);
+    outMatrix.identity();
     if ( !angle ) return outMatrix;
 
     let c = Math.cos(angle);
@@ -785,7 +793,8 @@ export class MatrixFlat {
 
   static translation(x = 0, y = 0, z, outMatrix) {
     const n = typeof z === "undefined" ? 3 : 4;
-    outMatrix = this.identity(n, n, outMatrix);
+    outMatrix ??= this.empty(n);
+    outMatrix.identity();
 
     /*
     [1, 0, 0],
@@ -806,7 +815,8 @@ export class MatrixFlat {
 
   static scale(x = 1, y = 1, z, outMatrix) {
     const n = typeof z === "undefined" ? 3 : 4;
-    outMatrix = this.identity(n, n, outMatrix);
+    outMatrix ??= this.empty(n);
+    outMatrix.identity();
     /*
     [x, 0, 0],
     [0, y, 0],
@@ -945,7 +955,7 @@ export class MatrixFlat {
     const rowsB = B.nrow;
     const colsB = B.ncol;
 
-    outMatrix = this.constructor.zeroes(rowsA, colsB, outMatrix)
+    outMatrix ??= this.constructor.zeroes(rowsA, colsB, outMatrix)
 
     if ( colsA !== rowsB || outMatrix.nrow !== rowsA || outMatrix.ncol !== colsB ) {
       console.error("Matrices cannot be multiplied.");
@@ -1184,7 +1194,7 @@ export class MatrixFlat {
    * @returns {Matrix}
    */
   multiply3x3(other, outMatrix) {
-    outMatrix = this.constructor.empty(3, 3);
+    outMatrix ??= this.constructor.empty(3, 3);
 
     // For speed, assume _idx is (col * this.nrow) + row
     // Array organized col0, row0, row1, row2, ... col1, row0, row1, ...
