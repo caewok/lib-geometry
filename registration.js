@@ -14,6 +14,7 @@ import { registerGeometryLibPatches } from "./patching.js";
 // Import tests
 import "./tests/AABB.test.js";
 import "./tests/PixelCache.test.js";
+import "./tests/Point.test.js";
 
 // Execute immediately on load to identify modules using lib geometry.
 (() => {
