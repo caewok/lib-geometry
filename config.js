@@ -85,6 +85,11 @@ const PLACEABLE_TRACKING_CONFIG = {
    */
   perPixelSpacing: 10,
 
+  /**
+   * Resolution when storing tile pixel caches.
+   * @type {number}
+   */
+  pixelCacheResolution: 1,
 
   /**
    * Use the alpha polygon threshold when creating tile faces.

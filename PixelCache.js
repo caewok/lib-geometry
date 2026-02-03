@@ -2512,6 +2512,14 @@ export class TrimmedPixelCache extends PixelCache {
     }
   }
 
+  // ----- NOTE: Getters / setters ----- //
+
+  get bufferBounds() { return this.#bufferBounds.clone(); }
+
+  get bufferWidth() { return this.#bufferBounds.max.x - this.#bufferBounds.min.x + 1; }
+
+  get bufferHeight() { return this.#bufferBounds.max.y - this.#bufferBounds.min.y + 1; }
+
 
   // ----- NOTE: Static factory method ----- //
 
@@ -2697,13 +2705,14 @@ export class TilePixelCache extends TrimmedPixelCache {
     if ( Number.isNumeric(opts) ) opts = { resolution: opts }; // Backwards compatibility.
 
     // See TextureLoader.getTextureAlphaData.
+    // Returns non-inclusive pixels. E.g., [minX, maxX)
     opts.resolution ||= 1;
     const texData = foundry.canvas.TextureLoader.getTextureAlphaData(tile.texture, opts.resolution);
 
     // Define bounds of actual data within the full texture frame.
-    const bufferBounds = new AABB2d();
-    bufferBounds.min.set(texData.minX, texData.minY);
-    bufferBounds.max.set(texData.maxX, texData.maxY);
+    opts.bufferBounds = new AABB2d();
+    opts.bufferBounds.min.set(texData.minX, texData.minY);
+    opts.bufferBounds.max.set(texData.maxX - 1, texData.maxY - 1); // Make inclusive: [minX, maxX].
     opts.pixelsOrClass = texData.data;
     opts.tile = tile;
     return new this(texData.width, texData.height, opts);

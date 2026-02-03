@@ -68,13 +68,14 @@ const AbstractTileAlpha = superclass => class extends superclass {
   convertTileToIsoBands() {
     const { tile, alphaThreshold } = this;
     if ( !(alphaThreshold && tile.evPixelCache) ) return null;
+    const cache = tile.evPixelCache;
     const threshold = 255 * alphaThreshold;
-    const pixels = tile.evPixelCache.pixels;
+    const pixels = cache.pixels;
     const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
 
     // Convert pixels to isobands.
-    const width = tile.evPixelCache.width
-    const height = tile.evPixelCache.height
+    const width = cache.bufferWidth;
+    const height = cache.bufferHeight;
     const rowViews = new Array(height);
     for ( let r = 0, start = 0, rMax = height; r < rMax; r += 1, start += width ) {
       rowViews[r] = [...pixels.slice(start, start + width)];
@@ -85,7 +86,7 @@ const AbstractTileAlpha = superclass => class extends superclass {
       bands = MarchingSquares.isoBands(rowViews, threshold, 256 - threshold);
     } catch ( err ) {
       console.error(err);
-      const poly = tile.evPixelCache.getThresholdLocalBoundingBox(alphaThreshold).toPolygon();
+      const poly = cache.getThresholdLocalBoundingBox(alphaThreshold).toPolygon();
       return ClipperPaths.fromPolygons([poly]);
     }
 

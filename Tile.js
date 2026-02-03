@@ -25,26 +25,21 @@ PATCHES.PIXEL_CACHE = {};
  * @param {DocumentModificationContext} options     Additional options which modified the update request
  * @param {string} userId                           The ID of the User who triggered the update workflow
  */
+const tileChangeParams = [
+  "x",
+  "y",
+  "width",
+  "height",
+  "rotation",
+  "texture",
+  "scaleX",
+  "scaleY",
+];
+
 function updateTile(tileD, changed, _options, _userId) {
   // Should not be needed: if ( changed.overhead ) document.object._evPixelCache = undefined;
   const cache = tileD.object?._evPixelCache;
-  if ( cache ) {
-    if ( Object.hasOwn(changed, "x")
-      || Object.hasOwn(changed, "y")
-      || Object.hasOwn(changed, "width")
-      || Object.hasOwn(changed, "height") ) {
-      cache._resize();
-    }
-
-    if ( Object.hasOwn(changed, "rotation")
-      || Object.hasOwn(changed, "texture")
-      || (changed.texture
-        && (Object.hasOwn(changed.texture, "scaleX")
-        || Object.hasOwn(changed.texture, "scaleY"))) ) {
-
-      cache.clearTransforms();
-    }
-  }
+  if ( cache && tileChangeParams.some(param => Object.hasOwn(changed, param)) ) cache.updateTransforms();
 }
 
 PATCHES.PIXEL_CACHE.HOOKS = { updateTile };
@@ -57,7 +52,7 @@ PATCHES.PIXEL_CACHE.HOOKS = { updateTile };
 function evPixelCache() {
   if ( !this.texture ) return undefined;
   return this._evPixelCache
-    || (this._evPixelCache = TilePixelCache.fromOverheadTileAlpha(this, CONFIG.GeometryLib.CONFIG.pixelCacheResolution ?? 1)); // 1/4 resolution.
+    || (this._evPixelCache = TilePixelCache.fromOverheadTileAlpha(this, { resolution: CONFIG.GeometryLib.CONFIG.pixelCacheResolution ?? 1 })); // 1/4 resolution.
 }
 
 PATCHES.PIXEL_CACHE.GETTERS = { evPixelCache };
