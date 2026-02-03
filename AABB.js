@@ -225,6 +225,13 @@ export class AABB2d {
   }
 
   /**
+   * For compatibility with PIXI objects approach.
+   * @param {number} x
+   * @param {number} y;
+   */
+  contains(x, y) { return this.containsPoint({ x, y }); }
+
+  /**
    * Does this bounding box almost contain the point?
    * @param {PIXI.Point} p
    * @param {number} [epsilon=1e-06]        How close to min/max for the point to count as contained

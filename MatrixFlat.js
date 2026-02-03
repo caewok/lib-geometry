@@ -1055,6 +1055,11 @@ export class MatrixFlat {
     return outMatrix;
   }
 
+  multiplyPoint(point, outPoint) {
+    if ( Object.hasOwn(point, "z") ) return this.multiplyPoint2d(point, outPoint);
+    else return this.multiplyPoint3d(point, outPoint);
+  }
+
   /**
    * Multiply a Point2d by this matrix and output a different Point3d.
    * For speed, the input is not checked against the matrix for correct dimensionality.
@@ -1583,7 +1588,7 @@ export class ModelMatrix2d {
   }
 
   clone(out) {
-    out ??= new this();
+    out ??= new this.constructor();
     this.rotation.clone(out.rotation);
     this.scale.clone(out.scale);
     this.translation.clone(out.translation);
@@ -1607,7 +1612,7 @@ export const ModelCenterMixin = superclass => {
   return class extends superclass {
     static BUFFER_IDX = super.BUFFER_LENGTH / this.DIM2;
 
-    static BUFFER_LENGTH = super.BUFFER_LENGTH + this.DIM2;
+    static BUFFER_LENGTH = super.BUFFER_LENGTH + (this.DIM2 * 2);
 
     /** @type {MatrixFloat32} */
     #center = (new MatrixFloat32(
@@ -1618,9 +1623,46 @@ export const ModelCenterMixin = superclass => {
 
     get modelCenter() { this.updated = true; return this.#center; }
 
+    set modelCenter(ctr) {
+      this.updated = true;
+      const is3d = this.constructor.DIM === 4;
+      MatrixFloat32.translation(-ctr.x, -ctr.y, is3d ? -ctr.z : undefined, this.#center);
+    }
+
     update() {
+      // Create a translation matrix to uncenter after applying the model matrix.
+      // Must consider scaling when un-centering.
+      // Do before the update so as not to trigger another.
+      // E.g. Local center 5, 5. Scaled by x10.
+      // Move -5, -5 using this.#center. TL is -5, -5; center is 0, 0.
+      // Scale x10: TL is -50, -50.
+      // Move 50, 50 using uncenter.
+      const centerMat = this.#center;
+      const is3d = this.constructor.DIM === 4;
+      const r = this.constructor.DIM - 1; // 3d: 3, 2d: 2.
+      const uncenterPt = is3d ? Point3d.tmp : PIXI.Point.tmp;
+      uncenterPt.x = centerMat.getIndex(r, 0);
+      uncenterPt.y = centerMat.getIndex(r, 1);
+      if ( is3d ) {
+        uncenterPt.z = centerMat.getIndex(r, 2);
+        this.scale.multiplyPoint3d(uncenterPt, uncenterPt);
+      } else this.scale.multiplyPoint2d(uncenterPt, uncenterPt)
+      uncenterPt.multiplyScalar(-1, uncenterPt); // Reverse translation direction.
+
+      // Set the uncenter matrix.
+      const uncenter = centerMat.clone();
+      uncenter.setIndex(r, 0, uncenterPt.x);
+      uncenter.setIndex(r, 1, uncenterPt.y);
+      if ( is3d ) uncenter.setIndex(r, 2, uncenterPt.z);
+
+      // Update the model matrix.
       super.update();
-      this.#center[this.constructor.multiplyName](this._model, this._model);
+
+      // Center prior to applying the model matrix.
+      centerMat[this.constructor.multiplyName](this._model, this._model);
+
+      // Undo the centering after.
+      this._model[this.constructor.multiplyName](uncenter, this._model);
     }
   }
 }
@@ -1632,18 +1674,12 @@ export const ModelCenterMixin = superclass => {
 export const ModelInverseMixin = superclass => {
 
   return class extends superclass {
-    static BUFFER_IDX = super.BUFFER_LENGTH / this.DIM2;
-
-    static BUFFER_LENGTH = super.BUFFER_LENGTH + this.DIM2;
-
     /** @type {MatrixFloat32} */
-    #inverse = (new MatrixFloat32(
-      new Float32Array(this._matrixBuffer, (this.constructor.DIM2 * this.constructor.BUFFER_IDX) * Float32Array.BYTES_PER_ELEMENT, this.constructor.DIM2), // (buffer, 18 * 4, 9)
-      this.constructor.DIM,
-      this.constructor.DIM))
-    .identity();
+    #inverse = MatrixFloat32.identity(this.constructor.DIM);
 
-    get modelInverse() { this.updated = true; return this.#inverse; }
+    get _modelInverse() { return this.#inverse; }
+
+    get modelInverse() { if ( this.updated ) this.update(); return this.#inverse; }
 
     update() {
       super.update();
