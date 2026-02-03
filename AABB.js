@@ -18,9 +18,11 @@ Object.freeze(axes.y);
 Object.freeze(axes.z);
 
 
-/* Axis-aligned bounding box
-  Represent a bounding box as a minimum and maximum point in 2d or 3d.
-*/
+/**
+ * Axis-aligned bounding box
+ * Represent a bounding box as a minimum and maximum point in 2d or 3d.
+ * The maximum row/column/z are considered inclusive. I.e., the range is [min, max], not [min, max).
+ */
 export class AABB2d {
   static POINT_CLASS = PIXI.Point;
 

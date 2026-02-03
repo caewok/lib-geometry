@@ -55,8 +55,8 @@ export class LocalCoordinateCache extends AABB2d {
     this.#resolution = resolution;
     this.min.x = 0;
     this.min.y = 0;
-    this.max.x = localWidth;
-    this.max.y = localHeight;
+    this.max.x = localWidth - 1; // AABB is inclusive. [min, max]
+    this.max.y = localHeight - 1;
 
     // Center the model before applying rotation and scale.
     this.modelMatrix.modelCenter = { x: localWidth * 0.5, y: localHeight * 0.5 };
@@ -69,11 +69,11 @@ export class LocalCoordinateCache extends AABB2d {
   /** @type {number} */
   get resolution() { return this.#resolution; }
 
-  get width() { return this.max.x; }
+  get width() { return this.max.x + 1; } // Actually: max.x - 0 + 1; adjust b/c maxX is inclusive.
 
-  get height() { return this.max.y; }
+  get height() { return this.max.y + 1; } // Actually: max.y - 0 + 1; adjust b/c maxX is inclusive.
 
-  get area() { return this.max.x * this.max.y; }
+  get area() { return this.width * this.height; }
 
   get left() { return 0; }
 
@@ -1116,11 +1116,17 @@ export class PixelCache extends LocalCoordinateCache {
   /** @type {number} */
   maximumPixelValue = 255;
 
-  /** @type {Map<number,PIXI.Rectangle>} */
-  #thresholdLocalBoundingBoxes = new Map();
+  /** @type {Map<number,AABB>} */
+  #thresholdLocalAABB = new Map();
 
   /** @type {Map<number,PIXI.Rectangle>} */
   #thresholdCanvasBoundingBoxes = new Map();
+
+  /** @type {Map<number,PIXI.Rectangle|PIXI.Polygon>} */
+  #thresholdLocalBoundingPolygons = new Map();
+
+  /** @type {Map<number,PIXI.Rectangle|PIXI.Polygon>} */
+  #thresholdCanvasBoundingPolygons = new Map();
 
   /**
    * Construct the local rectangle based on a provided pixel array.
@@ -1132,7 +1138,7 @@ export class PixelCache extends LocalCoordinateCache {
    */
   constructor(localWidth, localHeight, { pixelsOrClass = Uint8Array, maximumPixelValue, ...opts } = {}) {
     super(localWidth, localHeight, opts);
-    this.pixels = ( typeof pixels === "function" ) ? new pixelsOrClass(this.area) : pixelsOrClass;
+    this.pixels = ( typeof pixelsOrClass === "function" ) ? new pixelsOrClass(this.area) : pixelsOrClass;
     this.maximumPixelValue = maximumPixelValue ?? this.constructor.maximumPixelValue(this.pixels);
   }
 
@@ -1181,7 +1187,7 @@ export class PixelCache extends LocalCoordinateCache {
    */
   _clearLocalThresholdBoundingBoxes() {
     this.#thresholdCanvasBoundingBoxes.clear();
-    this.#thresholdLocalBoundingBoxes.clear();
+    this.#thresholdLocalAABB.clear();
     this.#thresholdLocalBoundingPolygons.clear();
   }
 
@@ -1196,12 +1202,22 @@ export class PixelCache extends LocalCoordinateCache {
   /**
    * Get a local bounding box based on a specific threshold
    * @param {number} [threshold=0.75]   Values lower than this will be ignored around the edges.
-   * @returns {PIXI.Rectangle} Rectangle based on local coordinates.
+   * @returns {AABB2d} Rectangle based on local coordinates.
    */
-  getThresholdLocalBoundingBox(threshold = 0.75) {
-    const map = this.#thresholdLocalBoundingBoxes;
-    if ( !map.has(threshold) ) map.set(threshold, this.#calculateLocalBoundingBox(threshold));
+  getThresholdLocalAABB(threshold = 0.75) {
+    const map = this.#thresholdLocalAABB;
+    if ( !map.has(threshold) ) map.set(threshold, this.#calculateLocalAABB(threshold));
     return map.get(threshold);
+  }
+
+  getThresholdLocalBoundingBox(threshold = 0.75) {
+    const aabb = this.getThresholdLocalAABB(threshold);
+    return new PIXI.Rectangle(
+      aabb.min.x,
+      aabb.min.y,
+      aabb.max.x - aabb.min.x + 1, // Pad b/c rectangle right/bottom not inclusive.
+      aabb.max.y - aabb.min.y + 1,
+    );
   }
 
   /**
@@ -1215,7 +1231,7 @@ export class PixelCache extends LocalCoordinateCache {
     return map.get(threshold);
   }
 
-  _calculateCanvasBoundingBox(threshold=0.75) {
+  _calculateCanvasBoundingBox(threshold = 0.75) {
     if ( threshold === 1 ) return super._calculateCanvasBoundingBox();
     return this.#calculateCanvasBoundingBox(threshold);
   }
@@ -1224,13 +1240,12 @@ export class PixelCache extends LocalCoordinateCache {
    * Calculate a canvas bounding box based on a specific threshold.
    */
   #calculateCanvasBoundingBox(threshold=0.75) {
-    const localRect = this.getThresholdLocalBoundingBox(threshold);
-
-    const { left, right, top, bottom } = localRect;
-    const TL = this._toCanvasCoordinates(left, top);
-    const TR = this._toCanvasCoordinates(right, top);
-    const BL = this._toCanvasCoordinates(left, bottom);
-    const BR = this._toCanvasCoordinates(right, bottom);
+    // Pad right and bottom to ensure full coverage for PIXI rectangle or polygon.
+    const aabb = this.getThresholdLocalAABB(threshold);
+    const TL = this._toCanvasCoordinates(aabb.min.x, aabb.min.y);
+    const TR = this._toCanvasCoordinates(aabb.max.x + 1, aabb.min.y);
+    const BL = this._toCanvasCoordinates(aabb.max.x + 1, aabb.max.y + 1);
+    const BR = this._toCanvasCoordinates(aabb.min.x, aabb.max.y + 1);
 
     // Can the box be represented with a rectangle? Points must be horizontal and vertical.
     // Could also be rotated 90º
@@ -1249,9 +1264,9 @@ export class PixelCache extends LocalCoordinateCache {
   /**
    * Calculate a bounding box based on a specific threshold.
    * @param {number} [threshold=0.75]   Values lower than this will be ignored around the edges.
-   * @returns {PIXI.Rectangle} Rectangle based on local coordinates.
+   * @returns {AABB2d} Rectangle based on local coordinates.
    */
-  #calculateLocalBoundingBox(threshold=0.75) {
+  #calculateLocalAABB(threshold=0.75) {
     // (Faster or equal to the old method that used one double non-breaking loop.)
     threshold = threshold * this.maximumPixelValue;
 
@@ -1311,13 +1326,13 @@ export class PixelCache extends LocalCoordinateCache {
       if ( ~maxBottom ) break;
     }
 
-    // Pad right/bottom by 1 b/c otherwise they would be inset.
-    // Don't Pad all by 1 to ensure that any pixel on the thresholdBounds is under the threshold.
-    // minLeft -= 1;
-    // minTop -= 1;
-    maxRight += 1;
-    maxBottom += 1;
-    return (new PIXI.Rectangle(minLeft, minTop, maxRight - minLeft, maxBottom - minTop));
+    // No right/bottom padding needed b/c AABB is closed [min, max].
+    const aabb = new AABB2d();
+    aabb.min.x = minLeft;
+    aabb.max.x = maxRight;
+    aabb.min.y = minTop;
+    aabb.max.y = maxBottom;
+    return aabb;
   }
 
   /**
@@ -1365,12 +1380,6 @@ export class PixelCache extends LocalCoordinateCache {
     const localPoly = this.getThresholdLocalBoundingPolygon(threshold);
     return new PIXI.Polygon([...localPoly.iteratePoints({ close: false })].map(pt => this._toCanvasCoordinates(pt.x, pt.y, pt)))
   }
-
-  /** @type {Map<number,PIXI.Rectangle>} */
-  #thresholdLocalBoundingPolygons = new Map();
-
-  /** @type {Map<number,PIXI.Rectangle>} */
-  #thresholdCanvasBoundingPolygons = new Map();
 
 
   /**
