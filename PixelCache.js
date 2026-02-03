@@ -1212,6 +1212,8 @@ export class PixelCache extends LocalCoordinateCache {
 
   getThresholdLocalBoundingBox(threshold = 0.75) {
     const aabb = this.getThresholdLocalAABB(threshold);
+    if ( !isFinite(aabb.min.x) ) return new PIXI.Rectangle();
+
     return new PIXI.Rectangle(
       aabb.min.x,
       aabb.min.y,
@@ -1276,6 +1278,7 @@ export class PixelCache extends LocalCoordinateCache {
     let maxRight = -1;
     let minTop = -1;
     let maxBottom = -1;
+    const aabb = new AABB2d();
 
     // Test left side
     for ( let x = left; x <= right; x += 1 ) {
@@ -1288,7 +1291,8 @@ export class PixelCache extends LocalCoordinateCache {
       }
       if ( ~minLeft ) break;
     }
-    if ( !~minLeft ) return new PIXI.Rectangle();
+
+    if ( !~minLeft ) return aabb; // Empty, defined as max: -∞, min: ∞
 
     // Test right side
     for ( let x = right; x >= left; x -= 1 ) {
@@ -1327,7 +1331,6 @@ export class PixelCache extends LocalCoordinateCache {
     }
 
     // No right/bottom padding needed b/c AABB is closed [min, max].
-    const aabb = new AABB2d();
     aabb.min.x = minLeft;
     aabb.max.x = maxRight;
     aabb.min.y = minTop;
