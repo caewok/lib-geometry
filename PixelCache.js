@@ -104,12 +104,14 @@ export class LocalCoordinateCache extends AABB2d {
    * @param {PIXI.Rectangle} rect
    * @param {number} [resolution=1]
    */
-  static fromCanvasRectangle(rect, resolution) {
+  static fromCanvasRectangle(rect, resolution = 1, opts = {} ) {
     const size = PIXI.Point.tmp.set(rect.width, rect.height);
     this.localSizeForResolution(size, resolution, size);
-    const out = new this(size.width, size.height, { resolution });
+    opts.resolution = resolution;
+    const out = new this(size.width, size.height, opts);
     size.release();
     out.translation = rect; // Translate to TL.
+    return out;
   }
 
   /**
@@ -117,8 +119,8 @@ export class LocalCoordinateCache extends AABB2d {
    * @param {PIXI.Rectangle|PIXI.Circle|PIXI.Ellipse|PIXI.Polygon} shape
    * @param {number} [resolution=1]
    */
-  static fromShape(shape, resolution) {
-    return this.fromRectangle(shape.getBounds(), resolution);
+  static fromShape(shape, resolution, opts = {}) {
+    return this.fromRectangle(shape.getBounds(), resolution, opts);
   }
 
   // ----- NOTE: Model Matrix ----- //
