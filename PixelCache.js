@@ -94,9 +94,11 @@ export class LocalCoordinateCache extends AABB2d {
    * @returns {PIXI.Point}
    */
   static localSizeForResolution(size, resolution = 1, outPoint) {
-    outPoint ??= PIXI.Point.tmp;
-    size.multiplyScalar(resolution, outPoint);
-    return outPoint;
+    return size.multiplyScalar(resolution, outPoint).ceil(outPoint);
+  }
+
+  static canvasSizeForResolution(size, resolution = 1, outPoint) {
+    return size.multiplyScalar(1/resolution, outPoint).ceil(outPoint);
   }
 
   /**
