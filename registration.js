@@ -16,6 +16,7 @@ import "./tests/AABB.test.js";
 import "./tests/PixelCache.test.js";
 import "./tests/Point.test.js";
 import "./tests/Point3d.test.js";
+import "./tests/GeometryTracking.test.js";
 
 // Execute immediately on load to identify modules using lib geometry.
 (() => {
