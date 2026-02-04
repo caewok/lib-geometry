@@ -1526,46 +1526,46 @@ export class MatrixFloat32 extends MatrixFlat {
  * Stores the rotation, translation, and scale matrices along with the model matrix.
  */
 export class ModelMatrix2d {
-  static DIM = 3;
+  // Static getters so ModelMatrix can override.
+  static get DIM() { return 3; };
 
-  static multiplyName = "multiply3x3";
+  static get multiplyName() { return "multiply3x3"; } // Static getter so ModelMatrix can override.
 
-  static DIM2 = this.DIM * this.DIM; // 9
+  static get DIM2() { return this.DIM * this.DIM; }; // 9
 
-  static BUFFER_LENGTH = this.DIM2 * 3; // 9 values * 3 matrices.
+  static get BUFFER_LENGTH() { return this.DIM2 * 3; }; // 9 values * 3 matrices.
 
   /** @type {ArrayBuffer} */
   _matrixBuffer = new ArrayBuffer(Float32Array.BYTES_PER_ELEMENT * this.constructor.BUFFER_LENGTH);
 
   /** @type {object<MatrixFloat32>} */
-  #rotation = (new MatrixFloat32(
+  // Could be private but may be useful to access them without triggering update.
+  _rotation = (new MatrixFloat32(
       new Float32Array(this._matrixBuffer, 0, this.constructor.DIM2), // (buffer, 0 * 4, 9)
       this.constructor.DIM,
       this.constructor.DIM))
     .identity();
 
-  #translation = (new MatrixFloat32(
+  _translation = (new MatrixFloat32(
       new Float32Array(this._matrixBuffer, this.constructor.DIM2 * Float32Array.BYTES_PER_ELEMENT, this.constructor.DIM2), // (buffer, 9 * 4, 9)
       this.constructor.DIM,
       this.constructor.DIM))
     .identity();
 
-  #scale = (new MatrixFloat32(
+  _scale = (new MatrixFloat32(
       new Float32Array(this._matrixBuffer, this.constructor.DIM2 * 2 * Float32Array.BYTES_PER_ELEMENT, this.constructor.DIM2), // (buffer, 18 * 4, 9)
       this.constructor.DIM,
       this.constructor.DIM))
     .identity();
 
-  get rotation() { this.#updated ||= true; return this.#rotation; }
+  get rotation() { this.#updated ||= true; return this._rotation; }
 
-  get translation() { this.#updated ||= true; return this.#translation; }
+  get translation() { this.#updated ||= true; return this._translation; }
 
-  get scale() { this.#updated ||= true; return this.#scale; }
+  get scale() { this.#updated ||= true; return this._scale; }
 
   /** @type {MatrixFloat32} */
-  #model = MatrixFloat32.identity(this.constructor.DIM);
-
-  get _model() { return this.#model; }
+  _model = MatrixFloat32.identity(this.constructor.DIM);
 
   get model() {
     if ( this.#updated ) this.update();
@@ -1600,9 +1600,9 @@ export class ModelMatrix2d {
  * Stores the rotation, translation, and scale matrices along with the model matrix.
  */
 export class ModelMatrix extends ModelMatrix2d {
-  static DIM = 4;
+  static get DIM() { return 4; }
 
-  static multiplyName = "multiply4x4";
+  static get multiplyName() { return "multiply4x4"; }
 }
 
 /**
@@ -1612,7 +1612,7 @@ export const ModelCenterMixin = superclass => {
   return class extends superclass {
     static BUFFER_IDX = super.BUFFER_LENGTH / this.DIM2;
 
-    static BUFFER_LENGTH = super.BUFFER_LENGTH + (this.DIM2 * 2);
+    static get BUFFER_LENGTH() { return super.BUFFER_LENGTH + (this.DIM2 * 2); }
 
     /** @type {MatrixFloat32} */
     #center = (new MatrixFloat32(
