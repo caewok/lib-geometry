@@ -110,7 +110,7 @@ export class LocalCoordinateCache extends AABB2d {
     const size = PIXI.Point.tmp.set(rect.width, rect.height);
     this.localSizeForResolution(size, resolution, size);
     opts.resolution = resolution;
-    const out = new this(size.width, size.height, opts);
+    const out = new this(size.x, size.y, opts);
     size.release();
     out.translation = rect; // Translate to TL.
     return out;
