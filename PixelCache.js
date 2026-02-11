@@ -213,12 +213,16 @@ export class LocalCoordinateCache extends AABB2d {
    * @returns {number}
    */
   _indexAtLocal(x, y) {
+    // Use floor to determine in which "pixel bucket" the coordinate lies.
+    x = ~~x;
+    y = ~~y;
+
+    // Bounds check.
     const { width, height } = this;
     if ( x < 0 || y < 0 || x >= width || y >= height ) return -1;
 
-    // Use floor to ensure consistency when converting to/from coordinates <--> index.
-    return ((~~y) * width) + (~~x);
-    // Equivalent: return (roundFastPositive(y) * this.localFrame.width) + roundFastPositive(x);
+    // Return the index.
+    return (y * width) + x
   }
 
   /**
@@ -271,12 +275,7 @@ export class LocalCoordinateCache extends AABB2d {
   _fromCanvasCoordinates(x, y, outPoint) {
     outPoint ??= PIXI.Point.tmp;
     outPoint.set(x, y);
-    const local = this.toLocalTransform.multiplyPoint2d(outPoint, outPoint);
-
-    // Avoid common rounding errors, like 19.999999999998.
-    local.x = fastFixed(local.x);
-    local.y = fastFixed(local.y);
-    return local;
+    return this.toLocalTransform.multiplyPoint2d(outPoint, outPoint);
   }
 
   /**
