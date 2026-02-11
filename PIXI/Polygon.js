@@ -195,24 +195,24 @@ function isSegmentEnclosed(segment, { epsilon = 1e-08 } = {}) {
  * (Use close = true to return the last --> first edge.)
  * @param {object} [options]
  * @param {boolean} [close]   If true, return last point --> first point as edge.
- * @returns Return an object { A: {x, y}, B: {x, y}} for each edge
- * Edges link, such that edge0.B === edge.1.A.
+ * @returns Return an object { a: {x, y}, b: {x, y}} for each edge
+ * Edges link, such that edge0.a === edge.1.b.
  */
 function* iterateEdges({close = true} = {}) {
   const ln = this.points.length;
   if ( ln < 4 ) return;
 
   const firstA = PIXI.Point.tmp.set(this.points[0], this.points[1]);
-  let A = firstA;
+  let a = firstA;
   for (let i = 2; i < ln; i += 2) {
-    const B = PIXI.Point.tmp.set(this.points[i], this.points[i + 1]);
-    yield { A, B };
-    A = B;
+    const b = PIXI.Point.tmp.set(this.points[i], this.points[i + 1]);
+    yield { a, b };
+    a = b;
   }
 
   if ( close ) {
-    const B = firstA;
-    yield { A, B };
+    const b = firstA;
+    yield { a, b };
   }
 }
 
@@ -242,8 +242,8 @@ function* iteratePoints({ close = true } = {}) {
 function linesCross(lines) {
   for ( const edge of this.iterateEdges() ) {
     for ( const line of lines ) {
-      if ( lineSegmentCrosses(edge.A, edge.B, line.A, line.B) ) return true;
-      edge.A.release(); // B will later be set to A, so don't release it.
+      if ( lineSegmentCrosses(edge.a, edge.b, line.a, line.b) ) return true;
+      edge.a.release(); // B will later be set to A, so don't release it.
     }
   }
   return false;
@@ -300,14 +300,14 @@ function segmentIntersections(a, b, { indices = false, tangents = true } = {}) {
   const ixIndices = [];
   const ixs = [];
   edges.forEach((edge, i) => {
-     if ( !foundry.utils.lineSegmentIntersects(a, b, edge.A, edge.B) ) return;
+     if ( !foundry.utils.lineSegmentIntersects(a, b, edge.a, edge.b) ) return;
      if ( indices && tangents ) {
        ixIndices.push(i);
        return;
      }
-     const ix = foundry.utils.lineLineIntersection(a, b, edge.A, edge.B);
+     const ix = foundry.utils.lineLineIntersection(a, b, edge.a, edge.b);
      if ( !ix ) return; // Shouldn't happen, but...
-     if ( edge.B.almostEqual(ix) ) return; // Get on the next iteration so endpoint intersections are not repeated.
+     if ( edge.b.almostEqual(ix) ) return; // Get on the next iteration so endpoint intersections are not repeated.
      if ( !tangents && _isTangentIntersection(a, b, edges, ix, i) ) return;
      ixIndices.push(i);
      ixs.push(_ixToPoint(ix));
@@ -337,7 +337,7 @@ function lineIntersections(a, b, { indices = false, tangents = true } = {}) {
   const ixIndices = [];
   const ixs = [];
   edges.forEach((edge, i) => {
-    const ix = foundry.utils.lineLineIntersection(a, b, edge.A, edge.B);
+    const ix = foundry.utils.lineLineIntersection(a, b, edge.a, edge.b);
     if ( !ix ) return;
     if ( !tangents && _isTangentIntersection(a, b, edges, ix, i) ) return;
     ixs.push(_ixToPoint(ix));
@@ -397,21 +397,21 @@ function pointsBetween(a, b) {
   // Start at ixA, and get intersection point at start and end
   const out = [];
   const startEdge = edges[ixA];
-  const startIx = foundry.utils.lineLineIntersection(startEdge.A, startEdge.B, a, b);
+  const startIx = foundry.utils.lineLineIntersection(startEdge.a, startEdge.b, a, b);
   out.push(_ixToPoint(startIx));
-  if ( !startEdge.B.almostEqual(startIx) ) out.push(startEdge.B);
+  if ( !startEdge.b.almostEqual(startIx) ) out.push(startEdge.b);
 
   const ln = edges.length;
-  for ( let i = startIx + 1; i < ln; i += 1 ) out.push(edges[i].B);
+  for ( let i = startIx + 1; i < ln; i += 1 ) out.push(edges[i].b);
 
   if ( ixB < ixA ) {
     // Must circle around to the starting edge
-    for ( let i = 0; i < ixB; i += 1 ) out.push(edges[i].B);
+    for ( let i = 0; i < ixB; i += 1 ) out.push(edges[i].b);
   }
 
   const endEdge = edges[ixB];
-  const endIx = foundry.utils.lineLineIntersection(endEdge.A, endEdge.B, a, b);
-  if ( !endEdge.A.almostEqual(endIx) ) out.push(_ixToPoint(endIx));
+  const endIx = foundry.utils.lineLineIntersection(endEdge.a, endEdge.b, a, b);
+  if ( !endEdge.a.almostEqual(endIx) ) out.push(_ixToPoint(endIx));
 
   return out;
 }
@@ -511,9 +511,9 @@ function _overlapsCircle(circle) {
   const segments = this.iterateEdges({ close: true });
   for ( const s of segments ) {
     // Get point on the line closest to segment from circle center
-    const c = foundry.utils.closestPointToSegment(circle, s.A, s.B);
+    const c = foundry.utils.closestPointToSegment(circle, s.a, s.b);
     if ( circle.contains(c.x, c.y) ) return true;
-    s.A.release(); // B will become A, so don't release.
+    s.a.release(); // B will become A, so don't release.
   }
 
   return false;
@@ -540,8 +540,8 @@ function _envelopsPolygon(poly) {
   // Step 3: Cannot have intersecting lines.
   const edges = poly.iterateEdges();
   for ( const edge of edges ) {
-    if ( this.lineSegmentIntersects(edge.A, edge.B) ) return false;
-    edge.A.release(); // B will become A so don't release.
+    if ( this.lineSegmentIntersects(edge.a, edge.b) ) return false;
+    edge.a.release(); // B will become A so don't release.
   }
   return true;
 }
@@ -562,8 +562,8 @@ function _envelopsRectangle(rect) {
   // Step 2: No intersecting edges.
   const edges = rect.iterateEdges();
   for ( const edge of edges ) {
-    if ( this.lineSegmentIntersects(edge.A, edge.B) ) return false;
-    edge.A.release(); // B will become A so don't release.
+    if ( this.lineSegmentIntersects(edge.a, edge.b) ) return false;
+    edge.a.release(); // B will become A so don't release.
   }
   return true;
 }
@@ -583,9 +583,9 @@ function _envelopsCircle(circle) {
   // Step 3: No intersecting edges.
   const edges = this.iterateEdges();
   for ( const edge of edges ) {
-    const ixs = circle.segmentIntersections(edge.A, edge.B);
+    const ixs = circle.segmentIntersections(edge.a, edge.b);
     if ( ixs.length ) return false;
-    edge.A.release(); // B will become A so don't release.
+    edge.a.release(); // B will become A so don't release.
   }
   return true;
 }
@@ -1118,11 +1118,11 @@ function pixiEdges({ close = true } = {}) {
 function canUseFanTriangulation(centroid) {
   centroid ??= this.center;
   if ( !this.contains(centroid.x, centroid.y) ) return false;
-  const lines = [...this.iteratePoints({ close: false })].map(B => {
-    return { A: centroid, B };
+  const lines = [...this.iteratePoints({ close: false })].map(b => {
+    return { a: centroid, b };
   });
   const out = !this.linesCross(lines); // Lines cross ignores lines that only share endpoints.
-  lines.forEach(l => l.B.release());
+  lines.forEach(l => l.b.release());
   return out;
 }
 

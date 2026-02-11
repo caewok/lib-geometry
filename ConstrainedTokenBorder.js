@@ -290,7 +290,7 @@ export class ConstrainedTokenBorder extends foundry.canvas.geometry.ClockwiseSwe
       const orient2d = foundry.utils.orient2dFast;
       for ( const boundaryEdge of boundary.iterateEdges() ) {
         // Works b/c the boundary polygon is simple.
-        if ( orient2d(boundaryEdge.A, boundaryEdge.B, edge.a, edge.b).almostEqual(0) ) return true;
+        if ( orient2d(boundaryEdge.a, boundaryEdge.b, edge.a, edge.b).almostEqual(0) ) return true;
       }
     }
     return false;

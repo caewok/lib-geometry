@@ -257,12 +257,12 @@ export function categorizePointsInOutConvexPolygon(poly, points, epsilon = 1e-08
       if ( !ptIsCW ) continue;
 
       const pt = points[i];
-      if ( isOnSegment(edge.A, edge.B, pt, epsilon) ) {
+      if ( isOnSegment(edge.a, edge.b, pt, epsilon) ) {
         ptIsCW = false;
         out.on.push(pt);
         found += 1;
       } else {
-        let oPt = foundry.utils.orient2dFast(edge.A, edge.B, pt);
+        let oPt = foundry.utils.orient2dFast(edge.a, edge.b, pt);
         if  ( oPt.almostEqual(0, epsilon) ) oPt = 0;
         ptIsCW &&= oPt < 0;
         if ( !ptIsCW ) {

@@ -282,7 +282,7 @@ export class AABB3d extends AABB2d {
     const axis = Point3d.tmp;
     const edgeDir = Point3d.tmp;
     for ( const edge of poly3d.iterateEdges() ) {
-      edge.B.subtract(edge.A, edgeDir);
+      edge.b.subtract(edge.a, edgeDir);
 
       // Cross with X axis (1, 0, 0) -> result is (0, edge.z, -edge.y)
       if ( checkGap(this, poly3d, axis.set(0, -edgeDir.z, edgeDir.y)) ) return false;

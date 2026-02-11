@@ -429,10 +429,9 @@ export class Polygon3d {
     const b = Point3d.tmp;
 
     for ( const edge of this.iterateEdges({ close: true }) ) {
-      const { A, B } = edge;
-      const z0 = bottomZ ?? A.z - heightZ;
-      const z1 = bottomZ ?? B.z - heightZ;
-      const side = Quad3d.from4Points(edge.B, edge.A, a.set(A.x, A.y, z0), b.set(B.x, B.y, z1));
+      const z0 = bottomZ ?? edge.a.z - heightZ;
+      const z1 = bottomZ ?? edge.b.z - heightZ;
+      const side = Quad3d.from4Points(edge.b, edge.a, a.set(edge.a.x, edge.a.y, z0), b.set(edge.b.x, edge.b.y, z1));
       sides[i++] = side;
     }
     Point3d.release(a, b);
@@ -477,16 +476,16 @@ export class Polygon3d {
     if ( n < 2 ) return;
 
     const firstA = this.points[0];
-    let A = firstA;
+    let a = firstA;
     for ( let i = 1; i < n; i += 1 ) {
-      const B = this.points[i];
-      yield { A, B };
-      A = B;
+      const b = this.points[i];
+      yield { a, b };
+      a = b;
     }
 
     if ( close ) {
-      const B = firstA;
-      yield { A, B };
+      const b = firstA;
+      yield { a, b };
     }
   }
 
@@ -682,12 +681,12 @@ export class Polygon3d {
     // Discard all points that don't meet it.
     const toKeep = [];
     for ( const edge of this.iterateEdges({ close: true }) ) {
-      const { A, B } = edge;
-      if ( cmp(A) ) toKeep.push(A.clone());
-      if ( cmp(A) ^ cmp(B) ) {
+      const { a, b } = edge;
+      if ( cmp(a) ) toKeep.push(a.clone());
+      if ( cmp(a) ^ cmp(b) ) {
         const newPt = Point3d.tmp;
-        const res = A.projectToAxisValue(B, cutoff, coordinate, newPt);
-        if ( res && !(newPt.almostEqual(A) || newPt.almostEqual(B)) ) toKeep.push(newPt);
+        const res = a.projectToAxisValue(b, cutoff, coordinate, newPt);
+        if ( res && !(newPt.almostEqual(a) || newPt.almostEqual(b)) ) toKeep.push(newPt);
       }
     }
     return toKeep;

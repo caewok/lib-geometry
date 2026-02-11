@@ -68,16 +68,16 @@ function* iteratePoints({close = true} = {}) {
  * Edges link, such that edge0.B === edge.1.A.
  */
 function* iterateEdges({close = true} = {}) {
-  const A = PIXI.Point.tmp.set(this.x, this.y);
-  const B = PIXI.Point.tmp.set(this.x + this.width, this.y);
-  yield { A, B };
+  const a = PIXI.Point.tmp.set(this.x, this.y);
+  const b = PIXI.Point.tmp.set(this.x + this.width, this.y);
+  yield { a, b };
 
-  const C = PIXI.Point.tmp.set(this.x + this.width, this.y + this.height);
-  yield { A: B, B: C };
+  const c = PIXI.Point.tmp.set(this.x + this.width, this.y + this.height);
+  yield { a: b, b: c };
 
-  const D = PIXI.Point.tmp.set(this.x, this.y + this.height);
-  yield { A: C, B: D };
-  if ( close ) yield { A: D, B: A };
+  const d = PIXI.Point.tmp.set(this.x, this.y + this.height);
+  yield { a: c, b: d };
+  if ( close ) yield { a: d, b: a };
 }
 
 /**

@@ -1088,7 +1088,7 @@ Ex: 6 points, 6 outer edges.
     ];
 
     let j = 0;
-    for ( const { A, B } of poly.iterateEdges({ close: true }) ) {
+    for ( const { a, b } of poly.iterateEdges({ close: true }) ) {
       // Position                   Normal          UV
       // B.x, B.y, topZ     nx, ny, nz      0, 0
       // A.x, A.y, topZ     nx, ny, nz      0, 0
@@ -1097,10 +1097,10 @@ Ex: 6 points, 6 outer edges.
       // B.x, B.y, topZ     nx, ny, nz      0, 0
       // A.x, A.y, bottomZ  nx, ny, nz      0, 0
 
-      a.set(A.x, A.y, topZ);
-      b.set(B.x, B.y, topZ);
-      c.set(A.x, A.y, bottomZ);
-      d.set(B.x, B.y, bottomZ);
+      a.set(a.x, a.y, topZ);
+      b.set(b.x, b.y, topZ);
+      c.set(a.x, a.y, bottomZ);
+      d.set(b.x, b.y, bottomZ);
 
       // Calculate the normal
       b.subtract(a, deltaAB);

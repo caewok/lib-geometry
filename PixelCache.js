@@ -958,8 +958,8 @@ export class LocalCoordinateCache extends AABB2d {
       // Calculate where this line hits the "walls" (edges) of the polygon
       const intersections = [];
       for ( const edge of polygon.iterateEdges({ close: true }) ) {
-        const p1 = edge.A;
-        const p2 = edge.B;
+        const p1 = edge.a;
+        const p2 = edge.b;
 
         // Check if the edge crosses the current Y level
         if ( (p1.y <= y && p2.y > y) || (p2.y <= y && p1.y > y) ) {
@@ -2238,8 +2238,8 @@ export class PixelCache extends LocalCoordinateCache {
       // Calculate where this line hits the "walls" (edges) of the polygon
       const intersections = [];
       for ( const edge of polygon.iterateEdges({ close: true }) ) {
-        const p1 = edge.A;
-        const p2 = edge.B;
+        const p1 = edge.a;
+        const p2 = edge.b;
 
         // Check if the edge crosses the current Y level
         if ( (p1.y <= y && p2.y > y) || (p2.y <= y && p1.y > y) ) {
