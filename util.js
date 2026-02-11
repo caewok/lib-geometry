@@ -271,7 +271,7 @@ export function categorizePointsInOutConvexPolygon(poly, points, epsilon = 1e-08
         }
       }
     }
-    edge.A.release();
+    edge.a.release();
     if ( found === nPts ) return out;
   }
 

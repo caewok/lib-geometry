@@ -261,7 +261,7 @@ function linesCross(lines) {
 function lineSegmentCrossesPolygon(a, b, { inside = false } = {}) {
   if ( this.contains(a.x, a.y) && this.contains(b.x, b.y) ) return inside;
   for ( const edge of this.pixiEdges() ) {
-    if ( lineSegmentCrosses(a, b, edge.A, edge.B) ) return true;
+    if ( lineSegmentCrosses(a, b, edge.a, edge.b) ) return true;
   }
   return false;
 }
@@ -279,7 +279,7 @@ function lineSegmentCrossesPolygon(a, b, { inside = false } = {}) {
 function lineSegmentIntersects(a, b, { inside = false } = {}) {
   if ( this.contains(a.x, a.y) && this.contains(b.x, b.y) ) return inside;
   for ( const edge of this.pixiEdges() ) {
-    if ( foundry.utils.lineSegmentIntersects(a, b, edge.A, edge.B) ) return true;
+    if ( foundry.utils.lineSegmentIntersects(a, b, edge.a, edge.b) ) return true;
   }
   return false;
 }
@@ -357,15 +357,15 @@ function _isTangentIntersection(a, b, edges, ix, i) {
   // Could be a singleton; tangent to vertex but never moving into the edge.
   // Happens if for edges A --> B --> C, orient(a, b, A) is same side as orient(a, b, C) for B edge
   const edge = edges[i];
-  if ( edge.A.almostEqual(ix) ) {
+  if ( edge.a.almostEqual(ix) ) {
     const idx = (edges.length + i - 1) % edges.length;
     const priorEdge = edges[idx];
-    if ( foundry.utils.orient2dFast(a, b, priorEdge.A) * foundry.utils.orient2dFast(a, b, edge.B) > 0 ) return true; // Same side
+    if ( foundry.utils.orient2dFast(a, b, priorEdge.a) * foundry.utils.orient2dFast(a, b, edge.b) > 0 ) return true; // Same side
 
-  } else if ( edge.B.almostEqual(ix) ) {
+  } else if ( edge.b.almostEqual(ix) ) {
     const idx = (edges.length + i + 1) % edges.length;
     const nextEdge = edges[idx];
-    if ( foundry.utils.orient2dFast(a, b, nextEdge.B) * foundry.utils.orient2dFast(a, b, edge.A) > 0 ) return true; // Same side
+    if ( foundry.utils.orient2dFast(a, b, nextEdge.b) * foundry.utils.orient2dFast(a, b, edge.a) > 0 ) return true; // Same side
   }
   return false;
 }

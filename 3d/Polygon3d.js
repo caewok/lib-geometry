@@ -469,7 +469,7 @@ export class Polygon3d {
    * @param {object} [options]
    * @param {boolean} [close]   If true, return last point --> first point as edge.
    * @returns { A: Point3d, B: Point3d } for each edge
-   * Edges link, such that edge0.B === edge.1.A.
+   * Edges link, such that edge0.b === edge.1.a.
    */
   *iterateEdges({close = true} = {}) {
     const n = this.points.length;

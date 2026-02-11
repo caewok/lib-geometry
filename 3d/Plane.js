@@ -110,15 +110,15 @@ export class Plane {
     const pts = Point3d.fromWall(wall, { finite: true }); // Need finite so Normal can be calculated
 
     // To keep the points simple, use different Z values
-    const A = pts.A.top;
-    const B = pts.A.bottom;
-    const C = pts.B.bottom;
+    const A = pts.a.top;
+    const B = pts.a.bottom;
+    const C = pts.b.bottom;
 
-    B.z = (A.z + B.z) * 0.5;
-    A.z = B.z + 1;
-    C.z = B.z;
+    b.z = (a.z + b.z) * 0.5;
+    a.z = b.z + 1;
+    c.z = b.z;
 
-    return Plane.fromPoints(pts.A.top, pts.A.bottom, pts.B.bottom);
+    return Plane.fromPoints(pts.a.top, pts.a.bottom, pts.b.bottom);
   }
 
   /**
@@ -377,25 +377,7 @@ export class Plane {
     const A = P;
     const n = P.add(N);
 
-    // Three points
-    /* Original version, for testing
-    A = terrainWallPoints.A.top
-    B = terrainWallPoints.A.bottom
-    C = terrainWallPoints.B.bottom
-
-    AB = B.subtract(A);
-    AC = C.subtract(A);
-    N = AB.cross(AC);
-    U = AB.normalize()
-    uN = N.normalize();
-    V = U.cross(uN);
-    u = A.add(U);
-    v = A.add(V);
-    n = A.add(uN);
-    */
-
     // Adjust for row-major matrix and left-hand coordinate system
-
     const S = new MatrixFlat([
       A.x, A.y, A.z, 1,
       u.x, u.y, u.z, 1,
