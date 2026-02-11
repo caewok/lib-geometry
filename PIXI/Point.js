@@ -15,7 +15,10 @@ const pool = new Pool(PIXI.Point); // Instead of static #pool, just hide it here
 
 function releaseStatic(...args) { args.forEach(arg => pool.release(arg)); }
 
-function releaseObj(obj) {  pool.release(obj); }
+function releaseObj(obj) {
+  obj.t0 = null;
+  pool.release(obj);
+}
 
 function release() { this.constructor.releaseObj(this); }
 
@@ -521,7 +524,7 @@ function to2d(_opts, outPoint) {
   return outPoint;
 }
 
-PIXI.Point.prototype.t0 = 0; // Solely for storing intersections to avoid rebuilding the class.
+PIXI.Point.prototype.t0 = null; // Solely for storing intersections to avoid rebuilding the class.
 
 /**
  * Iterator: x then y.

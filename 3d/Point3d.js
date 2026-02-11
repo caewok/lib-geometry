@@ -67,7 +67,7 @@ export class Point3d extends PIXI.Point {
 
   z = 0;
 
-  t0 = 0; // Solely for storing intersection distances.
+  t0 = null; // Solely for storing intersection distances.
 
   /**
    * @param {number} [x=0] - position of the point on the x axis
@@ -81,7 +81,10 @@ export class Point3d extends PIXI.Point {
 
   static #pool = new Pool(this);
 
-  static releaseObj(obj) { this.#pool.release(obj); }
+  static releaseObj(obj) {
+    obj.t0 = null;
+    this.#pool.release(obj);
+  }
 
   static release(...args) { args.forEach(arg => arg.release()); }
 

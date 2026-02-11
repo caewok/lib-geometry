@@ -44,7 +44,10 @@ export class GridCoordinates3d extends ElevatedPoint {
 
   static #pool = new Pool(this);
 
-  static releaseObj(obj) { this.#pool.release(obj); }
+  static releaseObj(obj) {
+    obj.t0 = null;
+    this.#pool.release(obj);
+  }
 
   static get tmp() { return this.#pool.acquire(); }
 
