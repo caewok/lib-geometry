@@ -81,18 +81,21 @@ function fromObject(obj) {
 function angleBetween(a, b, c, { clockwiseAngle = false } = {}) {
   // See https://mathsathome.com/angle-between-two-vectors/
   // Create new pixi points so that 2d distance works when passing 3d points.
-  const tmp0 = PIXI.Point.tmp;
-  const tmp1 = PIXI.Point.tmp;
+  const ba = a.subtract(b);
+  const bc = c.subtract(b);
 
-  const ba = a.subtract(b, tmp0);
-  const bc = c.subtract(b, tmp1);
-  const dot = ba.dot(bc);
-  const denom = ba.magnitude() * bc.magnitude();
+  // Use atan2 instead of acos for numerical stability.
+  const angle1 = Math.atan2(ba.y, ba.x);
+  const angle2 = Math.atan2(bc.y, bc.x);
+  let angle = Math.abs(angle1 - angle2);
+  if ( angle > Math.PI ) angle = (2 * Math.PI) - angle;
 
-  let angle = Math.acos(dot / denom);
+  // const dot = ba.dot(bc);
+  // const denom = ba.magnitude() * bc.magnitude();
+  // let angle = Math.acos(dot / denom);
   if ( clockwiseAngle && foundry.utils.orient2dFast(a, b, c) > 0 ) angle = (Math.PI * 2) - angle;
-  tmp0.release();
-  tmp1.release();
+  ba.release();
+  bc.release();
   return angle;
 }
 
