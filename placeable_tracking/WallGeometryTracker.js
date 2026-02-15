@@ -19,7 +19,7 @@ import {
 
 // LibGeometry
 import { AABB3d } from "../3d/AABB3d.js";
-import { MatrixFloat32 } from "../MatrixFlat.js";
+import { MatrixFloat32 } from "../Matrix.js";
 import { Quad3d } from "../3d/Polygon3d.js";
 import { gridUnitsToPixels } from "../util.js";
 

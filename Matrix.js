@@ -4,71 +4,108 @@ PIXI,
 "use strict";
 
 import { Point3d } from "./3d/Point3d.js";
+import { mix } from "./mixwith.js";
 
 // Basic matrix operations
 // May eventually replace with math.js (when installed, call "math" to get functions)
-// Row-major format
+// row-major format, so this works:
+// See https://www.modular.com/blog/row-major-vs-column-major-matrices-a-performance-analysis-in-mojo-and-numpy#:~:text=Row%2Dmajor%20and%20column%20major,stored%20in%20contiguous%20memory%20locations.
+/*
+[
+  1, 2, 3
+  4, 5, 6  ==> [1, 2, 3, 4, 5, 6, 7, 8, 9]
+  7, 8, 9
+]
 
+
+*/
+// Improved for speed; uses a flat array to store.
+// Keep separate for the moment until tested.
 
 export class Matrix {
-  constructor(arr) {
+
+  static [Symbol.hasInstance](instance) {
+    return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
+  }
+
+  static get _geoLibType() { return this.name; }
+
+  static arrayClass = Array;
+
+  static arrayIsTyped = false;
+
+  /** @type {Array|TypedArray} */
+  arr = [];
+
+  /** @type {number} */
+  nrow = 0;
+
+  /** @type {number} */
+  ncol = 0;
+
+  constructor(arr, nrow, ncol) {
     this.arr = arr;
+    this.nrow = nrow ?? 1;
+    this.ncol = ncol ?? Math.floor(arr.length / nrow);
   }
 
-  get nrow() { return this.arr.length; }
+  // ----- NOTE: Getters and indexers ---- //
 
-  get ncol() { return this.arr[0].length; }
+  // Backwards compatibility
+  /** @type {number} */
+  get dim1() { return this.nrow; }
+
+  // Backwards compatibility
+  /** @type {number} */
+  get dim2() { return this.ncol; }
+
+  /** @type {number} */
+  get length() { return this.arr.length; }
+
+  // Row major, so row 0, col0, col1, ... row 1, col0, col1, ...
+  _idx(row, col) { return (row * this.ncol) + col; }
+
+  getIndex(row, col) { return this.arr[this._idx(row, col)]; }
+
+  setIndex(row, col, value) { this.arr[this._idx(row, col)] = value; }
 
   /**
-   * First dimension length of the array
-   * @type {number}
+   * Return a new matrix with smaller or equal dimensions from this matrix.
+   * @param {object} [opts]
+   * @param {number} [opts.rowStart=0]      First row to keep, indexed from 0
+   * @param {number} [opts.rowEnd]          Last row to keep, inclusive; defaults to last row
+   * @param {number} [opts.colStart=0]      First column to keep, indexed from 0
+   * @param {number} [opts.colEnd]          Last column to keep, inclusive; defaults to last column
+   * @returns {Matrix} New matrix
    */
-  get dim1() {
-    return this.arr.length;
+  subset({ rowStart = 0, rowEnd = this.nrow - 1, colStart = 0, colEnd = this.ncol - 1 } = {}) {
+    rowEnd += 1;
+    colEnd += 1;
+
+    // Rows are easy.
+    const rowArr = this.arr.slice(rowStart * this.nrow, rowEnd * this.nrow);
+    const newArr = [];
+    for ( let r = 0, rMax = rowEnd - rowStart; r < rMax; r += 1 ) {
+      const cIdx = r * this.ncol;
+      newArr.push(...rowArr.slice(cIdx + colStart, cIdx + colEnd));
+    }
+   return new this.constructor(newArr, rowEnd - rowStart, colEnd - colStart);
   }
 
-  /**
-   * Second dimension length of the array
-   * @type {number}
-   */
-  get dim2() {
-    return this.arr[0].length;
-  }
-
-  /**
-   * Get an element of the matrix.
-   * @param {number} row
-   * @param {number} col
-   * @returns {number}
-   */
-  getIndex(row, col) { return this.arr[row][col]; }
-
-  /**
-   * Set an element of the matrix
-   * @param {number} row
-   * @param {number} col
-   * @param {number} value
-   */
-  setIndex(row, col, value) { this.arr[row][col] = value; }
+  // ----- NOTE: Iterators ----- //
 
   /**
    * Iterate over each element of the matrix.
-   * Iterate by row, then column.
+   * Iterate by column, then by row
    */
   [Symbol.iterator]() {
-    let r = 0;
-    let c = 0;
-    const { nrow, ncol } = this;
-    const ln = nrow * ncol;
+    let index = 0;
+    const ln = this.length;
+    const dat = this.arr;
     return {
       next() {
-        if ( (r * c) < ln ) {
-          const value = this.arr[r++][c];
-          if ( r >= nrow ) {
-            r = 0;
-            c += 1;
-          }
-          return { value, done: false };
+        if ( index < ln ) {
+          return { value: dat[index++], done: false };
         } else return { done: true };
       }
     };
@@ -86,9 +123,20 @@ export class Matrix {
   forEach(callback) {
     const { nrow, ncol } = this;
     for ( let r = 0; r < nrow; r += 1 ) {
-      const rArr = this.arr[r];
-      for ( let c = 0; c < ncol; c += 1 ) callback(rArr[c], r, c, this);
+      for ( let c = 0; c < ncol; c += 1 ) callback(this.getIndex(r, c), r, c, this);
     }
+  }
+
+  /**
+   * Same as forEach but does not use getIndex and does not determine row, col.
+   * @param {function} callback     Function that can take:
+   *   - @param {number} element
+   *   - @param {number} i
+   *   - @param {Matrix} this
+   */
+  _forEach(callback) {
+    const ln = this.length;
+    for ( let i = 0; i < ln; i += 1 ) callback(this.arr[i], i, this);
   }
 
   /**
@@ -97,121 +145,125 @@ export class Matrix {
    * @param {function} callback       See forEach.
    */
   setElements(callback) {
-    const setter = (elem, r, c) => this[r][c] = callback(elem, r, c, this);
+    const setter = (elem, r, c, mat) => mat.setIndex(r, c, callback(elem, r, c, mat));
     this.forEach(setter);
   }
 
   /**
-   * Confirm that length of each sub-array is equal.
-   * @param {Array[]} arr   Array of arrays.
-   * @returns {boolean}
+   * Same as setElements but does not use getIndex and does not determine row, col.
+   * @param {function} callback     Function that can take:
+   *   - @param {number} element
+   *   - @param {number} i
+   *   - @param {Matrix} this
    */
-  static verify(arr) {
-    if ( !(arr instanceof Array) || arr.length === 0 ) return false;
+  _setElements(callback) {
+    const setter = (elem, i, mat) => mat.arr[i] = callback(elem, i, mat);
+    this._forEach(setter);
+  }
 
-    const innerLength = arr[0].length;
-    return arr.every(elem => elem instanceof Array && elem.length === innerLength);
+  forEachDiagonal(callback) {
+    const ln = Math.min(this.nrow, this.ncol);
+    for ( let i = 0; i < ln; i += 1 ) callback(this.getIndex(i, i), i, this);
+  }
+
+  setDiagonal(callback) {
+    const setter = (elem, i, mat) => mat.setIndex(i, i, callback(elem, i, mat));
+    this.forEachDiagonal(setter);
+  }
+
+  // ----- NOTE: Construction from arrays ----- //
+
+  /**
+   * Create a column from a 2D array, where the outer array stores the rows.
+   * e.g.
+   * Matrix.from2dArray([
+   *   [r0c0, r1c0]
+   *   [r1c0, r1c1]
+   * @param {Array[Array[]]} arr
+   * @returns {Matrix}
+   */
+  static from2dArray(arr, outMatrix) {
+    const nrow = arr.length;
+    const ncol = arr[0].length;
+    outMatrix ??= this.empty(nrow, ncol);
+    outMatrix.setElements((elem, r, c) => arr[r][c]);
+    return outMatrix;
   }
 
   /**
-   * Create matrix of given dimensions from a flat array.
-   * Flat array arranged reading across. So (row0,col0), (row0,col1), ... (row1,col0), (row1,col1)
-   * @param {number[]} arr    Flat array of numbers.
+   * Uses the array provided unless a typed array is required, and then copies it.
+   * @param {Array|TypedArray} arr
    * @param {number} rows
    * @param {number} cols
-   * @return {Matrix}
    */
-  static fromFlatArray(arr, rows, cols) {
+  static fromRowMajorArray(arr, rows, cols) {
     const ln = arr.length;
     if ( rows * cols !== ln ) {
       console.error("Rows or columns incorrectly specified.");
       return undefined;
     }
+    return new this(this.arrayIsTyped ? new this.arrayClass(arr) : arr, rows, cols);
+  }
 
-    const out = new Array(rows);
-    for ( let r = 0; r < rows; r += 1 ) {
-      const arrR = new Array(cols);
-      out[r] = arrR;
-      const i = r * cols;
-      for ( let c = 0; c < cols; c += 1 ) {
-        arrR[c] = arr[i + c];
-      }
+  static fromColumnMajorArray(arr, rows, cols) {
+    const ln = arr.length;
+    if ( rows * cols !== ln ) {
+      console.error("Rows or columns incorrectly specified.");
+      return undefined;
     }
-    return new this(out);
-  }
-
-  toRowMajorArray() { return this.arr.flat(); }
-
-  toColMajorArray() {
-    const nRow = this.dim1;
-    const nCol = this.dim2;
-    const flatArr = Array(nRow * nCol);
-    for ( let c = 0; c < nCol; c += 1 ) {
-      const cIdx = c * nRow;
-      for ( let r = 0; r < nRow; r += 1 ) {
-        flatArr[cIdx + r] = this.arr[r][c];
-      }
-    }
-    return flatArr;
-  }
-
-  toGLSLArray() {
-    // See https://austinmorlan.com/posts/opengl_matrices/
-    // Technically: this.transpose().toColMajorArray().
-    // But that is the same as this.toRowMajorArray().
-    return this.toRowMajorArray();
-  }
-
-  /**
-   * Create an empty matrix.
-   * @param {number} rows
-   * @param {number} cols
-   * @returns {Matrix}
-   */
-  static empty(rows, cols) {
-    const out = new Array(rows);
-    for ( let r = 0; r < rows; r += 1 ) out[r] = new Array(cols);
-    return new this(out);
-  }
-
-  /**
-   * Create a matrix filled with zeroes.
-   * @param {number} rows
-   * @param {number} cols
-   * @returns {Matrix}
-   */
-  static zeroes(rows, cols) {
-    const out = new Array(rows);
-    for ( let r = 0; r < rows; r += 1 ) out[r] = (new Array(cols)).fill(0);
-    return new this(out);
-  }
-
-  /**
-   * Fill this matrix with zeroes.
-   * @returns {this}
-   */
-  zero() { this.setElements(() => 0); return this; }
-
-  /**
-   * Create an identity matrix
-   * @param {number} rows
-   * @param {number} cols
-   * @returns {Matrix}
-   */
-  static identity(rows, cols) {
-    const mat = Matrix.zeroes(rows, cols);
-    const iMax = Math.min(rows, cols);
-    for ( let i = 0; i < iMax; i += 1 ) {
-      mat.arr[i][i] = 1;
-    }
+    const mat = this.empty(rows, cols);
+    mat._setElements((elem, i) => arr[i]);
     return mat;
   }
 
   /**
-   * Reset this matrix to an identity matrix
-   * @returns {this}
+   * Copy the values of this array to a new array, in column-major format.
+   * @param {Array|TypedArray} arr
+   * @returns {Array|TypedArray} arr or a new array.
    */
-  identity() { this.setElements((elem, r, c) => r === c ? 1 : 0); return this; }
+  toColumnMajorArray(arr) {
+    arr ??= this.constructor.arrayIsTyped
+      ? new this.constructor.arrayClass(this.arr.length) : new Array(this.arr.length);
+    // Taken from transpose method.
+    this.forEach((elem, r, c) => arr[this._idx(c, r)] = elem);
+    return arr;
+  }
+
+  // ----- NOTE: Simple matrix construction ----- //
+
+  /**
+   * Create an empty matrix.
+   * @param {number} rows
+   * @param {number} [cols]
+   * @returns {Matrix}
+   */
+  static empty(rows, cols = rows) {
+    return new this(new this.arrayClass(rows * cols), rows, cols);
+  }
+
+  /**
+   * Create a matrix filled with zeroes.
+   * @param {number|Matrix} rows        Number of rows or the matrix to fill
+   * @param {number} [cols]
+   * @returns {Matrix}
+   */
+  static zeroes(rows, cols) {
+    const out = this.empty(rows, cols);
+    out.arr.fill(0);
+    return out;
+  }
+
+  /**
+   * Create an identity matrix
+   * @param {number|Matrix} rows        Number of rows or the matrix to fill
+   * @param {number} [cols]
+   * @returns {Matrix}
+   */
+  static identity(rows, cols) {
+    const mat = this.zeroes(rows, cols);
+    mat.setDiagonal(() => 1);
+    return mat;
+  }
 
   /**
    * Create a matrix filled with random numbers between 0 and 1.
@@ -221,24 +273,175 @@ export class Matrix {
    */
   static random(rows, cols) {
     const mat = this.empty(rows, cols);
-    for ( let r = 0; r < rows; r += 1 ) {
-      for ( let c = 0; c < cols; c += 1 ) mat.arr[r][c] = Math.random();
-    }
+    mat._setElements(() => Math.random());
     return mat;
   }
 
+  /**
+   * Create a 1x4 matrix from a point.
+   */
   static fromPoint3d(p, { homogenous = true } = {}) {
-    const arr = homogenous ? [p.x, p.y, p.z, 1] : [p.x, p.y, p.z];
-    return new Matrix([arr]);
-  }
+    const mat = this.empty(1, 3 + homogenous);
 
-  static fromPoint2d(p, { homogenous = true } = {}) {
-    const arr = homogenous ? [p.x, p.y, 1] : [p.x, p.y];
-    return new Matrix([arr]);
+    // Only single row, so can process the array directly.
+    mat.arr[0] = p.x;
+    mat.arr[1] = p.y;
+    mat.arr[2] = p.z;
+    if ( homogenous ) mat.arr[3] = 1;
+    return mat;
   }
 
   /**
-   * Specifies a viewing frustum in the world coordinate system.
+   * Create a 1x3 matrix from a point.
+   */
+  static fromPoint2d(p, { homogenous = true } = {}) {
+    const mat = this.empty(1, 2 + homogenous);
+
+    // Only single row, so can process the array directly.
+    mat.arr[0] = p.x;
+    mat.arr[1] = p.y;
+    if ( homogenous ) mat.arr[2] = 1;
+    return mat;
+  }
+
+ /**
+  * Set every element to 0.
+  * @returns {this} For convenience.
+  */
+ zero() { this.arr.fill(0); return this; }
+
+ /**
+  * Set every element except the diagonal to 0. Diagonals set to 1.
+  * @returns {this} For convenience.
+  */
+ identity() { this.arr.fill(0); this.setDiagonal(() => 1); return this; }
+
+ /**
+  * Set diagonal to a constant.
+  * @param {number} [c=1]     Constant to use
+  * @returns {this} For convenience
+  */
+ setConstantDiagonal(c = 1) {
+   const ln = Math.min(this.nrow, this.ncol);
+   for ( let i = 0; i < ln; i += 1 ) this.setIndex(i, i, c);
+   return this;
+ }
+
+ /**
+   * Convert matrix to a PIXI.Point.
+   * Any index in the first row can be chosen for x and y.
+   * If homogenous is true, the last column [0, col - 1] is assumed to be the divisor.
+   * @param {object} [options]    Options to affect how the matrix is interpreted.
+   * @param {number} [options.xIndex]       Column for the x variable.
+   * @param {number} [options.yIndex]       Column for the y variable.
+   * @param {boolean} [options.homogenous]  Whether to convert homogenous coordinates.
+   * @param {Point3d} [options.outPoint]    Placeholder for the new Point.
+   * @returns {PIXI.Point}
+   */
+  toPoint2d({ xIndex = 0, yIndex = 1, homogenous = true, outPoint = new PIXI.Point() } = {}) {
+    const arr = this.arr;
+    outPoint.x = arr[xIndex];
+    outPoint.y = arr[yIndex];
+    if ( homogenous ) {
+      const h = arr[this.ncol - 1];
+      outPoint.x /= h;
+      outPoint.y /= h;
+    }
+    return outPoint;
+  }
+
+  /**
+   * Convert matrix to a Point3d.
+   * Any index in the first row can be chosen for x and y and z.
+   * If homogenous is true, the last column [0, col - 1] is assumed to be the divisor.
+   * @param {object} [options]    Options to affect how the matrix is interpreted.
+   * @param {number} [options.xIndex]       Column for the x variable.
+   * @param {number} [options.yIndex]       Column for the y variable.
+   * @param {number} [options.zIndex]       Column for the z variable.
+   * @param {boolean} [options.homogenous]  Whether to convert homogenous coordinates.
+   * @param {Point3d} [options.outPoint]    Placeholder for the new Point3d.
+   * @returns {PIXI.Point}
+   */
+  toPoint3d({ xIndex = 0, yIndex = 1, zIndex = 2, homogenous = true, outPoint = new Point3d() } = {}) {
+    const arr = this.arr;
+    outPoint.x = arr[xIndex];
+    outPoint.y = arr[yIndex];
+    outPoint.z = arr[zIndex];
+    if ( homogenous ) {
+      const h = this.arr[this.ncol - 1];
+      outPoint.x /= h;
+      outPoint.y /= h;
+      outPoint.z /= h;
+    }
+    return outPoint;
+  }
+
+  /**
+   * Copy this matrix to a new matrix object.
+   * @param {Matrix} [outMatrix]      The matrix to use as the clone; must have same dimensions.
+   * @returns {Matrix}
+   */
+  clone(outMatrix) {
+    outMatrix ??= this.constructor.empty(this.nrow, this.ncol);
+    outMatrix._setElements((elem, i) => this.arr[i]);
+    return outMatrix;
+  }
+
+  // ----- NOTE: Transformation ----- //
+
+  /**
+   * Specifies an orthogonal viewing matrix.
+   */
+  static orthogonal(left, right, top, bottom, near, far, M) {
+    const lr = 1 / (left - right);
+    const bt = 1 / (bottom - top);
+    const nf = 1 / (near - far);
+
+    if ( M ) M.zero();
+    else M = this.zeroes(4);
+
+    // Diagonals.
+    M.setIndex(0, 0, -2 * lr);
+    M.setIndex(1, 1, -2 * bt);
+    M.setIndex(2, 2, 2 * nf);
+    M.setIndex(3, 3, 1);
+
+    // Bottom row.
+    M.setIndex(3, 0, (left + right) * lr);
+    M.setIndex(3, 1, (top + bottom) * bt);
+    M.setIndex(3, 2, (far + near) * nf);
+
+    /*
+    2/(r - l),    0,          0,    0,
+    0,    2/(t - b),          0,    0,
+    0,            0,  2/(n - f),    0,
+    (l + r)/(l - r), (b + t)/(b - t), (n + f)/(n - f), 1,
+    */
+  }
+
+ /**
+  * Specifies an orthogonal viewing matrix.
+  * Used for WebGPU, where near/far clip planes correspond to a normalized device coordinate Z range of [0, 1].
+  */
+  static orthogonalZO(left, right, top, bottom, near, far, M) {
+    this.orthogonal(left, right, top, bottom, near, far, M);
+
+    // Modify for ZO matrix.
+    const nf = 1 / (near - far);
+    M.setIndex(2, 2, nf);
+    M.setIndex(3, 2, near * nf)
+
+    /*
+    2/(r - l),    0,          0,    0,
+    0,    2/(t - b),          0,    0,
+    0,            0,  1/(n - f),    0,
+    (l + r)/(l - r), (b + t)/(b - t), n/(n - f), 1,
+    */
+
+  }
+
+  /**
+   * Specifies a viewing frustum (perspective projection matrix) in the world coordinate system.
    * See
    * https://registry.khronos.org/OpenGL-Refpages/gl2.1/xhtml/gluPerspective.xml
    * https://gamedev.stackexchange.com/questions/12726/understanding-the-perspective-projection-matrix-in-opengl
@@ -249,21 +452,70 @@ export class Matrix {
    * @param {number} fovRadians     Field of view angle, in radians, in the y direction
    * @param {number} aspect   Aspect ratio that determines fov in the x direction. Ratio of x (width) to y (height).
    * @param {number} zNear    Distance from the viewer to the near clipping plane (always positive)
-   * @param {number} zFar     Distance from the viewer to the far clipping plane (always positive)
+   * @param {number|Infinity} zFar     Distance from the viewer to the far clipping plane (always positive)
    * @returns {Matrix} 4x4 Matrix, in row-major format
    */
-  static perspective(fovRadians, aspect, zNear, zFar) {
+  static perspective(fovRadians, aspect, zNear, zFar, M) {
     const f = Math.tan((Math.PI * 0.5) - (0.5 * fovRadians));
-    const rangeInv = 1.0 / (zNear - zFar);
-    const DIAG0 = f / aspect;
-    const DIAG2 = (zNear + zFar) * rangeInv;
-    const A = zNear * zFar * rangeInv * 2;
-    return new Matrix([
-      [DIAG0,   0,    0,      0],
-      [0,       f,    0,      0],
-      [0,       0,    DIAG2,  -1],
-      [0,       0,    A,      0]
-    ]);
+
+    if ( M ) M.zero();
+    else M = this.zeroes(4);
+    M.setIndex(0, 0, f / aspect); // DIAG0
+    M.setIndex(1, 1, f);          // f
+    M.setIndex(2, 3, -1);         // -1
+
+    if ( zFar !== Infinity ) {
+      const rangeInv = 1.0 / (zNear - zFar);
+      M.setIndex(2, 2, (zNear + zFar) * rangeInv);    // DIAG2
+      M.setIndex(3, 2, 2 * zNear * zFar * rangeInv);  // A
+    } else {
+      M.setIndex(2, 2, -1);         // DIAG2
+      M.setIndex(3, 2, -2 * zNear); // A
+    }
+    return M;
+
+    /*
+      DIAG0,   0,    0,      0,
+      0,       f,    0,      0,
+      0,       0,    DIAG2,  -1,
+      0,       0,    A,      0
+    */
+  }
+
+  /**
+   * Specifies a viewing frustum (perspective projection matrix) in the world coordinate system.
+   * Used for WebGPU, where near/far clip planes correspond to a normalized device coordinate Z range of [0, 1].
+   * @param {number} fovRadians     Field of view angle, in radians, in the y direction
+   * @param {number} aspect   Aspect ratio that determines fov in the x direction. Ratio of x (width) to y (height).
+   * @param {number} zNear    Distance from the viewer to the near clipping plane (always positive)
+   * @param {number|Infinity} zFar     Distance from the viewer to the far clipping plane (always positive); Pass Infinity for infinite projection matrix.
+   * @returns {Matrix} 4x4 Matrix, in row-major format
+   */
+  static perspectiveZO(fovRadians, aspect, zNear, zFar, M) {
+    const f = Math.tan((Math.PI * 0.5) - (0.5 * fovRadians));
+
+    if ( M ) M.zero();
+    else M = this.zeroes(4);
+    M.setIndex(0, 0, f / aspect); // DIAG1
+    M.setIndex(1, 1, f);          // f
+    M.setIndex(2, 3, -1);         // -1
+
+    if ( zFar !== Infinity ) {
+      const rangeInv = 1.0 / (zNear - zFar);
+      M.setIndex(2, 2, zFar * rangeInv);              // DIAG2
+      M.setIndex(3, 2, zNear * zFar * rangeInv);      // A
+    } else {
+      M.setIndex(2, 2, -1);         // DIAG2
+      M.setIndex(3, 2, -zNear);     // A
+    }
+    return M;
+
+    /*
+      DIAG0,   0,    0,      0,
+      0,       f,    0,      0,
+      0,       0,    DIAG2,  -1,
+      0,       0,    A,      0
+    */
   }
 
   static perspectiveDegrees(fovDegrees, aspect, zNear, zFar) {
@@ -281,19 +533,33 @@ export class Matrix {
    * @param {number} top    Coordinate for the top horizontal clipping plane
    * @param {number} zNear    Distance from the viewer to the near clipping plane (always positive)
    * @param {number} zFar     Distance from the viewer to the far clipping plane (always positive)
-   * @returns {Matrix} 4x4 Matrix, in row-major format
+   * @param {FlatMatrix} M      Out matrix to use
+   * @returns {FlatMatrix} 4x4 Matrix, in row-major format
    */
-  static frustrum(left, right, bottom, top, zNear, zFar) {
+  static frustum(left, right, bottom, top, zNear, zFar, M) {
     const A = (right + left) / (right - left);
     const B = (top + bottom) / (top - bottom);
     const C = -((zFar + zNear) / (zFar - zNear));
     const D = -((2 * zFar * zNear) / (zFar - zNear));
-    return new Matrix([
-      [(2 * zNear) / (right - left),  0,                            A,  0],
-      [0,                             (2 * zNear) / (top - bottom), B,  0],
-      [0,                             0,                            C,  D],
-      [0,                             0,                            -1, 0]
-    ]);
+
+    if ( M ) M.zero();
+    else M = this.zeroes(4);
+
+    M.setIndex(0, 0, (2 * zNear) / (right - left));
+    M.setIndex(1, 1, (2 * zNear) / (top - bottom));
+    M.setIndex(0, 2, A);
+    M.setIndex(1, 2, B);
+    M.setIndex(2, 2, C);
+    M.setIndex(3, 2, -1);
+    M.setIndex(2, 3, D);
+    return M;
+
+    /*
+      (2 * zNear) / (right - left),  0,                            A,  0,
+      0,                             (2 * zNear) / (top - bottom), B,  0,
+      0,                             0,                            C,  D,
+      0,                             0,                            -1, 0
+    */
   }
 
   /**
@@ -310,41 +576,87 @@ export class Matrix {
    * @param {Point3d} up
    * @returns {Matrix} 4x4 matrix
    */
-  static lookAt(cameraPosition, targetPosition, up = new Point3d.Point3d(0, -1, 1)) {
+  static lookAt(cameraPosition, targetPosition, up, M, Minv) {
     // NOTE: Foundry uses a left-hand coordinate system, with y reversed.
+    const zAxis = Point3d.tmp;
+    cameraPosition.subtract(targetPosition, zAxis); // ZAxis = forward
+    if ( zAxis.almostEqual(Point3d.ZERO) ) {
+      zAxis.release();
+      return { M: this.identity(4), Minv: this.identity(4) };
+    }
+    zAxis.normalize(zAxis);
 
-    const zAxis = cameraPosition.subtract(targetPosition); // ZAxis = forward
-    if ( zAxis.magnitudeSquared ) zAxis.normalize(zAxis); // Don't normalize if 0, 0, 0
-
-    const xAxis = new Point3d(1, 0, 0);
-    const yAxis = new Point3d(0, 1, 0);
+    const xAxis = Point3d.tmp.set(1, 0, 0);
+    const yAxis = Point3d.tmp.set(0, 1, 0);
     if ( zAxis.x || zAxis.y ) {
-      up.cross(zAxis, xAxis); // XAxis = right
+      const tmpUp = up ? Point3d.tmp.copyFrom(up) : Point3d.tmp.set(0, -1, 1);
+      tmpUp.cross(zAxis, xAxis); // XAxis = right
       if ( xAxis.magnitudeSquared() ) xAxis.normalize(xAxis); // Don't normalize if 0, 0, 0
       zAxis.cross(xAxis, yAxis); // YAxis = up
-
-    } else {
-      console.warn("lookAt zAxis.x and y are zero.");
-      // Camera either directly overhead or directly below
-      // Overhead if zAxis.z is positive
-      // xAxis = new Point3d(1, 0, 0);
-      // yAxis = new Point3d(0, 1, 0);
-
+      tmpUp.release();
     }
+    // Otherwise camera either directly overhead or directly below
+    // Overhead if zAxis.z is positive
+    // xAxis = new Point3d(1, 0, 0);
+    // yAxis = new Point3d(0, 1, 0);
 
-    const M = new Matrix([
-      [xAxis.x, xAxis.y, xAxis.z, 0],
-      [yAxis.x, yAxis.y, yAxis.z, 0],
-      [zAxis.x, zAxis.y, zAxis.z, 0],
-      [cameraPosition.x, cameraPosition.y, cameraPosition.z, 1]
-    ]);
 
-    const Minv = new Matrix([
-      [xAxis.x, yAxis.x, zAxis.x, 0],
-      [xAxis.y, yAxis.y, zAxis.y, 0],
-      [xAxis.z, yAxis.z, zAxis.z, 0],
-      [-(xAxis.dot(cameraPosition)), -(yAxis.dot(cameraPosition)), -(zAxis.dot(cameraPosition)), 1]
-    ]);
+
+    if ( M ) M.zero();
+    else M = this.zeroes(4);
+    if ( Minv ) Minv.zero();
+    else Minv = this.zeroes(4);
+
+    M.setIndex(0, 0, xAxis.x);
+    M.setIndex(0, 1, xAxis.y);
+    M.setIndex(0, 2, xAxis.z);
+
+    M.setIndex(1, 0, yAxis.x);
+    M.setIndex(1, 1, yAxis.y);
+    M.setIndex(1, 2, yAxis.z);
+
+    M.setIndex(2, 0, zAxis.x);
+    M.setIndex(2, 1, zAxis.y);
+    M.setIndex(2, 2, zAxis.z);
+
+    M.setIndex(3, 0, cameraPosition.x);
+    M.setIndex(3, 1, cameraPosition.y);
+    M.setIndex(3, 2, cameraPosition.z);
+    M.setIndex(3, 3, 1);
+
+    Minv.setIndex(0, 0, xAxis.x);
+    Minv.setIndex(0, 1, yAxis.x);
+    Minv.setIndex(0, 2, zAxis.x);
+
+    Minv.setIndex(1, 0, xAxis.y);
+    Minv.setIndex(1, 1, yAxis.y);
+    Minv.setIndex(1, 2, zAxis.y);
+
+    Minv.setIndex(2, 0, xAxis.z);
+    Minv.setIndex(2, 1, yAxis.z);
+    Minv.setIndex(2, 2, zAxis.z);
+
+    Minv.setIndex(3, 0, -(xAxis.dot(cameraPosition)));
+    Minv.setIndex(3, 1, -(yAxis.dot(cameraPosition)));
+    Minv.setIndex(3, 2, -(zAxis.dot(cameraPosition)));
+    Minv.setIndex(3, 3, 1);
+
+    /* M
+      xAxis.x, xAxis.y, xAxis.z, 0,
+      yAxis.x, yAxis.y, yAxis.z, 0,
+      zAxis.x, zAxis.y, zAxis.z, 0,
+      cameraPosition.x, cameraPosition.y, cameraPosition.z, 1
+    */
+    /* Minv
+      xAxis.x, yAxis.x, zAxis.x, 0,
+      xAxis.y, yAxis.y, zAxis.y, 0,
+      xAxis.z, yAxis.z, zAxis.z, 0,
+      -(xAxis.dot(cameraPosition)), -(yAxis.dot(cameraPosition)), -(zAxis.dot(cameraPosition)), 1
+    */
+
+    xAxis.release();
+    yAxis.release();
+    zAxis.release();
 
     return { M, Minv };
   }
@@ -355,8 +667,11 @@ export class Matrix {
    * @param {boolean} [d3 = true]    If d3, use a 4-d matrix. Otherwise, 3-d matrix.
    * @returns {Matrix}
    */
-  static rotationX(angle, d3 = true) {
-    if ( !angle ) return d3 ? Matrix.identity(4, 4) : Matrix.identity(3, 3);
+  static rotationX(angle, d3 = true, outMatrix) {
+    const n = 3 + d3;
+    outMatrix ??= this.empty(n);
+    outMatrix.identity();
+    if ( !angle ) return outMatrix;
 
     let c = Math.cos(angle);
     let s = Math.sin(angle);
@@ -366,20 +681,22 @@ export class Matrix {
     if ( c.almostEqual(0) ) c = 0;
     if ( s.almostEqual(0) ) s = 0;
 
-    const rotX = d3
-    ? [
-      [1, 0, 0, 0],
-      [0, c, s, 0],
-      [0, -s, c, 0],
-      [0, 0, 0, 1]
-    ]
-      : [
-      [1, 0, 0],
-      [0, c, s],
-      [0, -s, c]
-    ] ;
+    /*
+    [1, 0, 0, 0],
+    [0, c, s, 0],
+    [0, -s, c, 0],
+    [0, 0, 0, 1]
 
-    return new Matrix(rotX);
+    [1, 0, 0],
+    [0, c, s],
+    [0, -s, c]
+    */
+
+    outMatrix.setIndex(1, 1, c);
+    outMatrix.setIndex(2, 2, c);
+    outMatrix.setIndex(1, 2, s);
+    outMatrix.setIndex(2, 1, -s);
+    return outMatrix;
   }
 
   /**
@@ -388,8 +705,11 @@ export class Matrix {
    * @param {boolean} [d3 = true]    If d3, use a 4-d matrix. Otherwise, 3-d matrix.
    * @returns {Matrix}
    */
-  static rotationY(angle, d3 = true) {
-    if ( !angle ) return d3 ? Matrix.identity(4, 4) : Matrix.identity(3, 3);
+  static rotationY(angle, d3 = true, outMatrix) {
+    const n = 3 + d3;
+    outMatrix ??= this.empty(n);
+    outMatrix.identity();
+    if ( !angle ) return outMatrix;
 
     let c = Math.cos(angle);
     let s = Math.sin(angle);
@@ -399,20 +719,21 @@ export class Matrix {
     if ( c.almostEqual(0) ) c = 0;
     if ( s.almostEqual(0) ) s = 0;
 
-    const rotY = d3
-    ? [
-      [c, 0, s, 0],
-      [0, 1, 0, 0],
-      [-s, 0, c, 0],
-      [0, 0, 0, 1]
-    ]
-      : [
-      [c, 0, s],
-      [0, 1, 0],
-      [-s, 0, c]
-    ];
+    /*
+    [c, 0, s, 0],
+    [0, 1, 0, 0],
+    [-s, 0, c, 0],
+    [0, 0, 0, 1]
 
-    return new Matrix(rotY);
+    [c, 0, s],
+    [0, 1, 0],
+    [-s, 0, c]
+    */
+    outMatrix.setIndex(0, 0, c);
+    outMatrix.setIndex(2, 2, c);
+    outMatrix.setIndex(2, 0, -s);
+    outMatrix.setIndex(0, 2, s);
+    return outMatrix;
   }
 
   /**
@@ -421,8 +742,11 @@ export class Matrix {
    * @param {boolean} [d3 = true]    If d3, use a 4-d matrix. Otherwise, 3-d matrix.
    * @returns {Matrix}
    */
-  static rotationZ(angle, d3 = true) {
-    if ( !angle ) return d3 ? Matrix.identity(4, 4) : Matrix.identity(3, 3);
+  static rotationZ(angle, d3 = true, outMatrix) {
+    const n = 3 + d3;
+    outMatrix ??= this.empty(n);
+    outMatrix.identity();
+    if ( !angle ) return outMatrix;
 
     let c = Math.cos(angle);
     let s = Math.sin(angle);
@@ -432,20 +756,21 @@ export class Matrix {
     if ( c.almostEqual(0) ) c = 0;
     if ( s.almostEqual(0) ) s = 0;
 
-    const rotZ = d3
-    ? [
+    /*
       [c, s, 0, 0],
       [-s, c, 0, 0],
       [0, 0, 1, 0],
       [0, 0, 0, 1]
-    ]
-      : [
+
       [c, s, 0],
       [-s, c, 0],
       [0, 0, 1]
-    ];
-
-    return new Matrix(rotZ);
+    */
+    outMatrix.setIndex(0, 0, c);
+    outMatrix.setIndex(1, 1, c);
+    outMatrix.setIndex(1, 0, -s);
+    outMatrix.setIndex(0, 1, s);
+    return outMatrix;
   }
 
   /**
@@ -456,55 +781,63 @@ export class Matrix {
    * @param {boolean} [d3 = true]    If d3, use a 4-d matrix. Otherwise, 3-d matrix.
    * @returns {Matrix}
    */
-  static rotationXYZ(angleX, angleY, angleZ, d3 = true) {
-    let rot = angleX ? Matrix.rotationX(angleX, d3) : angleY
-      ? Matrix.rotationY(angleY, d3) : angleZ
-        ? Matrix.rotationZ(angleZ, d3) : d3
-        ? Matrix.identity(4, 4) : Matrix.identity(3, 3);
+  static rotationXYZ(angleX, angleY, angleZ, d3 = true, outMatrix) {
+    outMatrix = angleX ? this.rotationX(angleX, d3, outMatrix) : angleY
+      ? this.rotationY(angleY, d3, outMatrix) : angleZ
+        ? this.rotationZ(angleZ, d3, outMatrix) : outMatrix.identity();
 
     const multFn = d3 ? "multiply4x4" : "multiply3x3";
-
     if ( angleX && angleY ) {
-      const rotY = Matrix.rotationY(angleY, d3);
-      rot = rot[multFn](rotY);
+      const rotY = this.rotationY(angleY, d3);
+      outMatrix = outMatrix[multFn](rotY); // Cannot pass outMatrix as tmp if it is rot.
     }
-
     if ( (angleX || angleY) && angleZ ) {
-      const rotZ = Matrix.rotationZ(angleZ, d3);
-      rot = rot[multFn](rotZ);
+      const rotZ = this.rotationZ(angleZ, d3);
+      outMatrix = outMatrix[multFn](rotZ);
     }
-
-    return rot;
+    return outMatrix;
   }
 
-  static translation(x = 0, y = 0, z) {
-    const t = typeof z === "undefined"
-    ? [
-      [1, 0, 0],
-      [0, 1, 0],
-      [x, y, 1]]
-      : [
-        [1, 0, 0, 0],
-        [0, 1, 0, 0],
-        [0, 0, 1, 0],
-        [x, y, z, 1]];
+  static translation(x = 0, y = 0, z, outMatrix) {
+    const n = typeof z === "undefined" ? 3 : 4;
+    outMatrix ??= this.empty(n);
+    outMatrix.identity();
 
-    return new Matrix(t);
+    /*
+    [1, 0, 0],
+    [0, 1, 0],
+    [x, y, 1]
+
+    [1, 0, 0, 0],
+    [0, 1, 0, 0],
+    [0, 0, 1, 0],
+    [x, y, z, 1]
+    */
+    const r = n - 1;
+    outMatrix.setIndex(r, 0, x);
+    outMatrix.setIndex(r, 1, y);
+    if ( typeof z !== "undefined" ) outMatrix.setIndex(r, 2, z);
+    return outMatrix;
   }
 
-  static scale(x = 1, y = 1, z) {
-    const t = typeof z === "undefined"
-    ? [
-      [x, 0, 0],
-      [0, y, 0],
-      [0, 0, 1]]
-      : [
-        [x, 0, 0, 0],
-        [0, y, 0, 0],
-        [0, 0, z, 0],
-        [0, 0, 0, 1]];
+  static scale(x = 1, y = 1, z, outMatrix) {
+    const n = typeof z === "undefined" ? 3 : 4;
+    outMatrix ??= this.empty(n);
+    outMatrix.identity();
+    /*
+    [x, 0, 0],
+    [0, y, 0],
+    [0, 0, 1]
 
-    return new Matrix(t);
+    [x, 0, 0, 0],
+    [0, y, 0, 0],
+    [0, 0, z, 0],
+    [0, 0, 0, 1]
+    */
+   outMatrix.setIndex(0, 0, x);
+   outMatrix.setIndex(1, 1, y);
+   if ( typeof z !== "undefined" ) outMatrix.setIndex(2, 2, z);
+   return outMatrix;
   }
 
   /**
@@ -532,30 +865,20 @@ export class Matrix {
     const ys = axis.y * s;
     const zs = axis.z * s;
 
-    return new Matrix([
-      [c + (axis.x * axis.x * cNeg), xy - zs, xz + ys, 0],
+    return this.fromRowMajorArray([
+      c + (axis.x * axis.x * cNeg), xy - zs, xz + ys, 0,
 
-      [xy + zs, c + (axis.y * axis.y * cNeg), yz - xs, 0],
+      xy + zs, c + (axis.y * axis.y * cNeg), yz - xs, 0,
 
-      [xz - ys, yz + xs, c + (axis.z * axis.z * cNeg), 0],
+      xz - ys, yz + xs, c + (axis.z * axis.z * cNeg), 0,
 
-      [0, 0, 0, 1]
+      0, 0, 0, 1
     ]);
   }
 
-  /**
-   * Copy this matrix to a new matrix object
-   * @returns {Matrix}
-   */
-  clone() {
-    // See https://jsbench.me/gflbviyw69/1
-    const { dim1, arr } = this;
-    const newMat = Array(dim1);
-    for ( let i = 0; i < dim1; i += 1 ) {
-      newMat[i] = arr[i].slice();
-    }
-    return new Matrix(newMat);
-  }
+
+
+  // ----- NOTE: Basic math operations ----- //
 
   /**
    * Test if this matrix is exactly equal to another
@@ -563,17 +886,8 @@ export class Matrix {
    * @returns {boolean}
    */
   equal(other) {
-    const d1 = this.dim1;
-    const d2 = this.dim2;
-    if ( d1 !== other.dim1 || d2 !== other.dim2 ) return false;
-
-    for ( let i = 0; i < d1; i += 1 ) {
-      for ( let j = 0; j < d2; j += 1 ) {
-        if ( this.arr[i][j] !== other.arr[i][j] ) return false;
-      }
-    }
-
-    return true;
+    if ( this.nrow !== other.nrow || this.ncol !== other.ncol ) return false;
+    return this.arr.every((elem, i) => elem === other.arr[i]);
   }
 
   /**
@@ -583,17 +897,8 @@ export class Matrix {
    * @returns {boolean}
    */
   almostEqual(other, epsilon = 1e-8) {
-    const d1 = this.dim1;
-    const d2 = this.dim2;
-    if ( d1 !== other.dim1 || d2 !== other.dim2 ) return false;
-
-    for ( let i = 0; i < d1; i += 1 ) {
-      for ( let j = 0; j < d2; j += 1 ) {
-        if ( !this.arr[i][j].almostEqual(other.arr[i][j], epsilon) ) return false;
-      }
-    }
-
-    return true;
+    if ( this.nrow !== other.nrow || this.ncol !== other.ncol ) return false;
+    return this.arr.every((elem, i) => elem.almostEqual(other.arr[i], epsilon));
   }
 
   /**
@@ -602,85 +907,11 @@ export class Matrix {
    * Destructive operation in that it affects values in this matrix.
    */
   clean(epsilon = 1e-08) {
-    const d1 = this.dim1;
-    const d2 = this.dim2;
-    for ( let i = 0; i < d1; i += 1 ) {
-      for ( let j = 0; j < d2; j += 1 ) {
-        if ( this.arr[i][j].almostEqual(0, epsilon) ) this.arr[i][j] = 0;
-        else if ( this.arr[i][j].almostEqual(1, epsilon) ) this.arr[i][j] = 1;
-      }
-    }
-  }
-
-  /**
-   * Convert matrix to a PIXI.Point.
-   * Any index in the first row can be chosen for x and y.
-   * If homogenous is true, the last column [0, col - 1] is assumed to be the divisor.
-   * @param {object} [options]    Options to affect how the matrix is interpreted.
-   * @param {number} [options.xIndex]       Column for the x variable.
-   * @param {number} [options.yIndex]       Column for the y variable.
-   * @param {boolean} [options.homogenous]  Whether to convert homogenous coordinates.
-   * @param {Point3d} [options.outPoint]    Placeholder for the new Point.
-   * @returns {PIXI.Point}
-   */
-  toPoint2d({ xIndex = 0, yIndex = 1, homogenous = true, outPoint = new PIXI.Point() } = {}) {
-    const row = this.arr[0];
-
-    outPoint.x = row[xIndex];
-    outPoint.y = row[yIndex];
-
-    if ( homogenous ) {
-      const h = row[this.dim2 - 1];
-      outPoint.x /= h;
-      outPoint.y /= h;
-    }
-
-    return outPoint;
-  }
-
-  /**
-   * Convert matrix to a Point3d.
-   * Any index in the first row can be chosen for x and y and z.
-   * If homogenous is true, the last column [0, col - 1] is assumed to be the divisor.
-   * @param {object} [options]    Options to affect how the matrix is interpreted.
-   * @param {number} [options.xIndex]       Column for the x variable.
-   * @param {number} [options.yIndex]       Column for the y variable.
-   * @param {number} [options.zIndex]       Column for the z variable.
-   * @param {boolean} [options.homogenous]  Whether to convert homogenous coordinates.
-   * @param {Point3d} [options.outPoint]    Placeholder for the new Point3d.
-   * @returns {PIXI.Point}
-   */
-  toPoint3d({ xIndex = 0, yIndex = 1, zIndex = 2, homogenous = true, outPoint = new Point3d() } = {}) {
-    const row = this.arr[0];
-
-    outPoint.x = row[xIndex];
-    outPoint.y = row[yIndex];
-    outPoint.z = row[zIndex];
-
-    if ( homogenous ) {
-      const h = row[this.dim2 - 1];
-      outPoint.x /= h;
-      outPoint.y /= h;
-      outPoint.z /= h;
-    }
-
-    return outPoint;
-  }
-
-  /**
-   * Copy the data from this matrix to another
-   * @param {Matrix} outMatrix    Other matrix to use (newly created by default)
-   * @returns Matrix
-   */
-  copyTo(outMatrix = Matrix.empty(this.dim1, this.dim2)) {
-    const dim1 = this.dim1;
-    const dim2 = this.dim2;
-    for ( let i = 0; i < dim1; i += 1 ) {
-      for ( let j = 0; j < dim2; j += 1 ) {
-        outMatrix.arr[i][j] = this.arr[i][j];
-      }
-    }
-    return outMatrix;
+    this._setElements(elem => {
+      if ( elem.almostEqual(0, epsilon) ) return 0;
+      if ( elem.almostEqual(1, epsilon) ) return 1;
+      return elem;
+    });
   }
 
   /**
@@ -688,74 +919,69 @@ export class Matrix {
    * @param {Matrix} outMatrix  Optional matrix to use for the returned data.
    * @returns {Matrix}
    */
-  transpose(outMatrix = Matrix.empty(this.dim1, this.dim2)) {
-    const arr = this.arr;
-    outMatrix.arr = Object.keys(arr[0]).map(function(c) {
-      return arr.map(function(r) { return r[c]; });
-    });
+  transpose(outMatrix) {
+    outMatrix ??= this.constructor.empty(this.nrow, this.ncol);
+    this.forEach((elem, r, c) => outMatrix.setIndex(c, r, elem));
     return outMatrix;
   }
 
-  add(other, outMatrix = Matrix.empty(other.dim1, other.dim2)) {
-    const d1 = this.dim1;
-    const d2 = this.dim2;
-
-    if ( d1 !== other.dim1 || d2 !== other.dim2 ) {
+  add(other, outMatrix) {
+    if ( this.nrow !== other.nrow || this.ncol !== other.ncol ) {
       console.error("Matrices cannot be added.");
       return undefined;
     }
-
-    for ( let i = 0; i < d1; i += 1 ) {
-      for ( let j = 0; j < d2; j += 1 ) {
-        outMatrix.arr[i][j] = this.arr[i][j] + other.arr[i][j];
-      }
-    }
+    outMatrix ??= this.constructor.empty(this.nrow, this.ncol);
+    outMatrix._setElements((elem, i) => this.arr[i] + other.arr[i]);
     return outMatrix;
   }
 
-  subtract(other, outMatrix = Matrix.empty(other.dim1, other.dim2)) {
-    const d1 = this.dim1;
-    const d2 = this.dim2;
-
-    if ( d1 !== other.dim1 || d2 !== other.dim2 ) {
-      console.error("Matrices cannot be added.");
+  subtract(other, outMatrix) {
+    if ( this.nrow !== other.nrow || this.ncol !== other.ncol ) {
+      console.error("Matrices cannot be subtracted.");
       return undefined;
     }
-
-    for ( let i = 0; i < d1; i += 1 ) {
-      for ( let j = 0; j < d2; j += 1 ) {
-        outMatrix.arr[i][j] = this.arr[i][j] - other.arr[i][j];
-      }
-    }
+    outMatrix ??= this.constructor.empty(this.nrow, this.ncol);
+    outMatrix._setElements((elem, i) => this.arr[i] - other.arr[i]);
     return outMatrix;
   }
+
+  // ----- NOTE: Multiplication ----- //
 
   /**
    * Multiply this and another matrix. this • other.
    * @param {Matrix} other
+   * @param {Matrix} [outMatrix]    Must have this.nrow and other.ncol; cannot be this or other.
    * @returns {Matrix}
    */
-  multiply(other) {
-    // A is this matrix; B is other matrix
-    const rowsA = this.dim1;
-    const colsA = this.dim2;
-    const rowsB = other.dim1;
-    const colsB = other.dim2;
+  multiply(other, outMatrix) {
+    let A = this;
+    let B = other;
 
-    if ( colsA !== rowsB ) {
+    const rowsA = A.nrow;
+    const colsA = A.ncol;
+    const rowsB = B.nrow;
+    const colsB = B.ncol;
+
+    outMatrix ??= this.constructor.zeroes(rowsA, colsB, outMatrix)
+
+    if ( colsA !== rowsB || outMatrix.nrow !== rowsA || outMatrix.ncol !== colsB ) {
       console.error("Matrices cannot be multiplied.");
       return undefined;
     }
 
-    const multiplication = Matrix.zeroes(rowsA, colsB);
+    // Cannot have the outMatrix reference A or B, because the outMatrix values get modified in the loop.
+    if ( A === outMatrix ) A = A.clone();
+    if ( B === outMatrix ) B = B.clone();
+
     for ( let x = 0; x < rowsA; x += 1 ) {
       for ( let y = 0; y < colsB; y += 1 ) {
         for ( let z = 0; z < colsA; z += 1 ) {
-          multiplication.arr[x][y] = multiplication.arr[x][y] + (this.arr[x][z] * other.arr[z][y]);
+          const value = outMatrix.getIndex(x, y) + (this.getIndex(x, z) * other.getIndex(z, y));
+          outMatrix.setIndex(x, y, value);
         }
       }
     }
-    return multiplication;
+    return outMatrix;
   }
 
   /**
@@ -763,31 +989,81 @@ export class Matrix {
    * @param {Matrix} other    A 1x3 matrix, like Matrix.prototype.fromPoint2d
    * @returns Matrix
    */
-  multiply1x3(other, outMatrix = Matrix.empty(1, 3)) {
-    const a0 = other.arr[0];
-    const a1 = other.arr[1];
-    const a2 = other.arr[2];
+  multiply1x3(other, outMatrix) {
+    outMatrix ??= this.constructor.empty(1, 3);
 
-    const a00 = a0[0];
-    const a01 = a0[1];
-    const a02 = a0[2];
-    const a10 = a1[0];
-    const a11 = a1[1];
-    const a12 = a1[2];
-    const a20 = a2[0];
-    const a21 = a2[1];
-    const a22 = a2[2];
+    // For speed, assume _idx is (col * this.nrow) + row
+    // Array organized col0, row0, row1, row2, ... col1, row0, row1, ...
+    const a00 = other.arr[0]; // aRC
+    const a01 = other.arr[1];
+    const a02 = other.arr[2];
 
-    const b0 = this.arr[0];
-    const b00 = b0[0];
-    const b01 = b0[1];
-    const b02 = b0[2];
+    const a10 = other.arr[3];
+    const a11 = other.arr[4];
+    const a12 = other.arr[5];
 
-    outMatrix.arr[0][0] = a00 * b00 + a10 * b01 + a20 * b02;
-    outMatrix.arr[0][1] = a01 * b00 + a11 * b01 + a21 * b02;
-    outMatrix.arr[0][2] = a02 * b00 + a12 * b01 + a22 * b02;
+    const a20 = other.arr[6];
+    const a21 = other.arr[7];
+    const a22 = other.arr[8];
+
+    const b00 = this.arr[0];
+    const b01 = this.arr[1];
+    const b02 = this.arr[2];
+
+    outMatrix.arr[0] = a00 * b00 + a10 * b01 + a20 * b02;
+    outMatrix.arr[1] = a01 * b00 + a11 * b01 + a21 * b02;
+    outMatrix.arr[2] = a02 * b00 + a12 * b01 + a22 * b02;
 
     return outMatrix;
+  }
+
+  /**
+   * Faster 1x4 multiplication
+   * Foundry bench puts this at ~ 75% of multiply.
+   * @param {Matrix} other    A 1x4 matrix, like Matrix.prototype.fromPoint3d
+   * @returns Matrix
+   */
+  multiply1x4(other, outMatrix) {
+    outMatrix ??= this.constructor.empty(1, 4);
+
+    // For speed, assume _idx is (col * this.nrow) + row
+    // Array organized col0, row0, row1, row2, ... col1, row0, row1, ...
+    const a00 = other.arr[0]; // aRC
+    const a01 = other.arr[1];
+    const a02 = other.arr[2];
+    const a03 = other.arr[3];
+
+    const a10 = other.arr[4];
+    const a11 = other.arr[5];
+    const a12 = other.arr[6];
+    const a13 = other.arr[7];
+
+    const a20 = other.arr[8];
+    const a21 = other.arr[9];
+    const a22 = other.arr[10];
+    const a23 = other.arr[11];
+
+    const a30 = other.arr[12];
+    const a31 = other.arr[13];
+    const a32 = other.arr[14];
+    const a33 = other.arr[15];
+
+    const b00 = this.arr[0];
+    const b01 = this.arr[1];
+    const b02 = this.arr[2];
+    const b03 = this.arr[3];
+
+    outMatrix.arr[0] = a00 * b00 + a10 * b01 + a20 * b02 + a30 * b03;
+    outMatrix.arr[1] = a01 * b00 + a11 * b01 + a21 * b02 + a31 * b03;
+    outMatrix.arr[2] = a02 * b00 + a12 * b01 + a22 * b02 + a32 * b03;
+    outMatrix.arr[3] = a03 * b00 + a13 * b01 + a23 * b02 + a33 * b03;
+
+    return outMatrix;
+  }
+
+  multiplyPoint(point, outPoint) {
+    if ( Object.hasOwn(point, "z") ) return this.multiplyPoint2d(point, outPoint);
+    else return this.multiplyPoint3d(point, outPoint);
   }
 
   /**
@@ -799,19 +1075,19 @@ export class Matrix {
    * @returns {Point3d}
    */
   multiplyPoint2d(point, outPoint = new PIXI.Point()) {
-    const a0 = this.arr[0];
-    const a1 = this.arr[1];
-    const a2 = this.arr[2];
+    // For speed, assume _idx is (col * this.nrow) + row
+    // Array organized col0, row0, row1, row2, ... col1, row0, row1, ...
+    const a00 = this.arr[0]; // aRC
+    const a01 = this.arr[1];
+    const a02 = this.arr[2];
 
-    const a00 = a0[0];
-    const a01 = a0[1];
-    const a02 = a0[2];
-    const a10 = a1[0];
-    const a11 = a1[1];
-    const a12 = a1[2];
-    const a20 = a2[0];
-    const a21 = a2[1];
-    const a22 = a2[2];
+    const a10 = this.arr[3];
+    const a11 = this.arr[4];
+    const a12 = this.arr[5];
+
+    const a20 = this.arr[6];
+    const a21 = this.arr[7];
+    const a22 = this.arr[8];
 
     const b00 = point.x;
     const b01 = point.y;
@@ -828,49 +1104,6 @@ export class Matrix {
   }
 
   /**
-   * Faster 1x4 multiplication
-   * Foundry bench puts this at ~ 75% of multiply.
-   * @param {Matrix} other    A 1x4 matrix, like Matrix.prototype.fromPoint3d
-   * @returns Matrix
-   */
-  multiply1x4(other, outMatrix = Matrix.empty(1, 4)) {
-    const a0 = other.arr[0];
-    const a1 = other.arr[1];
-    const a2 = other.arr[2];
-    const a3 = other.arr[3];
-
-    const a00 = a0[0];
-    const a01 = a0[1];
-    const a02 = a0[2];
-    const a03 = a0[3];
-    const a10 = a1[0];
-    const a11 = a1[1];
-    const a12 = a1[2];
-    const a13 = a1[3];
-    const a20 = a2[0];
-    const a21 = a2[1];
-    const a22 = a2[2];
-    const a23 = a2[3];
-    const a30 = a3[0];
-    const a31 = a3[1];
-    const a32 = a3[2];
-    const a33 = a3[3];
-
-    const b0 = this.arr[0];
-    const b00 = b0[0];
-    const b01 = b0[1];
-    const b02 = b0[2];
-    const b03 = b0[3];
-
-    outMatrix.arr[0][0] = a00 * b00 + a10 * b01 + a20 * b02 + a30 * b03;
-    outMatrix.arr[0][1] = a01 * b00 + a11 * b01 + a21 * b02 + a31 * b03;
-    outMatrix.arr[0][2] = a02 * b00 + a12 * b01 + a22 * b02 + a32 * b03;
-    outMatrix.arr[0][3] = a03 * b00 + a13 * b01 + a23 * b02 + a33 * b03;
-
-    return outMatrix;
-  }
-
-  /**
    * Multiply a Point3d by this matrix and output a different Point3d.
    * For speed, the input is not checked against the matrix for correct dimensionality.
    * Foundry bench puts this at ~ 68% of multiply.
@@ -879,27 +1112,28 @@ export class Matrix {
    * @returns {Point3d}
    */
   multiplyPoint3d(point, outPoint = new Point3d()) {
-    const a0 = this.arr[0];
-    const a1 = this.arr[1];
-    const a2 = this.arr[2];
-    const a3 = this.arr[3];
 
-    const a00 = a0[0];
-    const a01 = a0[1];
-    const a02 = a0[2];
-    const a03 = a0[3];
-    const a10 = a1[0];
-    const a11 = a1[1];
-    const a12 = a1[2];
-    const a13 = a1[3];
-    const a20 = a2[0];
-    const a21 = a2[1];
-    const a22 = a2[2];
-    const a23 = a2[3];
-    const a30 = a3[0];
-    const a31 = a3[1];
-    const a32 = a3[2];
-    const a33 = a3[3];
+    // For speed, assume _idx is (col * this.nrow) + row
+    // Array organized col0, row0, row1, row2, ... col1, row0, row1, ...
+    const a00 = this.arr[0]; // aRC
+    const a01 = this.arr[1];
+    const a02 = this.arr[2];
+    const a03 = this.arr[3];
+
+    const a10 = this.arr[4];
+    const a11 = this.arr[5];
+    const a12 = this.arr[6];
+    const a13 = this.arr[7];
+
+    const a20 = this.arr[8];
+    const a21 = this.arr[9];
+    const a22 = this.arr[10];
+    const a23 = this.arr[11];
+
+    const a30 = this.arr[12];
+    const a31 = this.arr[13];
+    const a32 = this.arr[14];
+    const a33 = this.arr[15];
 
     const b00 = point.x;
     const b01 = point.y;
@@ -926,22 +1160,22 @@ export class Matrix {
    * @param {Matrix} other
    * @returns {Matrix}
    */
-  multiply2x2(other, outMatrix = Matrix.empty(2, 2)) {
-    const a0 = this.arr[0];
-    const a1 = this.arr[1];
+  multiply2x2(other, outMatrix) {
+    outMatrix ??= this.constructor.empty(2, 2);
 
-    const a00 = a0[0];
-    const a01 = a0[1];
-    const a10 = a1[0];
-    const a11 = a1[1];
+    // For speed, assume _idx is (col * this.nrow) + row
+    // Array organized col0, row0, row1, row2, ... col1, row0, row1, ...
+    const a00 = this.arr[0]; // aRC
+    const a01 = this.arr[1];
 
-    const b0 = other.arr[0];
-    const b1 = other.arr[1];
+    const a10 = this.arr[2];
+    const a11 = this.arr[3];
 
-    const b00 = b0[0];
-    const b01 = b0[1];
-    const b10 = b1[0];
-    const b11 = b1[1];
+    const b00 = other.arr[0]; // aRC
+    const b01 = other.arr[1];
+
+    const b10 = other.arr[2];
+    const b11 = other.arr[3];
 
     const m1 = (a00 + a11) * (b00 + b11);
     const m2 = (a10 + a11) * b00;
@@ -952,12 +1186,12 @@ export class Matrix {
     const m7 = (a01 - a11) * (b10 + b11);
 
     // Row 0
-    outMatrix.arr[0][0] = m1 + m4 - m5 + m7;
-    outMatrix.arr[0][1] = m3 + m5;
+    outMatrix.arr[0] = m1 + m4 - m5 + m7;
+    outMatrix.arr[1] = m3 + m5;
 
     // Row 1
-    outMatrix.arr[1][0] = m2 + m4;
-    outMatrix.arr[1][1] = m1 - m2 + m3 + m6;
+    outMatrix.arr[2] = m2 + m4;
+    outMatrix.arr[3] = m1 - m2 + m3 + m6;
 
     return outMatrix;
   }
@@ -971,34 +1205,36 @@ export class Matrix {
    * @param {Matrix} other
    * @returns {Matrix}
    */
-  multiply3x3(other, outMatrix = Matrix.empty(3, 3)) {
-    const a0 = this.arr[0];
-    const a1 = this.arr[1];
-    const a2 = this.arr[2];
+  multiply3x3(other, outMatrix) {
+    outMatrix ??= this.constructor.empty(3, 3);
 
-    const a00 = a0[0];
-    const a01 = a0[1];
-    const a02 = a0[2];
-    const a10 = a1[0];
-    const a11 = a1[1];
-    const a12 = a1[2];
-    const a20 = a2[0];
-    const a21 = a2[1];
-    const a22 = a2[2];
+    // For speed, assume _idx is (col * this.nrow) + row
+    // Array organized col0, row0, row1, row2, ... col1, row0, row1, ...
+    const a00 = this.arr[0]; // aRC
+    const a01 = this.arr[1];
+    const a02 = this.arr[2];
 
-    const b0 = other.arr[0];
-    const b1 = other.arr[1];
-    const b2 = other.arr[2];
+    const a10 = this.arr[3];
+    const a11 = this.arr[4];
+    const a12 = this.arr[5];
 
-    const b00 = b0[0];
-    const b01 = b0[1];
-    const b02 = b0[2];
-    const b10 = b1[0];
-    const b11 = b1[1];
-    const b12 = b1[2];
-    const b20 = b2[0];
-    const b21 = b2[1];
-    const b22 = b2[2];
+    const a20 = this.arr[6];
+    const a21 = this.arr[7];
+    const a22 = this.arr[8];
+
+    // For speed, assume _idx is (col * this.nrow) + row
+    // Array organized col0, row0, row1, row2, ... col1, row0, row1, ...
+    const b00 = other.arr[0]; // aRC
+    const b01 = other.arr[1];
+    const b02 = other.arr[2];
+
+    const b10 = other.arr[3];
+    const b11 = other.arr[4];
+    const b12 = other.arr[5];
+
+    const b20 = other.arr[6];
+    const b21 = other.arr[7];
+    const b22 = other.arr[8];
 
     const m1 = (a00 + a01 + a02 - a10 - a11 - a21 - a22) * b11;
     const m2 = (a00 - a10) * (b11 - b01);
@@ -1025,19 +1261,19 @@ export class Matrix {
     const m23 = a22 * b22;
 
     // Row 0
-    outMatrix.arr[0][0] = m6 + m14 + m19;
-    outMatrix.arr[0][1] = m1 + m4 + m5 + m6 + m12 + m14 + m15;
-    outMatrix.arr[0][2] = m6 + m7 + m9 + m10 + m14 + m16 + m18;
+    outMatrix.arr[0] = m6 + m14 + m19;
+    outMatrix.arr[1] = m1 + m4 + m5 + m6 + m12 + m14 + m15;
+    outMatrix.arr[2] = m6 + m7 + m9 + m10 + m14 + m16 + m18;
 
     // Row 1
-    outMatrix.arr[1][0] = m2 + m3 + m4 + m6 + m14 + m16 + m17;
-    outMatrix.arr[1][1] = m2 + m4 + m5 + m6 + m20;
-    outMatrix.arr[1][2] = m14 + m16 + m17 + m18 + m21;
+    outMatrix.arr[3] = m2 + m3 + m4 + m6 + m14 + m16 + m17;
+    outMatrix.arr[4] = m2 + m4 + m5 + m6 + m20;
+    outMatrix.arr[5] = m14 + m16 + m17 + m18 + m21;
 
     // Row 2
-    outMatrix.arr[2][0] = m6 + m7 + m8 + m11 + m12 + m13 + m14;
-    outMatrix.arr[2][1] = m12 + m13 + m14 + m15 + m22;
-    outMatrix.arr[2][2] = m6 + m7 + m8 + m9 + m23;
+    outMatrix.arr[6] = m6 + m7 + m8 + m11 + m12 + m13 + m14;
+    outMatrix.arr[7] = m12 + m13 + m14 + m15 + m22;
+    outMatrix.arr[8] = m6 + m7 + m8 + m9 + m23;
 
     return outMatrix;
   }
@@ -1051,77 +1287,82 @@ export class Matrix {
    * @param {Matrix} other
    * @returns {Matrix}
    */
-  multiply4x4(other, outMatrix = Matrix.empty(4, 4)) {
-    const a0 = this.arr[0];
-    const a1 = this.arr[1];
-    const a2 = this.arr[2];
-    const a3 = this.arr[3];
+  multiply4x4(other, outMatrix) {
+    outMatrix ??= this.constructor.empty(4, 4);
 
-    const a00 = a0[0];
-    const a01 = a0[1];
-    const a02 = a0[2];
-    const a03 = a0[3];
-    const a10 = a1[0];
-    const a11 = a1[1];
-    const a12 = a1[2];
-    const a13 = a1[3];
-    const a20 = a2[0];
-    const a21 = a2[1];
-    const a22 = a2[2];
-    const a23 = a2[3];
-    const a30 = a3[0];
-    const a31 = a3[1];
-    const a32 = a3[2];
-    const a33 = a3[3];
+    // For speed, assume _idx is (col * this.nrow) + row
+    // Array organized col0, row0, row1, row2, ... col1, row0, row1, ...
+    const a00 = this.arr[0]; // aRC
+    const a01 = this.arr[1];
+    const a02 = this.arr[2];
+    const a03 = this.arr[3];
 
-    const b0 = other.arr[0];
-    const b1 = other.arr[1];
-    const b2 = other.arr[2];
-    const b3 = other.arr[3];
+    const a10 = this.arr[4];
+    const a11 = this.arr[5];
+    const a12 = this.arr[6];
+    const a13 = this.arr[7];
 
-    const b00 = b0[0];
-    const b01 = b0[1];
-    const b02 = b0[2];
-    const b03 = b0[3];
-    const b10 = b1[0];
-    const b11 = b1[1];
-    const b12 = b1[2];
-    const b13 = b1[3];
-    const b20 = b2[0];
-    const b21 = b2[1];
-    const b22 = b2[2];
-    const b23 = b2[3];
-    const b30 = b3[0];
-    const b31 = b3[1];
-    const b32 = b3[2];
-    const b33 = b3[3];
+    const a20 = this.arr[8];
+    const a21 = this.arr[9];
+    const a22 = this.arr[10];
+    const a23 = this.arr[11];
+
+    const a30 = this.arr[12];
+    const a31 = this.arr[13];
+    const a32 = this.arr[14];
+    const a33 = this.arr[15];
+
+    // For speed, assume _idx is (col * this.nrow) + row
+    // Array organized col0, row0, row1, row2, ... col1, row0, row1, ...
+    const b00 = other.arr[0]; // aRC
+    const b01 = other.arr[1];
+    const b02 = other.arr[2];
+    const b03 = other.arr[3];
+
+    const b10 = other.arr[4];
+    const b11 = other.arr[5];
+    const b12 = other.arr[6];
+    const b13 = other.arr[7];
+
+    const b20 = other.arr[8];
+    const b21 = other.arr[9];
+    const b22 = other.arr[10];
+    const b23 = other.arr[11];
+
+    const b30 = other.arr[12];
+    const b31 = other.arr[13];
+    const b32 = other.arr[14];
+    const b33 = other.arr[15];
 
     // Row 0
-    outMatrix.arr[0][0] = (a00 * b00) + (a01 * b10) + (a02 * b20) + (a03 * b30);
-    outMatrix.arr[0][1] = (a00 * b01) + (a01 * b11) + (a02 * b21) + (a03 * b31);
-    outMatrix.arr[0][2] = (a00 * b02) + (a01 * b12) + (a02 * b22) + (a03 * b32);
-    outMatrix.arr[0][3] = (a00 * b03) + (a01 * b13) + (a02 * b23) + (a03 * b33);
+    outMatrix.arr[0] = (a00 * b00) + (a01 * b10) + (a02 * b20) + (a03 * b30);
+    outMatrix.arr[1] = (a00 * b01) + (a01 * b11) + (a02 * b21) + (a03 * b31);
+    outMatrix.arr[2] = (a00 * b02) + (a01 * b12) + (a02 * b22) + (a03 * b32);
+    outMatrix.arr[3] = (a00 * b03) + (a01 * b13) + (a02 * b23) + (a03 * b33);
 
     // Row 1
-    outMatrix.arr[1][0] = (a10 * b00) + (a11 * b10) + (a12 * b20) + (a13 * b30);
-    outMatrix.arr[1][1] = (a10 * b01) + (a11 * b11) + (a12 * b21) + (a13 * b31);
-    outMatrix.arr[1][2] = (a10 * b02) + (a11 * b12) + (a12 * b22) + (a13 * b32);
-    outMatrix.arr[1][3] = (a10 * b03) + (a11 * b13) + (a12 * b23) + (a13 * b33);
+    outMatrix.arr[4] = (a10 * b00) + (a11 * b10) + (a12 * b20) + (a13 * b30);
+    outMatrix.arr[5] = (a10 * b01) + (a11 * b11) + (a12 * b21) + (a13 * b31);
+    outMatrix.arr[6] = (a10 * b02) + (a11 * b12) + (a12 * b22) + (a13 * b32);
+    outMatrix.arr[7] = (a10 * b03) + (a11 * b13) + (a12 * b23) + (a13 * b33);
 
     // Row 2
-    outMatrix.arr[2][0] = (a20 * b00) + (a21 * b10) + (a22 * b20) + (a23 * b30);
-    outMatrix.arr[2][1] = (a20 * b01) + (a21 * b11) + (a22 * b21) + (a23 * b31);
-    outMatrix.arr[2][2] = (a20 * b02) + (a21 * b12) + (a22 * b22) + (a23 * b32);
-    outMatrix.arr[2][3] = (a20 * b03) + (a21 * b13) + (a22 * b23) + (a23 * b33);
+    outMatrix.arr[8] = (a20 * b00) + (a21 * b10) + (a22 * b20) + (a23 * b30);
+    outMatrix.arr[9] = (a20 * b01) + (a21 * b11) + (a22 * b21) + (a23 * b31);
+    outMatrix.arr[10] = (a20 * b02) + (a21 * b12) + (a22 * b22) + (a23 * b32);
+    outMatrix.arr[11] = (a20 * b03) + (a21 * b13) + (a22 * b23) + (a23 * b33);
 
     // Row 3
-    outMatrix.arr[3][0] = (a30 * b00) + (a31 * b10) + (a32 * b20) + (a33 * b30);
-    outMatrix.arr[3][1] = (a30 * b01) + (a31 * b11) + (a32 * b21) + (a33 * b31);
-    outMatrix.arr[3][2] = (a30 * b02) + (a31 * b12) + (a32 * b22) + (a33 * b32);
-    outMatrix.arr[3][3] = (a30 * b03) + (a31 * b13) + (a32 * b23) + (a33 * b33);
+    outMatrix.arr[12] = (a30 * b00) + (a31 * b10) + (a32 * b20) + (a33 * b30);
+    outMatrix.arr[13] = (a30 * b01) + (a31 * b11) + (a32 * b21) + (a33 * b31);
+    outMatrix.arr[14] = (a30 * b02) + (a31 * b12) + (a32 * b22) + (a33 * b32);
+    outMatrix.arr[15] = (a30 * b03) + (a31 * b13) + (a32 * b23) + (a33 * b33);
+
 
     return outMatrix;
   }
+
+  // ----- NOTE: Inversion ----- //
 
   /**
    * Invert a matrix.
@@ -1138,36 +1379,38 @@ export class Matrix {
      i.almostEqual(Matrix.identity(m.dim1,m.dim2))
    *
    */
-  invert(outMatrix = Matrix.empty(this.dim1, this.dim2)) {
-    if ( this.dim1 < 2 || this.dim1 !== this.dim2 ) {
+  invert(outMatrix) {
+    outMatrix ??= this.constructor.empty(this.nrow, this.ncol);
+    if ( this === outMatrix ) console.error("Must supply a distinct matrix to store the inversion.");
+
+    if ( this.nrow < 2 || this.nrow !== this.ncol ) {
       console.error("Cannot use invert on a non-square matrix.");
       return undefined;
     }
 
-    const n = this.dim1;
+    const n = this.nrow;
     const x = Array.fromRange(n);
     const y = Array.fromRange(n);
     const k = {};
-    let det = this.optimizedNDet(n, this.arr, x, y, k);
+    let det = this.constructor.optimizedNDet(n, this, x, y, k);
     if ( !det ) throw new Error("Matrix is not invertible");
 
     det = 1 / det;
 
     // Fix for 2 x 2 matrices
     if ( n === 2 ) {
-      outMatrix.arr[0][0] = det * this.arr[1][1];
-      outMatrix.arr[0][1] = det * -this.arr[0][1];
-      outMatrix.arr[1][0] = det * -this.arr[1][0];
-      outMatrix.arr[1][1] = det * this.arr[0][0];
+      outMatrix.arr[0] = det * this.arr[3]; // Row 0, col 0 = row 1, col 1
+      outMatrix.arr[1] = det * -this.arr[1]; // Row 0, col 1 = row 0, col 1
+      outMatrix.arr[2] = det * -this.arr[2]; // Row 1, col 0 = row 1, col 0
+      outMatrix.arr[3] = det * this.arr[0]; // Row 1, col 1 = row 0, col 0
     } else {
-
       for ( let iy = 0; iy < n; iy += 1 ) {
         for ( let ix = 0; ix < n; ix += 1 ) {
           const plus = (ix + iy) % 2 === 0 ? 1 : -1;
           const xf = x.filter(e => e !== ix);
           const yf = y.filter(e => e !== iy);
-          const der = this.optimizedNDet(n - 1, this.arr, yf, xf, k);
-          outMatrix.arr[iy][ix] = det * plus * der;
+          const der = this.constructor.optimizedNDet(n - 1, this, yf, xf, k);
+          outMatrix.setIndex(iy, ix, det * plus * der);
         }
       }
     }
@@ -1179,27 +1422,27 @@ export class Matrix {
    * Return the determinant of this matrix;
    */
   determinant() {
-    if ( this.dim1 < 2 || this.dim1 !== this.dim2 ) {
+    if ( this.nrow < 2 || this.nrow !== this.ncol ) {
       console.error("Cannot calculate determinant of non-square matrix.");
       return undefined;
     }
-    const n = this.dim1;
+    const n = this.nrow;
     const x = Array.fromRange(n);
     const y = Array.fromRange(n);
     const k = {};
-    return this.optimizedNDet(n, this.arr, x, y, k);
+    return this.constructor.optimizedNDet(n, this, x, y, k);
   }
 
   /**
    * Calculate the determinant, recursively.
    * @param {number} n        Matrix rows or columns
-   * @param {number[][]} m    Matrix
+   * @param {Matrix} m        Matrix
    * @param {number[]} x
    * @param {number[]} y
    * @param {{string: number}} k
    * @returns {number}
    */
-  optimizedNDet(n, m, x, y, k) {
+  static optimizedNDet(n, m, x, y, k) {
     const mk = x.join("") + y.join("");
     if ( !k[mk] ) {
       if ( n > 2 ) {
@@ -1211,24 +1454,338 @@ export class Matrix {
           const xf = x.filter(e => e !== ix);
           const yf = y.filter(e => e !== iy);
           const der = this.optimizedNDet(n - 1, m, xf, yf, k);
-          d += m[iy][ix] * plus * der;
+          d += m.getIndex(iy, ix) * plus * der;
           plus *= -1;
         }
         k[mk] = d;
 
       } else {
-        const a = m[y[0]][x[0]];
-        const b = m[y[0]][x[1]];
-        const c = m[y[1]][x[0]];
-        const d = m[y[1]][x[1]];
+        const a = m.getIndex(y[0], x[0]);
+        const b = m.getIndex(y[0], x[1]);
+        const c = m.getIndex(y[1], x[0]);
+        const d = m.getIndex(y[1], x[1]);
         k[mk] = (a * d) - (b * c);
       }
     }
     return k[mk];
   }
 
-  /**
-   * Print this matrix to the console.
-   */
-  print() { console.table(this.arr); }
+  // ----- NOTE: Debugging ----- //
+
+  print({ startR, startC, endR, endC } = {}) {
+    startR ??= 0;
+    startC ??= 0;
+    endR ??= this.nrow;
+    endC ??= this.ncol;
+
+    // console.table prints arrays of arrays nicely.
+    const out = new Array(endR - startR);
+    for ( let r = startR; r < endR; r += 1 ) out[r] = new Array(endC - startC);
+    for ( let r = startR; r < endR; r += 1 ) {
+      const arrR = out[r];
+      for ( let c = startC; c < endC; c += 1 ) arrR[c] = this.getIndex(r, c);
+    }
+    console.table(out);
+  }
+
+  toString() { return `Matrix<${this.nrow},${this.ncol}>`}
 }
+
+// For backwards compatibility.
+Matrix.fromFlatArray = Matrix.fromRowMajorArray;
+Matrix.prototype.copyTo = Matrix.prototype.clone;
+
+
+// Example typed class
+
+export class MatrixFloat32 extends Matrix {
+  static arrayClass = Float32Array;
+
+  static arrayIsTyped = true;
+
+  /**
+   * Return a new matrix with smaller or equal dimensions from this matrix.
+   * @param {object} [opts]
+   * @param {number} [opts.rowStart=0]      First row to keep, indexed from 0
+   * @param {number} [opts.rowEnd]          Last row to keep, inclusive; defaults to last row
+   * @param {number} [opts.colStart=0]      First column to keep, indexed from 0
+   * @param {number} [opts.colEnd]          Last column to keep, inclusive; defaults to last column
+   * @returns {Matrix} New matrix
+   */
+  subset({ rowStart = 0, rowEnd = this.nrow - 1, colStart = 0, colEnd = this.ncol - 1 } = {}) {
+    rowEnd += 1;
+    colEnd += 1;
+
+    // Rows are easy.
+    const rowArr = this.arr.subarray(rowStart * this.nrow, rowEnd * this.nrow);
+    const out = this.constructor.empty(rowEnd - rowStart, colEnd - colStart);
+    for ( let r = 0, rMax = rowEnd - rowStart; r < rMax; r += 1 ) {
+      const cIdx = r * this.ncol;
+      out.arr.set(rowArr.subarray(cIdx + colStart, cIdx + colEnd), r * out.ncol);
+    }
+   return out;
+  }
+
+}
+
+/**
+ * Stores the rotation, translation, and scale matrices along with the model matrix.
+ */
+export class ModelMatrix2d {
+  // Static getters so ModelMatrix can override.
+  static get DIM() { return 3; };
+
+  static get multiplyName() { return "multiply3x3"; } // Static getter so ModelMatrix can override.
+
+  static get DIM2() { return this.DIM * this.DIM; }; // 9
+
+  static get BUFFER_LENGTH() { return this.DIM2 * 3; }; // 9 values * 3 matrices.
+
+  /** @type {ArrayBuffer} */
+  _matrixBuffer = new ArrayBuffer(Float32Array.BYTES_PER_ELEMENT * this.constructor.BUFFER_LENGTH);
+
+  /** @type {object<MatrixFloat32>} */
+  // Could be private but may be useful to access them without triggering update.
+  _rotation = (new MatrixFloat32(
+      new Float32Array(this._matrixBuffer, 0, this.constructor.DIM2), // (buffer, 0 * 4, 9)
+      this.constructor.DIM,
+      this.constructor.DIM))
+    .identity();
+
+  _translation = (new MatrixFloat32(
+      new Float32Array(this._matrixBuffer, this.constructor.DIM2 * Float32Array.BYTES_PER_ELEMENT, this.constructor.DIM2), // (buffer, 9 * 4, 9)
+      this.constructor.DIM,
+      this.constructor.DIM))
+    .identity();
+
+  _scale = (new MatrixFloat32(
+      new Float32Array(this._matrixBuffer, this.constructor.DIM2 * 2 * Float32Array.BYTES_PER_ELEMENT, this.constructor.DIM2), // (buffer, 18 * 4, 9)
+      this.constructor.DIM,
+      this.constructor.DIM))
+    .identity();
+
+  get rotation() { this.#updated ||= true; return this._rotation; }
+
+  get translation() { this.#updated ||= true; return this._translation; }
+
+  get scale() { this.#updated ||= true; return this._scale; }
+
+  /** @type {MatrixFloat32} */
+  _model = MatrixFloat32.identity(this.constructor.DIM);
+
+  get model() {
+    if ( this.#updated ) this.update();
+    return this._model;
+  }
+
+  /** @type {boolean} */
+  #updated = true;
+
+  get updated() { return this.#updated; }
+
+  set updated(value) { this.#updated ||= value; }
+
+  update() {
+    const { rotation, translation, scale } = this;
+    const M = this._model;
+    scale[this.constructor.multiplyName](rotation, M)
+    M[this.constructor.multiplyName](translation, M);
+    this.#updated = false;
+  }
+
+  clone(out) {
+    out ??= new this.constructor();
+    this.rotation.clone(out.rotation);
+    this.scale.clone(out.scale);
+    this.translation.clone(out.translation);
+    return out;
+  }
+}
+
+/**
+ * Stores the rotation, translation, and scale matrices along with the model matrix.
+ */
+export class ModelMatrix extends ModelMatrix2d {
+  static get DIM() { return 4; }
+
+  static get multiplyName() { return "multiply4x4"; }
+}
+
+/**
+ * Center the model using a separate translation matrix before applying scale and rotation.
+ */
+export const ModelCenterMixin = superclass => {
+  return class extends superclass {
+    static BUFFER_IDX = super.BUFFER_LENGTH / this.DIM2;
+
+    static get BUFFER_LENGTH() { return super.BUFFER_LENGTH + (this.DIM2 * 2); }
+
+    /** @type {MatrixFloat32} */
+    #center = (new MatrixFloat32(
+      new Float32Array(this._matrixBuffer, (this.constructor.DIM2 * this.constructor.BUFFER_IDX) * Float32Array.BYTES_PER_ELEMENT, this.constructor.DIM2), // (buffer, 18 * 4, 9)
+      this.constructor.DIM,
+      this.constructor.DIM))
+    .identity();
+
+    get modelCenter() { this.updated = true; return this.#center; }
+
+    set modelCenter(ctr) {
+      this.updated = true;
+      const is3d = this.constructor.DIM === 4;
+      MatrixFloat32.translation(-ctr.x, -ctr.y, is3d ? -ctr.z : undefined, this.#center);
+    }
+
+    update() {
+      // Create a translation matrix to uncenter after applying the model matrix.
+      // Must consider scaling when un-centering.
+      // Do before the update so as not to trigger another.
+      // E.g. Local center 5, 5. Scaled by x10.
+      // Move -5, -5 using this.#center. TL is -5, -5; center is 0, 0.
+      // Scale x10: TL is -50, -50.
+      // Move 50, 50 using uncenter.
+      const centerMat = this.#center;
+      const is3d = this.constructor.DIM === 4;
+      const r = this.constructor.DIM - 1; // 3d: 3, 2d: 2.
+      const uncenterPt = is3d ? Point3d.tmp : PIXI.Point.tmp;
+      uncenterPt.x = centerMat.getIndex(r, 0);
+      uncenterPt.y = centerMat.getIndex(r, 1);
+      if ( is3d ) {
+        uncenterPt.z = centerMat.getIndex(r, 2);
+        this.scale.multiplyPoint3d(uncenterPt, uncenterPt);
+      } else this.scale.multiplyPoint2d(uncenterPt, uncenterPt)
+      uncenterPt.multiplyScalar(-1, uncenterPt); // Reverse translation direction.
+
+      // Set the uncenter matrix.
+      const uncenter = centerMat.clone();
+      uncenter.setIndex(r, 0, uncenterPt.x);
+      uncenter.setIndex(r, 1, uncenterPt.y);
+      if ( is3d ) uncenter.setIndex(r, 2, uncenterPt.z);
+
+      // Update the model matrix.
+      super.update();
+
+      // Center prior to applying the model matrix.
+      centerMat[this.constructor.multiplyName](this._model, this._model);
+
+      // Undo the centering after.
+      this._model[this.constructor.multiplyName](uncenter, this._model);
+    }
+  }
+}
+
+
+/**
+ * Store the model inverse along with the model matrix.
+ */
+export const ModelInverseMixin = superclass => {
+
+  return class extends superclass {
+    /** @type {MatrixFloat32} */
+    #inverse = MatrixFloat32.identity(this.constructor.DIM);
+
+    get _modelInverse() { return this.#inverse; }
+
+    get modelInverse() { if ( this.updated ) this.update(); return this.#inverse; }
+
+    update() {
+      super.update();
+      this._model.invert(this.#inverse);
+    }
+  }
+}
+
+export class ModelMatrix2dInverse extends mix(ModelMatrix2d).with(ModelInverseMixin) {}
+
+export class ModelMatrix2dCenter extends mix(ModelMatrix2d).with(ModelCenterMixin) {}
+
+export class ModelMatrix2dCenterInverse extends mix(ModelMatrix2d).with(ModelCenterMixin, ModelInverseMixin) {}
+
+export class ModelMatrixInverse extends mix(ModelMatrix).with(ModelInverseMixin) {}
+
+export class ModelMatrixCenter extends mix(ModelMatrix).with(ModelCenterMixin) {}
+
+export class ModelMatrixCenterInverse extends mix(ModelMatrix).with(ModelCenterMixin, ModelInverseMixin) {}
+
+/* Tests
+Matrix = CONFIG.GeometryLib.Matrix
+Matrix = CONFIG.GeometryLib.Matrix
+QBenchmarkLoop = CONFIG.GeometryLib.bench.QBenchmarkLoop
+
+
+Matrix.zeroes(4, 10).arr.every(elem => elem === 0);
+resIdentity = [
+  1, 0, 0, 0,
+  0, 1, 0, 0,
+  0, 0, 1, 0,
+  0, 0, 0, 1
+];
+Matrix.identity(4, 4).arr.every((elem, idx) => elem === resIdentity[idx]);
+
+arr = Array.fromRange(16);
+resSum = arr.map(elem => elem + elem)
+m = new Matrix(arr, 4, 4);
+m.add(m).arr.every((elem, idx) => elem === resSum[idx])
+
+resDiff = arr.map(elem => elem - elem)
+m = new Matrix(arr, 4, 4);
+m.subtract(m).arr.every((elem, idx) => elem === resDiff[idx])
+
+resMult = [
+56, 62, 68, 74,
+152, 174, 196, 218,
+248, 286, 324, 362,
+344, 398, 452, 506 ];
+m = new Matrix(arr, 4, 4);
+m.multiply(m).arr.every((elem, idx) => elem === resMult[idx])
+m.multiply4x4(m).arr.every((elem, idx) => elem === resMult[idx])
+m.invert() // Should fail not invertible
+
+invertibleArr = [
+  1, 2, -1,
+  2, 1, 2,
+  -1, 2, 1
+]
+resInv = [
+  3/16, 1/4, -5/16,
+  1/4, 0, 1/4,
+  -5/16, 1/4, 3/16
+]
+
+m = new Matrix(invertibleArr, 3, 3);
+m.invert().arr.every((elem, idx) => elem === resInv[idx])
+
+
+m = Matrix.fromFlatArray(arr, 4, 4)
+m2 = new Matrix(arr, 4, 4)
+m3 = MatrixTyped.fromRowMajorArray(arr, 4, 4)
+
+
+
+N = 10000
+await QBenchmarkLoop(N, m, "multiply", m)
+await QBenchmarkLoop(N, m2, "multiply", m2)
+await QBenchmarkLoop(N, m3, "multiply", m3)
+
+await QBenchmarkLoop(N, m, "multiply4x4", m)
+await QBenchmarkLoop(N, m2, "multiply4x4", m2)
+await QBenchmarkLoop(N, m3, "multiply4x4", m3)
+
+await QBenchmarkLoop(N, m, "add", m)
+await QBenchmarkLoop(N, m2, "add", m2)
+await QBenchmarkLoop(N, m3, "add", m3)
+
+
+N = 10000
+m = Matrix.fromFlatArray(invertibleArr, 3, 3)
+m2 = new Matrix(invertibleArr, 3, 3)
+m3 = MatrixTyped.fromRowMajorArray(invertibleArr, 3, 3)
+await QBenchmarkLoop(N, m, "invert")
+await QBenchmarkLoop(N, m2, "invert")
+await QBenchmarkLoop(N, m3, "invert")
+
+
+await foundry.utils.benchmark(m.invert.bind(m), N, undefined)
+await foundry.utils.benchmark(m2.invert.bind(m2), N, undefined)
+await foundry.utils.benchmark(m3.invert.bind(m3), N, undefined)
+
+*/

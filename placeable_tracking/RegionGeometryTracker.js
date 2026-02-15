@@ -23,7 +23,7 @@ import { CenteredRectangle } from "../CenteredPolygon/CenteredRectangle.js";
 import { Ellipse } from "../Ellipse.js";
 import { GEOMETRY_LIB_ID, OTHER_MODULES } from "../const.js";
 import { AABB3d } from "../3d/AABB3d.js";
-import { MatrixFloat32 } from "../MatrixFlat.js";
+import { MatrixFloat32 } from "../Matrix.js";
 import { Quad3d, Polygon3d, Polygons3d, Ellipse3d, Circle3d } from "../3d/Polygon3d.js";
 import { Point3d } from "../3d/Point3d.js";
 

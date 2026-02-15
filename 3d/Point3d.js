@@ -34,7 +34,7 @@ PIXI
  */
 import { PoolableMixin } from "../Pool.js";
 import { mix } from "../mixwith.js";
-import { MatrixFlat } from "../MatrixFlat.js";
+import { Matrix } from "../Matrix.js";
 import { gridUnitsToPixels, roundDecimals } from "../util.js";
 
 /**
@@ -263,13 +263,13 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
 
     // Rotate points to match tile rotation.
     if ( rotation ) {
-      const rotZ = MatrixFlat.rotationZ(Math.toRadians(rotation));
+      const rotZ = Matrix.rotationZ(Math.toRadians(rotation));
       pts.forEach(pt => rotZ.multiplyPoint3d(pt, pt));
     }
 
     // Translate to canvas position.
     const center = bounds.center;
-    const trM = MatrixFlat.translation(center.x + offsetX, center.y + offsetY, elevationZ);
+    const trM = Matrix.translation(center.x + offsetX, center.y + offsetY, elevationZ);
     pts.forEach(pt => trM.multiplyPoint3d(pt, pt));
 
     return {

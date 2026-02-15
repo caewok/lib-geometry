@@ -6,7 +6,7 @@ PIXI,
 "use strict";
 
 import { LocalCoordinateCache, PixelCache, TrimmedPixelCache, TilePixelCache } from "../PixelCache.js";
-import { MatrixFloat32 } from "../MatrixFlat.js";
+import { MatrixFloat32 } from "../Matrix.js";
 
 Hooks.on("quenchReady", (quench) => {
   quench.registerBatch(

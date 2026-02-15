@@ -6,7 +6,7 @@ PIXI,
 
 import { Polygon3d, Circle3d } from "./Polygon3d.js";
 import { Point3d } from "./Point3d.js";
-import { MatrixFlat } from "../MatrixFlat.js";
+import { Matrix } from "../Matrix.js";
 import { almostBetween } from "../util.js";
 
 /* Sphere
@@ -454,7 +454,7 @@ export class Sphere {
     // This involves solving a system of linear equations derived from the
     // equation of a sphere: (x-x0)^2 + (y-y0)^2 + (z-z0)^2 = r^2
     // The determinant of a matrix formed by the points' coordinates gives the center.
-    const A = new MatrixFlat([
+    const A = new Matrix([
       a.x, a.y, a.z, 1,
       b.x, b.y, b.z, 1,
       c.x, c.y, c.z, 1,
@@ -466,21 +466,21 @@ export class Sphere {
     const cSq = c.magnitudeSquared();
     const dSq = d.magnitudeSquared();
 
-    const Dx = (new MatrixFlat([
+    const Dx = (new Matrix([
       aSq, a.y, a.z, 1,
       bSq, b.y, b.z, 1,
       cSq, c.y, c.z, 1,
       dSq, d.y, d.z, 1,
     ])).determinant();
 
-    const Dy = (new MatrixFlat([
+    const Dy = (new Matrix([
       aSq, a.x, a.z, 1,
       bSq, b.x, b.z, 1,
       cSq, c.x, c.z, 1,
       dSq, d.x, d.z, 1,
     ])).determinant();
 
-    const Dz = (new MatrixFlat([
+    const Dz = (new Matrix([
       aSq, a.x, a.y, 1,
       bSq, b.x, b.y, 1,
       cSq, c.x, c.y, 1,

@@ -18,7 +18,7 @@ export * from "./Ellipse.js";
 export * from "./Graph.js";
 export * from "./GridCoordinates.js";
 export * from "./HexGridCoordinates.js";
-export * from "./MatrixFlat.js";
+export * from "./Matrix.js";
 export * from "./PixelCache.js";
 export * from "./RadixSort.js";
 export * from "./Graph.js";

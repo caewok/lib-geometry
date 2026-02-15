@@ -10,7 +10,7 @@ Ray,
 import { extractPixels } from "./extract-pixels.js";
 import { roundFastPositive, bresenhamLine, bresenhamLineIterator, trimLineSegmentToPixelRectangle, clamp } from "./util.js";
 import { Draw } from "./Draw.js";
-import { MatrixFloat32, ModelMatrix2dCenterInverse } from "./MatrixFlat.js";
+import { MatrixFloat32, ModelMatrix2dCenterInverse } from "./Matrix.js";
 import { AABB2d } from "./AABB.js";
 
 /* Pixel Cache

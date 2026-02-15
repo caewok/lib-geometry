@@ -9,7 +9,7 @@ import { FixedLengthTrackingBuffer } from "./TrackingBuffer.js";
 
 // LibGeometry
 import { GEOMETRY_LIB_ID, GEOMETRY_ID } from "../const.js";
-import { MatrixFloat32, ModelMatrix } from "../MatrixFlat.js";
+import { MatrixFloat32, ModelMatrix } from "../Matrix.js";
 import { AABB3d } from "../3d/AABB3d.js";
 import { Quad3d } from "../3d/Polygon3d.js";
 import { almostBetween } from "../util.js";
@@ -212,7 +212,7 @@ export const PlaceableAABBMixin = superclass => class extends superclass {
 
 // ----- NOTE: PlaceableModelMatrixMixin ----- //
 
-/** @type {MatrixFlat<4,4>} */
+/** @type {Matrix<4,4>} */
 const identityM = MatrixFloat32.identity(4, 4);
 Object.freeze(identityM);
 

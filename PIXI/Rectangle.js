@@ -3,7 +3,7 @@ PIXI,
 */
 "use strict";
 
-import { MatrixFlat as Matrix } from "../MatrixFlat.js";
+import { Matrix } from "../Matrix.js";
 import { CutawayPolygon } from "../CutawayPolygon.js";
 
 export const PATCHES = {};

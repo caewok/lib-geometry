@@ -4,7 +4,7 @@ PIXI
 "use strict";
 
 import { Point3d } from "./Point3d.js";
-import { MatrixFlat } from "../MatrixFlat.js";
+import { Matrix } from "../Matrix.js";
 import { pointsAreCollinear } from "../util.js";
 
 const originPt3d = new Point3d();
@@ -303,7 +303,7 @@ export class Plane {
     const b = this.point.add(vs.v);
     const c = this.point.add(vs.u);
 
-    const m = new MatrixFlat([
+    const m = new Matrix([
       a.x, b.x, c.x, p.x,
       a.y, b.y, c.y, p.y,
       a.z, b.z, c.z, p.z,
@@ -384,14 +384,14 @@ export class Plane {
     const n = P.add(N);
 
     // Adjust for row-major matrix and left-hand coordinate system
-    const S = new MatrixFlat([
+    const S = new Matrix([
       A.x, A.y, A.z, 1,
       u.x, u.y, u.z, 1,
       v.x, v.y, v.z, 1,
       n.x, n.y, n.z, 1
     ], 4, 4);
 
-    const D = new MatrixFlat([
+    const D = new Matrix([
       0, 0, 0, 1,
       1, 0, 0, 1,
       0, 1, 0, 1,

@@ -12,7 +12,7 @@ import { GEOMETRY_LIB_ID } from "../const.js";
 import { combineTypedArrays } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
 import { Sphere } from "../3d/Sphere.js";
-import { MatrixFloat32, ModelMatrix } from "../MatrixFlat.js";
+import { MatrixFloat32, ModelMatrix } from "../Matrix.js";
 import { Triangle3d } from "../3d/Polygon3d.js";
 import { ClipperPaths } from "../ClipperPaths.js";
 import { Clipper2Paths } from "../Clipper2Paths.js";

@@ -51,7 +51,7 @@ Fixed Pool class to prevent duplicate objects in the pool
 Updated version number to 0.4.6 in registration.js
 
 ### Refactoring
-Optimized MatrixFlat.lookAt() by removing redundant variable
+Optimized Matrix.lookAt() by removing redundant variable
 
 Improved code organization and comments
 
@@ -104,7 +104,7 @@ AABB: Modified AABB2d and AABB3d to improve segment overlap testing and containm
 
 PIXI Extensions: Added segmentIntersections to PIXI.Circle that returns t0 values. Added lineSegmentCrosses to PIXI.Polygon. Improved intersection calculations. RoundedRectangle class added.
 
-MatrixFlat: Added a subset method to extract a portion of the matrix.
+Matrix: Added a subset method to extract a portion of the matrix.
 
 CutawayPolygon: Modified CutawayPolygon to ensure clockwise point order in a y-up coordinate system. InsertTopSteps method removed.
 
@@ -178,7 +178,7 @@ Dependencies: Code using 3D geometry classes now depends on the Pool class.
 ## 0.4.0 (Formerly known as 0.3.21)
 Fix setting / getting wall elevation and simplify MODULE_KEYS structure.
 Misc. fixes.
-Fixes to MatrixFlat and added perspective code.
+Fixes to Matrix and added perspective code.
 Switch to handle v13 patches while keeping v12 compatibility.
 Added:
 • Clipper 2

@@ -11,7 +11,7 @@ import { Point3d } from "./3d/Point3d.js";
 import { ClipperPaths } from "./ClipperPaths.js";
 import { Plane } from "./3d/Plane.js";
 import { Draw } from "./Draw.js";
-import { MatrixFlat as Matrix } from "./MatrixFlat.js";
+import { Matrix } from "./Matrix.js";
 import { GEOMETRY_CONFIG } from "./const.js";
 import { perpendicularPoint } from "./util.js";
 

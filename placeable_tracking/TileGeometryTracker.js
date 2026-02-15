@@ -21,7 +21,7 @@ import {
 // LibGeometry
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { AABB3d } from "../3d/AABB3d.js";
-import { MatrixFloat32 } from "../MatrixFlat.js";
+import { MatrixFloat32 } from "../Matrix.js";
 import { Point3d } from "../3d/Point3d.js";
 import { Quad3d, Polygon3d, Polygons3d, Triangle3d } from "../3d/Polygon3d.js";
 import { almostBetween } from "../util.js";
