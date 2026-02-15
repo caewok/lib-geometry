@@ -1,12 +1,12 @@
 /* globals
-PIXI,
 ClipperLib,
 canvas,
+CONST,
+PIXI,
 */
 "use strict";
 
 import { Draw } from "./Draw.js";
-import { NULL_SET } from "./util.js";
 
 
 /**
@@ -22,27 +22,11 @@ export class ClipperPaths {
     this.#scalingFactor = scalingFactor;
   }
 
-  static classTypes = new Set([this.name, "Clipper"]); // Alternative to instanceof
-
-  inheritsClassType(type) {
-    let proto = this;
-    let classTypes = proto.constructor.classTypes;
-    do {
-      if ( classTypes.has(type) ) return true;
-      proto = Object.getPrototypeOf(proto);
-      classTypes = proto?.constructor?.classTypes;
-
-    } while ( classTypes );
-    return false;
+  static [Symbol.hasInstance](instance) {
+    return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
   }
 
-  matchesClass(cl) {
-    return this.constructor.classTypes.equals(cl.classTypes || NULL_SET);
-  }
-
-  overlapsClass(cl) {
-    return this.constructor.classTypes.intersects(cl.classTypes || NULL_SET);
-  }
+  static get _geoLibType() { return this.name; }
 
 
   /** @type {number} */

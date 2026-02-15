@@ -829,7 +829,7 @@ export class Rectangle3dVertices extends BasicVertices {
 export class Polygon3dVertices extends BasicVertices {
 
   static isClipper(poly) {
-    return poly.matchesClass && (poly.matchesClass(ClipperPaths) || poly.matchesClass(Clipper2Paths));
+    return poly instanceof ClipperPaths || poly instanceof Clipper2Paths;
   }
 
   static NUM_TRIANGLE_ELEMENTS = 3 * this.NUM_VERTEX_ELEMENTS;

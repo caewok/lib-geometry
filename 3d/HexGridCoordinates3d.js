@@ -5,6 +5,7 @@
 
 import { GridCoordinates3d } from "./GridCoordinates3d.js";
 import { HexCoordinateMixin } from "../HexGridCoordinates.js";
+import { pixelsToGridUnits } from "../util.js";
 
 /**
  * Cube coordinates in a hexagonal grid. q + r + s = 0.
@@ -60,7 +61,7 @@ export class HexGridCoordinates3d extends HexCoordinateMixin(GridCoordinates3d) 
   setToHexCube(hexCube, elevation) {
     super.setToHexCube(hexCube);
     if ( typeof elevation === "undefined" ) {
-      if ( typeof hexCube.z !== "undefined" ) elevation = GEOMETRY_CONFIG.utils.pixelsToGridUnits(hexCube.z);
+      if ( typeof hexCube.z !== "undefined" ) elevation = pixelsToGridUnits(hexCube.z);
       else if ( typeof hexCube.k !== "undefined" ) elevation = this.constructor.elevationForUnit(hexCube.k);
       else elevation = 0;
     }

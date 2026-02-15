@@ -35,7 +35,7 @@ PIXI
 import { PoolableMixin } from "../Pool.js";
 import { mix } from "../mixwith.js";
 import { MatrixFlat } from "../MatrixFlat.js";
-import { NULL_SET, gridUnitsToPixels, roundDecimals } from "../util.js";
+import { gridUnitsToPixels, roundDecimals } from "../util.js";
 
 /**
  * 3-D version of PIXI.Point
@@ -44,27 +44,11 @@ import { NULL_SET, gridUnitsToPixels, roundDecimals } from "../util.js";
 export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
   toJSON() { return { ...this }; }
 
-  static classTypes = new Set([this.name]); // Alternative to instanceof
-
-  inheritsClassType(type) {
-    let proto = this;
-    let classTypes = proto.constructor.classTypes;
-    do {
-      if ( classTypes.has(type) ) return true;
-      proto = Object.getPrototypeOf(proto);
-      classTypes = proto?.constructor?.classTypes;
-
-    } while ( classTypes );
-    return false;
+  static [Symbol.hasInstance](instance) {
+    return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
   }
 
-  matchesClass(cl) {
-    return this.constructor.classTypes.equals(cl.classTypes || NULL_SET);
-  }
-
-  overlapsClass(cl) {
-    return this.constructor.classTypes.intersects(cl.classTypes || NULL_SET);
-  }
+  static get _geoLibType() { return this.name; }
 
   z = 0;
 

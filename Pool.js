@@ -2,6 +2,7 @@
 
 */
 "use strict";
+/* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 
 /* Pool
 Used to store temporary objects, such as points. Allows for returning objects to the pool.
@@ -50,8 +51,7 @@ export class Pool {
   release(obj) {
     // Basic test that the object belongs.
     const cl = this.cl;
-    const isValid = cl.classTypes ? obj.matchesClass(cl) : obj instanceof cl;
-    if ( !isValid) {
+    if ( !(obj instanceof cl) || obj.constructor.name !== cl.name ) {
       console.warn("Pool object does not match other instance in the pool.", { cl, obj });
       return;
     }
@@ -102,7 +102,7 @@ export const PoolableMixin = superclass => class extends superclass {
 
   release() { this.constructor._release(this); }
 
-  static onRelease(obj) { }
+  static onRelease(_obj) { }
 
   /**
    * Required builder to create multiple objects.

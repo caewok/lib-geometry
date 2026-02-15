@@ -1,6 +1,5 @@
 /* globals
 canvas,
-ClipperLib,
 CONFIG,
 foundry,
 PIXI,
@@ -11,7 +10,7 @@ PIXI,
 import { GEOMETRY_CONFIG } from "../const.js";
 import { Point3d } from "./Point3d.js";
 import { Plane } from "./Plane.js";
-import { pointsAreCollinear, NULL_SET, almostBetween } from "../util.js";
+import { pointsAreCollinear, almostBetween } from "../util.js";
 import { AABB3d } from "./AABB3d.js";
 import { Draw } from "../Draw.js";
 
@@ -24,27 +23,11 @@ Points in a Polygon3d are assumed to not be modified in place after creation.
 */
 export class Polygon3d {
 
-  static classTypes = new Set([this.name], "Polygon", "PlanarPolygon"); // Alternative to instanceof
-
-  inheritsClassType(type) {
-    let proto = this;
-    let classTypes = proto.constructor.classTypes;
-    do {
-      if ( classTypes.has(type) ) return true;
-      proto = Object.getPrototypeOf(proto);
-      classTypes = proto?.constructor?.classTypes;
-
-    } while ( classTypes );
-    return false;
+  static [Symbol.hasInstance](instance) {
+    return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
   }
 
-  matchesClass(cl) {
-    return this.constructor.classTypes.equals(cl.classTypes || NULL_SET);
-  }
-
-  overlapsClass(cl) {
-    return this.constructor.classTypes.intersects(cl.classTypes || NULL_SET);
-  }
+  static get _geoLibType() { return this.name; }
 
 
   // TODO: Cache bounds and plane. Use setter to modify points to reset cache?
@@ -1392,7 +1375,7 @@ export class Triangle3d extends Polygon3d {
    * @param {Number[]} [indices]    Indices to determine order in which triangles are created from vertices
    * @returns {Triangle[]}
    */
-  static fromVertices(vertices, indices, { positionOffset = 0, stride = 3, out } = {}) {
+  static fromVertices(vertices, indices, { positionOffset = 0, stride = 3 } = {}) {
     if ( vertices.length % stride !== 0 ) console.error(`${this.name}.fromVertices|Length of vertices is not divisible by stride ${stride}: ${vertices.length}`);
     indices ??= Array.fromRange(Math.floor(vertices.length / 3));
     if ( indices.length % 3 !== 0 ) console.error(`${this.name}.fromVertices|Length of indices is not divisible by 3: ${indices.length}`);

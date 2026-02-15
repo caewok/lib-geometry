@@ -1,5 +1,4 @@
 /* globals
-CanvasQuadtree
 */
 "use strict";
 
@@ -33,5 +32,5 @@ function refreshV13(wrapped) {
   wrapped();
 }
 
-PATCHES.CANVAS_EDGES.WRAPS = { refresh };
+PATCHES.CANVAS_EDGES.WRAPS = { refresh: refreshV13 };
 

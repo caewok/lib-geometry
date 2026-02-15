@@ -14,6 +14,7 @@ PIXI
  * @param {string} [opts.format] 				WebGL enum format
  * @param {string} [opts.type]						WebGL enum type
  */
+/*
 class CustomBufferResource extends PIXI.BufferResource {
   constructor(source, options = {}) {
     let { internalFormat, format, type } = options;
@@ -57,6 +58,7 @@ class CustomBufferResource extends PIXI.BufferResource {
     return true;
   }
 }
+*/
 
 /*
 const resource = new CustomBufferResource(dataArray, {

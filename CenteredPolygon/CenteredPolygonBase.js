@@ -3,8 +3,6 @@ PIXI,
 */
 "use strict";
 
-import { NULL_SET } from "../util.js";
-
 /**
  * Base class to be extended by others.
  * Follows the approach of Drawing and RegularPolygon class.
@@ -13,37 +11,14 @@ import { NULL_SET } from "../util.js";
  */
 export class CenteredPolygonBase extends PIXI.Polygon {
 
-  static classTypes = new Set([this.name], "Centered", "Polygon"); // Alternative to instanceof
-
-  inheritsClassType(type) {
-    let proto = this;
-    let classTypes = proto.constructor.classTypes;
-    do {
-      if ( classTypes.has(type) ) return true;
-      proto = Object.getPrototypeOf(proto);
-      classTypes = proto?.constructor?.classTypes;
-
-    } while ( classTypes );
-    return false;
+  static [Symbol.hasInstance](instance) {
+    return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
   }
 
-  matchesClass(cl) {
-    return this.constructor.classTypes.equals(cl.classTypes || NULL_SET);
-  }
-
-  overlapsClass(cl) {
-    return this.constructor.classTypes.intersects(cl.classTypes || NULL_SET);
-  }
+  static get _geoLibType() { return this.name; }
 
   /** @type {PIXI.Point} */
   origin = new PIXI.Point();
-
-  // TODO: Make rotation and radians getters, so they can be modified.
-  /** @type {number} */
-  rotation = 0;
-
-  /** @type {number} */
-  radians = 0;
 
   /** @type {Point[]} */
   _fixedPoints;

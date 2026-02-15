@@ -24,6 +24,12 @@ import { mix } from "./mixwith.js";
 
 export class MatrixFlat {
 
+  static [Symbol.hasInstance](instance) {
+    return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
+  }
+
+  static get _geoLibType() { return this.name; }
+
   static arrayClass = Array;
 
   static arrayIsTyped = false;

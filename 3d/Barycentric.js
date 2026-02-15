@@ -6,7 +6,8 @@ PIXI,
 
 import { Point3d } from "./Point3d.js";
 
-class BaryTriangleData {
+
+export class BaryTriangleData {
 
   /** @type {PIXI.Point} */
   a = new PIXI.Point();
@@ -51,6 +52,7 @@ class BaryTriangleData {
     return new this(tri3d.a.to2d(), tri3d.b.to2d(), tri3d.c.to2d());
   }
 }
+
 
 export class BarycentricPoint extends Point3d {
 

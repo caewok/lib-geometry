@@ -7,7 +7,6 @@ PIXI,
 "use strict";
 
 import { Point3d } from "./Point3d.js";
-import { instanceOrTypeOf } from "../util.js";
 
 
 /**
@@ -18,8 +17,8 @@ import { instanceOrTypeOf } from "../util.js";
  */
 export class Ray3d extends foundry.canvas.geometry.Ray {
   constructor(A, B) {
-    if ( !instanceOrTypeOf(A, Point3d) ) A = new Point3d(A.x, A.y, A.z);
-    if ( !instanceOrTypeOf(B, Point3d) ) B = new Point3d(B.x, B.y, B.z);
+    if ( !(A instanceof Point3d) ) A = new Point3d(A.x, A.y, A.z);
+    if ( !(B instanceof Point3d) ) B = new Point3d(B.x, B.y, B.z);
 
     super(A, B);
 

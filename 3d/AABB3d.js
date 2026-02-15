@@ -1,4 +1,5 @@
 /* globals
+foundry,
 PIXI,
 */
 "use strict";
@@ -6,6 +7,7 @@ PIXI,
 import { Point3d } from "./Point3d.js";
 import { almostLessThan } from "../util.js";
 import { AABB2d } from "../AABB.js";
+import { Quad3d, Circle3d } from "./Polygon3d.js";
 
 const axes = {
   x: new Point3d(1, 0, 0),
@@ -181,7 +183,7 @@ export class AABB3d extends AABB2d {
    * @returns {AABB3d}
    */
   static fromPolygon3d(poly3d, out) {
-    if ( poly3d.overlapsClass("Circle3d") ) return this.fromCircle3d(poly3d, out);
+    if ( poly3d instanceof Circle3d ) return this.fromCircle3d(poly3d, out);
     return this.fromPoints(poly3d.points, out);
   }
 
@@ -260,7 +262,7 @@ export class AABB3d extends AABB2d {
    * @return {boolean}
    */
   overlapsConvexPolygon3d(poly3d) {
-    if ( poly3d.overlapsClass("Circle3d") ) return this.overlapsCircle3d(poly3d);
+    if ( poly3d instanceof Circle3d ) return this.overlapsCircle3d(poly3d);
 
     // Early exit if polygon is empty
     if ( !poly3d.points || poly3d.points.length === 0 ) return false;

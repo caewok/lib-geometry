@@ -9,7 +9,6 @@ import { OTHER_MODULES } from "./const.js";
 // Patches for the CanvasEdges class.
 export const PATCHES = {};
 PATCHES.CANVAS_EDGES = {};
-PATCHES.CANVAS_EDGES_V13 = {};
 
 // ----- Getters ----- //
 

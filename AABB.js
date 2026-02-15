@@ -24,6 +24,13 @@ Object.freeze(axes.z);
  * The maximum row/column/z are considered inclusive. I.e., the range is [min, max], not [min, max).
  */
 export class AABB2d {
+
+  static [Symbol.hasInstance](instance) {
+    return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
+  }
+
+  static get _geoLibType() { return this.name; }
+
   static POINT_CLASS = PIXI.Point;
 
   static axes = ["x", "y"];

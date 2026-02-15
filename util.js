@@ -1,13 +1,13 @@
 /* globals
-CONFIG,
 canvas,
+CONFIG,
 foundry,
 Drawing,
 PIXI
 */
 "use strict";
 
-import { extractPixels } from "./extract-pixels.js";
+import { GEOMETRY_LIB_ID } from "./const.js";
 
 // Simple extensions
 Math.minMax = function(...args) {
@@ -162,7 +162,7 @@ dist(end, currPt) < dist(start, currPt) && dist(currPt, start) > dist(start, end
  * @returns {ElevatedPoint}
  */
 function from2dCutaway(cutawayPt, start, end, outPoint) {
-  outPoint ??= GEOMETRY_CONFIG.threeD.ElevatedPoint.tmp;
+  outPoint ??= CONFIG[GEOMETRY_LIB_ID].lib.threeD.ElevatedPoint.tmp;
   // b/c outPoint is 3d, makes sure to temporarily store the 2d values.
   const start2d = start.to2d();
   const end2d = end.to2d();
@@ -376,11 +376,11 @@ Math.PI_1_2 = Math.PI * 0.5;
 export function centeredPolygonFromDrawing(drawing) {
   switch ( drawing.document.shape.type ) {
     case Drawing.SHAPE_TYPES.RECTANGLE:
-      return GEOMETRY_CONFIG.threeD.CenteredRectangle.fromDrawing(drawing);
+      return CONFIG[GEOMETRY_LIB_ID].lib.threeD.CenteredRectangle.fromDrawing(drawing);
     case Drawing.SHAPE_TYPES.ELLIPSE:
-      return GEOMETRY_CONFIG.threeD.Ellipse.fromDrawing(drawing);
+      return CONFIG[GEOMETRY_LIB_ID].lib.threeD.Ellipse.fromDrawing(drawing);
     case Drawing.SHAPE_TYPES.POLYGON:
-      return GEOMETRY_CONFIG.threeD.CenteredPolygon.fromDrawing(drawing);
+      return CONFIG[GEOMETRY_LIB_ID].lib.threeD.CenteredPolygon.fromDrawing(drawing);
     case Drawing.SHAPE_TYPES.CIRCLE: {
       const width = drawing.document.shape.width;
       return PIXI.Circle(drawing.document.x + width * 0.5, drawing.document.y + width * 0.5, width);
@@ -913,7 +913,7 @@ export function* bresenhamLine3dIterator(a, b) {
       z1 += incZ;
 
       // Return the point.
-      yield new GEOMETRY_CONFIG.threeD.Point3d(Math.round(x1), Math.round(y1), Math.round(z1));
+      yield new CONFIG[GEOMETRY_LIB_ID].lib.threeD.Point3d(Math.round(x1), Math.round(y1), Math.round(z1));
     }
   } else {
     // Iterate through the line
@@ -924,7 +924,7 @@ export function* bresenhamLine3dIterator(a, b) {
       z1 += incZ;
 
       // Return the point.
-      yield new GEOMETRY_CONFIG.threeD.Point3d(Math.round(x1), Math.round(y1), Math.round(z1));
+      yield new CONFIG[GEOMETRY_LIB_ID].lib.threeD.Point3d(Math.round(x1), Math.round(y1), Math.round(z1));
     }
   }
 }
@@ -1403,20 +1403,6 @@ export function segmentOverlap(a, b, c, d) {
   }
 
   return res;
-}
-
-/**
- * Is an object an instance of a class or a class type.
- * First check for "classTypes". If not present, fall back on instanceof.
- * @param {object} obj1
- * @param {object} obj2
- * @return {boolean} True if the two objects share a class / parent class.
- */
-export function instanceOrTypeOf(obj1, cl) {
-  const types1 = obj1.constructor.classTypes;
-  const types2 = cl.classTypes;
-  if ( types1 && types2 ) return types2.some(type => obj1.inheritsClassType(type));
-  return obj1 instanceof cl;
 }
 
 export function almostLessThan(a, b, epsilon = 1e-06) { return a < b || a.almostEqual(b, epsilon); }

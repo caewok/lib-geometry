@@ -13,6 +13,12 @@ Object.freeze(originPt3d);
 // Class to represent a plane
 export class Plane {
 
+  static [Symbol.hasInstance](instance) {
+    return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
+  }
+
+  static get _geoLibType() { return this.name; }
+
   /** @type {Point3d} */
   #normal = new Point3d(0, 0, 1);
 
@@ -110,9 +116,9 @@ export class Plane {
     const pts = Point3d.fromWall(wall, { finite: true }); // Need finite so Normal can be calculated
 
     // To keep the points simple, use different Z values
-    const A = pts.a.top;
-    const B = pts.a.bottom;
-    const C = pts.b.bottom;
+    const a = pts.a.top;
+    const b = pts.a.bottom;
+    const c = pts.b.bottom;
 
     b.z = (a.z + b.z) * 0.5;
     a.z = b.z + 1;

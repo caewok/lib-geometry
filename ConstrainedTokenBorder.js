@@ -7,6 +7,7 @@ PIXI
 "use strict";
 
 import { ClipperPaths } from "./ClipperPaths.js";
+import { Clipper2Paths } from "./Clipper2Paths.js";
 
 export const PATCHES = {};
 PATCHES.CONSTRAINED_TOKEN_BORDER = {};
@@ -393,7 +394,7 @@ export class ConstrainedTokenBorder extends foundry.canvas.geometry.ClockwiseSwe
    * @returns {PIXI.Polygon|undefined}
    */
   static clipperShapeToPolygon(shape) {
-    if ( !(shape.constructor.classTypes && shape.inheritsClassType("Clipper")) ) return shape; // ClipperPaths and Clipper2Paths share "Clipper" type.
+    if ( !(shape instanceof ClipperPaths || shape instanceof Clipper2Paths ) ) return shape;
 
     // Multiple polygons present. Ignore holes. Return remaining polygon or
     // construct one from convex hull of remaining polygons.

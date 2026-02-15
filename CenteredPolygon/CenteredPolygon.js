@@ -4,7 +4,6 @@ PIXI
 "use strict";
 
 import "./CenteredPolygonBase.js";
-import { NULL_SET } from "../util.js";
 import { CenteredPolygonBase } from "./CenteredPolygonBase.js";
 
 /* Testing
@@ -59,29 +58,6 @@ drawing.drawShape(bounds)
  * Holds a set of points that can be rotated.
  */
 export class CenteredPolygon extends CenteredPolygonBase {
-
-  static classTypes = new Set([this.name]); // Alternative to instanceof
-
-  inheritsClassType(type) {
-    let proto = this;
-    let classTypes = proto.constructor.classTypes;
-    do {
-      if ( classTypes.has(type) ) return true;
-      proto = Object.getPrototypeOf(proto);
-      classTypes = proto?.constructor?.classTypes;
-
-    } while ( classTypes );
-    return false;
-  }
-
-  matchesClass(cl) {
-    return this.constructor.classTypes.equals(cl.classTypes || NULL_SET);
-  }
-
-  overlapsClass(cl) {
-    return this.constructor.classTypes.intersects(cl.classTypes || NULL_SET);
-  }
-
 
   /**
    * @param {Point} origin    Center point of the polygon.

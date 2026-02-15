@@ -5,9 +5,6 @@ PIXI,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { ClipperPaths } from "./ClipperPaths.js";
-import { Clipper2Paths} from "./Clipper2Paths.js";
-
 /**
  * Class that holds an array of PIXI shapes (PIXI.Polygon, PIXI.Circle, etc.)
  * If the shape is a hole, it has the "isHole" property added.
