@@ -57,4 +57,60 @@ export class Pool {
     }
     this.#pool.add(obj); // Important that the object here is only added once.
   }
+
+  // Use a WeakMap to store pools keyed by the Class itself.
+  // This ensures no memory leaks and separate pools for every class implementing Pool.
+  static #poolRegistry = new WeakMap();
+
+  /**
+   * Get the pool for a given class.
+   * @param {class} cl
+   * @returns {Pool}
+   */
+   static getPool(cl) {
+     if ( !this.#poolRegistry.has(cl) ) {
+       this.#poolRegistry.set(cl, new this(cl));
+     }
+     return this.#poolRegistry.get(cl);
+   }
 }
+
+export const PoolableMixin = superclass => class extends superclass {
+
+  /**
+   * Retrieve the pool for this class.
+   * @type {Pool}
+   */
+  static get pool() { return Pool.getPool(this); }
+
+  /**
+   * Get a pooled instance of this class.
+   * @type {Poolable}
+   */
+  static get tmp() { return this.pool.acquire(); }
+
+  /**
+   * Release an instance back to the pool and trigger cleanup.
+   * @param {Poolable} objs
+   */
+  static _release(obj) {
+    this.onRelease(obj); // Optional cleanup hook.
+    this.pool.release(obj);
+  }
+
+  static release(...objs) { objs.forEach(obj => this._release(obj)); }
+
+  release() { this.constructor._release(this); }
+
+  static onRelease(obj) { }
+
+  /**
+   * Required builder to create multiple objects.
+   * @param {number} n
+   * @returns {Poolable[n]}
+   */
+  static buildNObjects(n) {
+    return Array.from({ length: n}, () => new this());
+  }
+}
+

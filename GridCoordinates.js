@@ -5,7 +5,8 @@ PIXI,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { Pool } from "./Pool.js";
+import { PoolableMixin } from "./Pool.js";
+import { mix } from "./mixwith.js";
 
 // ----- NOTE: Foundry typedefs  ----- //
 
@@ -26,15 +27,7 @@ import { Pool } from "./Pool.js";
 /**
  * A 2d point that can function as Point|GridOffset2D. For just a point, use PIXI.Point.
  */
-export class GridCoordinates extends PIXI.Point {
-  static #pool = new Pool(this);
-
-  static releaseObj(obj) {
-    obj.t0 = null;
-    this.#pool.release(obj);
-  }
-
-  static get tmp() { return this.#pool.acquire(); }
+export class GridCoordinates extends mix(PIXI.Point).with(PoolableMixin) {
 
   /**
    * Factory function that converts a GridOffset to GridCoordinates.

@@ -39,7 +39,9 @@ Hooks.on("init", function() {
   mergeConfigs(maxVersion);
 
   const controllingModule = CONFIG[GEOMETRY_LIB_ID].registeredVersions.get(maxVersion);
-  if ( controllingModule === MODULE_ID ) registerGeometryLibClasses();
+  if ( controllingModule === MODULE_ID ) {
+    registerGeometryLibClasses();
+  }
 });
 
 function registerGeometryLibClasses() {

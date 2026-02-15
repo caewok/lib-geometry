@@ -5,7 +5,6 @@
 
 import { GridCoordinates3d } from "./GridCoordinates3d.js";
 import { HexCoordinateMixin } from "../HexGridCoordinates.js";
-import { Pool } from "../Pool.js";
 
 /**
  * Cube coordinates in a hexagonal grid. q + r + s = 0.
@@ -30,15 +29,6 @@ import { Pool } from "../Pool.js";
 export class HexGridCoordinates3d extends HexCoordinateMixin(GridCoordinates3d) {
 
   static classTypes = new Set([this.name]); // Alternative to instanceof
-
-  static #pool = new Pool(this);
-
-  static releaseObj(obj) {
-    obj.t0 = null;
-    this.#pool.release(obj);
-  }
-
-  static get tmp() { return this.#pool.acquire(); }
 
   /**
    * Create this point from hex coordinates plus optional elevation.

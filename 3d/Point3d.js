@@ -32,7 +32,8 @@ PIXI
  * @property {Point3d} bl
  * @property {Point3d} br
  */
-import { Pool } from "../Pool.js";
+import { PoolableMixin } from "../Pool.js";
+import { mix } from "../mixwith.js";
 import { MatrixFlat } from "../MatrixFlat.js";
 import { NULL_SET, gridUnitsToPixels, roundDecimals } from "../util.js";
 
@@ -40,7 +41,7 @@ import { NULL_SET, gridUnitsToPixels, roundDecimals } from "../util.js";
  * 3-D version of PIXI.Point
  * See https://pixijs.download/dev/docs/packages_math_src_Point.ts.html
  */
-export class Point3d extends PIXI.Point {
+export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
   toJSON() { return { ...this }; }
 
   static classTypes = new Set([this.name]); // Alternative to instanceof
@@ -67,8 +68,6 @@ export class Point3d extends PIXI.Point {
 
   z = 0;
 
-  t0 = null; // Solely for storing intersection distances.
-
   /**
    * @param {number} [x=0] - position of the point on the x axis
    * @param {number} [y=0] - position of the point on the y axis
@@ -79,25 +78,10 @@ export class Point3d extends PIXI.Point {
     this.z = z;
   }
 
-  static #pool = new Pool(this);
-
-  static releaseObj(obj) {
-    obj.t0 = null;
-    this.#pool.release(obj);
+  static onRelease(obj) {
+    obj.z = 0;
+    super.onRelease(obj);
   }
-
-  static release(...args) { args.forEach(arg => arg.release()); }
-
-  static buildNObjects(n = 1) {
-    const out = Array(n);
-    for ( let i = 0; i < n; i += 1 ) out[i] = new this();
-    return out;
-  }
-
-   // No need to clear the object, as no cache used.
-  release() { this.constructor.releaseObj(this); }
-
-  static get tmp() { return this.#pool.acquire(); }
 
   /**
    * Iterator: x then y.

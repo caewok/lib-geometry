@@ -5,7 +5,6 @@ PIXI,
 "use strict";
 
 import { Point3d } from "./Point3d.js";
-import { Pool } from "../Pool.js";
 
 class BaryTriangleData {
 
@@ -56,15 +55,6 @@ class BaryTriangleData {
 export class BarycentricPoint extends Point3d {
 
   static classTypes = new Set([this.name]); // Alternative to instanceof
-
-  static #pool = new Pool(this);
-
-  static releaseObj(obj) {
-    obj.t0 = null;
-    this.#pool.release(obj);
-  }
-
-  static get tmp() { return this.#pool.acquire(); }
 
   static BaryTriangleData;
 

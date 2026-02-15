@@ -6,7 +6,6 @@ canvas,
 
 import { roundNearWhole } from "./util.js";
 import { GridCoordinates } from "./GridCoordinates.js";
-import { Pool } from "./Pool.js";
 
 /**
  * Cube coordinates in a hexagonal grid. q + r + s = 0.
@@ -110,15 +109,5 @@ export function HexCoordinateMixin(Base) {
 export class HexGridCoordinates extends HexCoordinateMixin(GridCoordinates) {
 
   static classTypes = new Set([this.name]); // Alternative to instanceof
-
-  static #pool = new Pool(this);
-
-  static releaseObj(obj) {
-    obj.t0 = null;
-    this.#pool.release(obj);
-  }
-
-  static get tmp() { return this.#pool.acquire(); }
-
 
 }

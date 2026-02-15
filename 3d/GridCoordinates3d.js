@@ -7,7 +7,6 @@ canvas,
 import { roundNearWhole, pixelsToGridUnits, gridUnitsToPixels } from "../util.js";
 import { ElevatedPoint } from "./ElevatedPoint.js";
 import { GridCoordinates } from "../GridCoordinates.js";
-import { Pool } from "../Pool.js";
 
 // ----- NOTE: 3d versions of Foundry typedefs ----- //
 
@@ -41,15 +40,6 @@ import { Pool } from "../Pool.js";
 export class GridCoordinates3d extends ElevatedPoint {
 
   static classTypes = new Set([this.name]); // Alternative to instanceof
-
-  static #pool = new Pool(this);
-
-  static releaseObj(obj) {
-    obj.t0 = null;
-    this.#pool.release(obj);
-  }
-
-  static get tmp() { return this.#pool.acquire(); }
 
   /**
    * Factory function that converts a GridOffset to GridCoordinates.

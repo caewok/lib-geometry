@@ -5,30 +5,20 @@ foundry
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { Pool } from "../Pool.js";
+import { Pool, PoolableMixin } from "../Pool.js";
 import { roundDecimals as roundDecimalsNumber } from "../util.js";
+import { mix } from "../mixwith.js";
 
 export const PATCHES = {};
 PATCHES.PIXI = {};
 
-const pool = new Pool(PIXI.Point); // Instead of static #pool, just hide it here.
+const Poolable = mix(PIXI.Point).with(PoolableMixin);
 
-function releaseStatic(...args) { args.forEach(arg => pool.release(arg)); }
-
-function releaseObj(obj) {
+function onRelease(obj) {
+  obj.x = 0;
+  obj.y = 0;
   obj.t0 = null;
-  pool.release(obj);
 }
-
-function release() { this.constructor.releaseObj(this); }
-
-function buildNObjects(n = 1) {
-  const out = Array(n);
-  for ( let i = 0; i < n; i += 1 ) out[i] = new this();
-  return out;
-}
-
-function getTmp() { return pool.acquire(); }
 
 /**
  * Invert a wall key to get the coordinates.
@@ -43,8 +33,6 @@ function pointFromKey(key, outPoint) {
   outPoint.set(x, y);
   return outPoint;
 }
-
-
 
 /**
  * Use roundDecimals to round the point coordinates to a certain number of decimals
@@ -552,8 +540,9 @@ PATCHES.PIXI.GETTERS = {
 };
 
 PATCHES.PIXI.STATIC_GETTERS = {
-  tmp: getTmp,
-};
+  pool: function() { return Pool.getPool(this); },
+  tmp: function() { return this.pool.acquire(); },
+}
 
 PATCHES.PIXI.STATIC_METHODS = {
   midPoint,
@@ -565,9 +554,13 @@ PATCHES.PIXI.STATIC_METHODS = {
   fromObject,
   pointFromKey,
   invertKey: pointFromKey,  // Alias for backward compatibility.
-  release: releaseStatic,
-  releaseObj,
-  buildNObjects,
+
+  // Pool
+  onRelease,
+  release: Poolable.release,
+  _release: Poolable._release,
+  buildNObjects: Poolable.buildNObjects,
+
 };
 
 PATCHES.PIXI.METHODS = {
@@ -596,5 +589,7 @@ PATCHES.PIXI.METHODS = {
   roundDecimals,
   fromAngle,
   to2d,
-  release,
+
+  // Pool
+  release: function() { this.constructor.release(this); }
 };
