@@ -303,7 +303,7 @@ export class Plane {
     const b = this.point.add(vs.v);
     const c = this.point.add(vs.u);
 
-    const m = new Matrix([
+    const m = Matrix.fromRowMajorArray([
       a.x, b.x, c.x, p.x,
       a.y, b.y, c.y, p.y,
       a.z, b.z, c.z, p.z,
@@ -311,7 +311,9 @@ export class Plane {
     ], 4, 4);
     b.release();
     c.release();
-    return m.determinant().almostEqual(0);
+    const out =  m.determinant().almostEqual(0);
+    m.release();
+    return out;
   }
 
 
@@ -384,14 +386,14 @@ export class Plane {
     const n = P.add(N);
 
     // Adjust for row-major matrix and left-hand coordinate system
-    const S = new Matrix([
+    const S = Matrix.fromRowMajorArray([
       A.x, A.y, A.z, 1,
       u.x, u.y, u.z, 1,
       v.x, v.y, v.z, 1,
       n.x, n.y, n.z, 1
     ], 4, 4);
 
-    const D = new Matrix([
+    const D = Matrix.fromRowMajorArray([
       0, 0, 0, 1,
       1, 0, 0, 1,
       0, 1, 0, 1,
@@ -400,7 +402,9 @@ export class Plane {
     Point3d.release(u, v, n);
 
     const Sinv = S.invert();
-    return Sinv.multiply4x4(D);
+    const out = Sinv.multiply4x4(D);
+    Matrix.release(S, D, Sinv);
+    return out;
   }
 
   /**

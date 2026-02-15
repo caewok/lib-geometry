@@ -454,40 +454,35 @@ export class Sphere {
     // This involves solving a system of linear equations derived from the
     // equation of a sphere: (x-x0)^2 + (y-y0)^2 + (z-z0)^2 = r^2
     // The determinant of a matrix formed by the points' coordinates gives the center.
-    const A = new Matrix([
+    const A = Matrix.fromRowMajorArray([
       a.x, a.y, a.z, 1,
       b.x, b.y, b.z, 1,
       c.x, c.y, c.z, 1,
       d.x, d.y, d.z, 1,
     ], 4, 4);
+    const detA = A.determinant();
 
     const aSq = a.magnitudeSquared();
     const bSq = b.magnitudeSquared();
     const cSq = c.magnitudeSquared();
     const dSq = d.magnitudeSquared();
 
-    const Dx = (new Matrix([
+    const D = Matrix.fromRowMajorArray([
       aSq, a.y, a.z, 1,
       bSq, b.y, b.z, 1,
       cSq, c.y, c.z, 1,
       dSq, d.y, d.z, 1,
-    ])).determinant();
+    ]);
+    const Dx = D.determinant();
 
-    const Dy = (new Matrix([
-      aSq, a.x, a.z, 1,
-      bSq, b.x, b.z, 1,
-      cSq, c.x, c.z, 1,
-      dSq, d.x, d.z, 1,
-    ])).determinant();
+    D.setRow(1, [a.x, b.x, c.x, d.x]);
+    const Dy = D.determinant();
 
-    const Dz = (new Matrix([
-      aSq, a.x, a.y, 1,
-      bSq, b.x, b.y, 1,
-      cSq, c.x, c.y, 1,
-      dSq, d.x, d.y, 1,
-    ])).determinant();
+    D.setRow(2, [a.y, b.y, c.y, d.y]);
+    const Dz = D.determinant();
 
-    const detA = A.determinant();
+    Matrix.release(A, D);
+
     // Points are coplanar.
     // More robust, optimal solution would test all 2-point and 3-point subsets.
     if ( Math.abs(detA) < 1e-09 ) return this.sphereFromThreePoints(a, b, c);

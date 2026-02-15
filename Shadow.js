@@ -162,7 +162,7 @@ export class ShadowProjection {
 
     const dot = (P.a * L.x) + (P.b * L.y) + (P.c * L.z) + P.d;
 
-    return new Matrix([
+    return Matrix.fromRowMajorArray([
       [dot - (L.x * P.a), -(L.y * P.a), -(L.z * P.a), -1 * P.a],
       [-(L.x * P.b), dot - (L.y * P.b), -(L.z * P.b), -1 * P.b],
       [-(L.x * P.c), -(L.y * P.c), dot - (L.z * P.c), -1 * P.c],
@@ -510,7 +510,7 @@ export class ShadowProjection {
     const dotNV = N.dot(v);
     const scaledDotNV = dotNV + d;
 
-    return new Matrix([
+    return Matrix.fromRowMajorArray([
       -(scaledDotNL * v.x) + (scaledDotNV * l.x),
       -(scaledDotNL * v.y) + (scaledDotNV * l.y),
       -(scaledDotNL * v.z) + (scaledDotNV * l.z),
@@ -536,7 +536,7 @@ export class ShadowProjection {
       l0.z + delta.z * fac
     )
     */
-    return new Matrix([
+    return Matrix.fromRowMajorArray([
       (l0.x * dotNdelta) + (delta.x * -dotNw),
       (l0.y * dotNdelta) + (delta.y * -dotNw),
       (l0.z * dotNdelta) + (delta.z * -dotNw),

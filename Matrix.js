@@ -4,6 +4,7 @@ PIXI,
 "use strict";
 
 import { Point3d } from "./3d/Point3d.js";
+import { PoolableMixin } from "./Pool.js";
 import { mix } from "./mixwith.js";
 
 // Basic matrix operations
@@ -22,7 +23,7 @@ import { mix } from "./mixwith.js";
 // Improved for speed; uses a flat array to store.
 // Keep separate for the moment until tested.
 
-export class Matrix {
+class AbstractMatrix {
 
   static [Symbol.hasInstance](instance) {
     return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
@@ -30,11 +31,7 @@ export class Matrix {
 
   static get _geoLibType() { return this.name; }
 
-  static arrayClass = Array;
-
-  static arrayIsTyped = false;
-
-  /** @type {Array|TypedArray} */
+  /** @type {Array} */
   arr = [];
 
   /** @type {number} */
@@ -43,10 +40,10 @@ export class Matrix {
   /** @type {number} */
   ncol = 0;
 
-  constructor(arr, nrow, ncol) {
-    this.arr = arr;
-    this.nrow = nrow ?? 1;
-    this.ncol = ncol ?? Math.floor(arr.length / nrow);
+  constructor(nrow = 0, ncol = 0) {
+    this.nrow = nrow;
+    this.ncol = ncol;
+    this.arr.length = nrow * ncol;
   }
 
   // ----- NOTE: Getters and indexers ---- //
@@ -61,6 +58,9 @@ export class Matrix {
 
   /** @type {number} */
   get length() { return this.arr.length; }
+
+  /** @type {number} */
+  get size() { return this.nrow * this.ncol; }
 
   // Row major, so row 0, col0, col1, ... row 1, col0, col1, ...
   _idx(row, col) { return (row * this.ncol) + col; }
@@ -78,18 +78,21 @@ export class Matrix {
    * @param {number} [opts.colEnd]          Last column to keep, inclusive; defaults to last column
    * @returns {Matrix} New matrix
    */
-  subset({ rowStart = 0, rowEnd = this.nrow - 1, colStart = 0, colEnd = this.ncol - 1 } = {}) {
+  subset({ rowStart = 0, rowEnd = this.nrow - 1, colStart = 0, colEnd = this.ncol - 1, out } = {}) {
     rowEnd += 1;
     colEnd += 1;
+    out ??= this.constructor.tmpMatrix(rowEnd - rowStart, colEnd - colStart)
 
     // Rows are easy.
-    const rowArr = this.arr.slice(rowStart * this.nrow, rowEnd * this.nrow);
-    const newArr = [];
+    const rowArr = this.arr.subarray(rowStart * this.nrow, rowEnd * this.nrow);
+    let i = 0;
     for ( let r = 0, rMax = rowEnd - rowStart; r < rMax; r += 1 ) {
       const cIdx = r * this.ncol;
-      newArr.push(...rowArr.slice(cIdx + colStart, cIdx + colEnd));
+      const newRow = rowArr.subarray(cIdx + colStart, cIdx + colEnd);
+      out.arr.set(newRow, i);
+      i += newRow.length;
     }
-   return new this.constructor(newArr, rowEnd - rowStart, colEnd - colStart);
+   return out;
   }
 
   // ----- NOTE: Iterators ----- //
@@ -147,6 +150,7 @@ export class Matrix {
   setElements(callback) {
     const setter = (elem, r, c, mat) => mat.setIndex(r, c, callback(elem, r, c, mat));
     this.forEach(setter);
+    return this; // For convenience.
   }
 
   /**
@@ -164,11 +168,26 @@ export class Matrix {
   forEachDiagonal(callback) {
     const ln = Math.min(this.nrow, this.ncol);
     for ( let i = 0; i < ln; i += 1 ) callback(this.getIndex(i, i), i, this);
+    return this; // For convenience.
   }
 
   setDiagonal(callback) {
     const setter = (elem, i, mat) => mat.setIndex(i, i, callback(elem, i, mat));
     this.forEachDiagonal(setter);
+    return this; // For convenience.
+  }
+
+  setRow(row, values = []) {
+    if ( this.ncol !== values.length ) throw Error(`Matrix#setRow|Need ${this.ncol} values.`);
+    this.arr.set(values, row * this.ncol);
+    return this; // For convenience.
+  }
+
+  setColumn(col, values = []) {
+    const nr = this.nrow;
+    if ( nr !== values.length ) throw Error(`Matrix#setColumn|Need ${nr} values.`);
+    for ( let r = 0, i = 0; r < nr; r += 1, i += 1 ) this.setIndex(r, col, values[i]);
+    return this; // For convenience.
   }
 
   // ----- NOTE: Construction from arrays ----- //
@@ -196,24 +215,26 @@ export class Matrix {
    * @param {number} rows
    * @param {number} cols
    */
-  static fromRowMajorArray(arr, rows, cols) {
+  static fromRowMajorArray(arr, rows, cols, out) {
     const ln = arr.length;
     if ( rows * cols !== ln ) {
       console.error("Rows or columns incorrectly specified.");
       return undefined;
     }
-    return new this(this.arrayIsTyped ? new this.arrayClass(arr) : arr, rows, cols);
+    out ??= this.tmpMatrix(rows, cols);
+    out.arr.set(arr);
+    return out;
   }
 
-  static fromColumnMajorArray(arr, rows, cols) {
+  static fromColumnMajorArray(arr, rows, cols, out) {
     const ln = arr.length;
     if ( rows * cols !== ln ) {
       console.error("Rows or columns incorrectly specified.");
       return undefined;
     }
-    const mat = this.empty(rows, cols);
-    mat._setElements((elem, i) => arr[i]);
-    return mat;
+    out ??= this.tmpMatrix(rows, cols);
+    out._setElements((elem, i) => arr[i]);
+    return out;
   }
 
   /**
@@ -222,8 +243,8 @@ export class Matrix {
    * @returns {Array|TypedArray} arr or a new array.
    */
   toColumnMajorArray(arr) {
-    arr ??= this.constructor.arrayIsTyped
-      ? new this.constructor.arrayClass(this.arr.length) : new Array(this.arr.length);
+    arr ??= new this.arr.constructor(this.arr.length);
+
     // Taken from transpose method.
     this.forEach((elem, r, c) => arr[this._idx(c, r)] = elem);
     return arr;
@@ -237,9 +258,7 @@ export class Matrix {
    * @param {number} [cols]
    * @returns {Matrix}
    */
-  static empty(rows, cols = rows) {
-    return new this(new this.arrayClass(rows * cols), rows, cols);
-  }
+  static empty(rows, cols = rows) { return this.tmpMatrix(rows, cols); }
 
   /**
    * Create a matrix filled with zeroes.
@@ -1492,40 +1511,220 @@ export class Matrix {
 }
 
 // For backwards compatibility.
-Matrix.fromFlatArray = Matrix.fromRowMajorArray;
-Matrix.prototype.copyTo = Matrix.prototype.clone;
+AbstractMatrix.fromFlatArray = AbstractMatrix.fromRowMajorArray;
+AbstractMatrix.prototype.copyTo = AbstractMatrix.prototype.clone;
+
+// Pooling
+export class Matrix extends mix(AbstractMatrix).with(PoolableMixin) {
+
+  // Pooling
+  /**
+   * Return a temporary matrix of a given size.
+   * @param {number} nrow
+   * @param {number} ncol
+   * @returns {Matrix}
+   */
+  static tmpMatrix(nrow, ncol) {
+    const obj = this.tmp;
+    obj.nrow = nrow;
+    obj.ncol = ncol;
+    obj.arr.length = obj.size;
+    return obj;
+  }
+
+  /**
+   * Callback to release a Matrix object, zeroing out its values.
+   * @param {Matrix}
+   */
+  static onRelease(obj) {
+    obj.arr.length = 0;
+    obj.nrow = 0;
+    obj.ncol = 0;
+  }
+}
+
+
+/**
+ * Manage a typed array buffer size.
+ * Allocate space on a first-fit strategy. (Free List alogrithm.)
+ * Tracks contiguous blocks of empty space and allocates accordingly.
+ */
+class BufferManager {
+  /** @type {ArrayBuffer} */
+  buffer;
+
+  /** @type {object[]} */
+  freeSegments = [];
+
+  /** @type {TypedArray} */
+  typedClass;
+
+  /** @type {number} */
+  get bytesPerElement() { return this.typedClass.BYTES_PER_ELEMENT; }
+
+  constructor(totalSize = 0, { typedClass = Float32Array, maxSize = totalSize } = {}) {
+    this.typedClass = typedClass;
+    const byteSize = totalSize * this.bytesPerElement;
+    this.buffer = new ArrayBuffer(byteSize, { maxByteLength: maxSize * this.bytesPerElement });
+    this.freeSegments.push({ byteOffset: 0, byteSize });
+  }
+
+  /**
+   * Return a new array of the requested size.
+   * @param {number} size     Number of elements
+   * @returns {TypedArray<size>}
+   */
+  newArray(size) {
+    const byteOffset = this.allocate(size);
+    return new this.typedClass(this.buffer, byteOffset, size);
+  }
+
+  /**
+   * Reserve a block of space.
+   * If out of space, constructs a new buffer.
+   * @param {number} size       Number of elements to reserve
+   * @returns {number} The byte offset.
+   */
+  allocate(size) {
+    const byteSize = size * this.bytesPerElement;
+    for ( let i = 0, iMax = this.freeSegments.length; i < iMax; i += 1 ) {
+      const segment = this.freeSegments[i];
+      if ( segment.byteSize >= byteSize ) {
+        const byteOffset = segment.byteOffset;
+        if ( segment.byteSize === byteSize ) this.freeSegments.splice(i, 1); // Perfect fit: remove the segment entirely.
+        else {
+          // Partial fit: shrink the existing fre segment.
+          segment.byteOffset += byteSize;
+          segment.byteSize -= byteSize;
+        }
+        return byteOffset;
+      }
+    }
+
+    // Insufficient memory left in the buffer.
+    // Expand buffer if possible.
+    const totalBytesNeeded = this.buffer.byteLength + byteSize;
+    if ( this.buffer.maxByteLength > totalBytesNeeded ) {
+      // Grow the buffer and use the resized portion for this allocation.
+      const byteOffset = this.buffer.byteLength;
+      this.buffer.resize(totalBytesNeeded);
+      return byteOffset;
+    } else {
+      // Trash the buffer and start anew.
+      this.freeSegments.length = 1;
+      this.freeSegments[0] = { byteOffset: 0, byteSize: this.buffer.byteLength };
+      this.buffer = new ArrayBuffer(Math.max(this.buffer.byteLength, byteSize), { maxByteLength: Math.max(this.buffer.maxByteLength, byteSize) });
+      return this.allocate(size);
+    }
+  }
+
+  /**
+   * Release a block of space and merges it with adjacent free blocks.
+   * @param {TypedArray} arr        The array being freed.
+   */
+  release(arr) {
+    arr.fill(0); // Good practice to limit caching errors.
+    if ( arr.buffer !== this.buffer ) return;
+    const byteSize = arr.byteLength;
+    const byteOffset = arr.byteOffset;
+    const newSegment = { byteSize, byteOffset };
+
+    // Insert and maintain sorted order by offset to allow merging.
+    const idx = this.freeSegments.findIndex(s => s.byteOffset > byteOffset);
+    if ( ~idx ) this.freeSegments.splice(idx, 0, newSegment);
+    else this.freeSegments.push(newSegment);
+    this._mergeNeighbors();
+  }
+
+  /**
+   * Combines adjacent free blocks to limit fragmentation.
+   */
+  _mergeNeighbors() {
+    for ( let i = 0, iMax = this.freeSegments.length - 1; i < iMax; i += 1 ) {
+      const current = this.freeSegments[i];
+      const next = this.freeSegments[i+1];
+
+      // If current block ends exactly where the next starts, merge.
+      if ( current.byteOffset + current.byteSize === next.byteOffset ) {
+        current.byteSize += next.byteSize;
+        this.freeSegments.splice(i + 1, 1);
+        iMax--;
+        i--; // Check again with the newly merged block.
+      }
+    }
+  }
+}
+
+/** Testing
+mgr = new BufferManager(16, { maxSize: 32 })
+arr1 = mgr.newArray(4)
+arr2 = mgr.newArray(5)
+arr3 = mgr.newArray(3)
+arr1.set([1,2,3,4])
+arr2.set([5,6,7, 8, 9])
+arr3.set([10, 11, 1])
+mgr.release(arr2)
+mgr.release(arr1)
+arr1 = mgr.newArray(6)
+arr1.set([1,2,3,4,5,6])
+arr4 = mgr.newArray(10)
+arr5 = mgr.newArray(15)
+arr6 = mgr.newArray(35)
+*/
 
 
 // Example typed class
 
 export class MatrixFloat32 extends Matrix {
-  static arrayClass = Float32Array;
 
-  static arrayIsTyped = true;
+  /** @type {Float32Array} */
+  arr = null;
 
-  /**
-   * Return a new matrix with smaller or equal dimensions from this matrix.
-   * @param {object} [opts]
-   * @param {number} [opts.rowStart=0]      First row to keep, indexed from 0
-   * @param {number} [opts.rowEnd]          Last row to keep, inclusive; defaults to last row
-   * @param {number} [opts.colStart=0]      First column to keep, indexed from 0
-   * @param {number} [opts.colEnd]          Last column to keep, inclusive; defaults to last column
-   * @returns {Matrix} New matrix
-   */
-  subset({ rowStart = 0, rowEnd = this.nrow - 1, colStart = 0, colEnd = this.ncol - 1 } = {}) {
-    rowEnd += 1;
-    colEnd += 1;
+  constructor(nrow, ncol, buffer, offset = 0) {
+    super(nrow, ncol);
 
-    // Rows are easy.
-    const rowArr = this.arr.subarray(rowStart * this.nrow, rowEnd * this.nrow);
-    const out = this.constructor.empty(rowEnd - rowStart, colEnd - colStart);
-    for ( let r = 0, rMax = rowEnd - rowStart; r < rMax; r += 1 ) {
-      const cIdx = r * this.ncol;
-      out.arr.set(rowArr.subarray(cIdx + colStart, cIdx + colEnd), r * out.ncol);
-    }
-   return out;
+    buffer ??= new ArrayBuffer(this.size * Float32Array.BYTES_PER_ELEMENT);
+    const byteOffset = offset * Float32Array.BYTES_PER_ELEMENT;
+    this.arr = new Float32Array(buffer, byteOffset, this.size);
   }
 
+  // ----- NOTE: Buffer manager ----- //
+  /** @type {number} */
+  static BUFFER_DEFAULT_MATRIX_SIZE = 16; // Common size for a single matrix.
+
+  /** @type {number} */
+  static BUFFER_NUM_MATRICES = 10; // How many matrices to allocate before switching buffers.
+
+  /**
+   * Current buffer with usable space to define matrices.
+   * @type {BufferManager}
+   */
+  static bufferManager = new BufferManager(this.BUFFER_DEFAULT_MATRIX_SIZE, {
+    typedClass: Float32Array,
+    maxSize: this.BUFFER_NUM_MATRICES * this.BUFFER_DEFAULT_MATRIX_SIZE
+  });
+
+  /**
+   * Return a temporary matrix of a given size.
+   * Uses an array buffer to allocate the array, which may be reused.
+   * @param {number} nrow
+   * @param {number} ncol
+   * @returns {Matrix}
+   */
+  static tmpMatrix(nrow, ncol) {
+    const obj = this.tmp;
+    obj.nrow = nrow;
+    obj.ncol = ncol;
+    obj.arr = this.bufferManager.newArray(obj.size);
+    return obj;
+  }
+
+  static onRelease(obj) {
+    this.bufferManager.release(obj.arr);
+    obj.nrow = 0;
+    obj.ncol = 0;
+    obj.arr = null;
+  }
 }
 
 /**
@@ -1546,23 +1745,27 @@ export class ModelMatrix2d {
 
   /** @type {object<MatrixFloat32>} */
   // Could be private but may be useful to access them without triggering update.
+  // Use matrix buffer. E.g.:
+  // index 0: rotation 3 x 3.
+  // index 9: translation 3 x 3
+  // index 18: scale 3 x 3
   _rotation = (new MatrixFloat32(
-      new Float32Array(this._matrixBuffer, 0, this.constructor.DIM2), // (buffer, 0 * 4, 9)
-      this.constructor.DIM,
-      this.constructor.DIM))
-    .identity();
+    this.constructor.DIM,
+    this.constructor.DIM,
+    this._matrixBuffer,
+    0)).identity();
 
   _translation = (new MatrixFloat32(
-      new Float32Array(this._matrixBuffer, this.constructor.DIM2 * Float32Array.BYTES_PER_ELEMENT, this.constructor.DIM2), // (buffer, 9 * 4, 9)
-      this.constructor.DIM,
-      this.constructor.DIM))
-    .identity();
+    this.constructor.DIM,
+    this.constructor.DIM,
+    this._matrixBuffer,
+    this.constructor.DIM2)).identity();
 
   _scale = (new MatrixFloat32(
-      new Float32Array(this._matrixBuffer, this.constructor.DIM2 * 2 * Float32Array.BYTES_PER_ELEMENT, this.constructor.DIM2), // (buffer, 18 * 4, 9)
-      this.constructor.DIM,
-      this.constructor.DIM))
-    .identity();
+    this.constructor.DIM,
+    this.constructor.DIM,
+    this._matrixBuffer,
+    this.constructor.DIM2 * 2)).identity();
 
   get rotation() { this.#updated ||= true; return this._rotation; }
 
@@ -1622,10 +1825,10 @@ export const ModelCenterMixin = superclass => {
 
     /** @type {MatrixFloat32} */
     #center = (new MatrixFloat32(
-      new Float32Array(this._matrixBuffer, (this.constructor.DIM2 * this.constructor.BUFFER_IDX) * Float32Array.BYTES_PER_ELEMENT, this.constructor.DIM2), // (buffer, 18 * 4, 9)
       this.constructor.DIM,
-      this.constructor.DIM))
-    .identity();
+      this.constructor.DIM,
+      this._matrixBuffer,
+      this.constructor.DIM2 * this.constructor.BUFFER_IDX)).identity();
 
     get modelCenter() { this.updated = true; return this.#center; }
 
