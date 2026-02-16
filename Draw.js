@@ -45,6 +45,11 @@ export class Draw {
     d.point(...args);
   }
 
+  static star(...args) {
+    const d = new this();
+    d.star(...args);
+  }
+
   static polygonPoints(...args) {
     const d = new this();
     d.polygonPoints(...args);
@@ -98,6 +103,14 @@ export class Draw {
     opts.color ??= Draw.COLORS.red;
     opts.fill ??= opts.color;
     this.shape(new PIXI.Circle(p.x, p.y, radius), opts)
+  }
+
+  star(p, { radius = 5, outerRadius, innerRadius, numTips, ...opts } = {}) {
+    opts.color ??= Draw.COLORS.yellow;
+    opts.fill ??= opts.color;
+    outerRadius ??= radius;
+    const pts = this._calculateStarPoints(p, { numTips, outerRadius, innerRadius });
+    this.shape(new PIXI.Polygon(pts), opts)
   }
 
   /**
@@ -216,6 +229,34 @@ export class Draw {
     if ( ~idx ) return this.g.polygonText.removeChildAt(idx);
     return undefined;
   }
+
+  /**
+   * Helper to create a star to use as a point.
+   * @param {Point} center
+   * @param {number} [numTips=5]
+   * @param {number} [outerRadius=1]
+   * @param {number} [innerRadius]      Defaults to half the outer radius
+   * @returns {Point[]}
+   */
+  _calculateStarPoints(center, { numTips = 5, outerRadius = 1, innerRadius = outerRadius * 0.5 } = {}) {
+    const totalPoints = numTips * 2;
+    const vertices = Array(totalPoints);
+    const angleStep = Math.PI / numTips;
+
+    // Offset by -90 degrees (-π/2) so the first point faces straight up.
+    const startRotation = -Math.PI_1_2;
+    for ( let i = 0; i < totalPoints; i += 1 ) {
+      // Alternate between outer and inner radius.
+      const r = (i % 2 === 0) ? outerRadius : innerRadius;
+      const currAngle = startRotation + (i * angleStep);
+      vertices[i] = PIXI.Point.tmp.set(
+        center.x + Math.cos(currAngle) * r,
+        center.y + Math.sin(currAngle) * r,
+      );
+    }
+    return vertices;
+  }
+
 
   /**
    * Clear all labels created by labelPoint.
