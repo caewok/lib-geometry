@@ -17,7 +17,6 @@ const Poolable = mix(PIXI.Point).with(PoolableMixin);
 function onRelease(obj) {
   obj.x = 0;
   obj.y = 0;
-  obj.t0 = null;
 }
 
 /**
@@ -508,8 +507,6 @@ function to2d(_opts, outPoint) {
   outPoint.copyFrom(this);
   return outPoint;
 }
-
-PIXI.Point.prototype.t0 = null; // Solely for storing intersections to avoid rebuilding the class.
 
 /**
  * Iterator: x then y.
