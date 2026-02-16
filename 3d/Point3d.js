@@ -306,9 +306,11 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
    * Ordered, so sortable.
    * @returns {BigInt}
    */
-  get key() {
-    const z = Math.round(this.z);
-    const key2d = super.key;
+  get key() { return this.constructor.key(this); }
+
+  static key(pt) {
+    const key2d = PIXI.Point.key(pt);
+    const z = Math.round(pt.z || 0);
     return (BigInt(key2d) << 32n) ^ BigInt(z);
   }
 
@@ -357,15 +359,6 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
 //     return { x, y };
 //   }
 
-  /**
-   * Sort key. If z values are equal, will arrange points from north-west to south-east along z plane.
-   * @returns {number}
-   */
-  get sortKey() {
-    return (MAX_TEXTURE_SIZE2 * Math.round(this.z))
-      + (MAX_TEXTURE_SIZE * Math.round(this.x))
-      + Math.round(this.y);
-  }
 
   /**
    * Drop the z dimension; return a new PIXI.Point

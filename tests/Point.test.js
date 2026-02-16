@@ -104,13 +104,13 @@ describe("PIXI.Point Basic Extensions", () => {
     });
 
     describe("Foundry Integration & Keys", () => {
-      it("sortKey getter should return a unique NW-to-SE number", () => {
+      it("key getter should return a unique NW-to-SE number", () => {
         const p = new PIXI.Point(100, 50);
         const expected = (Math.pow(2, 16) * 100) + 50;
-        expect(p.sortKey).to.equal(expected);
+        expect(p.key).to.equal(expected);
       });
 
-      it("pointFromKey should reconstruct a point from a sortKey", () => {
+      it("pointFromKey should reconstruct a point from a key", () => {
         const key = (Math.pow(2, 16) * 500) + 250;
         const p = PIXI.Point.pointFromKey(key);
 

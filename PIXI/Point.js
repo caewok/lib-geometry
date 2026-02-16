@@ -117,8 +117,12 @@ function distanceSquaredBetween(a, b) {
  * @returns {number}
  */
 function key() {
-  const x = Math.round(this.x);
-  const y = Math.round(this.y);
+  return this.constructor.key(this);
+}
+
+function staticKey(pt) {
+  const x = Math.round(pt.x);
+  const y = Math.round(pt.y);
   return (x << 16) ^ y;
 }
 
@@ -498,16 +502,6 @@ function translate(dx, dy, outPoint) {
 const MAX_TEXTURE_SIZE = Math.pow(2, 16);
 const MAX_TEXTURE_SIZE_INV = 1 / MAX_TEXTURE_SIZE;
 
-/**
- * Sort key, arranging points from north-west to south-east
- * @returns {number}
- */
-function sortKey() {
-  const x = Math.round(this.x);
-  const y = Math.round(this.y);
-  return (MAX_TEXTURE_SIZE * x) + y;
-}
-
 // For parallel with Point3d.
 function to2d(_opts, outPoint) {
   outPoint ??= this.constructor.tmp;
@@ -536,7 +530,6 @@ PIXI.Point.prototype[Symbol.iterator] = function() {
 
 PATCHES.PIXI.GETTERS = {
   key,
-  sortKey,
 };
 
 PATCHES.PIXI.STATIC_GETTERS = {
@@ -554,6 +547,7 @@ PATCHES.PIXI.STATIC_METHODS = {
   fromObject,
   pointFromKey,
   invertKey: pointFromKey,  // Alias for backward compatibility.
+  key: staticKey,
 
   // Pool
   onRelease,
@@ -589,6 +583,7 @@ PATCHES.PIXI.METHODS = {
   roundDecimals,
   fromAngle,
   to2d,
+  toString: function() { return `{x: ${this.x}, y: ${this.y}}`},
 
   // Pool
   release: function() { this.constructor.release(this); }
