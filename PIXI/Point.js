@@ -567,6 +567,7 @@ PATCHES.PIXI.STATIC_METHODS = {
 };
 
 PATCHES.PIXI.METHODS = {
+  clone,
   add,
   subtract,
   multiply,
