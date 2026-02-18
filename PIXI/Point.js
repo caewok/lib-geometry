@@ -20,6 +20,18 @@ function onRelease(obj) {
 }
 
 /**
+ * Copy this point, return a new point.
+ * @param {PIXI.Point} out    The new point to copy to.
+ * @returns {PIXI.Point}
+ */
+function clone(out) {
+  out ??= this.constructor.tmp;
+  out.x = this.x;
+  out.y = this.y;
+  return out;
+}
+
+/**
  * Invert a wall key to get the coordinates.
  * Key = (MAX_TEXTURE_SIZE * x) + y, where x and y are integers.
  * @param {number} key      Integer key

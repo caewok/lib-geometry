@@ -91,11 +91,6 @@ export class GridCoordinates extends mix(PIXI.Point).with(PoolableMixin) {
   }
 
   /**
-   * @returns {GridCoordinates}
-   */
-  clone() { return new this.constructor(this.x, this.y); }
-
-  /**
    * @returns {PIXI.Point}
    */
   toPoint() { return PIXI.Point.fromObject(this); }

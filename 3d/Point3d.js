@@ -392,11 +392,14 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
   }
 
   /**
-   * Creates a clone of this point
-   * @returns A clone of this point
+   * Copy this point, return a new point.
+   * @param {PIXI.Point} out    The new point to copy to.
+   * @returns {PIXI.Point}
    */
-  clone() {
-    return this.constructor.tmp.set(this.x, this.y, this.z);
+  clone(out) {
+    out = super.clone(out);
+    out.z = this.z;
+    return out;
   }
 
   /**
