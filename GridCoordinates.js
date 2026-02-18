@@ -196,6 +196,11 @@ export class GridCoordinates extends mix(PIXI.Point).with(PoolableMixin) {
     const res = this.measurePath([a, b], options);
     return res.distance;
   };
+
+  static gridCostBetween(a, b, options) {
+    const res = this.measurePath([a, b], options);
+    return res.cost;
+  }
 }
 
 // Synonyms
