@@ -196,6 +196,12 @@ export class GridCoordinates3d extends ElevatedPoint {
     return this.i === other.i && this.j === other.j;
   }
 
+  addOffset(offset, outPoint) {
+    outPoint = super.addOffset(offset, outPoint);
+    outPoint.k += (offset.k || 0);
+    return outPoint;
+  }
+
   /**
    * Calculate the unit elevation for a given set of coordinates.
    * @param {number} elevation    Elevation in grid units

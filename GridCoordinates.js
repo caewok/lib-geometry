@@ -127,6 +127,20 @@ export class GridCoordinates extends mix(PIXI.Point).with(PoolableMixin) {
   }
 
   /**
+   * Add an offset to this point, returning a new point.
+   * @param {pt} offset
+   * @param {GridCoordinates} [outPoint]
+   * @return {GridCoordinates}
+   */
+  addOffset(offset, outPoint) {
+    outPoint ??= this.constructor.tmp;
+    this.clone(outPoint);
+    outPoint.i += (offset.i || 0);
+    outPoint.j += (offset.j || 0);
+    return outPoint;
+  }
+
+  /**
    * Determine the number of diagonals based on two 2d offsets for a square grid.
    * If hexagonal, no diagonals.
    * @param {GridOffset} aOffset
