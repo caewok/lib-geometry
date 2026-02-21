@@ -352,7 +352,7 @@ export class Polygon3d {
     const points2d = this._convert3dPointsTo2d(this.points);
     const poly = new PIXI.Polygon(points2d);
     const tris2d = poly.triangulate(opts);
-    PIXI.Point.release(...points2d);
+    points2d.forEach(pt => pt.release());
 
     // Convert back to 3d. For speed, do with tmp points instead of using _convert2dPointsTo3d.
     const from2dM = this.plane.conversion2dMatrixInverse;
