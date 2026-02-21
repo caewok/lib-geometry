@@ -161,10 +161,8 @@ export class WallGeometryTracker extends mix(AbstractPlaceableGeometryTracker).w
    * @returns {number} Angle in radians
    */
   static edgeAngle(edge) {
-    const delta = edge.b.subtract(edge.a, PIXI.Point.tmp);
-    const out = Math.atan2(delta.y, delta.x);
-    delta.release();
-    return out;
+    using delta = edge.b.subtract(edge.a, PIXI.Point.tmp);
+    return Math.atan2(delta.y, delta.x);
   }
 
   /**

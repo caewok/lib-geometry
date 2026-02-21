@@ -332,10 +332,9 @@ export class TileGeometryTracker extends mix(AbstractPlaceableGeometryTracker).w
 
       // Threshold test at the intersection point.
       const pxThreshold = 255 * this.alphaThreshold;
-      const projPt = Point3d.tmp;
+      using projPt = Point3d.tmp;
       rayOrigin.add(rayDirection.multiplyScalar(t, projPt), projPt);
       const px = this.tile.evPixelCache.pixelAtCanvas(projPt.x, projPt.y);
-      projPt.release();
       if ( px > pxThreshold ) return t;
     }
     return null;

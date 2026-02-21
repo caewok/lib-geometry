@@ -104,10 +104,8 @@ export class BarycentricPoint extends Point3d {
    * @returns {number}
    */
   interpolateNumber(a, b, c) {
-    const pt = Point3d.tmp.set(a, b, c);
-    const out = this.dot(pt);
-    pt.release();
-    return out;
+    using pt = Point3d.tmp.set(a, b, c);
+    return this.dot(pt);
   }
 
   /**

@@ -21,6 +21,8 @@ Can be clipped at a specific z value.
 
 Points in a Polygon3d are assumed to not be modified in place after creation.
 */
+Symbol.dispose ??= Symbol("Symbol.dispose");
+
 export class Polygon3d {
 
   static [Symbol.hasInstance](instance) {
@@ -43,6 +45,12 @@ export class Polygon3d {
     this.points.length = n;
     for ( let i = 0; i < n; i += 1 ) this.points[i] = new Point3d();
   }
+
+  release() {
+    this.points.forEach(pt => pt.release());
+  }
+
+  [Symbol.dispose]() { this.release(); }
 
   // ----- NOTE: In-place modifiers ----- //
 
@@ -146,11 +154,10 @@ export class Polygon3d {
       const nPoints = points.length;
       this.#planarPoints.length = nPoints;
       const to2dM = this.plane.conversion2dMatrix;
-      const tmpPt = Point3d.tmp;
+      using tmpPt = Point3d.tmp;
       for ( let i = 0; i < nPoints; i += 1 ) {
         this.#planarPoints[i] = to2dM.multiplyPoint3d(points[i], tmpPt).to2d();
       }
-      tmpPt.release();
     }
     return this.#planarPoints;
   }
@@ -177,10 +184,9 @@ export class Polygon3d {
       const poly2d = new PIXI.Polygon(pts);
       PIXI.Point.release(...pts);
       const ctr = poly2d.center;
-      const ctr3d = Point3d.tmp.set(ctr.x, ctr.y, 0);
+      using ctr3d = Point3d.tmp.set(ctr.x, ctr.y, 0);
       this.#centroid = plane.conversion2dMatrixInverse.multiplyPoint3d(ctr3d);
       this.#dirtyCentroid = false;
-      ctr3d.release();
     }
     return this.#centroid;
   }
@@ -350,9 +356,9 @@ export class Polygon3d {
 
     // Convert back to 3d. For speed, do with tmp points instead of using _convert2dPointsTo3d.
     const from2dM = this.plane.conversion2dMatrixInverse;
-    const a = Point3d.tmp;
-    const b = Point3d.tmp;
-    const c = Point3d.tmp;
+    using a = Point3d.tmp;
+    using b = Point3d.tmp;
+    using c = Point3d.tmp;
     const out = tris2d.map(tri2d => {
       const pts = tri2d.points;
       a.set(pts[0], pts[1], 0);
@@ -363,7 +369,6 @@ export class Polygon3d {
       from2dM.multiplyPoint3d(c, c);
       return Triangle3d.from3Points(a, b, c);
     });
-    Point3d.release(a, b, c);
     return out;
   }
 
@@ -389,11 +394,9 @@ export class Polygon3d {
    * @returns {Point3d[]}
    */
   _convert2dPointsTo3d(pts) {
-    const tmp3d = Point3d.tmp;
+    using tmp3d = Point3d.tmp;
     const from2dM = this.plane.conversion2dMatrixInverse;
-    const points3d = pts.map(pt => from2dM.multiplyPoint3d(tmp3d.set(pt.x, pt.y, 0)));
-    tmp3d.release();
-    return points3d;
+    return pts.map(pt => from2dM.multiplyPoint3d(tmp3d.set(pt.x, pt.y, 0)));
   }
 
   /**
@@ -408,16 +411,14 @@ export class Polygon3d {
     const numSides = this.points.length;
     const sides = new Array(numSides);
     let i = 0;
-    const a = Point3d.tmp;
-    const b = Point3d.tmp;
-
+    using a = Point3d.tmp;
+    using b = Point3d.tmp;
     for ( const edge of this.iterateEdges({ close: true }) ) {
       const z0 = bottomZ ?? edge.a.z - heightZ;
       const z1 = bottomZ ?? edge.b.z - heightZ;
       const side = Quad3d.from4Points(edge.b, edge.a, a.set(edge.a.x, edge.a.y, z0), b.set(edge.b.x, edge.b.y, z1));
       sides[i++] = side;
     }
-    Point3d.release(a, b);
     return sides;
   }
 
@@ -548,19 +549,17 @@ export class Polygon3d {
 
   translate({ x = 0, y = 0, z = 0} = {}, poly3d) {
     poly3d ??= this.clone();
-    const txPt = Point3d.tmp.set(x, y, z);
+    using txPt = Point3d.tmp.set(x, y, z);
     poly3d.points.forEach(pt => pt.add(txPt, pt));
     poly3d.clearCache();
-    txPt.release();
     return poly3d;
   }
 
   scale({ x = 1, y = 1, z = 1} = {}, poly3d) {
     poly3d ??= this.clone();
-    const scalePt = Point3d.tmp.set(x, y, z);
+    using scalePt = Point3d.tmp.set(x, y, z);
     poly3d.points.forEach(pt => pt.multiply(scalePt, pt));
     poly3d.clearCache();
-    scalePt.release();
     return poly3d;
   }
 
@@ -614,10 +613,9 @@ export class Polygon3d {
     } else {
       poly2d = this.toPlanarPolygon()
       ix2d = this._convert3dPointsTo2d([ix])[0];
-      ix2d.release();
     }
     const contained = poly2d.contains(ix2d.x, ix2d.y);
-    ix.release();
+    ix2d.release();
     return contained;
   }
 
@@ -710,19 +708,16 @@ export class Polygon3d {
     // Convert the intersecting ray to 2d values on this plane.
     const to2dM = this.plane.conversion2dMatrix
     const b3d = res.point.add(res.direction);
-    const tmpPt3d = Point3d.tmp;
-    const a = to2dM.multiplyPoint3d(res.point, tmpPt3d).to2d();
-    const b = to2dM.multiplyPoint3d(b3d, tmpPt3d).to2d();
+    using tmpPt3d = Point3d.tmp;
+    using a = to2dM.multiplyPoint3d(res.point, tmpPt3d).to2d();
+    using b = to2dM.multiplyPoint3d(b3d, tmpPt3d).to2d();
 
     const poly2d = new PIXI.Polygon(this.planarPoints);
     const ixs = poly2d.lineIntersections(a, b);
     ixs.sort((a, b) => a.t0 - b.t0);
-    a.release();
-    b.release();
 
     const from2dM = this.plane.conversion2dMatrixInverse;
     const pts3d = ixs.map(ix => from2dM.multiplyPoint3d(tmpPt3d.set(ix.x, ix.y, 0)));
-    tmpPt3d.release();
     if ( pts3d.length === 1 ) return pts3d[0];
 
     // Intersecting poly with a plane, so the first intersection must be outside --> inside.
@@ -781,15 +776,13 @@ export class Ellipse3d extends Polygon3d {
 
   _calculatePlane() {
     const center = this.centroid;
-    const normal = Point3d.tmp;
+    using normal = Point3d.tmp;
 
     // Add 2 points to form a flat plane. Form CCW.
-    const b = Point3d.tmp.set(center.x + this.radiusX, center.y, center.z);
-    const c = Point3d.tmp.set(center.x, center.y - this.radiusY, center.z);
+    using b = Point3d.tmp.set(center.x + this.radiusX, center.y, center.z);
+    using c = Point3d.tmp.set(center.x, center.y - this.radiusY, center.z);
     Plane.normalFromPoints(center, b, c, normal);
-    const out = new Plane(center, normal);
-    Point3d.release(normal, b, c);
-    return out;
+    return new Plane(center, normal);
   }
 
   _setDimensions(center, radiusX, radiusY) {
@@ -822,10 +815,8 @@ export class Ellipse3d extends Polygon3d {
   // ----- NOTE: Factory methods ----- //
 
   static fromEllipse(ellipse, elevationZ = 0, out) {
-    const centerPt = Point3d.tmp.set(ellipse.x, ellipse.y, elevationZ)
-    out = this.fromCenterPoint(centerPt, ellipse.width, ellipse.height, out);
-    centerPt.release();
-    return out;
+    using centerPt = Point3d.tmp.set(ellipse.x, ellipse.y, elevationZ)
+    return this.fromCenterPoint(centerPt, ellipse.width, ellipse.height, out);
   }
 
   static fromCenterPoint(center, radiusX, radiusY, out) {
@@ -875,10 +866,8 @@ export class Ellipse3d extends Polygon3d {
    */
   static from2dPoints(pts, elevation = 0, out, opts) {
     const res = this.calculateDimensionsFromPoints(pts, opts);
-    const centerPt = Point3d.tmp.set(res.center.x, res.center.y, elevation)
-    out = this.fromCenterPoint(centerPt, res.radiusX, res.radiusY, out);
-    centerPt.release();
-    return out;
+    using centerPt = Point3d.tmp.set(res.center.x, res.center.y, elevation)
+    return this.fromCenterPoint(centerPt, res.radiusX, res.radiusY, out);
   }
 
   static from3dPoints(pts, out, opts) {
@@ -934,16 +923,14 @@ export class Ellipse3d extends Polygon3d {
   // ----- NOTE: Conversions to ----- //
 
   toPlanarEllipse() {
-    const center = Point3d.tmp;
+    using center = Point3d.tmp;
     const centroid = this.centroid;
     if ( centroid.almostEqual(this.plane.point) ) center.set(0, 0, 0);
     else {
       const to2dM = this.plane.conversion2dMatrix;
       to2dM.multiplyPoint3d(centroid, center);
     }
-    const out = new PIXI.Ellipse(center.x, center.y, this.radiusX, this.radiusY);
-    center.release();
-    return out;
+    return new PIXI.Ellipse(center.x, center.y, this.radiusX, this.radiusY);
   }
 
   /**
@@ -1048,62 +1035,54 @@ export class Ellipse3d extends Polygon3d {
   transform(M, ellipse3d) {
     // Get the x and y points along the ellipse.
     const { center, x, y } = this.#ellipsePoints();
-    const txCenter = M.multiplyPoint3d(center);
-    const txX = M.multiplyPoint3d(x);
-    const txY = M.multiplyPoint3d(y);
+    using txCenter = M.multiplyPoint3d(center);
+    using txX = M.multiplyPoint3d(x);
+    using txY = M.multiplyPoint3d(y);
 
     ellipse3d ??= this.clone();
     ellipse3d.points[0].copyFrom(txCenter);
     ellipse3d.radiusX = Point3d.distanceBetween(txCenter, txX);
     ellipse3d.radiusY = Point3d.distanceBetween(txCenter, txY);
-    Point3d.release(center, x, y, txCenter, txX, txY);
     return ellipse3d;
   }
 
   multiplyScalar(multiplier, ellipse3d) {
     // Get the x and y points along the ellipse.
     const { center, x, y } = this.#ellipsePoints();
-    const txCenter = center.multiplyScalar(multiplier);
-    const txX = x.multiplyScalar(multiplier);
-    const txY = y.multiplyScalar(multiplier);
+    using txCenter = center.multiplyScalar(multiplier);
+    using txX = x.multiplyScalar(multiplier);
+    using txY = y.multiplyScalar(multiplier);
 
     ellipse3d ??= this.clone();
     ellipse3d.points[0].copyFrom(txCenter);
     ellipse3d.radiusX = Point3d.distanceBetween(txCenter, txX);
     ellipse3d.radiusY = Point3d.distanceBetween(txCenter, txY);
-    Point3d.release(center, x, y, txCenter, txX, txY);
     return ellipse3d;
   }
 
   scale({ x = 1, y = 1, z = 1} = {}, ellipse3d) {
     // Get the x and y points along the ellipse.
     const { center, x: xPt, y: yPt } = this.#ellipsePoints();
-    const scalePt = Point3d.tmp.set(x, y, z);
-    const txCenter = center.multiply(scalePt);
-    const txX = xPt.multiply(scalePt);
-    const txY = yPt.multiply(scalePt);
+    using scalePt = Point3d.tmp.set(x, y, z);
+    using txCenter = center.multiply(scalePt);
+    using txX = xPt.multiply(scalePt);
+    using txY = yPt.multiply(scalePt);
 
     ellipse3d ??= this.clone();
     ellipse3d.points[0].copyFrom(txCenter);
     ellipse3d.radiusX = Point3d.distanceBetween(txCenter, txX);
     ellipse3d.radiusY = Point3d.distanceBetween(txCenter, txY);
-    scalePt.release();
-    Point3d.release(center, xPt, yPt, txCenter, txX, txY);
     return ellipse3d;
   }
 
   #ellipsePoints() {
     const ellipse2d = this.toPlanarEllipse();
-    const w = PIXI.Point.tmp.set(ellipse2d.width, 0);
-    const h = PIXI.Point.tmp.set(0, ellipse2d.height);
+    using w = PIXI.Point.tmp.set(ellipse2d.width, 0);
+    using h = PIXI.Point.tmp.set(0, ellipse2d.height);
 
-    const xPt2d = ellipse2d.center.add(w);
-    const yPt2d = ellipse2d.center.add(h);
+    using xPt2d = ellipse2d.center.add(w);
+    using yPt2d = ellipse2d.center.add(h);
     const [x, y] = this._convert2dPointsTo3d([xPt2d, yPt2d]);
-    xPt2d.release();
-    yPt2d.release();
-    w.release();
-    h.release();
     return { center: this.points[0], x,  y };
   }
 
@@ -1154,10 +1133,8 @@ export class Circle3d extends Ellipse3d {
   // ----- NOTE: Factory methods ----- //
 
   static fromCircle(cir, elevationZ = 0, out) {
-    const centerPt = Point3d.tmp.set(cir.x, cir.y, elevationZ);
-    out = this.fromCenterPoint(centerPt, cir.radius, out);
-    centerPt.release();
-    return out;
+    using centerPt = Point3d.tmp.set(cir.x, cir.y, elevationZ);
+    return this.fromCenterPoint(centerPt, cir.radius, out);
   }
 
   static fromCenterPoint(center, radius, out) {
@@ -1183,16 +1160,14 @@ export class Circle3d extends Ellipse3d {
   // ----- NOTE: Conversions to ----- //
 
   toPlanarCircle() {
-    const center = Point3d.tmp;
+    using center = Point3d.tmp;
     const centroid = this.centroid;
     if ( centroid.almostEqual(this.plane.point) ) center.set(0, 0, 0);
     else {
       const to2dM = this.plane.conversion2dMatrix;
       to2dM.multiplyPoint3d(centroid, center);
     }
-    const out = new PIXI.Circle(center.x, center.y, this.radius);
-    center.release();
-    return out;
+    return new PIXI.Circle(center.x, center.y, this.radius);
   }
 
   toPlanarPolygon(opts) {
@@ -1271,28 +1246,26 @@ export class Circle3d extends Ellipse3d {
     // TODO: If the x and y scales are different, this will result in an ellipse, not a circle.
     // Get the x and y points along the ellipse.
     const { center, x, y } = this.#circlePoints();
-    const txCenter = M.multiplyPoint3d(center);
-    const txX = M.multiplyPoint3d(x);
-    const txY = M.multiplyPoint3d(y);
+    using txCenter = M.multiplyPoint3d(center);
+    using txX = M.multiplyPoint3d(x);
+    using txY = M.multiplyPoint3d(y);
 
     circle3d ??= this.clone();
     circle3d.points[0].copyFrom(txCenter);
     circle3d.radius = Math.max(Point3d.distanceBetween(txCenter, txX), Point3d.distanceBetween(txCenter, txY));
-    Point3d.release(center, x, y, txCenter, txX, txY);
     return circle3d;
   }
 
   multiplyScalar(multiplier, circle3d) {
     // Get the x and y points along the ellipse.
     const { center, x, y } = this.#circlePoints();
-    const txCenter = center.multiplyScalar(multiplier);
-    const txX = x.multiplyScalar(multiplier);
-    const txY = y.multiplyScalar(multiplier);
+    using txCenter = center.multiplyScalar(multiplier);
+    using txX = x.multiplyScalar(multiplier);
+    using txY = y.multiplyScalar(multiplier);
 
     circle3d ??= this.clone();
     circle3d.points[0].copyFrom(txCenter);
     circle3d.radius = Math.max(Point3d.distanceBetween(txCenter, txX), Point3d.distanceBetween(txCenter, txY));
-    Point3d.release(center, x, y, txCenter, txX, txY);
     return circle3d;
   }
 
@@ -1301,31 +1274,25 @@ export class Circle3d extends Ellipse3d {
 
     // Get the x and y points along the ellipse.
     const { center, x: xPt, y: yPt } = this.#circlePoints();
-    const scalePt = Point3d.tmp.set(x, y, z);
-    const txCenter = center.multiply(scalePt);
-    const txX = xPt.multiply(scalePt);
-    const txY = yPt.multiply(scalePt);
+    using scalePt = Point3d.tmp.set(x, y, z);
+    using txCenter = center.multiply(scalePt);
+    using txX = xPt.multiply(scalePt);
+    using txY = yPt.multiply(scalePt);
 
     circle3d ??= this.clone();
     circle3d.points[0].copyFrom(txCenter);
     circle3d.radius = Math.max(Point3d.distanceBetween(txCenter, txX), Point3d.distanceBetween(txCenter, txY));
-    scalePt.release();
-    Point3d.release(center, xPt, yPt, txCenter, txX, txY);
     return circle3d;
   }
 
   #circlePoints() {
     const circle2d = this.toPlanarCircle();
-    const w = PIXI.Point.tmp.set(circle2d.radius, 0);
-    const h = PIXI.Point.tmp.set(0, circle2d.radius);
+    using w = PIXI.Point.tmp.set(circle2d.radius, 0);
+    using h = PIXI.Point.tmp.set(0, circle2d.radius);
 
-    const xPt2d = circle2d.center.add(w);
-    const yPt2d = circle2d.center.add(h);
+    using xPt2d = circle2d.center.add(w);
+    using yPt2d = circle2d.center.add(h);
     const [x, y] = this._convert2dPointsTo3d([xPt2d, yPt2d]);
-    xPt2d.release();
-    yPt2d.release();
-    w.release();
-    h.release();
     return { center: this.points[0], x,  y };
   }
 }
@@ -1380,16 +1347,15 @@ export class Triangle3d extends Polygon3d {
     indices ??= Array.fromRange(Math.floor(vertices.length / 3));
     if ( indices.length % 3 !== 0 ) console.error(`${this.name}.fromVertices|Length of indices is not divisible by 3: ${indices.length}`);
     const tris = new Array(Math.floor(indices.length / 3));
-    const a = Point3d.tmp;
-    const b = Point3d.tmp;
-    const c = Point3d.tmp;
+    using a = Point3d.tmp;
+    using b = Point3d.tmp;
+    using c = Point3d.tmp;
     for ( let i = 0, j = 0, jMax = tris.length; j < jMax; ) {
       pointFromVertices(i++, vertices, indices, stride, positionOffset, a);
       pointFromVertices(i++, vertices, indices, stride, positionOffset, b);
       pointFromVertices(i++, vertices, indices, stride, positionOffset, c);
       tris[j++] = this.from3Points(a, b, c);
     }
-    Point3d.release(a, b, c);
     return tris;
   }
 
@@ -1481,40 +1447,29 @@ export class Triangle3d extends Polygon3d {
     const [v0, v1, v2] = this.points;
 
     // Calculate the edge vectors of the triangle
-    const edge1 = v1.subtract(v0);
-    const edge2 = v2.subtract(v0);
+    using edge1 = v1.subtract(v0);
+    using edge2 = v2.subtract(v0);
 
     // Calculate the determinant of the triangle
-    const pvec = rayDirection.cross(edge2);
+    using pvec = rayDirection.cross(edge2);
 
     // If the determinant is near zero, ray lies in plane of triangle
     const det = edge1.dot(pvec);
-    if (det > -Number.EPSILON && det < Number.EPSILON) {
-      Point3d.release(edge1, edge2, pvec);
-      return null;  // Ray is parallel to triangle
-    }
+    if (det > -Number.EPSILON && det < Number.EPSILON) return null;  // Ray is parallel to triangle
     const invDet = 1 / det;
 
     // Calculate the intersection point using barycentric coordinates
-    const tvec = rayOrigin.subtract(v0);
+    using tvec = rayOrigin.subtract(v0);
     const u = invDet * tvec.dot(pvec);
-    if (u < 0 || u > 1) {
-      Point3d.release(edge1, edge2, pvec, tvec);
-      return null;  // Intersection point is outside of triangle
-    }
+    if (u < 0 || u > 1) return null;  // Intersection point is outside of triangle
 
-    const qvec = tvec.cross(edge1, edge1);
+    using qvec = tvec.cross(edge1, edge1);
     const v = invDet * rayDirection.dot(qvec);
-    if (v < 0 || u + v > 1) {
-      Point3d.release(edge1, edge2, pvec, tvec, qvec);
-      return null;  // Intersection point is outside of triangle
-    }
+    if (v < 0 || u + v > 1) return null;  // Intersection point is outside of triangle
 
     // Calculate the distance to the intersection point
     const t = invDet * edge2.dot(qvec);
-    const out = t > Number.EPSILON ? t : null;
-    Point3d.release(edge1, edge2, pvec, tvec, qvec);
-    return out;
+    return t > Number.EPSILON ? t : null;
   }
 
   /**
@@ -1710,80 +1665,59 @@ export class Quad3d extends Polygon3d {
 
     // --- Triangle 1: V0, V1, V3 ---
     // Edge vectors.
-    const edge1 = v1.subtract(v0);
-    const edge2 = v3.subtract(v0);
+    using edge1 = v1.subtract(v0);
+    using edge2 = v3.subtract(v0);
 
     // Cross product rayDirection × e03.
-    const p = rayDirection.cross(edge2);
+    using p = rayDirection.cross(edge2);
 
     // Determinant. If close to 0, ray is parallel to plane.
     const det = edge1.dot(p);
 
     // If determinant is near zero, ray lies in plane of triangle.
-    if ( det.almostEqual(0) ) {
-      Point3d.release(edge1, edge2, p);
-      return null;
-    }
-    const invDet = 1.0 / det;
+    if ( det.almostEqual(0) ) return null;
 
     // Vector to ray origin.
-    const tVec = rayOrigin.subtract(v0);
+    using tVec = rayOrigin.subtract(v0);
 
     // Calculate Barycentric u (alpha) parameter.
+    const invDet = 1.0 / det;
     const u = tVec.dot(p) * invDet;
 
     // Calculate Barycentric v (beta) parameter.
-    const q = tVec.cross(edge1);
+    using q = tVec.cross(edge1);
     const v = rayDirection.dot(q) * invDet;
 
     // Check Triangle 1 Intersection:
     // Condition: alpha >= 0, beta >= 0, alpha + beta <= 1
     if ( u >= 0.0 && v >= 0.0  && (u + v) <= 1.0 ) {
       const t = edge2.dot(q) * invDet;
-      if ( !t.almostEqual(0.0) && t > 0.0 ) {
-        Point3d.release(edge1, edge2, p, q, tVec);
-        return t; // Could return { u, v, triangle: 1 }
-      }
+      if ( !t.almostEqual(0.0) && t > 0.0 ) return t; // Could return { u, v, triangle: 1 }
     }
-    Point3d.release(edge1, edge2, p, q, tVec)
 
     // --- Triangle 2: V1, V2, V3 ---
-    const edge1Prime = v1.subtract(v2);
-    const edge2Prime = v3.subtract(v2);
-    const pPrime = rayDirection.cross(edge2Prime);
+    using edge1Prime = v1.subtract(v2);
+    using edge2Prime = v3.subtract(v2);
+    using pPrime = rayDirection.cross(edge2Prime);
     const detPrime = edge1Prime.dot(pPrime);
 
-    if ( detPrime.almostEqual(0) ) {
-      Point3d.release(edge1Prime, edge2Prime, pPrime);
-      return null;
-    }
+    if ( detPrime.almostEqual(0) ) return null;
 
     const invDetPrime = 1.0 / detPrime;
-    const tVecPrime = rayOrigin.subtract(v2); // Vector to ray origin.
+    using tVecPrime = rayOrigin.subtract(v2); // Vector to ray origin.
 
     const uPrime = tVecPrime.dot(pPrime) * invDetPrime; // Aka alphaPrime.
-    if ( uPrime < 0.0 || uPrime > 1.0 ) {
-      Point3d.release(edge1Prime, edge2Prime, tVecPrime, pPrime);
-      return null;
-    }
+    if ( uPrime < 0.0 || uPrime > 1.0 ) return null;
 
-    const qPrime = tVecPrime.cross(edge1Prime);
+    using qPrime = tVecPrime.cross(edge1Prime);
     const vPrime = rayDirection.dot(qPrime) * invDetPrime;
-    if ( vPrime < 0.0 || (uPrime + vPrime) > 1.0 ) {
-      Point3d.release(edge1Prime, edge2Prime, tVecPrime, qPrime, pPrime);
-      return null;
-    }
+    if ( vPrime < 0.0 || (uPrime + vPrime) > 1.0 ) return null;
 
     // Hit Triangle 2
+    // Note: Mapping barycentric to bilinear for T2 is complex.
+    // Simple approximation: u = 1-beta', v = 1-alpha' (valid for parallelograms)
     const tPrime = edge2Prime.dot(qPrime) * invDetPrime;
-    Point3d.release(edge1Prime, edge2Prime, qPrime, tVecPrime, pPrime);
-    if ( !tPrime.almostEqual(0) && tPrime > 0.0 ) {
-      // Hit Triangle 2
-      // Note: Mapping barycentric to bilinear for T2 is complex.
-      // Simple approximation: u = 1-beta', v = 1-alpha' (valid for parallelograms)
-      return tPrime; // {u: 1.0 - vPrime, v: 1.0 - uPrime, triangle: 2 }
-    }
-
+    if ( !tPrime.almostEqual(0) && tPrime > 0.0 ) return tPrime;
     return null;
   }
 
@@ -1904,6 +1838,10 @@ export class Polygons3d extends Polygon3d {
   constructor(n = 0) {
     super(0);
     this.polygons.length = n;
+  }
+
+  release() {
+    this.#applyMethodToAll("release");
   }
 
   #applyMethodToAll(method, ...args) { this.polygons.forEach(poly => poly[method](...args)); }
@@ -2167,7 +2105,7 @@ export class Polygons3d extends Polygon3d {
     // Convert the intersecting ray to 2d values on this plane.
     const to2dM = this.plane.conversion2dMatrix
     const b3d = res.point.add(res.direction);
-    const tmpPt3d = Point3d.tmp;
+    using tmpPt3d = Point3d.tmp;
     const a = to2dM.multiplyPoint3d(res.point, tmpPt3d).to2d();
     const b = to2dM.multiplyPoint3d(b3d, tmpPt3d).to2d();
 
@@ -2183,7 +2121,6 @@ export class Polygons3d extends Polygon3d {
     // Convert back to 3d.
     const from2dM = this.plane.conversion2dMatrixInverse;
     out.forEach(elem => elem.ixs.pt3d = from2dM.multiplyPoint3d(tmpPt3d.set(elem.ixs.x, elem.ixs.y, 0)));
-    tmpPt3d.release();
     return out;
   }
 

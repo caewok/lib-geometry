@@ -107,11 +107,10 @@ export class LocalCoordinateCache extends AABB2d {
    * @param {number} [resolution=1]
    */
   static fromCanvasRectangle(rect, resolution = 1, opts = {} ) {
-    const size = PIXI.Point.tmp.set(rect.width, rect.height);
+    using size = PIXI.Point.tmp.set(rect.width, rect.height);
     this.localSizeForResolution(size, resolution, size);
     opts.resolution = resolution;
     const out = new this(size.x, size.y, opts);
-    size.release();
     out.translation = rect; // Translate to TL.
     return out;
   }
@@ -248,10 +247,8 @@ export class LocalCoordinateCache extends AABB2d {
    */
   _canvasAtIndex(i, outPoint) {
     outPoint ??= PIXI.Point.tmp;
-    const local = this._localAtIndex(i, PIXI.Point.tmp);
-    const out = this._toCanvasCoordinates(local.x, local.y, outPoint);
-    local.release();
-    return out;
+    using local = this._localAtIndex(i, PIXI.Point.tmp);
+    return this._toCanvasCoordinates(local.x, local.y, outPoint);
   }
 
   /**
@@ -364,12 +361,10 @@ export class LocalCoordinateCache extends AABB2d {
     const origin = this._fromCanvasCoordinates(circle.x, circle.y);
 
     // For radius, use two points of equivalent distance to compare.
-    const local = this._fromCanvasCoordinates(circle.radius, 0, PIXI.Point.tmp);
-    const local0 = this._fromCanvasCoordinates(0, 0, PIXI.Point.tmp);
+    using local = this._fromCanvasCoordinates(circle.radius, 0, PIXI.Point.tmp);
+    using local0 = this._fromCanvasCoordinates(0, 0, PIXI.Point.tmp);
     const radius = local.x - local0.x;
-    const out = new PIXI.Circle(origin.x, origin.y, radius);
-    PIXI.Point.release(local, local0);
-    return out;
+    return new PIXI.Circle(origin.x, origin.y, radius);
   }
 
   /**
@@ -381,15 +376,13 @@ export class LocalCoordinateCache extends AABB2d {
     const origin = this._fromCanvasCoordinates(ellipse.x, ellipse.y, PIXI.Point.tmp);
 
     // For halfWidth and halfHeight, use two points of equivalent distance to compare.
-    const localDim = this._fromCanvasCoordinates(ellipse.halfWidth, 0, PIXI.Point.tmp);
-    const local0 = this._fromCanvasCoordinates(0, 0, PIXI.Point.tmp);
+    using localDim = this._fromCanvasCoordinates(ellipse.halfWidth, 0, PIXI.Point.tmp);
+    using local0 = this._fromCanvasCoordinates(0, 0, PIXI.Point.tmp);
     const halfWidth = localDim.x - local0.x;
 
     this._fromCanvasCoordinates(ellipse.halfHeight, 0, localDim);
     const halfHeight = localDim.x - local0.x;
-    const out = new PIXI.Ellipse(origin.x, origin.y, halfWidth, halfHeight);
-    PIXI.Point.release(localDim, local0);
-    return out;
+    return new PIXI.Ellipse(origin.x, origin.y, halfWidth, halfHeight);
   }
 
   /**
@@ -398,11 +391,9 @@ export class LocalCoordinateCache extends AABB2d {
    * @returns {PIXI.Rectangle}
    */
   _rectangleToLocalCoordinates(rect) {
-    const TL = this._fromCanvasCoordinates(rect.left, rect.top, PIXI.Point.tmp);
-    const BR = this._fromCanvasCoordinates(rect.right, rect.bottom, PIXI.Point.tmp);
-    rect = new PIXI.Rectangle(TL.x, TL.y, BR.x - TL.x, BR.y - TL.y);
-    PIXI.Point.release(TL, BR);
-    return rect;
+    using TL = this._fromCanvasCoordinates(rect.left, rect.top, PIXI.Point.tmp);
+    using BR = this._fromCanvasCoordinates(rect.right, rect.bottom, PIXI.Point.tmp);
+    return new PIXI.Rectangle(TL.x, TL.y, BR.x - TL.x, BR.y - TL.y);
   }
 
   /**
@@ -414,7 +405,7 @@ export class LocalCoordinateCache extends AABB2d {
     const points = poly.points;
     const ln = points.length;
     const newPoints = Array(ln);
-    const local = PIXI.Point.tmp;
+    using local = PIXI.Point.tmp;
     for ( let i = 0; i < ln; i += 2 ) {
       const x = points[i];
       const y = points[i + 1];
@@ -422,7 +413,6 @@ export class LocalCoordinateCache extends AABB2d {
       newPoints[i] = local.x;
       newPoints[i + 1] = local.y;
     }
-    local.release();
     return new PIXI.Polygon(newPoints);
   }
 
@@ -682,14 +672,11 @@ export class LocalCoordinateCache extends AABB2d {
   convertCanvasOffsetGridToLocal(canvasOffsets) {
     // Determine what one pixel move in the x direction equates to for a local move.
     const canvasOrigin = this._toCanvasCoordinates(0, 0);
-    const xShift = this._fromCanvasCoordinates(canvasOrigin.x + 1, canvasOrigin.y);
-    const yShift = this._fromCanvasCoordinates(canvasOrigin.x, canvasOrigin.y + 1);
-    const xFixed = PIXI.Point.tmp.set(1, 0);
-    const yFixed = PIXI.Point.tmp.set(0, 1);
-    if ( xShift.equals(xFixed) && yShift.equals(yFixed) ) {
-      PIXI.Point.release(xShift, yShift, xFixed, yFixed);
-      return canvasOffsets;
-    }
+    using xShift = this._fromCanvasCoordinates(canvasOrigin.x + 1, canvasOrigin.y);
+    using yShift = this._fromCanvasCoordinates(canvasOrigin.x, canvasOrigin.y + 1);
+    using xFixed = PIXI.Point.tmp.set(1, 0);
+    using yFixed = PIXI.Point.tmp.set(0, 1);
+    if ( xShift.equals(xFixed) && yShift.equals(yFixed) ) return canvasOffsets;
 
     const nOffsets = canvasOffsets.length;
     const localOffsets = Array(nOffsets);
@@ -701,7 +688,6 @@ export class LocalCoordinateCache extends AABB2d {
       localOffsets[i] = (xOffset * xShift.x) + (xOffset * yShift.x);
       localOffsets[i + 1] = (yOffset * xShift.y) + (yOffset * yShift.y);
     }
-    PIXI.Point.release(xShift, yShift, xFixed, yFixed);
     return localOffsets;
   }
 
@@ -720,20 +706,20 @@ export class LocalCoordinateCache extends AABB2d {
     const pixels = [];
 
     // 1. Convert start and end points to grid coordinates
-    const current = PIXI.Point.tmp;
-    const end = PIXI.Point.tmp;
+    using current = PIXI.Point.tmp;
+    using end = PIXI.Point.tmp;
     a.floor(current);
     b.floor(end);
 
     // 2. Determine step direction (+1 or -1)
-    const step = PIXI.Point.tmp.set(
+    using step = PIXI.Point.tmp.set(
       (b.x > a.x) ? 1 : -1,
       (b.y > a.y) ? 1 : -1,
     );
 
     // 3. Calculate the distance (t) required to move 1 pixel unit
     // We avoid division by zero by using Infinity if delta is 0
-    const delta = b.subtract(a);
+    using delta = b.subtract(a);
 
     // How far along the ray we must move for the component to change 1 unit
     // pixelSize / |delta| gives us the scale factor per grid cell
@@ -777,7 +763,6 @@ export class LocalCoordinateCache extends AABB2d {
         current.y += step.y;
       }
     }
-    PIXI.Point.release(step, delta, current, end);
     return pixels;
   }
 
@@ -792,7 +777,7 @@ export class LocalCoordinateCache extends AABB2d {
 
     // 1. Calculate the starting grid index (Top-Left)
     // We use Math.floor to snap to the grid coordinate
-    const start = PIXI.Point.tmp.set(rect.x, rect.y);
+    using start = PIXI.Point.tmp.set(rect.x, rect.y);
     start.floor(start);
 
     // 2. Calculate the ending grid index (Bottom-Right)
@@ -801,7 +786,7 @@ export class LocalCoordinateCache extends AABB2d {
     // pixels 0 and 1, but NOT 2. Without the epsilon, 20/10 = 2, which would
     // wrongly include the next pixel.
     const EPSILON = 0.0001;
-    const end = PIXI.Point.tmp.set(
+    using end = PIXI.Point.tmp.set(
       rect.x + rect.width - EPSILON,
       rect.y + rect.height - EPSILON,
     );
@@ -811,7 +796,6 @@ export class LocalCoordinateCache extends AABB2d {
     for ( let y = start.y; y <= end.y; y += 1 ) {
       for ( let x = start.x; x <= end.x; x += 1 ) pixels.push(PIXI.Point.tmp.set(x, y));
     }
-    PIXI.Point.release(start, end);
     return pixels;
   }
 
@@ -828,10 +812,10 @@ export class LocalCoordinateCache extends AABB2d {
 
     // 1. Define the Bounding Box of the circle in grid coordinates
     const radiusSq = circle.radius * circle.radius;
-    const center = PIXI.Point.fromObject(circle);
-    const radius = PIXI.Point.tmp.set(circle.radius, circle.radius)
-    const start = PIXI.Point.tmp;
-    const end = PIXI.Point.tmp;
+    using center = PIXI.Point.fromObject(circle);
+    using radius = PIXI.Point.tmp.set(circle.radius, circle.radius)
+    using start = PIXI.Point.tmp;
+    using end = PIXI.Point.tmp;
 
     // E.g,
     // Math.floor((circle.x - circle.radius) / pixelSize)
@@ -841,9 +825,9 @@ export class LocalCoordinateCache extends AABB2d {
 
     // 2. Iterate through the bounding box
 
-    const closest = PIXI.Point.tmp;
-    const next = PIXI.Point.tmp;
-    const delta = PIXI.Point.tmp;
+    using closest = PIXI.Point.tmp;
+    using next = PIXI.Point.tmp;
+    using delta = PIXI.Point.tmp;
     for ( let y = start.y; y <= end.y; y += 1 ) {
       for ( let x = start.x; x <= end.x; x += 1 ) {
         // 3. Find the point within the pixel closest to the circle center
@@ -868,8 +852,6 @@ export class LocalCoordinateCache extends AABB2d {
         if ( distanceSq <= radiusSq ) pixels.push(PIXI.Point.tmp.set(x, y));
       }
     }
-
-    PIXI.Point.release(center, radius, start, end, closest, next, delta);
     return pixels;
   }
 
@@ -885,10 +867,10 @@ export class LocalCoordinateCache extends AABB2d {
     const pixels = [];
 
     // 1. Define the Bounding Box in grid coordinates.
-    const center = PIXI.Point.fromObject(ellipse);
-    const start = PIXI.Point.tmp;
-    const end = PIXI.Point.tmp;
-    const radius = PIXI.Point.tmp.set(ellipse.width, ellipse.height); // In PIXI, width and height are radii (semi-axes)
+    using center = PIXI.Point.fromObject(ellipse);
+    using start = PIXI.Point.tmp;
+    using end = PIXI.Point.tmp;
+    using radius = PIXI.Point.tmp.set(ellipse.width, ellipse.height); // In PIXI, width and height are radii (semi-axes)
 
     // E.g., Math.floor((ellipse.x - a) / pixelSize);
     center.subtract(radius, start).floor(start);
@@ -898,9 +880,9 @@ export class LocalCoordinateCache extends AABB2d {
     radius.multiply(radius, radius);
 
     // 2. Iterate through the bounding box
-    const closest = PIXI.Point.tmp;
-    const next = PIXI.Point.tmp;
-    const delta = PIXI.Point.tmp;
+    using closest = PIXI.Point.tmp;
+    using next = PIXI.Point.tmp;
+    using delta = PIXI.Point.tmp;
     for ( let y = start.y; y <= end.y; y += 1 ) {
       for ( let x = start.x; x <= end.x; x += 1 ) {
         // 3. Find the point within the pixel closest to the ellipse center
@@ -924,7 +906,6 @@ export class LocalCoordinateCache extends AABB2d {
 
       }
     }
-    PIXI.Point.release(center, radius, start, end, closest, next, delta);
     return pixels;
   }
 
@@ -941,12 +922,11 @@ export class LocalCoordinateCache extends AABB2d {
 
     // 1. Convert flat array to objects and find the bounding box
     // Find the vertical range (minY to maxY) so we don't scan the entire world.
-    const aabb = AABB2d.fromPolygon(polygon);
+    using aabb = AABB2d.fromPolygon(polygon);
 
     // 2. Convert Y bounds to grid indices
     const startY = Math.floor(aabb.min.y);
     const endY = Math.floor(aabb.max.y);
-    aabb.release();
 
     // 3. Process each horizontal scanline
     for ( let gridY = startY; gridY <= endY; gridY += 1 ) {
@@ -1481,10 +1461,9 @@ export class PixelCache extends LocalCoordinateCache {
    * @param {number} value      Value to set at each pixel.
    */
   setPixelsUnderCanvasSegment(a, b, value = 0) {
-    a = this._fromCanvasCoordinates(a.x, a.y);
-    b = this._fromCanvasCoordinates(b.x, b.y);
-    this._setPixelsUnderLocalSegment(a, b, value);
-    PIXI.Point.release(a, b);
+    using aLocal = this._fromCanvasCoordinates(a.x, a.y);
+    using bLocal = this._fromCanvasCoordinates(b.x, b.y);
+    this._setPixelsUnderLocalSegment(aLocal, bLocal, value);
   }
 
   /**
@@ -1794,10 +1773,8 @@ export class PixelCache extends LocalCoordinateCache {
    */
   pixelsForRelativePointsFromCanvas(x, y, canvasOffsets, localOffsets) {
     localOffsets ??= this.convertCanvasOffsetGridToLocal(canvasOffsets);
-    const pt = this._fromCanvasCoordinates(x, y, PIXI.Point.tmp);
-    const out = this._pixelsForRelativePointsFromLocal(pt.x, pt.y, localOffsets);
-    pt.release();
-    return out;
+    using pt = this._fromCanvasCoordinates(x, y, PIXI.Point.tmp);
+    return this._pixelsForRelativePointsFromLocal(pt.x, pt.y, localOffsets);
   }
 
   // ----- NOTE: Aggregators ----- //
@@ -2000,20 +1977,20 @@ export class PixelCache extends LocalCoordinateCache {
     const pixels = [];
 
     // 1. Convert start and end points to grid coordinates
-    const current = PIXI.Point.tmp;
-    const end = PIXI.Point.tmp;
+    using current = PIXI.Point.tmp;
+    using end = PIXI.Point.tmp;
     a.floor(current);
     b.floor(end);
 
     // 2. Determine step direction (+1 or -1)
-    const step = PIXI.Point.tmp.set(
+    using step = PIXI.Point.tmp.set(
       (b.x > a.x) ? 1 : -1,
       (b.y > a.y) ? 1 : -1,
     );
 
     // 3. Calculate the distance (t) required to move 1 pixel unit
     // We avoid division by zero by using Infinity if delta is 0
-    const delta = b.subtract(a);
+    using delta = b.subtract(a);
 
     // How far along the ray we must move for the component to change 1 unit
     // pixelSize / |delta| gives us the scale factor per grid cell
@@ -2057,7 +2034,6 @@ export class PixelCache extends LocalCoordinateCache {
         current.y += step.y;
       }
     }
-    PIXI.Point.release(step, delta, current, end);
     return pixels;
   }
 
@@ -2072,7 +2048,7 @@ export class PixelCache extends LocalCoordinateCache {
 
     // 1. Calculate the starting grid index (Top-Left)
     // We use Math.floor to snap to the grid coordinate
-    const start = PIXI.Point.tmp.set(rect.x, rect.y);
+    using start = PIXI.Point.tmp.set(rect.x, rect.y);
     start.floor(start);
 
     // 2. Calculate the ending grid index (Bottom-Right)
@@ -2081,7 +2057,7 @@ export class PixelCache extends LocalCoordinateCache {
     // pixels 0 and 1, but NOT 2. Without the epsilon, 20/10 = 2, which would
     // wrongly include the next pixel.
     const EPSILON = 0.0001;
-    const end = PIXI.Point.tmp.set(
+    using end = PIXI.Point.tmp.set(
       rect.x + rect.width - EPSILON,
       rect.y + rect.height - EPSILON,
     );
@@ -2091,7 +2067,6 @@ export class PixelCache extends LocalCoordinateCache {
     for ( let y = start.y; y <= end.y; y += 1 ) {
       for ( let x = start.x; x <= end.x; x += 1 ) pixels.push(PIXI.Point.tmp.set(x, y));
     }
-    PIXI.Point.release(start, end);
     return pixels;
   }
 
@@ -2108,10 +2083,10 @@ export class PixelCache extends LocalCoordinateCache {
 
     // 1. Define the Bounding Box of the circle in grid coordinates
     const radiusSq = circle.radius * circle.radius;
-    const center = PIXI.Point.fromObject(circle);
-    const radius = PIXI.Point.tmp.set(circle.radius, circle.radius)
-    const start = PIXI.Point.tmp;
-    const end = PIXI.Point.tmp;
+    using center = PIXI.Point.fromObject(circle);
+    using radius = PIXI.Point.tmp.set(circle.radius, circle.radius)
+    using start = PIXI.Point.tmp;
+    using end = PIXI.Point.tmp;
 
     // E.g,
     // Math.floor((circle.x - circle.radius) / pixelSize)
@@ -2121,9 +2096,9 @@ export class PixelCache extends LocalCoordinateCache {
 
     // 2. Iterate through the bounding box
 
-    const closest = PIXI.Point.tmp;
-    const next = PIXI.Point.tmp;
-    const delta = PIXI.Point.tmp;
+    using closest = PIXI.Point.tmp;
+    using next = PIXI.Point.tmp;
+    using delta = PIXI.Point.tmp;
     for ( let y = start.y; y <= end.y; y += 1 ) {
       for ( let x = start.x; x <= end.x; x += 1 ) {
         // 3. Find the point within the pixel closest to the circle center
@@ -2148,8 +2123,6 @@ export class PixelCache extends LocalCoordinateCache {
         if ( distanceSq <= radiusSq ) pixels.push(PIXI.Point.tmp.set(x, y));
       }
     }
-
-    PIXI.Point.release(center, radius, start, end, closest, next, delta);
     return pixels;
   }
 
@@ -2165,10 +2138,10 @@ export class PixelCache extends LocalCoordinateCache {
     const pixels = [];
 
     // 1. Define the Bounding Box in grid coordinates.
-    const center = PIXI.Point.fromObject(ellipse);
-    const start = PIXI.Point.tmp;
-    const end = PIXI.Point.tmp;
-    const radius = PIXI.Point.tmp.set(ellipse.width, ellipse.height); // In PIXI, width and height are radii (semi-axes)
+    using center = PIXI.Point.fromObject(ellipse);
+    using start = PIXI.Point.tmp;
+    using end = PIXI.Point.tmp;
+    using radius = PIXI.Point.tmp.set(ellipse.width, ellipse.height); // In PIXI, width and height are radii (semi-axes)
 
     // E.g., Math.floor((ellipse.x - a) / pixelSize);
     center.subtract(radius, start).floor(start);
@@ -2178,9 +2151,9 @@ export class PixelCache extends LocalCoordinateCache {
     radius.multiply(radius, radius);
 
     // 2. Iterate through the bounding box
-    const closest = PIXI.Point.tmp;
-    const next = PIXI.Point.tmp;
-    const delta = PIXI.Point.tmp;
+    using closest = PIXI.Point.tmp;
+    using next = PIXI.Point.tmp;
+    using delta = PIXI.Point.tmp;
     for ( let y = start.y; y <= end.y; y += 1 ) {
       for ( let x = start.x; x <= end.x; x += 1 ) {
         // 3. Find the point within the pixel closest to the ellipse center
@@ -2204,7 +2177,6 @@ export class PixelCache extends LocalCoordinateCache {
 
       }
     }
-    PIXI.Point.release(center, radius, start, end, closest, next, delta);
     return pixels;
   }
 
@@ -2441,9 +2413,8 @@ export class PixelCache extends LocalCoordinateCache {
       if ( !value ) continue;
       const color = colorFn(value);
       const alpha = gammaFn(alphaFn(value));
-      const pt = coordFn.call(this, i);
+      using pt = coordFn.call(this, i);
       Draw.point(pt, { color, alpha, radius });
-      pt.release();
     }
   }
 
@@ -2472,10 +2443,8 @@ export class PixelCache extends LocalCoordinateCache {
     } else {
       coordFn = (localX, localY) => this._toCanvasCoordinates(localX, localY);
       valueFn = (localX, localY) => {
-        const canvasPt = this._toCanvasCoordinates(localX, localY);
-        const px = this.pixelAtCanvas(canvasPt.x, canvasPt.y);
-        canvasPt.release();
-        return px;
+        using canvasPt = this._toCanvasCoordinates(localX, localY);
+        return this.pixelAtCanvas(canvasPt.x, canvasPt.y);
       }
     }
 
@@ -2486,9 +2455,8 @@ export class PixelCache extends LocalCoordinateCache {
         if ( !value ) continue;
         const color = colorFn(value);
         const alpha = gammaFn(alphaFn(value));
-        const pt = coordFn.call(this, localX, localY);
+        using pt = coordFn.call(this, localX, localY);
         Draw.point(pt, { color, alpha, radius });
-        pt.release();
       }
     }
   }

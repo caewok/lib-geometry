@@ -22,7 +22,6 @@ import { mix } from "./mixwith.js";
 */
 // Improved for speed; uses a flat array to store.
 // Keep separate for the moment until tested.
-
 class AbstractMatrix {
 
   static [Symbol.hasInstance](instance) {
@@ -597,22 +596,18 @@ class AbstractMatrix {
    */
   static lookAt(cameraPosition, targetPosition, up, M, Minv) {
     // NOTE: Foundry uses a left-hand coordinate system, with y reversed.
-    const zAxis = Point3d.tmp;
+    using zAxis = Point3d.tmp;
     cameraPosition.subtract(targetPosition, zAxis); // ZAxis = forward
-    if ( zAxis.almostEqual(Point3d.ZERO) ) {
-      zAxis.release();
-      return { M: this.identity(4), Minv: this.identity(4) };
-    }
+    if ( zAxis.almostEqual(Point3d.ZERO) ) return { M: this.identity(4), Minv: this.identity(4) };
     zAxis.normalize(zAxis);
 
-    const xAxis = Point3d.tmp.set(1, 0, 0);
-    const yAxis = Point3d.tmp.set(0, 1, 0);
+    using xAxis = Point3d.tmp.set(1, 0, 0);
+    using yAxis = Point3d.tmp.set(0, 1, 0);
     if ( zAxis.x || zAxis.y ) {
-      const tmpUp = up ? Point3d.tmp.copyFrom(up) : Point3d.tmp.set(0, -1, 1);
+      using tmpUp = up ? Point3d.tmp.copyFrom(up) : Point3d.tmp.set(0, -1, 1);
       tmpUp.cross(zAxis, xAxis); // XAxis = right
       if ( xAxis.magnitudeSquared() ) xAxis.normalize(xAxis); // Don't normalize if 0, 0, 0
       zAxis.cross(xAxis, yAxis); // YAxis = up
-      tmpUp.release();
     }
     // Otherwise camera either directly overhead or directly below
     // Overhead if zAxis.z is positive
@@ -672,11 +667,6 @@ class AbstractMatrix {
       xAxis.z, yAxis.z, zAxis.z, 0,
       -(xAxis.dot(cameraPosition)), -(yAxis.dot(cameraPosition)), -(zAxis.dot(cameraPosition)), 1
     */
-
-    xAxis.release();
-    yAxis.release();
-    zAxis.release();
-
     return { M, Minv };
   }
 

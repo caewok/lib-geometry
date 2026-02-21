@@ -34,12 +34,9 @@ function centroid() {
     case 0: return undefined;
     case 1: return pts.next().value; // Should not happen if close is true
     case 2: {
-      const a = pts.next().value;
-      const b = pts.next().value;
-      const out = PIXI.Point.midPoint(a, b);
-      a.release();
-      b.release();
-      return out;
+      using a = pts.next().value;
+      using b = pts.next().value;
+      return PIXI.Point.midPoint(a, b);
     }
   }
   const outPoint = PIXI.Point.tmp;
@@ -51,7 +48,6 @@ function centroid() {
     const mult = (a.x * b.y) - (b.x * a.y);
     outPoint.x += sumX * mult;
     outPoint.y += (a.y + b.y) * mult;
-
     a.release();
     a = b;
   }
@@ -532,9 +528,8 @@ function _envelopsPolygon(poly) {
 
   // Step 2: All polygon points must be contained.
   const iter = poly.iteratePoints({ close: false });
-  for ( const pt of iter ) {
+  for ( using pt of iter ) {
     if ( !this.contains(pt.x, pt.y) ) return false;
-    pt.release();
   }
 
   // Step 3: Cannot have intersecting lines.

@@ -117,13 +117,12 @@ export class BasicVertices {
    * @returns {Float32Array} The vertices, modified in place
    */
   static transformVertexPositions(vertices, M, { stride = this.NUM_VERTEX_ELEMENTS, positionOffset = 0 } = {}) {
-    const pt = Point3d.tmp;
+    using pt = Point3d.tmp;
     for ( let i = positionOffset, iMax = vertices.length; i < iMax; i += stride ) {
       pt.set(vertices[i], vertices[i+1], vertices[i+2]);
       M.multiplyPoint3d(pt, pt);
       vertices.set([...pt], i);
     }
-    pt.release();
     return vertices;
   }
 
@@ -295,14 +294,13 @@ export class BasicVertices {
     const numVertices = Math.floor(vertices.length / stride);
     const normals = new vertices.constructor(numVertices);
     for ( let i = 0, j = 0, iMax = vertices.length; i < iMax; i += (stride * 3) ) {
-      const v0 = this._getSinglePosition(vertices, i, positionOffset);
-      const v1 = this._getSinglePosition(vertices, i + stride, positionOffset);
-      const v2 = this._getSinglePosition(vertices, i + (stride * 2), positionOffset);
-      const n = this._calculateNormalForTriangle3d(v0, v1, v2);
+      using v0 = this._getSinglePosition(vertices, i, positionOffset);
+      using v1 = this._getSinglePosition(vertices, i + stride, positionOffset);
+      using v2 = this._getSinglePosition(vertices, i + (stride * 2), positionOffset);
+      using n = this._calculateNormalForTriangle3d(v0, v1, v2);
       normals[j++] = n.x;
       normals[j++] = n.y;
       normals[j++] = n.z;
-      Point3d.release(v0, v1, v2, n);
     }
     return normals;
   }
@@ -317,13 +315,12 @@ export class BasicVertices {
   }
 
   static _calculateNormalForTriangle3d(v0, v1, v2) {
-    const dir0 = v1.subtract(v0);
-    const dir1 = v2.subtract(v0);
+    using dir0 = v1.subtract(v0);
+    using dir1 = v2.subtract(v0);
     const n = dir0.cross(dir1);
 
     // If collinear, return the n without normalizing to avoid NaN.
     if ( n.magnitude() ) n.normalize(n);
-    Point3d.release(dir0, dir1);
     return n;
   }
 
@@ -341,11 +338,10 @@ export class BasicVertices {
     if ( numVertices < 3 ) return new vertices.constructor();
 
     // Determine the normal for the vertices, using the first three.
-    const v0 = this._getSinglePosition(vertices, 0, positionOffset);
-    const v1 = this._getSinglePosition(vertices, stride, positionOffset);
-    const v2 = this._getSinglePosition(vertices, stride * 2, positionOffset);
+    using v0 = this._getSinglePosition(vertices, 0, positionOffset);
+    using v1 = this._getSinglePosition(vertices, stride, positionOffset);
+    using v2 = this._getSinglePosition(vertices, stride * 2, positionOffset);
     const n = this._calculateNormalForTriangle3d(v0, v1, v2);
-    Point3d.release(v0, v1, v2);
 
     // Project onto an axis.
     const abs = n.abs();
@@ -1059,14 +1055,14 @@ Ex: 6 points, 6 outer edges.
     if ( !(poly instanceof PIXI.Polygon) ) poly = poly.toPolygon();
 
     // Some temporary points.
-    const a = Point3d.tmp;
-    const b = Point3d.tmp;
-    const c = Point3d.tmp;
-    const d = Point3d.tmp;
+    using a = Point3d.tmp;
+    using b = Point3d.tmp;
+    using c = Point3d.tmp;
+    using d = Point3d.tmp;
     const triPts = [a, b, c, d];
-    const n = Point3d.tmp;
-    const deltaAB = Point3d.tmp;
-    const deltaAC = Point3d.tmp;
+    using n = Point3d.tmp;
+    using deltaAB = Point3d.tmp;
+    using deltaAC = Point3d.tmp;
 
     /* Looking at a side face
     a  b     uv: 0,0    1,0
@@ -1125,7 +1121,6 @@ Ex: 6 points, 6 outer edges.
       sides.set(vs[1], j); j += vertexOffset;
       sides.set(vs[2], j); j += vertexOffset;
     }
-    Point3d.release(a, b, c, d, n, deltaAB, deltaAC);
     return sides;
   }
 }

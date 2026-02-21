@@ -80,8 +80,8 @@ function fromObject(obj) {
 function angleBetween(a, b, c, { clockwiseAngle = false } = {}) {
   // See https://mathsathome.com/angle-between-two-vectors/
   // Create new pixi points so that 2d distance works when passing 3d points.
-  const ba = a.subtract(b);
-  const bc = c.subtract(b);
+  using ba = a.subtract(b);
+  using bc = c.subtract(b);
 
   // Use atan2 instead of acos for numerical stability.
   const angle1 = Math.atan2(ba.y, ba.x);
@@ -93,8 +93,6 @@ function angleBetween(a, b, c, { clockwiseAngle = false } = {}) {
   // const denom = ba.magnitude() * bc.magnitude();
   // let angle = Math.acos(dot / denom);
   if ( clockwiseAngle && foundry.utils.orient2dFast(a, b, c) > 0 ) angle = (Math.PI * 2) - angle;
-  ba.release();
-  bc.release();
   return angle;
 }
 
@@ -431,11 +429,9 @@ function projectToward(other, t, outPoint) {
 function towardsPoint(other, distance, outPoint) {
   outPoint ??= this.constructor.tmp;
   if ( !distance ) return outPoint.copyFrom(this);
-  const delta = other.subtract(this);
+  using delta = other.subtract(this);
   const t = distance / delta.magnitude();
-  this.add(delta.multiplyScalar(t, delta), outPoint); // Note: this might equal other or outPoint.
-  delta.release();
-  return outPoint;
+  return this.add(delta.multiplyScalar(t, delta), outPoint); // Note: this might equal other or outPoint.
 }
 
 /**
@@ -447,12 +443,10 @@ function towardsPoint(other, distance, outPoint) {
 function towardsPointSquared(other, distance2, outPoint) {
   outPoint ??= this.constructor.tmp;
   if ( !distance2 ) return outPoint.copyFrom(this);
-  const delta = other.subtract(this);
+  using delta = other.subtract(this);
   const sign = Math.sign(distance2);
   const t = sign * Math.sqrt(Math.abs(distance2) / delta.magnitudeSquared());
-  this.add(delta.multiplyScalar(t, delta), outPoint); // Note: this might equal other or outPoint.
-  delta.release();
-  return outPoint;
+  return this.add(delta.multiplyScalar(t, delta), outPoint); // Note: this might equal other or outPoint.
 }
 
 /**
@@ -566,6 +560,8 @@ PATCHES.PIXI.STATIC_METHODS = {
 
 };
 
+
+Symbol.dispose ??= Symbol("Symbol.dispose");
 PATCHES.PIXI.METHODS = {
   clone,
   add,
@@ -596,5 +592,14 @@ PATCHES.PIXI.METHODS = {
   toString: function() { return `{x: ${this.x}, y: ${this.y}}`},
 
   // Pool
-  release: function() { this.constructor.release(this); }
+  release: function() { this.constructor.release(this); },
+
+  // Patching cannot handle this approach because Symbol.dispose is special and will not be listed as an Object.entries().
+  // [Symbol.dispose]: function() { this.constructor._release(this); },
 };
+
+// Alternative to patching.
+PIXI.Point.prototype[Symbol.dispose] = function() {
+  if ( !this.constructor._release ) return;
+  this.constructor._release(this);
+}

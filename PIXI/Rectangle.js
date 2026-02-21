@@ -208,9 +208,8 @@ function _envelopsCircle(circle) {
 function _envelopsPolygon(poly) {
   // All points of the polygon must be contained in the circle.
   const iter = poly.iteratePoints({ close: false });
-  for ( const pt of iter ) {
+  for ( using pt of iter ) {
     if ( !this.contains(pt.x, pt.y) ) return false;
-    pt.release();
   }
   return true;
 }

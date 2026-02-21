@@ -228,11 +228,10 @@ export class AABB3d extends AABB2d {
     const ax = angle(N, axes.x);
     const ay = angle(N, axes.y);
     const az = angle(N, axes.z);
-    const R = Point3d.tmp.set(Math.sin(ax), Math.sin(ay), Math.sin(az)) * circle3d.radius;
+    using R = Point3d.tmp.set(Math.sin(ax), Math.sin(ay), Math.sin(az)) * circle3d.radius;
     const { x, y, z } = this.center;
     out.min.set(x - R.x, y - R.y, z - R.z);
     out.max.set(x + R.x, y + R.y, z + R.z);
-    R.release();
     return out;
   }
 
@@ -281,8 +280,8 @@ export class AABB3d extends AABB2d {
     // Test 3: Edge cross products.
     // Test axis = Cross(PolygonEdge, BoxAxis) for all combinations.
     // BoxAxes are X(1,0,0), Y(0,1,0), Z(0,0,1).
-    const axis = Point3d.tmp;
-    const edgeDir = Point3d.tmp;
+    using axis = Point3d.tmp;
+    using edgeDir = Point3d.tmp;
     for ( const edge of poly3d.iterateEdges() ) {
       edge.b.subtract(edge.a, edgeDir);
 
@@ -295,8 +294,6 @@ export class AABB3d extends AABB2d {
       // Cross with Z axis (0, 0, 1) -> result is (edge.y, -edge.x, 0)
       if ( checkGap(this, poly3d, axis.set(-edgeDir.y, edgeDir.x, 0)) ) return false;
     }
-    axis.release();
-    edgeDir.release();
 
     // If no separating axis found, they overlap.
     return true;
@@ -338,19 +335,18 @@ export class AABB3d extends AABB2d {
     if ( this.containsPoint(center) ) return true;
 
     // Find the point on the AABB closest to the circle's center.
-    const closestPoint = Point3d.tmp.set(
+    using closestPoint = Point3d.tmp.set(
       Math.max(min.x, Math.min(center.x, max.x)),
       Math.max(min.y, Math.min(center.y, max.y)),
       Math.max(min.z, Math.min(center.z, max.z)),
     );
 
     // Project this closest point onto the circle's plane.
-    const planePoint = plane.projectPointOnPlane(closestPoint);
-    const centerPoint = plane.projectPointOnPlane(center);
+    using planePoint = plane.projectPointOnPlane(closestPoint);
+    using centerPoint = plane.projectPointOnPlane(center);
 
     // Check if the projected point is inside the circle.
     const dist2 = PIXI.Point.distanceSquaredBetween(planePoint, centerPoint);
-    Point3d.release(closestPoint, planePoint, centerPoint);
     return almostLessThan(dist2, radiusSquared);
   }
 

@@ -142,13 +142,12 @@ export class Draw {
     else {
       // Move from t = 0 to t = 1.
       // Calculate the percent t for dash and gap lengths.
-      const delta = B.subtract(A);
+      using delta = B.subtract(A);
       const dist = delta.magnitude();
-      delta.release();
       const gapT = gapLength / dist;
       const dashT = dashLength / dist;
       let t = 0;
-      const current = A.clone();
+      using current = A.clone();
       while ( t < 1 ) {
         this.g.moveTo(current.x, current.y);
         t += dashT;
@@ -158,7 +157,6 @@ export class Draw {
         t += gapT;
         A.projectToward(B, t, current);
       }
-      current.release();
     }
   }
 

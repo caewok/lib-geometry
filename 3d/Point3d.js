@@ -41,6 +41,7 @@ import { gridUnitsToPixels, roundDecimals } from "../util.js";
  * 3-D version of PIXI.Point
  * See https://pixijs.download/dev/docs/packages_math_src_Point.ts.html
  */
+// export class Point3d extends PIXI.Point { // Cannot extend PIXI.Point b/c on load, not yet patched with Poolable.
 export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
   toJSON() { return { ...this }; }
 
@@ -290,14 +291,12 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
    * @returns {number}  Angle, in radians
    */
   static angleBetween(a, b, c) {
-    const tmp0 = this.tmp;
-    const tmp1 = this.tmp;
+    using tmp0 = this.tmp;
+    using tmp1 = this.tmp;
     const ba = a.subtract(b, tmp0);
     const bc = c.subtract(b, tmp1);
     const dot = ba.dot(bc);
     const denom = ba.magnitude() * bc.magnitude();
-    tmp0.release();
-    tmp1.release();
     return Math.acos(dot / denom);
   }
 
@@ -660,10 +659,8 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
    * @returns {boolean}
    */
   equalXY(other) {
-    const pt2d = PIXI.Point.tmp.set(this.x, this.y);
-    const out = pt2d.equals(other);
-    pt2d.release();
-    return out;
+    using pt2d = PIXI.Point.tmp.set(this.x, this.y);
+    return pt2d.equals(other);
   }
 
   /**
@@ -673,10 +670,8 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
    * @returns {boolean}
    */
   almostEqualXY(other, epsilon) {
-    const pt2d = PIXI.Point.tmp.set(this.x, this.y);
-    const out = pt2d.almostEqual(other, epsilon);
-    pt2d.release();
-    return out;
+    using pt2d = PIXI.Point.tmp.set(this.x, this.y);
+    return pt2d.almostEqual(other, epsilon);
   }
 
   /**

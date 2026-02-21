@@ -23,6 +23,8 @@ Object.freeze(axes.z);
  * Represent a bounding box as a minimum and maximum point in 2d or 3d.
  * The maximum row/column/z are considered inclusive. I.e., the range is [min, max], not [min, max).
  */
+Symbol.dispose ??= Symbol("Symbol.dispose");
+
 export class AABB2d {
 
   static [Symbol.hasInstance](instance) {
@@ -58,6 +60,8 @@ export class AABB2d {
     this.min.release();
     this.max.release();
   }
+
+  [Symbol.dispose]() { this.release(); }
 
   /**
    * The width (delta) along each axis.
@@ -315,7 +319,7 @@ export class AABB2d {
    */
   overlapsSegment(a, b, axes) {
     axes ??= this.constructor.axes;
-    const rayDirection = b.subtract(a);
+    using rayDirection = b.subtract(a);
     const epsilon = 1e-06;
 
     // Initialize t-interval for the infinite line's intersection with the AABB.
@@ -330,10 +334,7 @@ export class AABB2d {
       if ( Math.abs(rayDirection[axis]) < epsilon ) {
         // Segment is parallel to the slab for this axis.
         // If segment origin is outside the slab, it can never intersect.
-        if ( p0 < min || p0 > max ) {
-          rayDirection.release();
-          return false;
-        }
+        if ( p0 < min || p0 > max ) return false;
         // Otherwise, the infinite line is always within this slab. Proceed to next axis.
       }
 
@@ -350,17 +351,13 @@ export class AABB2d {
       tmax = Math.min(tmax, t2);
 
       // If the intersection interval becomes invalid, the line misses the box.
-      if ( tmin > tmax ) {
-        rayDirection.release();
-        return false;
-      }
+      if ( tmin > tmax ) return false;
     }
 
     // After checking all axes, [tmin, tmax] is the interval where the infinite
     // line intersects the AABB. The final step is to check if this interval
     // overlaps with the segment's own interval, which is [0, 1].
     // Two intervals [a, b] and [c, d] overlap if a <= d and b >= c.
-    rayDirection.release();
     return almostGreaterThan(1.0, tmin) && almostLessThan(0.0, tmax);
     // return tmin <= 1.0 && tmax >= 0.0;
   }
@@ -413,22 +410,16 @@ export class AABB2d {
   projectOntoAxis(axis) {
     // Use "extents" optimization for speed.
     // Get center and extents (half-width).
-    const center = this.getCenter();
-    const extents = this.getExtents();
+    using center = this.getCenter();
+    using extents = this.getExtents();
 
     // Project the center.
     const centerProj = center.dot(axis);
 
     // Project the radius (sum of absolute dot products of extents).
     // This works because the AABB axes are (1,0,0), (0,1,0), (0,0,1).
-    const absAxis = axis.abs();
+    using absAxis = axis.abs();
     const radius = extents.dot(absAxis);
-
-    // Release unused vars.
-    center.release();
-    extents.release();
-    absAxis.release();
-
     return { min: centerProj - radius, max: centerProj + radius };
   }
 

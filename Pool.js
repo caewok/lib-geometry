@@ -75,6 +75,9 @@ export class Pool {
    }
 }
 
+// Polyfill for environments that don't have it yet
+Symbol.dispose ??= Symbol("Symbol.dispose");
+
 export const PoolableMixin = superclass => class extends superclass {
 
   /**
@@ -99,6 +102,13 @@ export const PoolableMixin = superclass => class extends superclass {
   }
 
   static release(...objs) { objs.forEach(obj => this._release(obj)); }
+
+  /**
+   * Trigger automatic return to the pool if the point is defined with a "using" declaration.
+   * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/using
+   * When the 'using' block ends, this is called automatically.
+   */
+  [Symbol.dispose]() { this.constructor._release(this); }
 
   release() { this.constructor._release(this); }
 

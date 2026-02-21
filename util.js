@@ -164,12 +164,10 @@ dist(end, currPt) < dist(start, currPt) && dist(currPt, start) > dist(start, end
 function from2dCutaway(cutawayPt, start, end, outPoint) {
   outPoint ??= CONFIG[GEOMETRY_LIB_ID].lib.threeD.ElevatedPoint.tmp;
   // b/c outPoint is 3d, makes sure to temporarily store the 2d values.
-  const start2d = start.to2d();
-  const end2d = end.to2d();
+  using start2d = start.to2d();
+  using end2d = end.to2d();
   start2d.towardsPointSquared(end2d, cutawayPt.x, outPoint);
   outPoint.z = cutawayPt.y;
-  start2d.release();
-  end2d.release();
   return outPoint;
 }
 
@@ -271,7 +269,6 @@ export function categorizePointsInOutConvexPolygon(poly, points, epsilon = 1e-08
         }
       }
     }
-    edge.a.release();
     if ( found === nPts ) return out;
   }
 
@@ -1226,14 +1223,10 @@ export function pointsAreCollinear(a, b, c, epsilon = 1e-06) {
 
   // Collinear 3d points form a degenerate triangle with zero area.
   // Test the cross products.
-  const ab = b.subtract(a);
-  const bc = c.subtract(b);
-  const cross = ab.cross(bc);
-  const out = cross.almostEqual(0, epsilon);
-  ab.release();
-  bc.release();
-  cross.release();
-  return out;
+  using ab = b.subtract(a);
+  using bc = c.subtract(b);
+  using cross = ab.cross(bc);
+  return cross.almostEqual(0, epsilon);
 }
 
 /**
