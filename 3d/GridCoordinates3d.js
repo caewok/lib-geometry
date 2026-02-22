@@ -43,7 +43,7 @@ export class GridCoordinates3d extends ElevatedPoint {
 
   /**
    * Factory function that converts a GridOffset to GridCoordinates.
-   * @param {GridOffset} offset
+   * @param {GridOffset|GridOffset3d} offset
    * @param {number} [elevation]      Override the elevation in offset, if any. In grid units
    * @returns {GridCoordinates3d}
    */
@@ -61,7 +61,7 @@ export class GridCoordinates3d extends ElevatedPoint {
    */
   static gridCenterForPoint(pt) {
     pt = new this(pt.x, pt.y, pt.z);
-    return pt.centerToOffset();
+    return pt.centerToGrid();
   }
 
   /**
@@ -88,7 +88,7 @@ export class GridCoordinates3d extends ElevatedPoint {
   get j() { return canvas.grid.getOffset({ x: this.x, y: this.y }).j }
 
   /** @type {number} */
-  get k() { return this.constructor.unitElevation(pixelsToGridUnits(this.z)); }
+  get k() { return canvas.grid.getOffset({ x: this.x, y: this.y, elevation: this.elevation }).k; }
 
   /** @type {number} */
   set i(value) { this.y = canvas.grid.getCenterPoint({ i: value, j: this.j }).y; }
@@ -104,9 +104,7 @@ export class GridCoordinates3d extends ElevatedPoint {
    * @type {object}
    */
   get offset() {
-    const o = canvas.grid.getOffset({ x: this.x, y: this.y });
-    o.k = this.k;
-    return o;
+    return canvas.grid.getOffset({ x: this.x, y: this.y, elevation: this.elevation });
   }
 
   /**
@@ -121,14 +119,12 @@ export class GridCoordinates3d extends ElevatedPoint {
   }
 
   /**
-   * Convert this point to a new one based on its offset.
+   * Center this point on its grid space
    * Sets x,y,z to equal the center for i,j,k
    * @returns {GridCoordinates3d} New object
    */
   get center() {
-    const center = this.constructor.fromObject(canvas.grid.getCenterPoint({ x: this.x, y: this.y }));
-    center.z = gridUnitsToPixels(this.constructor.elevationForUnit(this.k));
-    return center;
+    return this.constructor.fromObject(canvas.grid.getCenterPoint({ x: this.x, y: this.y, elevation: this.elevation }));
   }
 
   /**
@@ -138,34 +134,31 @@ export class GridCoordinates3d extends ElevatedPoint {
   toWaypoint() { return ElevatedPoint.fromObject(this); }
 
   /**
-   * Change this point to a specific offset value.
+   * Change this point to a specific offset value, in place.
    * Faster than setting each {i, j, k} separately.
-   * @param {GridOffset} offset
+   * @param {GridOffset} offset       Either i, j or i, j, k
+   * @param {number} elevation        Override k with a specific grid elevation
+   * @returns {this}
    */
-  setOffset(offset) {
-    const { x, y } = canvas.grid.getCenterPoint(offset);
-    this.x = roundNearWhole(x);
-    this.y = roundNearWhole(y);
-    this.elevation = roundNearWhole(this.constructor.elevationForUnit(offset.k || 0));
-    return this;
-  }
-
-  /**
-   * Change this point to a specific offset value in the 2d axes. Do not modify elevation.
-   * Faster than setting each {i, j} separately.
-   * @param {GridOffset} offset
-   */
-  setOffset2d(offset) {
-    const { x, y } = canvas.grid.getCenterPoint(offset);
-    this.x = roundNearWhole(x);
-    this.y = roundNearWhole(y);
+  setOffset(offset, elevation) {
+    if ( elevation ) offset = { i: offset.i, j: offset.j, elevation };
+    const pt = canvas.grid.getCenterPoint(offset);
+    this.x = pt.x;
+    this.y = pt.y;
+    if ( Object.hasOwn(pt, "elevation") ) this.elevation = pt.elevation;
+    this.roundNearWhole();
     return this;
   }
 
   /**
    * Center this point based on its current offset value.
    */
-  centerToOffset() { return this.setOffset(this); }
+  centerToGrid() { return this.setOffset(this); }
+
+  /**
+   * Center the 2d coordinates of this point but leave elevation alone.
+   */
+  centerTo2dGrid() { return this.setOffset({ i: this.i, j: this.j }); }
 
   /**
    * Conversion to 2d.

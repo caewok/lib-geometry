@@ -46,13 +46,25 @@ function pointFromKey(key, outPoint) {
 }
 
 /**
- * Use roundDecimals to round the point coordinates to a certain number of decimals
+ * Use roundDecimals to round the point coordinates to a certain number of decimals, in place.
  * @param {number} places   Number of decimals places to use when rounding.
  * @returns {this}
  */
 function roundDecimals(places = 0) {
   this.x = roundDecimalsNumber(this.x, places);
   this.y = roundDecimalsNumber(this.y, places);
+  return this;
+}
+
+
+/**
+ * Round the point coordinates that are vary near a whole number, in place.
+ * @param {number} [epsilon=1e-08]
+ * @returns {this}
+ */
+function roundNearWhole(epsilon) {
+  this.x = roundNearWhole(this.x, epsilon);
+  this.y = roundNearWhole(this.y, epsilon);
   return this;
 }
 
@@ -587,6 +599,7 @@ PATCHES.PIXI.METHODS = {
   translate,
   rotate,
   roundDecimals,
+  roundNearWhole,
   fromAngle,
   to2d,
   toString: function() { return `{x: ${this.x}, y: ${this.y}}`},

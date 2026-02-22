@@ -50,15 +50,17 @@ export function HexCoordinateMixin(Base) {
     /** @type {number} */
     set q(value) {
       const pt = canvas.grid.cubeToPoint({ q: value, r: this.r });
-      this.x = roundNearWhole(pt.x);
-      this.y = roundNearWhole(pt.y);
+      this.x = pt.x;
+      this.y = pt.y;
+      this.roundNearWhole();
     }
 
     /** @type {number} */
     set r(value) {
       const pt = canvas.grid.cubeToPoint({ q: this.q, r: value });
-      this.x = roundNearWhole(pt.x);
-      this.y = roundNearWhole(pt.y);
+      this.x = pt.x;
+      this.y = pt.y;
+      this.roundNearWhole();
     }
 
     /** @type {number} */
@@ -84,10 +86,10 @@ export function HexCoordinateMixin(Base) {
      * @returns {this} For convenience.
      */
     setToHexCube(hexCube) {
-      const { x, y } = canvas.grid.cubeToPoint(hexCube);
-      this.x = roundNearWhole(x);
-      this.y = roundNearWhole(y);
-      return this;
+      const pt = canvas.grid.cubeToPoint(hexCube);
+      this.x = pt.x;
+      this.y = pt.y;
+      this.roundNearWhole();
     }
 
     /**

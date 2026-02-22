@@ -109,7 +109,7 @@ export class GridCoordinates extends mix(PIXI.Point).with(PoolableMixin) {
   /**
    * Center this point based on its current offset value.
    */
-  centerToOffset() { return this.setOffset(this); }
+  centerToGrid() { return this.setOffset(this); }
 
   /**
    * For compatibility with PIXI.Point.

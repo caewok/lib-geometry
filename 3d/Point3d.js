@@ -468,6 +468,17 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
   }
 
   /**
+   * Round the point coordinates that are vary near a whole number, in place.
+   * @param {number} [epsilon=1e-08]
+   * @returns {this}
+   */
+  roundNearWhole(epsilon) {
+    super.roundNearWhole(epsilon);
+    this.z = roundNearWhole(this.z, epsilon);
+    return this;
+  }
+
+  /**
    * Add a point to this one.
    * Based on https://api.pixijs.io/@pixi/math-extras/src/pointExtras.ts.html
    * @param {PIXI.Point} other    The point to add to `this`.
