@@ -74,10 +74,10 @@ export class AbstractPlaceableGeometryTracker {
    * Register hooks for this placeable type that record updates.
    */
   static registerPlaceableHooks() {
-    if ( this._hooks.has(this.constructor.name) ) return;
+    if ( this._hooks.has(this.name) ) return;
 
     const hooks = [];
-    this._hooks.set(this.constructor.name, hooks);
+    this._hooks.set(this.name, hooks);
 
     const HOOKS = {
       draw: "_onPlaceableDraw",
@@ -93,9 +93,9 @@ export class AbstractPlaceableGeometryTracker {
    * Deregister hooks for this placeable type that record updates.
    */
   static deregisterPlaceableHooks() {
-    const hooks = this._hooks.get(this.constructor.name) ?? [];
+    const hooks = this._hooks.get(this.name) ?? [];
     hooks.forEach(hook => Hooks.off(hook.name, hook.id));
-    this._hooks.delete(this.constructor.name);
+    this._hooks.delete(this.name);
   }
 
   /**
