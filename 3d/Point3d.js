@@ -706,13 +706,6 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
 }
 
 /**
- * The effective maximum texture size that Foundry VTT "ever" has to worry about.
- * @type {number}
- */
-const MAX_TEXTURE_SIZE = Math.pow(2, 16);
-const MAX_TEXTURE_SIZE2 = Math.pow(MAX_TEXTURE_SIZE, 2);
-
-/**
  * Count the number of positive integer digits.
  * Will return 0 for negative numbers.
  * Will truncate any decimals.

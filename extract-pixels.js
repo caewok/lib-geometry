@@ -1,5 +1,4 @@
 /* globals
-Float16Array,
 PIXI
 */
 
