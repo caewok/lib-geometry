@@ -12,7 +12,7 @@ import { TokenPositionTracker, TokenScaleTracker, TokenShapeTracker } from "./To
 // Mixing
 import { mix } from "../mixwith.js";
 import {
-  AbstractPlaceableGeometryTracker,
+  PlaceableGeometryTracker,
   PlaceableAABBMixin,
   PlaceableModelMatrixMixin,
   PlaceableFacesMixin
@@ -196,7 +196,7 @@ const TokenConstrainedBrightLitFacesMixin = superclass => class extends supercla
  * Prototype order:
  * WallGeometryTracker -> PlaceableFacesMixin -> PlaceableMatricesMixin -> PlaceableAABBMixin -> AbstractPlaceableGeometryTracker
  */
-export class TokenGeometryTracker extends mix(AbstractPlaceableGeometryTracker).with(
+export class TokenGeometryTracker extends mix(PlaceableGeometryTracker).with(
   TokenConstrainedBrightLitFacesMixin, TokenConstrainedLitFacesMixin, TokenConstrainedFacesMixin,
   PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin) {
   /** @type {string} */

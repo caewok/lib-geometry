@@ -3,9 +3,9 @@
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { AbstractPlaceableTracker } from "./AbstractPlaceableTracker.js";
+import { PlaceableTracker } from "./AbstractPlaceableTracker.js";
 
-class AbstractMeasuredTemplateTracker extends AbstractPlaceableTracker {
+class AbstractMeasuredTemplateTracker extends PlaceableTracker {
   /** @type {string} */
   static PLACEABLE_NAME = "MeasuredTemplate";
 

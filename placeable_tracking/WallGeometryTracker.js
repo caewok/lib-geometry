@@ -11,7 +11,7 @@ import { WallTypeTracker, WallPositionTracker } from "./WallTracker.js";
 // Mixing
 import { mix } from "../mixwith.js";
 import {
-  AbstractPlaceableGeometryTracker,
+  PlaceableGeometryTracker,
   PlaceableAABBMixin,
   PlaceableModelMatrixMixin,
   PlaceableFacesMixin
@@ -27,7 +27,7 @@ import { gridUnitsToPixels } from "../util.js";
  * Prototype order:
  * WallGeometryTracker -> PlaceableFacesMixin -> PlaceableMatricesMixin -> PlaceableAABBMixin -> AbstractPlaceableGeometryTracker
  */
-export class WallGeometryTracker extends mix(AbstractPlaceableGeometryTracker).with(PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin) {
+export class WallGeometryTracker extends mix(PlaceableGeometryTracker).with(PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin) {
   /** @type {string} */
   static PLACEABLE_NAME = "Wall";
 

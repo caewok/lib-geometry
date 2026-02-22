@@ -11,7 +11,7 @@ import { RegionUpdateTracker, RegionElevationTracker } from "./RegionTracker.js"
 // Mixing
 import { mix } from "../mixwith.js";
 import {
-  AbstractPlaceableGeometryTracker,
+  PlaceableGeometryTracker,
   PlaceableAABBMixin,
   PlaceableModelMatrixMixin,
   PlaceableFacesMixin
@@ -31,7 +31,7 @@ import { Point3d } from "../3d/Point3d.js";
  * Prototype order:
  * WallGeometryTracker -> PlaceableFacesMixin -> PlaceableMatricesMixin -> PlaceableAABBMixin -> AbstractPlaceableGeometryTracker
  */
-export class RegionGeometryTracker extends mix(AbstractPlaceableGeometryTracker).with(PlaceableAABBMixin, PlaceableFacesMixin) {
+export class RegionGeometryTracker extends mix(PlaceableGeometryTracker).with(PlaceableAABBMixin, PlaceableFacesMixin) {
   /** @type {string} */
   static PLACEABLE_NAME = "Region";
 
@@ -299,7 +299,7 @@ export class RegionGeometryTracker extends mix(AbstractPlaceableGeometryTracker)
 }
 
 // Track each shape separately, per region.
-class AbstractRegionShapeGeometryTracker extends mix(AbstractPlaceableGeometryTracker).with(PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin) {
+class AbstractRegionShapeGeometryTracker extends mix(PlaceableGeometryTracker).with(PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin) {
   /** @type {TrackerKeys} */
   static TRACKERS = {};
 

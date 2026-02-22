@@ -12,7 +12,7 @@ import { TilePositionTracker, TileScaleTracker, TileRotationTracker, TileTexture
 // Mixing
 import { mix } from "../mixwith.js";
 import {
-  AbstractPlaceableGeometryTracker,
+  PlaceableGeometryTracker,
   PlaceableAABBMixin,
   PlaceableModelMatrixMixin,
   PlaceableFacesMixin
@@ -212,7 +212,7 @@ const TileAlphaTrianglesMixin = superclass => class extends superclass {
  * Prototype order:
  * TileGeometryTracker -> PlaceableFacesMixin -> PlaceableMatricesMixin -> PlaceableAABBMixin -> AbstractPlaceableGeometryTracker
  */
-export class TileGeometryTracker extends mix(AbstractPlaceableGeometryTracker).with(
+export class TileGeometryTracker extends mix(PlaceableGeometryTracker).with(
   PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin,
   AbstractTileAlpha, TileAlphaPolygonsMixin, TileAlphaTrianglesMixin) {
   /** @type {string} */

@@ -3,9 +3,9 @@
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { AbstractPlaceableTracker } from "./AbstractPlaceableTracker.js";
+import { PlaceableTracker } from "./AbstractPlaceableTracker.js";
 
-class AbstractTileTracker extends AbstractPlaceableTracker {
+class AbstractTileTracker extends PlaceableTracker {
   /** @type {string} */
   static PLACEABLE_NAME = "Tile";
 

@@ -1,6 +1,5 @@
 /* globals
 canvas,
-Hooks,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
@@ -8,6 +7,8 @@ Hooks,
 import { FixedLengthTrackingBuffer } from "./TrackingBuffer.js";
 
 // LibGeometry
+import { PlaceableHooksMixin } from "./AbstractPlaceableTracker.js";
+import { mix } from "../mixwith.js";
 import { GEOMETRY_LIB_ID, GEOMETRY_ID } from "../const.js";
 import { MatrixFloat32, ModelMatrix } from "../Matrix.js";
 import { AABB3d } from "../3d/AABB3d.js";
@@ -42,61 +43,15 @@ Once registered, will create tracking objects for each placeable created.
 - Use tracking update numbers to lazily update the geometry as needed.
 - Mix-ins to track different properties.
 */
-export class AbstractPlaceableGeometryTracker {
+class AbstractPlaceableGeometryTracker {
   /**
    * The tracker will be saved at placeable[GEOMETRY_LIB_ID][ID] with updateId property.
    * @type {string}
    */
   static ID = GEOMETRY_ID;
 
-  // ----- NOTE: Hooks ----- //
+  static HOOKS_TO_USE = ["draw", "destroy"];
 
-  /**
-   * A hook event that fires when a {@link PlaceableObject} is initially drawn.
-   * @param {PlaceableObject} object    The object instance being drawn
-   */
-  static _onPlaceableDraw(placeable) {
-    this.create(placeable);
-  }
-
-  static _onPlaceableDestroy(placeable) {
-    const handler = placeable[GEOMETRY_LIB_ID]?.[this.ID];
-    if ( !handler ) return;
-    handler.destroy();
-  }
-
-  // ----- NOTE: Registration ----- //
-
-  /** @type {number[]} */
-  static _hooks = new Map();
-
-  /**
-   * Register hooks for this placeable type that record updates.
-   */
-  static registerPlaceableHooks() {
-    if ( this._hooks.has(this.name) ) return;
-
-    const hooks = [];
-    this._hooks.set(this.name, hooks);
-
-    const HOOKS = {
-      draw: "_onPlaceableDraw",
-      destroy: "_onPlaceableDestroy",
-    };
-    for ( const [name, methodName] of Object.entries(HOOKS) ) {
-      const id = Hooks.on(name, this[methodName].bind(this));
-      hooks.push({ name, methodName, id });
-    }
-  }
-
-  /**
-   * Deregister hooks for this placeable type that record updates.
-   */
-  static deregisterPlaceableHooks() {
-    const hooks = this._hooks.get(this.name) ?? [];
-    hooks.forEach(hook => Hooks.off(hook.name, hook.id));
-    this._hooks.delete(this.name);
-  }
 
   /**
    * Create a handler for all placeables.
@@ -109,8 +64,7 @@ export class AbstractPlaceableGeometryTracker {
       tracker.registerPlaceableHooks();
       tracker.registerExistingPlaceables(placeables)
     });
-
-    placeables.forEach(placeable => this.create(placeable));
+    super.registerExistingPlaceables(placeables);
   }
 
   // ----- NOTE: Constructor ----- //
@@ -123,21 +77,10 @@ export class AbstractPlaceableGeometryTracker {
   }
 
   static create(placeable) {
-    // Singleton. If this tracker already exists, keep it.
-    const obj = placeable[GEOMETRY_LIB_ID] ??= {};
-    if ( obj[this.ID] ) return obj[this.ID];
-
-    const out = new this(placeable);
-    obj[this.ID] = out;
-
     // Confirm the trackers we need are present.
     Object.values(this.TRACKERS).forEach(tracker => {
-      if ( !obj[tracker.ID] ) tracker.registerExistingPlaceables([placeable]);
+      if ( !placeable[tracker.ID] ) tracker.registerExistingPlaceables([placeable]);
     });
-
-    out.initialize();
-    out.update();
-    return out;
   }
 
   // ----- NOTE: Updating ----- //
@@ -193,6 +136,8 @@ export class AbstractPlaceableGeometryTracker {
     delete this.placeable[GEOMETRY_LIB_ID][this.constructor.ID];
   }
 }
+
+export class PlaceableGeometryTracker extends mix(AbstractPlaceableGeometryTracker).with(PlaceableHooksMixin) { }
 
 // ----- NOTE: PlaceableAABBMixin ----- //
 

@@ -7,6 +7,7 @@ Hooks,
 "use strict";
 
 import { GEOMETRY_LIB_ID } from "../const.js";
+import { mix } from "../mixwith.js";
 
 /* Track geometry changes to placeable.
 
@@ -23,18 +24,21 @@ CONFIG.GeometryLib.placeableTrackers.TokenPositionTracker.registerPlaceableHooks
 CONFIG.GeometryLib.placeableTrackers.TokenPositionTracker.registerExistingPlaceables()
 */
 
-/**
- * The abstract tracker handles incrementing a counter for a set
- * of update keys. Keys can be either refresh keys or document property keys.
- */
-export class AbstractPlaceableTracker {
-  /**
-   * The tracker will be saved at placeable[GEOMETRY_LIB_ID][ID] with updateId property.
-   * @type {string}
-   */
-  static ID;
+export const PlaceableHooksMixin = superclass => class extends superclass {
 
   // ----- NOTE: Tracking Keys ----- //
+
+  static HOOK_TYPES = {
+    create: "_onPlaceableDocumentCreation",
+    update: "_onPlaceableDocumentUpdate",
+    "delete": "_onPlaceableDocumentDeletion",
+
+    draw: "_onPlaceableDraw",
+    refresh: "_onPlaceableRefresh",
+    destroy: "_onPlaceableDestroy"
+  }
+
+  // static HOOKS_TO_USE = []; // Must be defined by child class.
 
   /**
    * Change keys in that indicate a relevant change to the placeable document.
@@ -87,7 +91,9 @@ export class AbstractPlaceableTracker {
    * @param {Partial<DatabaseDeleteOperation>} options Additional options which modified the deletion request
    * @param {string} userId                           The ID of the User who triggered the deletion workflow
    */
-  // Unused static _onPlaceableDocumentDeletion(_placeableD, _options, _userId) {}
+  static _onPlaceableDocumentDeletion(_placeableD, _options, _userId) {
+    // No object available to destroy from here unless stored elsewhere.
+  }
 
   /**
    * A hook event that fires when a {@link PlaceableObject} is initially drawn.
@@ -117,7 +123,11 @@ export class AbstractPlaceableTracker {
    * A hook event that fires when a {@link PlaceableObject} is destroyed.
    * @param {PlaceableObject} object    The object instance being destroyed
    */
-  // Unused static _onPlaceableDestroy(placeable) {}
+  static _onPlaceableDestroy(placeable) {
+    const handler = placeable[GEOMETRY_LIB_ID]?.[this.ID];
+    if ( !handler ) return;
+    handler.destroy();
+  }
 
   // ----- NOTE: Register Hooks ----- //
 
@@ -132,17 +142,9 @@ export class AbstractPlaceableTracker {
     const hooks = [];
     this._hooks.set(this.name, hooks);
 
-    const HOOKS = {}
-    if ( this.DOCUMENT_KEYS.size ) {
-      HOOKS[`create${this.PLACEABLE_NAME}`] = "_onPlaceableDocumentCreation";
-      HOOKS[`update${this.PLACEABLE_NAME}`] = "_onPlaceableDocumentUpdate";
-    }
-    if ( this.REFRESH_FLAGS.size ) {
-      HOOKS[`draw${this.PLACEABLE_NAME}`] = "_onPlaceableDraw";
-      HOOKS[`refresh${this.PLACEABLE_NAME}`] = "_onPlaceableRefresh";
-    }
-
-    for ( const [name, methodName] of Object.entries(HOOKS) ) {
+    for ( const hookType of this.HOOKS_TO_USE ) {
+      const name = `${hookType}${this.PLACEABLE_NAME}`;
+      const methodName = this.HOOK_TYPES[hookType];
       const id = Hooks.on(name, this[methodName].bind(this));
       hooks.push({ name, methodName, id });
     }
@@ -165,6 +167,46 @@ export class AbstractPlaceableTracker {
     placeables.forEach(placeable => this.create(placeable));
   }
 
+  static create(placeable) {
+    const obj = placeable[GEOMETRY_LIB_ID] ??= {};
+
+    // Singleton. If this tracker already exists, keep it.
+    if ( obj[this.ID] ) return obj[this.ID];
+
+    const out = new this(placeable);
+    obj[this.ID] = out;
+    super.create(placeable);
+
+    out.initialize();
+    out.update();
+  }
+
+  /* Class must define:
+  static HOOKS_TO_USE;
+
+  static create() { }
+
+  initialize() { }
+
+  update() { }
+  */
+}
+
+
+
+/**
+ * The abstract tracker handles incrementing a counter for a set
+ * of update keys. Keys can be either refresh keys or document property keys.
+ */
+class AbstractPlaceableTracker {
+  /**
+   * The tracker will be saved at placeable[GEOMETRY_LIB_ID][ID] with updateId property.
+   * @type {string}
+   */
+  static ID;
+
+  static HOOKS_TO_USE = ["create", "update"];
+
   // ----- NOTE: Constructor ----- //
 
   /** @type {Placeable} */
@@ -174,20 +216,9 @@ export class AbstractPlaceableTracker {
     this.placeable = placeable;
   }
 
-  static create(placeable) {
-    const obj = placeable[GEOMETRY_LIB_ID] ??= {};
+  static create(placeable) { }
 
-    // Singleton. If this tracker already exists, keep it.
-    if ( obj[this.ID] ) return obj[this.ID];
-
-    const out = new this(placeable);
-    obj[this.ID] = out;
-    out.initialize();
-    // out.update();
-    return out;
-  }
-
-  initialize() { this.update(); }
+  initialize() { }
 
   /**
    * Increment every time there is an update.
@@ -197,10 +228,10 @@ export class AbstractPlaceableTracker {
 
   get updateId() { return this.#updateId; }
 
-  update() {
-    this.#updateId += 1;
-  }
+  update() { this.#updateId += 1; }
 }
+
+export class PlaceableTracker extends mix(AbstractPlaceableTracker).with(PlaceableHooksMixin) { }
 
 /* Testing
 tracking = CONFIG.GeometryLib.lib.placeableTracking
