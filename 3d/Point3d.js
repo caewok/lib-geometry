@@ -35,7 +35,7 @@ PIXI
 import { PoolableMixin } from "../Pool.js";
 import { mix } from "../mixwith.js";
 import { Matrix } from "../Matrix.js";
-import { gridUnitsToPixels, roundDecimals } from "../util.js";
+import { gridUnitsToPixels, roundDecimals, roundNearWhole } from "../util.js";
 
 /**
  * 3-D version of PIXI.Point

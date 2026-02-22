@@ -6,7 +6,7 @@ foundry
 "use strict";
 
 import { Pool, PoolableMixin } from "../Pool.js";
-import { roundDecimals as roundDecimalsNumber } from "../util.js";
+import { roundDecimals as roundDecimalsNumber, roundNearWhole as roundNearWholeNumber } from "../util.js";
 import { mix } from "../mixwith.js";
 
 export const PATCHES = {};
@@ -63,8 +63,8 @@ function roundDecimals(places = 0) {
  * @returns {this}
  */
 function roundNearWhole(epsilon) {
-  this.x = roundNearWhole(this.x, epsilon);
-  this.y = roundNearWhole(this.y, epsilon);
+  this.x = roundNearWholeNumber(this.x, epsilon);
+  this.y = roundNearWholeNumber(this.y, epsilon);
   return this;
 }
 
