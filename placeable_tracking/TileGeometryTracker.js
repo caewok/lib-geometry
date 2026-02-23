@@ -320,10 +320,12 @@ export class TileGeometryTracker extends mix(PlaceableGeometryTracker).with(
    * Ignores intersections behind the ray.
    * @param {Point3d} rayOrigin
    * @param {Point3d} rayDirection
-   * @param {number} [cutoff=1]   Ignore hits further along the ray from this (treat ray as segment)
-   * @returns {number|null} The distance along the ray
+   * @param {object} [opts]
+   * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
+   * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
+   * @returns {number|null} The distance along the ray, as a multiple of rayDirection
    */
-  rayIntersection(rayOrigin, rayDirection, { minT = 0, maxT = Number.POSITIVE_INFINITY } = {}) {
+  rayIntersection(rayOrigin, rayDirection, { minT = 0, maxT = 1 } = {}) {
     // Top and bottom are the same (just opposite orientations) and so only need to test one.
     const t = this.faces.top.intersectionT(rayOrigin, rayDirection);
     if ( t !== null && almostBetween(t, minT, maxT) ) {

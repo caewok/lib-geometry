@@ -380,12 +380,14 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
    * Ignores intersections behind the ray.
    * @param {Point3d} rayOrigin
    * @param {Point3d} rayDirection
-   * @param {number} [cutoff=1]   Ignore hits further along the ray from this (treat ray as segment)
-   * @returns {number|null} The distance along the ray
+   * @param {object} [opts]
+   * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
+   * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
+   * @returns {number|null} The distance along the ray, as a multiple of rayDirection
    */
   rayIntersection(rayOrigin, rayDirection, opts) { return this.constructor.rayIntersectionForFaces(this.iterateFaces(), rayOrigin, rayDirection, opts); }
 
-  static rayIntersectionForFaces(iter, rayOrigin, rayDirection, { minT = 0, maxT = Number.POSITIVE_INFINITY } = {}) {
+  static rayIntersectionForFaces(iter, rayOrigin, rayDirection, { minT = 0, maxT = 1 } = {}) {
     for ( const face of iter ) {
       const t = face.intersectionT(rayOrigin, rayDirection);
       if ( t !== null && almostBetween(t, minT, maxT) ) return t;
