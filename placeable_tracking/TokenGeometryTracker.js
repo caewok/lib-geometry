@@ -55,7 +55,7 @@ const TokenConstrainedFacesMixin = superclass => class extends superclass {
   };
 
   get constrainedFaces() {
-    return this.isConstrained ? this._constrainedFaced : this.faces;
+    return this.isConstrained ? this._constrainedFaces : this.faces;
   }
 
   /**
@@ -74,6 +74,7 @@ const TokenConstrainedFacesMixin = superclass => class extends superclass {
   }
 
   updateConstrainedFaces() {
+    if ( !this.isConstrained ) return;
     const SPACER = this.constructor.SPACER;
     const token = this.token;
     const poly = token.constrainedTokenBorder.toPolygon();

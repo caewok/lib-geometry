@@ -115,7 +115,7 @@ export class Ellipse extends PIXI.Ellipse {
    * @returns {PIXI.Point}
    */
   _fromCartesianCoords(a, outPoint) {
-    outPoint ??= new PIXI.Point();
+    outPoint ??= PIXI.Point.tmp;
     a = PIXI.Point.fromObject(a);
     a.add(-this.x, -this.y, outPoint);
     PIXI.Point.rotate(outPoint, -this.radians, outPoint);
@@ -129,7 +129,7 @@ export class Ellipse extends PIXI.Ellipse {
    * @returns {Point}
    */
   _toCartesianCoords(a, outPoint) {
-    outPoint ??= new PIXI.Point();
+    outPoint ??= PIXI.Point.tmp;
     a = PIXI.Point.fromObject(a);
     PIXI.Point.rotate(a, this.radians, outPoint)
     outPoint.add(this.x, this.y, outPoint);

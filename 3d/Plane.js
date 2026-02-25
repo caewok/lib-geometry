@@ -335,7 +335,7 @@ export class Plane {
     const denom = this.denom2d;
     const { numU, numV } = (this.numeratorFn2d).call(this, pt);
 
-    return new PIXI.Point(numU / denom, numV / denom);
+    return PIXI.Point.tmp.set(numU / denom, numV / denom);
   }
 
   /**

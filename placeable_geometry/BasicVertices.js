@@ -687,7 +687,7 @@ export class VerticalQuadVertices extends BasicVertices {
     const dy = b.y - a.y;
     const dx = b.x - a.x;
     const radians = Math.atan2(dy, dx) + Math.toRadians(rotateZ);
-    const center = new PIXI.Point(a.x + (dx / 2), a.y + (dy / 2));
+    const center = PIXI.Point.tmp.set(a.x + (dx / 2), a.y + (dy / 2));
     const length = PIXI.Point.distanceBetween(a, b);
 
     // Build transform matrix.
@@ -1159,7 +1159,7 @@ export class Hex3dVertices extends Polygon3dVertices {
 
     // Convert to 3d polygon vertices.
     opts.useFan = true;
-    opts.centroid = new PIXI.Point(0, 0); // Centered at 0, 0.
+    opts.centroid = PIXI.Point.tmp.set(0, 0); // Centered at 0, 0.
     return super.calculateVertices(poly, opts);
   }
 

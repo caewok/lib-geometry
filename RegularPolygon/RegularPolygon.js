@@ -199,7 +199,7 @@ export class RegularPolygon extends PIXI.Polygon {
    */
   fromCartesianCoords(a, outPoint) {
     const { x, y } = this.origin;
-    outPoint ??= new PIXI.Point;
+    outPoint ??= PIXI.Point.tmp;
     a.add(-x, -y, outPoint);
     PIXI.Point.rotate(outPoint, -this.radians, outPoint);
     return outPoint;
@@ -213,7 +213,7 @@ export class RegularPolygon extends PIXI.Polygon {
    */
   toCartesianCoords(a, outPoint) {
     const { x, y } = this.origin;
-    outPoint ??= new PIXI.Point;
+    outPoint ??= PIXI.Point.tmp;
     PIXI.Point.rotate(a, this.radians, outPoint);
     outPoint.add(x, y, outPoint);
     return outPoint;
@@ -226,7 +226,7 @@ export class RegularPolygon extends PIXI.Polygon {
    * @returns {boolean} True if point {x,y} is contained within the shape.
    */
   contains(x, y) {
-    const pt = this.fromCartesianCoords(new PIXI.Point(x, y));
+    const pt = this.fromCartesianCoords(PIXI.Point.tmp.set(x, y));
 
     // Test the outer and inner circles
     if ( !this.outerCircle.contains(pt.x, pt.y) ) return false;

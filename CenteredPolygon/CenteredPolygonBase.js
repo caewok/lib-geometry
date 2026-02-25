@@ -150,7 +150,7 @@ export class CenteredPolygonBase extends PIXI.Polygon {
    * @returns {PIXI.Point}
    */
   fromCartesianCoords(a, outPoint) {
-    outPoint ??= new PIXI.Point;
+    outPoint ??= PIXI.Point.tmp;
     a.add(-this.x, -this.y, outPoint)
     PIXI.Point.rotate(outPoint, -this.radians, outPoint);
     return outPoint;
@@ -163,7 +163,7 @@ export class CenteredPolygonBase extends PIXI.Polygon {
    * @returns {Point}
    */
   toCartesianCoords(a, outPoint) {
-    outPoint ??= new PIXI.Point;
+    outPoint ??= PIXI.Point.tmp;
     PIXI.Point.rotate(pt, this.radians, outPoint);
     outPoint.add(this.x, this.y, outPoint);
     return outPoint;

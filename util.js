@@ -130,7 +130,7 @@ export function elevationForUnit(k) { return roundNearWhole(k * canvas.scene.dim
  *  - y: Elevation in pixel units
  */
 function to2dCutaway(currPt, start, end, outPoint) {
-  outPoint ??= new PIXI.Point();
+  outPoint ??= PIXI.Point.tmp;
   const distCS = PIXI.Point.distanceSquaredBetween(currPt, start);
 
   const pt = outPoint.set(distCS, currPt.z);
@@ -825,7 +825,7 @@ export function bresenhamLine3d(x1, y1, z1, x2, y2, z2) {
  * @returns {Iterator<PIXI.Point>}
  */
 export function* bresenhamLineIterator(a, b) {
-  yield new PIXI.Point(a.x, a.y);
+  yield PIXI.Point.tmp.set(a.x, a.y);
 
   let x1 = Math.round(a.x);
   let y1 = Math.round(a.y);
@@ -855,7 +855,7 @@ export function* bresenhamLineIterator(a, b) {
     y1 += incY;
 
     // Return the point.
-    yield new PIXI.Point(Math.round(x1), Math.round(y1));
+    yield PIXI.Point.tmp.set(Math.round(x1), Math.round(y1));
   }
 }
 
@@ -870,7 +870,7 @@ export function* bresenhamLineIterator(a, b) {
  * @testing
  */
 export function* bresenhamLine3dIterator(a, b) {
-  yield new PIXI.Point(a.x, a.y);
+  yield PIXI.Point.tmp.set(a.x, a.y);
 
   let x1 = Math.round(a.x);
   let y1 = Math.round(a.y);
@@ -910,7 +910,7 @@ export function* bresenhamLine3dIterator(a, b) {
       z1 += incZ;
 
       // Return the point.
-      yield new CONFIG[GEOMETRY_LIB_ID].lib.threeD.Point3d(Math.round(x1), Math.round(y1), Math.round(z1));
+      yield Point3d.tmp.set(Math.round(x1), Math.round(y1), Math.round(z1));
     }
   } else {
     // Iterate through the line
@@ -921,7 +921,7 @@ export function* bresenhamLine3dIterator(a, b) {
       z1 += incZ;
 
       // Return the point.
-      yield new CONFIG[GEOMETRY_LIB_ID].lib.threeD.Point3d(Math.round(x1), Math.round(y1), Math.round(z1));
+      yield Point3d.tmp.set(Math.round(x1), Math.round(y1), Math.round(z1));
     }
   }
 }
@@ -1250,12 +1250,12 @@ export function findOverlappingPoints(a, b, c, d) {
   const cdx = Math.minMax(c.x, d.x);
   const cdy = Math.minMax(c.y, d.y);
 
-  const p0 = new PIXI.Point(
+  const p0 = PIXI.Point.tmp.set(
     Math.max(abx.min, cdx.min),
     Math.max(aby.min, cdy.min)
   );
 
-  const p1 = new PIXI.Point(
+  const p1 = PIXI.Point.tmp.set(
     Math.min(abx.max, cdx.max),
     Math.min(aby.max, cdy.max)
   );

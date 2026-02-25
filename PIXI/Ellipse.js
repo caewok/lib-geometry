@@ -42,7 +42,7 @@ function scaledArea({scalingFactor = 1} = {}) {
  * @returns {PIXI.Point}
  */
 function _fromCartesianCoords(a, outPoint) {
-  outPoint ??= new PIXI.Point();
+  outPoint ??= PIXI.Point.tmp;
   a = PIXI.Point.fromObject(a);
   a.add(-this.x, -this.y, outPoint);
   PIXI.Point.rotate(outPoint, -this.radians, outPoint);
@@ -56,7 +56,7 @@ function _fromCartesianCoords(a, outPoint) {
  * @returns {Point}
  */
 function _toCartesianCoords(a, outPoint) {
-  outPoint ??= new PIXI.Point();
+  outPoint ??= PIXI.Point.tmp;
   a = PIXI.Point.fromObject(a);
   PIXI.Point.rotate(a, this.radians, outPoint);
   outPoint.add(this.x, this.y, outPoint);
@@ -64,7 +64,7 @@ function _toCartesianCoords(a, outPoint) {
 }
 
 function _toCircleCoords(a, outPoint) {
-  outPoint ??= new PIXI.Point();
+  outPoint ??= PIXI.Point.tmp;
   const ratio = this.height / this.width;
 
   outPoint.x = a.x * ratio;
@@ -73,7 +73,7 @@ function _toCircleCoords(a, outPoint) {
 }
 
 function _fromCircleCoords(a, outPoint) {
-  outPoint ??= new PIXI.Point();
+  outPoint ??= PIXI.Point.tmp;
   const ratio = this.width / this.height;
   outPoint.x = a.x * ratio;
   outPoint.y = a.y;
@@ -127,17 +127,15 @@ function toPolygon({ density } = {}) {
   const cirPts = cirPoly.points;
   const ln = cirPts.length;
   const pts = Array(ln);
+  using cirPt = PIXI.Point.tmp;
+  using ePt = PIXI.Point.tmp;
   for ( let i = 0; i < ln; i += 2 ) {
-    const cirPt = new PIXI.Point(cirPts[i], cirPts[i + 1]);
-    const ePt = new PIXI.Point();
-
+    cirPt.set(cirPts[i], cirPts[i + 1]);
     this._fromCircleCoords(cirPt, ePt);
     this._toCartesianCoords(ePt, ePt);
-
     pts[i] = ePt.x;
     pts[i+1] = ePt.y;
   }
-
   cirPoly.points = pts;
   return cirPoly;
 }
@@ -373,7 +371,7 @@ function almostEqual(other, epsilon = 1e-08) {
 function pointAtAngle(radians) {
   const x = this.x + (this.width * Math.cos(radians));
   const y = this.y + (this.height * Math.sin(radians));
-  return new PIXI.Point(x, y);
+  return PIXI.Point.tmp.set(x, y);
 }
 
 /**

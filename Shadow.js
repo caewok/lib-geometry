@@ -273,10 +273,10 @@ export class ShadowProjection {
 
     const srcOrigin = this.sourceOrigin;
 
-    const topShadow = { A: new Point3d(0, 0, planeZ), B: new Point3d(0, 0, planeZ) };
+    const topShadow = { A: Point3d.tmp.set(0, 0, planeZ), B: Point3d.tmp.set(0, 0, planeZ) };
     const bottomShadow = {
-      A: new Point3d(pts.A.bottom.x, pts.A.bottom.y, planeZ),
-      B: new Point3d(pts.B.bottom.x, pts.B.bottom.y, planeZ)
+      A: Point3d.tmp.set(pts.A.bottom.x, pts.A.bottom.y, planeZ),
+      B: Point3d.tmp.set(pts.B.bottom.x, pts.B.bottom.y, planeZ)
     };
 
     if ( pts.A.top.z >= sourceZ ) {
@@ -492,7 +492,7 @@ export class ShadowProjection {
    * @param {Point3d} v
    * @returns {Point3d}
    */
-  _intersectionWith(v, outPoint = new Point3d()) {
+  _intersectionWith(v, outPoint = Point3d.tmp) {
     return this.shadowMatrix.multiplyPoint3d(v, outPoint);
   }
 
@@ -767,13 +767,13 @@ export class Shadow extends PIXI.Polygon {
       // Can use the intersection point: will create a triangle shadow.
       // (Think flagpole shadow.)
       if ( A.z < ixAB.z ) {
-        const newA = new Point3d();
+        const newA = Point3d.tmp;
         const t = B.projectToAxisValue(A, 0, "z", newA);
         if ( !t || t < 0 || t > 1 ) return null; // Wall portion completely behind surface.
         if ( newA.almostEqual(B) ) return null;
         A = newA;
       } else if ( B.z < ixAB.z ) {
-        const newB = new Point3d();
+        const newB = Point3d.tmp;
         const t = A.projectToAxisValue(B, 0, "z", newB);
         if ( !t || t < 0 || t > 1 ) return null; // Wall portion completely behind surface.
         if ( newB.almostEqual(A) ) return null;
@@ -864,8 +864,8 @@ export class Shadow extends PIXI.Polygon {
     if ( origin.z <= C.z ) return null; // Viewer is below the wall bottom.
 
     // Because the surfacePlane is parallel to XY, we can infer the intersection of the wall.
-    const ixAC = new Point3d(A.x, A.y, surfacePlane.point.z);
-    const ixBD = new Point3d(B.x, B.y, surfacePlane.point.z);
+    const ixAC = Point3d.tmp.set(A.x, A.y, surfacePlane.point.z);
+    const ixBD = Point3d.tmp.set(B.x, B.y, surfacePlane.point.z);
 
     const ixOriginA = wallPointSurfaceIntersection(A, origin, surfacePlane);
     const ixOriginB = wallPointSurfaceIntersection(B, origin, surfacePlane);
@@ -1057,7 +1057,7 @@ function wallPointSurfaceIntersection(A, origin, surfacePlane) {
   // Viewer is below top of the wall, so find far point to use
   const maxR2 = Math.pow(canvas.dimensions.maxR, 2);
   const rA = Ray.towardsPointSquared(origin, A, maxR2);
-  const pA = new Point3d(rA.B.x, rA.B.y, origin.z);
+  const pA = Point3d.tmp.set(rA.B.x, rA.B.y, origin.z);
   return surfacePlane.lineIntersection(pA, Shadow.upV);
 }
 

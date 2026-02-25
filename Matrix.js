@@ -356,7 +356,7 @@ class AbstractMatrix {
    * @param {Point3d} [options.outPoint]    Placeholder for the new Point.
    * @returns {PIXI.Point}
    */
-  toPoint2d({ xIndex = 0, yIndex = 1, homogenous = true, outPoint = new PIXI.Point() } = {}) {
+  toPoint2d({ xIndex = 0, yIndex = 1, homogenous = true, outPoint = PIXI.Point.tmp } = {}) {
     const arr = this.arr;
     outPoint.x = arr[xIndex];
     outPoint.y = arr[yIndex];
@@ -380,7 +380,7 @@ class AbstractMatrix {
    * @param {Point3d} [options.outPoint]    Placeholder for the new Point3d.
    * @returns {PIXI.Point}
    */
-  toPoint3d({ xIndex = 0, yIndex = 1, zIndex = 2, homogenous = true, outPoint = new Point3d() } = {}) {
+  toPoint3d({ xIndex = 0, yIndex = 1, zIndex = 2, homogenous = true, outPoint = Point3d.tmp } = {}) {
     const arr = this.arr;
     outPoint.x = arr[xIndex];
     outPoint.y = arr[yIndex];
@@ -1120,7 +1120,7 @@ class AbstractMatrix {
    * @param {Point3d} outPoint Optional point in which to store the result.
    * @returns {Point3d}
    */
-  multiplyPoint3d(point, outPoint = new Point3d()) {
+  multiplyPoint3d(point, outPoint = Point3d.tmp) {
 
     // For speed, assume _idx is (col * this.nrow) + row
     // Array organized col0, row0, row1, row2, ... col1, row0, row1, ...

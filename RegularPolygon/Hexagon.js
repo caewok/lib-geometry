@@ -102,12 +102,12 @@ export class Hexagon extends RegularPolygon {
 
     // Points at W and E
     return [
-      new PIXI.Point(radius, 0),
-      new PIXI.Point(r1_2, apothem),
-      new PIXI.Point(-r1_2, apothem),
-      new PIXI.Point(-radius, 0),
-      new PIXI.Point(-r1_2, -apothem),
-      new PIXI.Point(r1_2, -apothem)
+      PIXI.Point.tmp.set(radius, 0),
+      PIXI.Point.tmp.set(r1_2, apothem),
+      PIXI.Point.tmp.set(-r1_2, apothem),
+      PIXI.Point.tmp.set(-radius, 0),
+      PIXI.Point.tmp.set(-r1_2, -apothem),
+      PIXI.Point.tmp.set(r1_2, -apothem)
     ];
   }
 

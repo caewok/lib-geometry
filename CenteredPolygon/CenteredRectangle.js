@@ -57,7 +57,7 @@ export class CenteredRectangle extends CenteredPolygonBase {
       origin = PIXI.Point(0, 0);
     }
 
-    origin ??= new PIXI.Point(leftCorner.x + (width * 0.5), leftCorner.y + (height * 0.5));
+    origin ??= PIXI.Point.tmp.set(leftCorner.x + (width * 0.5), leftCorner.y + (height * 0.5));
 
     // Could use Square if already imported:
     // if ( width === height ) return new Square(origin, undefined, { rotation, width });
@@ -113,10 +113,10 @@ export class CenteredRectangle extends CenteredPolygonBase {
     const h1_2 = height * 0.5;
 
     return [
-      new PIXI.Point(-w1_2, -h1_2),
-      new PIXI.Point(w1_2, -h1_2),
-      new PIXI.Point(w1_2, h1_2),
-      new PIXI.Point(-w1_2, h1_2)
+      PIXI.Point.tmp.set(-w1_2, -h1_2),
+      PIXI.Point.tmp.set(w1_2, -h1_2),
+      PIXI.Point.tmp.set(w1_2, h1_2),
+      PIXI.Point.tmp.set(-w1_2, h1_2)
     ];
   }
 

@@ -223,7 +223,7 @@ export class Polygon3d {
     if ( out ) out.points.length = n;
     else out = new this(n);
     for ( let i = 0; i < n; i += 1 ) {
-      const outPt = out.points[i] ??= new Point3d()
+      const outPt = out.points[i] ??= Point3d.tmp;
       outPt.copyFrom(pts[i]);
     }
     return out;

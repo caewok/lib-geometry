@@ -84,7 +84,7 @@ export class RegularStar extends RegularPolygon {
       for ( let i = 0; i < ln; i += 2 ) {
         // Rotate the inner points by half the angle between the outer points
         // So the inner point lies halfway between two outerpoints
-        const pt = new PIXI.Point(pts[i], pts[i + 1]);
+        const pt = PIXI.Point.tmp.set(pts[i], pts[i + 1]);
         PIXI.Point.rotate(pt, angle, pt);
         this._innerPoints.push(pt);
       }

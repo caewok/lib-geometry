@@ -46,9 +46,9 @@ export class EquilateralTriangle extends RegularPolygon {
     const sqrt3_2 = Math.SQRT3 / 2;
     const { radius, apothem } = this;
     return [
-      new PIXI.Point(radius, 0),
-      new PIXI.Point(-apothem, sqrt3_2 * radius),
-      new PIXI.Point(-apothem, -sqrt3_2 * radius)
+      PIXI.Point.tmp.set(radius, 0),
+      PIXI.Point.tmp.set(-apothem, sqrt3_2 * radius),
+      PIXI.Point.tmp.set(-apothem, -sqrt3_2 * radius)
     ];
   }
 

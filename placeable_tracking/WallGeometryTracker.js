@@ -144,7 +144,7 @@ export class WallGeometryTracker extends mix(PlaceableGeometryTracker).with(Plac
    * @returns {PIXI.Point}
    */
   static edgeCenter(edge) {
-    const ctr = new PIXI.Point();
+    const ctr = PIXI.Point.tmp;
     return edge.a.add(edge.b, ctr).multiplyScalar(0.5, ctr);
   }
 

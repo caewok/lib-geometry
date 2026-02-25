@@ -72,9 +72,9 @@ export class TriangleSplitter {
    * Create a vertical cutting plane along the a|b 2d overhead segment.
    */
   static from2dPoints(a, b, keepCW = true) {
-    const a3 = new Point3d(a.x, a.y, 0);
-    const b3 = new Point3d(b.x, b.y, 0);
-    const c3 = new Point3d(a.x, a.y, 1);
+    const a3 = Point3d.tmp.set(a.x, a.y, 0);
+    const b3 = Point3d.tmp.set(b.x, b.y, 0);
+    const c3 = Point3d.tmp.set(a.x, a.y, 1);
     const plane = new Plane.fromPoints(a3, b3, c3);
     return new this(plane, keepCW);
   }
