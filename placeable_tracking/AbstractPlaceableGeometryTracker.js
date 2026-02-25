@@ -389,6 +389,7 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
 
   static rayIntersectionForFaces(iter, rayOrigin, rayDirection, { minT = 0, maxT = 1 } = {}) {
     for ( const face of iter ) {
+      if ( !face.isFacing(rayOrigin) ) continue;
       const t = face.intersectionT(rayOrigin, rayDirection);
       if ( t !== null && almostBetween(t, minT, maxT) ) return t;
     }
