@@ -117,7 +117,8 @@ export class Ellipse extends PIXI.Ellipse {
   _fromCartesianCoords(a, outPoint) {
     outPoint ??= new PIXI.Point();
     a = PIXI.Point.fromObject(a);
-    a.translate(-this.x, -this.y, outPoint).rotate(-this.radians, outPoint);
+    a.add(-this.x, -this.y, outPoint);
+    PIXI.Point.rotate(outPoint, -this.radians, outPoint);
     return outPoint;
   }
 
@@ -130,7 +131,8 @@ export class Ellipse extends PIXI.Ellipse {
   _toCartesianCoords(a, outPoint) {
     outPoint ??= new PIXI.Point();
     a = PIXI.Point.fromObject(a);
-    a.rotate(this.radians, outPoint).translate(this.x, this.y, outPoint);
+    PIXI.Point.rotate(a, this.radians, outPoint)
+    outPoint.add(this.x, this.y, outPoint);
     return outPoint;
   }
 
@@ -225,7 +227,8 @@ export class Ellipse extends PIXI.Ellipse {
     // Align this ellipse to the axis at 0,0 and rotate to 0º.
     // I.e, move the circle and then rotate it.
     using cirCtr = PIXI.Point.tmp;
-    circle.center.translate(-this.x, -this.y, cirCtr).rotate(-this.radians, cirCtr);
+    circle.center.add(-this.x, -this.y, cirCtr);
+    PIXI.Point.rotate(cirCtr, -this.radians, cirCtr);
     return this.constructor.quickEllipsesOverlapTest(
       0, 0, this.majorRadius, this.minorRadius,
       cirCtr.x, cirCtr.y, circle.radius, circle.radius

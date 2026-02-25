@@ -44,8 +44,8 @@ function scaledArea({scalingFactor = 1} = {}) {
 function _fromCartesianCoords(a, outPoint) {
   outPoint ??= new PIXI.Point();
   a = PIXI.Point.fromObject(a);
-
-  a.translate(-this.x, -this.y, outPoint);
+  a.add(-this.x, -this.y, outPoint);
+  PIXI.Point.rotate(outPoint, -this.radians, outPoint);
   return outPoint;
 }
 
@@ -58,8 +58,8 @@ function _fromCartesianCoords(a, outPoint) {
 function _toCartesianCoords(a, outPoint) {
   outPoint ??= new PIXI.Point();
   a = PIXI.Point.fromObject(a);
-
-  a.translate(this.x, this.y, outPoint);
+  PIXI.Point.rotate(a, this.radians, outPoint);
+  outPoint.add(this.x, this.y, outPoint);
   return outPoint;
 }
 

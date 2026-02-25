@@ -487,7 +487,7 @@ export class LocalCoordinateCache extends AABB2d {
     center = rect.center;
     for ( let i = 0; i < offsets.length; i += 2 ) {
       tmpPt.copyFrom({ x: offsets[i], y: offsets[i + 1] });
-      tmpPt.translate(center.x, center.y, tmpPt);
+      tmpPt.add(center.x, center.y, tmpPt);
       Draw.point(tmpPt, { radius: 1 })
       if ( !rect.contains(tmpPt.x, tmpPt.y) )
       log(`Rectangle does not contain {tmpPt.x},${tmpPt.y} (${offsets[i]},${offsets[i+1]})`)
@@ -590,7 +590,7 @@ export class LocalCoordinateCache extends AABB2d {
     center = poly.getBounds().center;
     for ( let i = 0; i < offsets.length; i += 2 ) {
       tmpPt.copyFrom({ x: offsets[i], y: offsets[i + 1] });
-      tmpPt.translate(center.x, center.y, tmpPt);
+      tmpPt.add(center.x, center.y, tmpPt);
       Draw.point(tmpPt, { radius: 1 })
       if ( !poly.contains(tmpPt.x, tmpPt.y) )
       log(`Poly does not contain {tmpPt.x},${tmpPt.y} (${offsets[i]},${offsets[i+1]})`)

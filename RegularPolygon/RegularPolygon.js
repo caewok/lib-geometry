@@ -200,7 +200,8 @@ export class RegularPolygon extends PIXI.Polygon {
   fromCartesianCoords(a, outPoint) {
     const { x, y } = this.origin;
     outPoint ??= new PIXI.Point;
-    a.translate(-x, -y, outPoint).rotate(-this.radians, outPoint);
+    a.add(-x, -y, outPoint);
+    PIXI.Point.rotate(outPoint, -this.radians, outPoint);
     return outPoint;
   }
 
@@ -213,7 +214,8 @@ export class RegularPolygon extends PIXI.Polygon {
   toCartesianCoords(a, outPoint) {
     const { x, y } = this.origin;
     outPoint ??= new PIXI.Point;
-    a.rotate(this.radians, outPoint).translate(x, y, outPoint);
+    PIXI.Point.rotate(a, this.radians, outPoint);
+    outPoint.add(x, y, outPoint);
     return outPoint;
   }
 

@@ -483,13 +483,14 @@ function projectToAxisValue(other, value, coordinate, outPoint) {
 }
 
 /**
- * Rotate a point around a given angle
+ * Rotate a 2d point around a given angle from the origin.
+ * @param {PIXI.Point} pt   Point to rotate
  * @param {number} angle  In radians
- * @param {Point3d|PIXI.Point} [outPoint] A point-like object to store the result.
- * @returns {Point} A new point
+ * @param {PIXI.Point} [outPoint] A point-like object to store the result.
+ * @returns {PIXI.Point} The outPoint
  */
-function rotate(angle, outPoint) {
-  outPoint ??= this.constructor.tmp;
+function rotate(pt, angle, outPoint) {
+  outPoint ??= pt.constructor.tmp;
   const cAngle = Math.cos(angle);
   const sAngle = Math.sin(angle);
   const { x, y } = this; // Avoid accidentally using the outPoint values when calculating new y.
@@ -498,19 +499,6 @@ function rotate(angle, outPoint) {
   return outPoint;
 }
 
-/**
- * Translate a point by a given dx, dy
- * @param {number} dx
- * @param {number} dy
- * @param {Point3d|PIXI.Point} [outPoint] A point-like object to store the result.
- * @returns {Point} A new point
- */
-function translate(dx, dy, outPoint) {
-  outPoint ??= this.constructor.tmp;
-  outPoint.x = this.x + dx;
-  outPoint.y = this.y + dy;
-  return outPoint;
-}
 
 /**
  * The effective maximum texture size that Foundry VTT "ever" has to worry about.
@@ -563,6 +551,7 @@ PATCHES.PIXI.STATIC_METHODS = {
   pointFromKey,
   invertKey: pointFromKey,  // Alias for backward compatibility.
   key: staticKey,
+  rotate,
 
   // Pool
   onRelease,
@@ -596,8 +585,6 @@ PATCHES.PIXI.METHODS = {
   towardsPoint,
   towardsPointSquared,
   projectToAxisValue,
-  translate,
-  rotate,
   roundDecimals,
   roundNearWhole,
   fromAngle,
@@ -616,3 +603,5 @@ PIXI.Point.prototype[Symbol.dispose] = function() {
   if ( !this.constructor._release ) return;
   this.constructor._release(this);
 }
+
+

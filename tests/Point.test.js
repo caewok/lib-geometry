@@ -95,7 +95,7 @@ describe("PIXI.Point Basic Extensions", () => {
       it("rotate() should rotate the point around the origin", () => {
         const p = new PIXI.Point(10, 0);
         const angle = Math.PI / 2; // 90 degrees
-        const res = p.rotate(angle);
+        const res = PIXI.Point.rotate(p, angle);
 
         expect(res.x).to.be.closeTo(0, 1e-8);
         expect(res.y).to.be.closeTo(10, 1e-8);

@@ -499,8 +499,8 @@ function pointsLattice({ spacing = 1, startAtEdge = false } = {}) {
  */
 function translate(dx, dy, out) {
   out ??= this.clone();
-  out.x -= dx;
-  out.y -= dy;
+  out.x += dx;
+  out.y += dy;
   return out;
 }
 
