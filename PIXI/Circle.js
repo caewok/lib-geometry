@@ -263,18 +263,6 @@ function quadraticIntersection(p0, p1, center, radius, epsilon=0) {
 }
 
 /**
- * Get all intersection points on this circle for a segment A|B
- * Intersections are sorted from A to B.
- * @param {Point} a             The first endpoint on segment A|B
- * @param {Point} b             The second endpoint on segment A|B
- * @returns {Point[]}           Points where the segment A|B intersects the circle
- */
-function segmentIntersections(a, b) {
-  const ixs = lineCircleIntersection(a, b, this, this.radius);
-  return ixs.intersections;
-};
-
-/**
  * Determine the intersection between a line segment and a circle.
  * @param {Point} a                   The first vertex of the segment
  * @param {Point} b                   The second vertex of the segment
@@ -418,8 +406,8 @@ PATCHES.PIXI.METHODS = {
   translate,
   scaledArea,
   lineSegmentIntersects,
+  lineCircleIntersection,
   segmentIntersectionsGeometric,
-  segmentIntersections,
   pointsLattice,
 
   // Equality
