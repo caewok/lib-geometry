@@ -86,9 +86,9 @@ function* iterateEdges({close = true} = {}) {
  * @returns {boolean}
  */
 function overlaps(shape) {
+  if ( shape instanceof PIXI.Rectangle ) { return this._overlapsRectangle(shape); }
   if ( shape instanceof PIXI.Polygon ) { return this._overlapsPolygon(shape); }
   if ( shape instanceof PIXI.Circle ) { return this._overlapsCircle(shape); }
-  if ( shape instanceof PIXI.Rectangle ) { return this._overlapsRectangle(shape); }
   if ( shape instanceof PIXI.Ellipse ) return shape._overlapsRectangle(this);
   if ( shape.toPolygon) return this._overlapsPolygon(shape.toPolygon());
   console.warn("overlaps|shape not recognized.", shape);
@@ -160,13 +160,13 @@ function _overlapsPolygon(poly) {
  */
 function _overlapsRectangle(rect) {
   // https://www.geeksforgeeks.org/find-two-rectangles-overlap
-  // One rectangle is completely above the other
-  if ( this.top > rect.bottom || rect.top > this.bottom ) return false;
+  return !(
+    // One rectangle is completely above the other
+    this.top > rect.bottom || rect.top > this.bottom ||
 
-  // One rectangle is completely to the left of the other
-  if ( this.left > rect.right || rect.left > this.right ) return false;
-
-  return true;
+    // One rectangle is completely to the left of the other
+    this.left > rect.right || rect.left > this.right
+  );
 }
 
 /**
