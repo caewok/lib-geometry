@@ -45,6 +45,17 @@ export class AABB2d {
   // max = new this.constructor.POINT_CLASS(Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY);
   max = this.constructor.POINT_CLASS.tmp;
 
+  // Getters to mirror expected data in PIXI.Rectangle. Mostly for Quadtree.
+
+  /** @type {PIXI.Point} */
+  get x() { return this.min.x; }
+
+  get y() { return this.min.y; }
+
+  get width() { return this.max.x - this.min.x; }
+
+  get height() { return this.max.y - this.min.y; }
+
   constructor() { this._clear(); }
 
   _clear() {
@@ -301,6 +312,19 @@ export class AABB2d {
   }
 
   /**
+   * Does this AABB overlap a PIXI.Rectangle?
+   * @param {PIXI.Rectangle} rect
+   * @returns {boolean}
+   */
+  overlapsRectangle(rect) {
+    // See overlapsAABB.
+    const xMinMax = Math.minMax(rect.left, rect.right);
+    const yMinMax = Math.minMax(rect.top, rect.bottom);
+    return !(this.max.x < xMinMax.min || xMinMax.max < this.min.x ||
+             this.max.y < yMinMax.min || yMinMax.max < this.min.y);
+  }
+
+  /**
    * Does this AABB overlap a wall or edge?
    * @param {Wall|Edge} edge
    * @returns {boolean}
@@ -384,10 +408,10 @@ export class AABB2d {
 
   toRectangle(out) {
     out ??= new PIXI.Rectangle();
-    out.x = this.min.x;
-    out.y = this.min.y;
-    out.width = this.min.y, this.max.x - this.min.x;
-    out.height = this.max.y - this.min.y;
+    out.x = this.x;
+    out.y = this.y;
+    out.width = this.width;
+    out.height = this.height;
     return out;
   }
 
@@ -430,3 +454,6 @@ export class AABB2d {
     draw.point(this.max, opts);
   }
 }
+
+// For consistency with PIXI.Rectangle
+AABB2d.prototype.overlaps = AABB2d.prototype.overlapsRectangle;
