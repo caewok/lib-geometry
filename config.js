@@ -182,6 +182,15 @@ function tokenIsAlive(token) { return !tokenIsDead(token); }
  * @returns {boolean} True if dead.
  */
 function tokenIsDead(token) {
+  // DemonLord using damage system.
+  if ( game.system.id === "demonlord") {
+    const health = Number(foundry.utils.getProperty(token, "actor.system.characteristics.health.max"));
+    const damage = Number(foundry.utils.getProperty(token, "actor.system.characteristics.health.value"));
+    const hp = health - damage;
+    return hp <= 0;
+  }
+
+  // Generic.
   const deadStatus = CONFIG.statusEffects.find(status => status.id === "dead");
   if ( deadStatus && token.actor.statuses.has(deadStatus.id) ) return true;
 
