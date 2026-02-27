@@ -908,8 +908,8 @@ Ex: 6 points, 6 outer edges.
     // Test that the segment between centroid and polygon point does not intersect another edge.
     centroid ??= poly.center;
     if ( !poly.contains(centroid.x, centroid.y) ) return false;
-    const lines = [...poly.iteratePoints({ close: false })].map(B => {
-      return { A: centroid, B };
+    const lines = [...poly.iteratePoints({ close: false })].map(b => {
+      return { a: centroid, b };
     });
     return !poly.linesCross(lines); // Lines cross ignores lines that only share endpoints.
   }
