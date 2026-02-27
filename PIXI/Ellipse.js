@@ -43,23 +43,19 @@ function scaledArea({scalingFactor = 1} = {}) {
  */
 function _fromCartesianCoords(a, outPoint) {
   outPoint ??= PIXI.Point.tmp;
-  a = PIXI.Point.fromObject(a);
-  a.add(-this.x, -this.y, outPoint);
-  PIXI.Point.rotate(outPoint, -this.radians, outPoint);
+  a.subtract(this, outPoint); // This has x,y properties, so can subtract.
   return outPoint;
 }
 
 /**
  * Shift to cartesian coordinates from the shape space.
- * @param {Point} a
+ * @param {PIXI.Point} a
  * @param {PIXI.Point} [outPoint] A point-like object to store the result.
  * @returns {Point}
  */
 function _toCartesianCoords(a, outPoint) {
   outPoint ??= PIXI.Point.tmp;
-  a = PIXI.Point.fromObject(a);
-  PIXI.Point.rotate(a, this.radians, outPoint);
-  outPoint.add(this.x, this.y, outPoint);
+  a.add(this, outPoint); // This has x,y properties, so can add.
   return outPoint;
 }
 
