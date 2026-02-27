@@ -27,6 +27,8 @@ class NullSet extends Set {
    console.error(`GeometryLib|Attempted to add ${value} to a NullSet.`, value);
    return this;
   }
+
+  intersection() { return this; } // Intersection with null set is always null.
 }
 export const NULL_SET = new NullSet();
 
