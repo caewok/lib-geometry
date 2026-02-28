@@ -53,8 +53,39 @@ export class Sphere {
     return this.aabb;
   }
 
+  clone(out) {
+    out ??= new this.constructor();
+    out.radius = this.radius;
+    out.center.copyFrom(this.center);
+    return out;
+  }
+
   contains(pt, epsilon = 1e-06) {
     return Point3d.distanceSquaredBetween(pt, this.center) < (this.radiusSquared + epsilon);
+  }
+
+  /**
+   * Transform the sphere using a transform matrix.
+   * Scales according to the largest axis to avoid transforming into an ellipsoid.
+   * @param {Matrix<4x4>} M         Transformation matrix
+   * @param {Sphere} out            A sphere to store the transformed values
+   * @returns {Sphere} The modified sphere.
+   */
+  transform(M, out) {
+    out ??= new this.constructor();
+    this.clone(out);
+
+    // Translate.
+    out.center = M.multiplyPoint3d(this.center);
+
+    // Scale. Extract length of the basis vectors (rows)
+    const sx = Math.hypot(M.arr[0], M.arr[1], M.arr[2]);
+    const sy = Math.hypot(M.arr[4], M.arr[5], M.arr[6]);
+    const sz = Math.hypot(M.arr[8], M.arr[9], M.arr[10]);
+    out.radius *= Math.max(sx, sy, sz);
+
+    // Rotation is ignored.
+    return out;
   }
 
   toCircle2d() { return new PIXI.Circle(this.center.x, this.center.y, this.radius); }
