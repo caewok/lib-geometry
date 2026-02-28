@@ -509,12 +509,13 @@ class RegionPolygonShapeGeometryTracker extends AbstractRegionShapeGeometryTrack
    */
   _initializePrototypeFaces() {
     // Center and scale polygon points to a 0.5 cube.
+    const poly = this.unrotatedShapePIXI ??= this.constructor.shapePIXI(this.shape, false);
     const polyCenter = poly.center;
     const bounds = poly.getBounds();
-    const poly = this.unrotatedShapePIXI
-      .translate(-polyCenter.x, polyCenter.y)
+    const unitPoly = poly
+      .translate(-polyCenter.x, -polyCenter.y)
       .scale(1/bounds.width, 1/bounds.height);
-    Polygon3d.fromPolygon(poly, 0.5, this._prototypeFaces.top);
+    Polygon3d.fromPolygon(unitPoly, 0.5, this._prototypeFaces.top);
     this._prototypeFaces.top.clone(this._prototypeFaces.bottom).reverseOrientation();
     this._prototypeFaces.bottom.setZ(-0.5);
     this._prototypeFaces.sides = this._prototypeFaces.top.buildTopSides(-0.5);
