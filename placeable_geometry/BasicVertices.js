@@ -1188,6 +1188,12 @@ export class Hex3dVertices extends Polygon3dVertices {
     hexColumns ??= canvas.scene.grid.columns;
     return `${shape}_${width}_${height}_${hexColumns}`;
   }
+
+  static polygonTopFaceForToken(token, { topZ, centroid, stride, useFan } = {}) {
+    const poly = this.hexagonalShapeForToken(token);
+    poly.scale(0.5/token.width, 0.5/token.height, poly);
+    return this._polygonTopFaceFan(poly, { topZ, centroid, stride });
+  }
 }
 
 export class Ellipse3dVertices extends Polygon3dVertices {
