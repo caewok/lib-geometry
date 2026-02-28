@@ -493,7 +493,7 @@ function rotate(pt, angle, outPoint) {
   outPoint ??= pt.constructor.tmp;
   const cAngle = Math.cos(angle);
   const sAngle = Math.sin(angle);
-  const { x, y } = this; // Avoid accidentally using the outPoint values when calculating new y.
+  const { x, y } = pt; // Avoid accidentally using the outPoint values when calculating new y.
   outPoint.x = (x * cAngle) - (y * sAngle);
   outPoint.y = (y * cAngle) + (x * sAngle);
   return outPoint;
