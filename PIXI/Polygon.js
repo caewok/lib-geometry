@@ -190,9 +190,9 @@ function isSegmentEnclosed(segment, { epsilon = 1e-08 } = {}) {
  * If the polygon is closed, the last two points will be ignored.
  * (Use close = true to return the last --> first edge.)
  * @param {object} [options]
- * @param {boolean} [close]   If true, return last point --> first point as edge.
- * @returns Return an object { a: {x, y}, b: {x, y}} for each edge
- * Edges link, such that edge0.a === edge.1.b.
+ * @param {boolean} [close]   If true, return last point --> first point as edge
+ * @returns { a: PIXI.Point, b: PIXI.Point }  Return an object for each edge.
+ * Edges link, such that edge0.a === edge.1.b. If close === true, the first point will be reused.
  */
 function* iterateEdges({close = true} = {}) {
   const ln = this.points.length;
@@ -216,7 +216,7 @@ function* iterateEdges({close = true} = {}) {
  * Iterate over the polygon's {x, y} points in order.
  * @param {object} [options]
  * @param {boolean} [options.close]   If close, include the first point again.
- * @returns {x, y} PIXI.Point
+ * @returns {PIXI.Point} Each point returned is distinct; if close === true, a new PIXI.Point is created.
  */
 function* iteratePoints({ close = true } = {}) {
   const ln = this.points.length;
@@ -453,8 +453,8 @@ function _overlapsPolygon(other) {
 
   if ( !polyBounds.overlaps(otherBounds) ) return false;
 
-  const pts1 = this.iteratePoints({ close: true });
-  let a = pts1.next().value;
+  const thisIter = this.iteratePoints({ close: true });
+  let a = thisIter.next().value;
   if ( !a ) {
     a.release();
     return false;
@@ -464,14 +464,11 @@ function _overlapsPolygon(other) {
     return true;
   }
 
-  for ( const b of pts1 ) {
-    if ( other.contains(b.x, b.y) ) {
-      PIXI.Point.release(a, b);
-      return true;
-    }
-    const pts2 = other.iteratePoints({ close: true });
-    let c = pts2.next().value;
-    for ( const d of pts2 ) {
+  for ( let b of thisIter ) {
+    if ( other.contains(b.x, b.y) ) return true;
+    const otherIter = other.iteratePoints({ close: true });
+    let c = otherIter.next().value;
+    for ( const d of otherIter ) {
       if ( foundry.utils.lineSegmentIntersects(a, b, c, d) || this.contains(d.x, d.y) ) {
         PIXI.Point.release(a, b, c, d);
         return true;
@@ -484,7 +481,6 @@ function _overlapsPolygon(other) {
     a = b;
   }
   a.release();
-
   return false;
 }
 
@@ -509,7 +505,6 @@ function _overlapsCircle(circle) {
     // Get point on the line closest to segment from circle center
     const c = foundry.utils.closestPointToSegment(circle, s.a, s.b);
     if ( circle.contains(c.x, c.y) ) return true;
-    s.a.release(); // B will become A, so don't release.
   }
 
   return false;
@@ -536,7 +531,6 @@ function _envelopsPolygon(poly) {
   const edges = poly.iterateEdges();
   for ( const edge of edges ) {
     if ( this.lineSegmentIntersects(edge.a, edge.b) ) return false;
-    edge.a.release(); // B will become A so don't release.
   }
   return true;
 }
@@ -666,11 +660,14 @@ function signedArea({ scalingFactor } = {}) {
  */
 function translate(dx, dy, out) {
   // Keep out points in case out === this.
-  out ??= this.clone();
-  out.length = this.points.length;
-  for (let i = 0, ln = this.points.length; i < ln; i += 2) {
-    out.points[i] = this.points[i] + dx;
-    out.points[i+1] = this.points[i + 1] + dy;
+  if ( !out ) out = this.clone();
+  else if ( out !== this ) out.points.length = this.points.length;
+
+  const pts = this.points;
+  const outPts = out.points;
+  for (let i = 0, ln = pts.length; i < ln; i += 2) {
+    outPts[i] = pts[i] + dx;
+    outPts[i+1] = pts[i + 1] + dy;
   }
   out._isPositive = this._isPositive;
   if ( this.bounds ) out.bounds = out.getBounds(); // Bounds will have changed due to translate
@@ -686,11 +683,14 @@ function translate(dx, dy, out) {
  */
 function scale(scaleX, scaleY, out) {
   // Keep out points in case out === this.
-  out ??= this.clone();
-  out.length = this.points.length;
-  for (let i = 0, ln = this.points.length; i < ln; i += 2) {
-    out.points[i] = this.points[i] * scaleX;
-    out.points[i+1] = this.points[i + 1] * scaleY;
+  if ( !out ) out = this.clone();
+  else if ( out !== this ) out.points.length = this.points.length;
+
+  const pts = this.points;
+  const outPts = out.points;
+  for (let i = 0, ln = pts.length; i < ln; i += 2) {
+    outPts[i] = pts[i] * scaleX;
+    outPts[i+1] = pts[i + 1] * scaleY;
   }
   out._isPositive = this._isPositive;
   if ( this.bounds ) out.bounds = out.getBounds(); // Bounds will have changed due to translate
@@ -705,12 +705,15 @@ function scale(scaleX, scaleY, out) {
  */
 function centerScale(scaleX = 1, scaleY = 1, out) {
   // Keep out points in case out === this.
-  out ??= this.clone();
-  out.length = this.points.length;
+  if ( !out ) out = this.clone();
+  else if ( out !== this ) out.points.length = this.points.length;
+
   const center = this.center;
-  for (let i = 0, ln = this.points.length; i < ln; i += 2) {
-    out.points[i] = ((this.points[i] - center.x) * scaleX) + center.x;
-    out.points[i+1] = ((this.points[i + 1] - center.y) * scaleY) + center.y;
+  const pts = this.points;
+  const outPts = out.points;
+  for (let i = 0, ln = pts.length; i < ln; i += 2) {
+    outPts[i] = ((pts[i] - center.x) * scaleX) + center.x;
+    outPts[i+1] = ((pts[i + 1] - center.y) * scaleY) + center.y;
   }
   out._isPositive = this._isPositive;
   if ( this.bounds ) out.bounds = out.getBounds(); // Bounds will have changed due to translate
@@ -892,15 +895,17 @@ function clean({epsilon = 1e-8, epsilonCollinear = 1e-12} = {}) {
   for ( const next of pts ) {
     if ( curr.almostEqual(prev, epsilon)
       || foundry.utils.orient2dFast(prev, curr, next).almostEqual(0, epsilonCollinear) ) {
-      curr.release(); curr = next;
+      curr.release();
+      curr = next;
       continue;
     }
     cleanPoints.push(curr.x, curr.y);
-
-    prev.release(); prev = curr;
-    curr.release(); curr = next;
+    prev.release();
+    prev = curr;
+    curr = next;
   }
-  prev.release(); curr.release();
+  prev.release();
+  curr.release();
 
   // Check for and remove closing point.
   const ln = cleanPoints.length;
@@ -961,20 +966,19 @@ function equals(other) {
   // Find the matching point
   const startPoint = thisPoints.next().value;
   const startIdx = otherPoints.findIndex(pt => pt.equals(startPoint));
+  startPoint.release();
   if ( !~startIdx ) return false;
 
   // Test each point sequentially from each array
   let k = startIdx + 1; // +1 b/c already tested startPoint.
   const nPoints = otherPoints.length;
-  for ( const thisPoint of thisPoints ) {
+  for ( using thisPoint of thisPoints ) {
     k = k % nPoints;
     if ( !thisPoint.equals(otherPoints[k]) ) {
-      thisPoint.release();
       PIXI.Point.release(...otherPoints);
       return false;
     }
     k += 1;
-    thisPoint.release();
   }
   PIXI.Point.release(...otherPoints);
   return true;
@@ -1000,20 +1004,19 @@ function almostEqual(other, epsilon = 1e-08) {
   // Find the matching point
   const startPoint = thisPoints.next().value;
   const startIdx = otherPoints.findIndex(pt => pt.equals(startPoint));
+  startPoint.release();
   if ( !~startIdx ) return false;
 
   // Test each point sequentially from each array
   let k = startIdx + 1; // +1 b/c already tested startPoint.
   const nPoints = otherPoints.length;
-  for ( const thisPoint of thisPoints ) {
+  for ( using thisPoint of thisPoints ) {
     k = k % nPoints;
     if ( !thisPoint.almostEqual(otherPoints[k], epsilon) ) {
-      thisPoint.release();
       PIXI.Point.release(...otherPoints);
       return false;
     }
     k += 1;
-    thisPoint.release();
   }
   PIXI.Point.release(...otherPoints);
   return true;
