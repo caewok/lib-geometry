@@ -24,7 +24,10 @@ export class Plane {
 
   get normal() { return this.#normal; }
 
-  set normal(value) { this.#normal.copyFrom(value).normalize(this.normal); }
+  set normal(value) {
+    this.#normal.copyFrom(value).normalize(this.normal);
+    if ( Number.isNaN(this.#normal.x) || Number.isNaN(this.#normal.x) || Number.isNaN(this.#normal.x) ) throw Error("Plane#normal is undefined.");
+  }
 
   /** @type {Point3d} */
   point = new Point3d();
