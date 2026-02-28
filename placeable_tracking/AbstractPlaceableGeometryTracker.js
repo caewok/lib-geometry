@@ -15,6 +15,7 @@ import { AABB3d } from "../3d/AABB3d.js";
 import { Quad3d } from "../3d/Polygon3d.js";
 import { almostBetween } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
+import { Sphere } from "../3d/Sphere.js";
 
 
 /* Store key geometry information for each placeable, in 3d.
@@ -354,6 +355,12 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
   }
 
   _initializePrototypeFaces() {
+    if ( this._prototypeFaces.top instanceof Sphere ) {
+      if ( !(this.faces.top instanceof Sphere) ) this.faces.top = this._prototypeFaces.top.clone();
+      this.faces.bottom = null;
+      this.faces.sides.length = 0;
+      return;
+    }
     if ( this._prototypeFaces.top ) this.faces.top = this._prototypeFaces.top._cloneEmpty(); // Preserves hole status.
     if ( this._prototypeFaces.bottom ) this.faces.bottom = this._prototypeFaces.bottom._cloneEmpty();
     const numSides = this._prototypeFaces.sides.length;

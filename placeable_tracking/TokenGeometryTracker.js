@@ -2,6 +2,7 @@
 canvas,
 CONFIG,
 CONST,
+PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
@@ -22,7 +23,7 @@ import {
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { AABB3d } from "../3d/AABB3d.js";
 import { MatrixFloat32 } from "../Matrix.js";
-import { Quad3d, Polygon3d } from "../3d/Polygon3d.js";
+import { Quad3d, Polygon3d, Ellipse3d } from "../3d/Polygon3d.js";
 import { Point3d } from "../3d/Point3d.js";
 import { Sphere } from "../3d/Sphere.js";
 
@@ -237,58 +238,74 @@ export class TokenGeometryTracker extends mix(PlaceableGeometryTracker).with(
 
   // ----- NOTE: Faces ----- //
 
+  #initializeSphericalTopFace() {
+    if ( !(this._prototypeFaces.top instanceof Sphere) )  this._prototypeFaces.top = new Sphere;
+    this._prototypeFaces.top.radius = 0.5;
+    this._prototypeFaces.bottom = null;
+    this._prototypeFaces.sides.length = 0;
+  }
+
+  #initializeEllipseTopFace() {
+    if ( !(this._prototypeFaces.top instanceof Ellipse3d) ) {
+      this._prototypeFaces.top = new Ellipse3d();
+      this._prototypeFaces.bottom = new Ellipse3d();
+    }
+    this._prototypeFaces.top.radiusX = 0.5;
+    this._prototypeFaces.top.radiusY = 0.5;
+  }
+
+  #initializeHexagonalTopFace() {
+    if ( !(this._prototypeFaces.top instanceof Polygon3d) ) {
+      this._prototypeFaces.top = new Polygon3d();
+      this._prototypeFaces.bottom = new Polygon3d();
+    }
+    const poly = Hex3dVertices.polygonTopFaceForToken(token);
+    Polygon3d.fromPolygon(poly, 0.5, this._prototypeFaces.top);
+  }
+
+  #initializeCubeTopFace() {
+    if ( !(this._prototypeFaces.top instanceof Quad3d) ) {
+      this._prototypeFaces.top = new Quad3d();
+      this._prototypeFaces.bottom = new Quad3d();
+    }
+    this.constructor.QUADS.up.clone(this._prototypeFaces.top);
+  }
+
   /**
    * Create the initial face shapes for this token, using a 0.5 x 0.5 x 0.5 unit cube.
    */
   _initializePrototypeFaces() {
+    // Sphere treated as a single face.
+    if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.useTokenSphere ) {
+      this.#initializeSphericalTopFace();
+      return super._initializePrototypeFaces();
+    }
+
     // For top and bottom, use the token shape.
-    if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.useTokenSphere || this.token.document.shape === CONST.TOKEN_SHAPES.ELLIPSE_1 || this.token.document.shape === CONST.TOKEN_SHAPES.ELLIPSE_2 ) {
-      this._prototypeFaces.top = Sphere.fromCenterPoint(Point3d.tmp.set(0, 0, 0), 0.5);
-      this._prototypeFaces.bottom = null;
-      this._prototypeFaces.sides.length = 0;
-      return super._initializePrototypeFaces();
-    }
+    const SHAPES = CONST.TOKEN_SHAPES;
+    switch ( this.token.document.shape ) {
+      case SHAPES.ELLIPSE_1:
+      case SHAPES.ELLIPSE_2:
+        this.#initializeEllipseTopFace();
+        break;
 
-    // For hexagonal, center token shape and scale to unit cube (0.5 x 0.5 x 0.5).
-    // Use 0.5 and -0.5 for the top and bottom elevations.
-    if ( canvas.grid.isHexagonal ) {
-      if ( !(this._prototypeFaces.top instanceof Polygon3d) ) {
-        this._prototypeFaces.top = new Polygon3d;
-        this._prototypeFaces.bottom = new Polygon3d;
-      }
-      const shape = this.token.shape
-        .translate(-shape.center.x, -shape.center.y) // Center at 0,0.
-        .scale(1 / (this.token.document.width * canvas.dimensions.size), 1 / (this.token.document.height * canvas.dimensions.size)); // Scale to 0.5 x 0.5
-      Polygon3d.from(this.token.shape, 0.5, this._prototypeFaces.top);
-      this._prototypeFaces.top.clone(this._prototypeFaces.bottom);
-      this._prototypeFaces.bottom.setZ(-0.5);
+      case SHAPES.TRAPEZOID_1:
+      case SHAPES.TRAPEZOID_2:
+        this.#initializeHexagonalTopFace();
+        break;
 
-      // Construct sides.
-      this._prototypeFaces.sides = this._prototypeFaces.top.buildTopSides(-0.5);
-      return super._initializePrototypeFaces();
+      case RECTANGLE_1:
+      case RECTANGLE_2:
+        this.#initializeCubeTopFace();
+        break;
     }
-
-    // For square grids, use token cube.
-    if ( !(this._prototypeFaces.top instanceof Quad3d) ) {
-      this._prototypeFaces.top = new Quad3d;
-      this._prototypeFaces.bottom = new Quad3d;
-      this._prototypeFaces.sides.length = 4;
-      for ( let i = 0; i < 4; i += 1 ) this._prototypeFaces.sides[i] ??= new Quad3d(); // Hex or square grids both use Quad3d sides.
-    }
-    this.constructor.QUADS.up.clone(this._prototypeFaces.top);
-    this.constructor.QUADS.down.clone(this._prototypeFaces.bottom);
+    this._prototypeFaces.top.clone(this._prototypeFaces.bottom);
+    this._prototypeFaces.bottom.reverseOrientation(); // Face down.
     this._prototypeFaces.top.setZ(0.5);
     this._prototypeFaces.bottom.setZ(-0.5);
 
-    const RECT_SIDES = this.constructor.RECT_SIDES;
-    for ( const side of Object.keys(RECT_SIDES) ) this.constructor.QUADS[side].clone(this._prototypeFaces.sides[RECT_SIDES[side]]);
-
-    // Adjust sides so they are 0.5 from center in each direction.
-    this._prototypeFaces.sides[RECT_SIDES.north].translate({ y: -0.5 }, this._prototypeFaces.sides[RECT_SIDES.north]);
-    this._prototypeFaces.sides[RECT_SIDES.south].translate({ y: 0.5 }, this._prototypeFaces.sides[RECT_SIDES.south]);
-    this._prototypeFaces.sides[RECT_SIDES.west].translate({ x: -0.5 }, this._prototypeFaces.sides[RECT_SIDES.west]);
-    this._prototypeFaces.sides[RECT_SIDES.east].translate({ x: 0.5 }, this._prototypeFaces.sides[RECT_SIDES.east]);
-
+    // Build sides from the top shape to the bottom elevation.
+    this._prototypeFaces.sides = this._prototypeFaces.top.buildTopSides(-0.5);
     super._initializePrototypeFaces()
   }
 
