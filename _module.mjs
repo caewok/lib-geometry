@@ -4,6 +4,7 @@ export * as threeD from "./3d/_module.mjs";
 export * as CenteredPolygon from "./CenteredPolygon/_module.mjs";
 export * as RegularPolygon from "./RegularPolygon/_module.mjs";
 export * as bench from "./benchmark.js";
+export * as canvasTests from "./canvas_tests.js";
 
 export * as placeableGeometry from "./placeable_geometry/_module.mjs";
 export * as placeableTracking from "./placeable_tracking/_module.mjs";
