@@ -1163,8 +1163,17 @@ export class Hex3dVertices extends Polygon3dVertices {
     return super.calculateVertices(poly, opts);
   }
 
-  static hexagonalShapeForToken(token) {
-    return getHexagonalShape(token.document.width, token.document.height, token.document.shape, canvas.scene.grid.columns ?? false);
+  /**
+   * Get the unit polygon hex shape for a token.
+   * @param {Token} token
+   * @returns {PIXI.Polygon}
+   */
+  static hexagonalUnitShapeForToken(token) {
+    const res = getHexagonalShape(token.document.width, token.document.height, token.document.shape, canvas.scene.grid.columns ?? false);
+    let poly = new PIXI.Polygon(res.points);
+    poly = poly.translate(-res.center.x, -res.center.y);
+    const bounds = poly.getBounds();
+    return poly.scale(1/bounds.width, 1/bounds.height);
   }
 
   static calculateVerticesForToken(token) {
@@ -1189,10 +1198,12 @@ export class Hex3dVertices extends Polygon3dVertices {
     return `${shape}_${width}_${height}_${hexColumns}`;
   }
 
-  static polygonTopFaceForToken(token, { topZ, centroid, stride, useFan } = {}) {
-    const poly = this.hexagonalShapeForToken(token);
-    poly.scale(0.5/token.width, 0.5/token.height, poly);
-    return this._polygonTopFaceFan(poly, { topZ, centroid, stride });
+  static polygonTopFaceForToken(token, { topZ, centroid, stride } = {}) {
+    const poly = this.hexagonalUnitShapeForToken(token);
+    const scaledPoly = poly
+      .scale(token.document.width, token.document.height)
+      .translate(token.center.x, token.center.y);
+    return this._polygonTopFaceFan(scaledPoly, { topZ, centroid, stride });
   }
 }
 

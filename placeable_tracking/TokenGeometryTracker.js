@@ -1,7 +1,6 @@
 /* globals
 canvas,
 CONFIG,
-CONST,
 PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
@@ -9,6 +8,7 @@ PIXI,
 
 // Trackers
 import { TokenPositionTracker, TokenScaleTracker, TokenShapeTracker } from "./TokenTracker.js";
+import { Hex3dVertices } from "../placeable_geometry/BasicVertices.js";
 
 // Mixing
 import { mix } from "../mixwith.js";
@@ -239,7 +239,7 @@ export class TokenGeometryTracker extends mix(PlaceableGeometryTracker).with(
   // ----- NOTE: Faces ----- //
 
   #initializeSphericalTopFace() {
-    if ( !(this._prototypeFaces.top instanceof Sphere) )  this._prototypeFaces.top = new Sphere;
+    if ( !(this._prototypeFaces.top instanceof Sphere) )  this._prototypeFaces.top = new Sphere();
     this._prototypeFaces.top.radius = 0.5;
     this._prototypeFaces.bottom = null;
     this._prototypeFaces.sides.length = 0;
@@ -259,7 +259,7 @@ export class TokenGeometryTracker extends mix(PlaceableGeometryTracker).with(
       this._prototypeFaces.top = new Polygon3d();
       this._prototypeFaces.bottom = new Polygon3d();
     }
-    const poly = Hex3dVertices.polygonTopFaceForToken(token);
+    const poly = Hex3dVertices.hexagonalUnitShapeForToken(this.token);
     Polygon3d.fromPolygon(poly, 0.5, this._prototypeFaces.top);
   }
 
@@ -282,22 +282,21 @@ export class TokenGeometryTracker extends mix(PlaceableGeometryTracker).with(
     }
 
     // For top and bottom, use the token shape.
-    const SHAPES = CONST.TOKEN_SHAPES;
-    switch ( this.token.document.shape ) {
-      case SHAPES.ELLIPSE_1:
-      case SHAPES.ELLIPSE_2:
+    const SHAPES = PIXI.SHAPES;
+    switch ( this.token.tokenBorder.type ) {
+      case SHAPES.POLY:
+        this.#initializeHexagonalTopFace();
+        break;
+      case SHAPES.RECT:
+      case SHAPES.RRECT:
+        this.#initializeCubeTopFace();
+        break;
+      case SHAPES.CIRC:
+      case SHAPES.ELIP:
         this.#initializeEllipseTopFace();
         break;
 
-      case SHAPES.TRAPEZOID_1:
-      case SHAPES.TRAPEZOID_2:
-        this.#initializeHexagonalTopFace();
-        break;
-
-      case RECTANGLE_1:
-      case RECTANGLE_2:
-        this.#initializeCubeTopFace();
-        break;
+      default: this.#initializeCubeTopFace();
     }
     this._prototypeFaces.top.clone(this._prototypeFaces.bottom);
     this._prototypeFaces.bottom.reverseOrientation(); // Face down.

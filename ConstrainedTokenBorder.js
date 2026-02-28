@@ -154,7 +154,7 @@ export class ConstrainedTokenBorder extends foundry.canvas.geometry.ClockwiseSwe
     y: null,
     elevation: null,
     width: null,
-    height: null
+    height: null,
   }
 
   /** @type {Token} */
