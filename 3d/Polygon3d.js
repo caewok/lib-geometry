@@ -915,7 +915,14 @@ export class Ellipse3d extends Polygon3d {
 
   clone(out) {
     out ??= super.clone();
-    out.radiusX = this.radiusX; // Rest is already set via points.
+    out.radiusX = this.radiusX;
+    out.radiusY = this.radiusY;
+    return out;
+  }
+
+  _cloneEmpty() {
+    const out = super._cloneEmpty();
+    out.radiusX = this.radiusX;
     out.radiusY = this.radiusY;
     return out;
   }
