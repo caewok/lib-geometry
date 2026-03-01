@@ -23,10 +23,6 @@ export class WallPositionTracker extends AbstractWallTracker {
     "flags.wall-height.top",
     "c",
     "dir",
-    "light",
-    "move",
-    "sight",
-    "sound",
   ]);
 }
 
@@ -35,7 +31,6 @@ export class WallTypeTracker extends AbstractWallTracker {
   static ID = "typeTracker";
 
   static DOCUMENT_KEYS = new Set([
-    "dir",
     "light",
     "move",
     "sight",
