@@ -107,9 +107,18 @@ function drawPlaceableGeometry(placeable, placeableColor, { face = "top", aabb =
  * @param {boolean} [opts.aabb=false]           If true, draw the bounding box
  * @param {*} [opts]                            Other opts passed to drawing
  */
-export function drawWallGeometries({ walls, ...drawingOpts }) {
+export function drawWallGeometries({ walls, ...drawingOpts } = {}) {
   walls ??= canvas.walls.placeables;
-  for ( const wall of walls ) drawPlaceableGeometry(wall, "blue", drawingOpts)
+  for ( const wall of walls ) {
+    let color = "blue";
+    let face = "top"
+    if ( wall.edge.direction ) {
+      const geom = wall[GEOMETRY_LIB_ID][GEOMETRY_ID];
+      face = geom.faces.top ? "top" : "bottom";
+      color = geom.faces.top ? "green": "red";
+    }
+    drawPlaceableGeometry(wall, color, { face, ...drawingOpts });
+  }
 }
 
 /**
@@ -120,7 +129,7 @@ export function drawWallGeometries({ walls, ...drawingOpts }) {
  * @param {boolean} [opts.aabb=false]           If true, draw the bounding box
  * @param {*} [opts]                            Other opts passed to drawing
  */
-export function drawTokenGeometries({ tokens, ...drawingOpts }) {
+export function drawTokenGeometries({ tokens, ...drawingOpts } = {}) {
   tokens ??= canvas.tokens.placeables;
   for ( const token of tokens ) drawPlaceableGeometry(token, "orange", drawingOpts);
 }
@@ -133,7 +142,7 @@ export function drawTokenGeometries({ tokens, ...drawingOpts }) {
  * @param {boolean} [opts.aabb=false]           If true, draw the bounding box
  * @param {*} [opts]                            Other opts passed to drawing
  */
-export function drawTileGeometries({ tiles, ...drawingOpts }) {
+export function drawTileGeometries({ tiles, ...drawingOpts } = {}) {
   tiles ??= canvas.tiles.placeables;
   for ( const tile of tiles ) drawPlaceableGeometry(tile, "yellow", drawingOpts);
 }
@@ -146,7 +155,7 @@ export function drawTileGeometries({ tiles, ...drawingOpts }) {
  * @param {boolean} [opts.aabb=false]           If true, draw the bounding box
  * @param {*} [opts]                            Other opts passed to drawing
  */
-export function drawRegionGeometries({ regions, ...drawingOpts }) {
+export function drawRegionGeometries({ regions, ...drawingOpts } = {}) {
   regions ??= canvas.regions.placeables;
   for ( const region of regions ) drawPlaceableGeometry(region, "green", drawingOpts);
 }
