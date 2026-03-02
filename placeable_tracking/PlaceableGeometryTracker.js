@@ -150,7 +150,15 @@ WallGeometryTracker = CONFIG.GeometryLib.lib.placeableGeometryTracking.WallGeome
 Draw = CONFIG.GeometryLib.lib.Draw;
 canvasTests = CONFIG.GeometryLib.lib.canvasTests
 canvasTests.drawWallGeometries()
+canvasTests.drawTileGeometries()
+canvasTests.drawRegionGeometries()
 canvasTests.drawTokenGeometries()
-canvasTests.drawConstrainedTokenGeometries()
+
+canvasTests.drawTokenBorder()
+canvasTests.drawConstrainedTokenBorder()
+canvasTests.drawLitTokenBorderTokenBorder()
+canvasTests.drawBrightLitTokenBorderTokenBorder()
+canvasTests.drawTokenSoundBorder()
+
 
 */

@@ -54,13 +54,25 @@ function tokenBorder() {
   In dnd5e at least, shapes change based on grid type.
   But the underlying token document shape may be different.
   Further, prototype tokens do not get a shape.
-  Square grid: only RECTANGLE_1. getShape: PIXI.Rectangle
-  Gridless: ELLIPSE_1 or RECTANGLE_1. getShape: PIXI.Ellipse or PIXI.Rectangle, respectively.
-  Hex grid: All 6 options, which are all variations on hexes. Some may not change
-  depending on token. getShape: PIXI.Polygon
+  See Token#getShape.
+
+  Options available in the token config:
+  Square grid:
+    RECTANGLE_1: PIXI.Polygon.
+
+  Hex grid:
+    - All 6 options. Some may not change depending on token. Result is always PIXI.Polygon.
+
+  Gridless:
+   - ELLIPSE_1: PIXI.Circle or PIXI.Ellipse
+   - RECTANGLE_1: PIXI.Rectangle
   */
-  return this.getShape().translate(this.document.x, this.document.y);
+
+  // If square grid, use token bounds, which form a rectangle, instead of token shape (polygon).
+  const shape = canvas.grid.isSquare ? this.bounds : this.shape;
+  return shape.translate(this.document.x, this.document.y);
 }
+
 
 /**
  * New getter Token.prototype.litTargetShape

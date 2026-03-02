@@ -1,7 +1,7 @@
 /* globals
 canvas,
 CONFIG,
-PIXI,
+CONST,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
@@ -286,23 +286,36 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
       return super._initializePrototypeFaces();
     }
 
-    // For top and bottom, use the token shape.
-    const SHAPES = PIXI.SHAPES;
-    switch ( this.token.tokenBorder.type ) {
-      case SHAPES.POLY:
-        this.#initializeHexagonalTopFace();
-        break;
-      case SHAPES.RECT:
-      case SHAPES.RRECT:
-        this.#initializeCubeTopFace();
-        break;
-      case SHAPES.CIRC:
-      case SHAPES.ELIP:
-        this.#initializeEllipseTopFace();
-        break;
+    /*
+    For top and bottom, use the grid logic from Token#getShape.
+    Options available in the token config:
+    Square grid:
+      RECTANGLE_1: PIXI.Polygon.
 
-      default: this.#initializeCubeTopFace();
+    Hex grid:
+      - All 6 options. Some may not change depending on token. Result is always PIXI.Polygon.
+
+    Gridless:
+     - ELLIPSE_1: PIXI.Circle or PIXI.Ellipse
+     - RECTANGLE_1: PIXI.Rectangle
+     */
+    const TYPES = CONST.GRID_TYPES;
+    switch ( canvas.grid.type ) {
+      case TYPES.SQUARE: this.#initializeCubeTopFace(); break;
+      case TYPES.GRIDLESS: {
+        const shape = this.token.document.shape;
+        if ( shape === CONST.TOKEN_SHAPES.ELLIPSE_1
+          || shape === CONST.TOKEN_SHAPES.ELLIPSE_2 ) this.#initializeEllipseTopFace();
+        else this.#initializeCubeTopFace();
+        break;
+      }
+      default: this.#initializeHexagonalTopFace();
     }
+    // Confirm orientation by testing against the center of the unit token.
+    using ctr = Point3d.tmp.set(0, 0, 0);
+    if ( this._prototypeFaces.top.isFacing(ctr) ) this.faces.top.reverseOrientation();
+
+    // Build bottom from the top and set the unit elevation.
     this._prototypeFaces.top.clone(this._prototypeFaces.bottom);
     this._prototypeFaces.bottom.reverseOrientation(); // Face down.
     this._prototypeFaces.top.setZ(0.5);
