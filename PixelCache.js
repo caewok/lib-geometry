@@ -1229,8 +1229,8 @@ export class PixelCache extends LocalCoordinateCache {
     const aabb = this.getThresholdLocalAABB(threshold);
     const TL = this._toCanvasCoordinates(aabb.min.x, aabb.min.y);
     const TR = this._toCanvasCoordinates(aabb.max.x + 1, aabb.min.y);
-    const BL = this._toCanvasCoordinates(aabb.max.x + 1, aabb.max.y + 1);
-    const BR = this._toCanvasCoordinates(aabb.min.x, aabb.max.y + 1);
+    const BL = this._toCanvasCoordinates(aabb.min.x, aabb.max.y + 1);
+    const BR = this._toCanvasCoordinates(aabb.max.x + 1, aabb.max.y + 1);
 
     // Can the box be represented with a rectangle? Points must be horizontal and vertical.
     // Could also be rotated 90º
