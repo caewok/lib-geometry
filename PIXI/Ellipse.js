@@ -25,6 +25,21 @@ function center() { return new PIXI.Point(this.x, this.y); }
 function area() { return Math.PI * this.width * this.height; }
 
 /**
+ * Move this ellipse by given x,y delta
+ * @param {number} dx
+ * @param {number} dy
+ * @returns {PIXI.Circle} New circle
+ */
+function translate(dx, dy, out) {
+  out ??= new PIXI.Ellipse();
+  out.x = this.x + dx;
+  out.y = this.y + dy;
+  out.width = this.width;
+  out.height = this.height;
+  return out;
+}
+
+/**
  * Area that matches clipper measurements, so it can be compared with Clipper Polygon versions.
  * Used to match what Clipper would measure as area, by scaling the points.
  * @param {object} [options]
@@ -426,6 +441,7 @@ PATCHES.PIXI.METHODS = {
   pointAtAngle,
   angleAtPoint,
   scaledArea,
+  translate,
 };
 
 PATCHES.PIXI.STATIC_METHODS = {

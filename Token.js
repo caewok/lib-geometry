@@ -69,8 +69,9 @@ function tokenBorder() {
   */
 
   // If square grid, use token bounds, which form a rectangle, instead of token shape (polygon).
-  const shape = canvas.grid.isSquare ? this.bounds : this.shape;
-  return shape.translate(this.document.x, this.document.y);
+  // If canvas not fully loaded, this.shape may be undefined.
+  const shape = canvas.grid.isSquare ? this.bounds : (this.shape ?? this.getShape());
+  return shape.translate(this.document.x, this.document.y); // Return new shape; do not modify original.
 }
 
 

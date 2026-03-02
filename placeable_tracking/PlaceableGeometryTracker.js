@@ -88,6 +88,11 @@ export class PlaceableGeometryTracker {
     for ( const placeable of placeables ) this.constructor._onPlaceableDocumentCreation(placeable.document);
   }
 
+  deRegisterExistingPlaceables(placeables) {
+    placeables ??= canvas[this.layer].placeables;
+    for ( const placeable of placeables ) this.constructor._onPlaceableDestroy(placeable);
+  }
+
   activate() {
     if ( !this._createHookId ) { // Avoid duplicate hooks.
       this._createHookId = Hooks.on(`create${this.documentName}`, this.constructor._onPlaceableDocumentCreation.bind(this.constructor));

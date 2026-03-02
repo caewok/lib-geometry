@@ -34,8 +34,12 @@ function area() {
  * @param {number} dy
  * @returns {PIXI.Circle} New circle
  */
-function translate(dx, dy) {
-  return new PIXI.Circle(this.x + dx, this.y + dy, this.radius);
+function translate(dx, dy, out) {
+  out ??= new PIXI.Circle();
+  out.x = this.x + dx;
+  out.y = this.y + dy;
+  out.radius = this.radius;
+  return out;
 }
 
 /**

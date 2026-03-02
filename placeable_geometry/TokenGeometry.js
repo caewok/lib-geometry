@@ -313,7 +313,7 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
     }
     // Confirm orientation by testing against the center of the unit token.
     using ctr = Point3d.tmp.set(0, 0, 0);
-    if ( this._prototypeFaces.top.isFacing(ctr) ) this.faces.top.reverseOrientation();
+    if ( this._prototypeFaces.top.isFacing(ctr) ) this._prototypeFaces.top.reverseOrientation();
 
     // Build bottom from the top and set the unit elevation.
     this._prototypeFaces.top.clone(this._prototypeFaces.bottom);
