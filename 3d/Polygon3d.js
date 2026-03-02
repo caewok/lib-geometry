@@ -1972,14 +1972,14 @@ export class Polygons3d extends Polygon3d {
     // If out was supplied, it may be the wrong polygon length.
     const outPolys = out.polygons;
     const thisPolys = this.polygons;
-    if ( outPolys.length !== n ) outPolys.length = m;
+    if ( outPolys.length !== n ) outPolys.length = n;
 
     // Clone each polygon. If the polygon is the same, use it. Otherwise, clone anew.
     for ( let i = 0; i < n; i += 1 ) {
       const outPoly = outPolys[i];
       const thisPoly = thisPolys[i];
       if ( outPoly instanceof thisPoly.constructor
-        && thisPoly instanceo outPoly.constructor ) thisPoly.clone(outPoly);
+        && thisPoly instanceof outPoly.constructor ) thisPoly.clone(outPoly);
       else outPolys[i] = thisPoly.clone();
     }
     return out;
