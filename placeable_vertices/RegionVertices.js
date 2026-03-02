@@ -5,9 +5,9 @@ PIXI,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { AbstractInstancedVertices, AbstractModelVerticesMixin, VertexObject } from "./GeometryDesc.js";
+import { AbstractInstancedVertices, AbstractModelVerticesMixin, VertexObject } from "./PlaceableVertices.js";
 import { Rectangle3dVertices, Polygon3dVertices, Ellipse3dVertices, Circle3dVertices } from "./BasicVertices.js";
-import { RegionGeometryTracker } from "../placeable_tracking/RegionGeometryTracker.js";
+import { RegionGeometry } from "../placeable_geometry/RegionGeometry.js";
 import { gridUnitsToPixels } from "../util.js";
 import { ElevatedPoint } from "../3d/ElevatedPoint.js";
 import { GEOMETRY_LIB_ID, GEOMETRY_ID, OTHER_MODULES } from "../const.js";
@@ -58,7 +58,7 @@ export class RegionPolygonModelVertices extends mix(AbstractRegionVertices).with
 
   calculateModel(opts = {}) {
     tmpPoly.points = this.shape.points;
-    const elev = RegionGeometryTracker.regionElevation(this.region);
+    const elev = RegionGeometry.regionElevation(this.region);
     const vo = new VertexObject();
     vo.vertices = Polygon3dVertices.calculateVertices(tmpPoly, elev);
     vo.dropNormalsAndUVs({ keepNormals: opts.hasNormals, keepUVs: opts.hasUVs, out: vo });

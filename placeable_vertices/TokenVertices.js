@@ -6,7 +6,7 @@ CONST,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { AbstractInstancedVertices, AbstractModelVerticesMixin, VertexObject } from "./GeometryDesc.js";
+import { AbstractInstancedVertices, AbstractModelVerticesMixin, VertexObject } from "./PlaceableVertices.js";
 import { Rectangle3dVertices, Polygon3dVertices, Hex3dVertices, SphereVertices, Ellipse3dVertices } from "./BasicVertices.js";
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { mix } from "../mixwith.js";

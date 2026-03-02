@@ -3,7 +3,7 @@
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { AbstractInstancedVertices } from "./GeometryDesc.js";
+import { AbstractInstancedVertices } from "./PlaceableVertices.js";
 import { VerticalQuadVertices } from "./BasicVertices.js";
 
 export class WallInstancedVertices extends AbstractInstancedVertices {

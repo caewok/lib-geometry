@@ -1,7 +1,7 @@
-/** @module placeableTracking */
+/** @module placeableGeometryTracking */
 
-export * from "./WallTracker.js";
-export * from "./TokenTracker.js";
-export * from "./TileTracker.js";
-export * from "./RegionTracker.js";
-export * from "./MeasuredTemplateTracker.js";
+export * from "./WallGeometryTracker.js";
+export * from "./TileGeometryTracker.js";
+export * from "./TokenGeometryTracker.js";
+export * from "./RegionGeometryTracker.js";
+export * from "./TrackingBuffer.js";

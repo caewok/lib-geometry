@@ -6,9 +6,9 @@ export * as RegularPolygon from "./RegularPolygon/_module.mjs";
 export * as bench from "./benchmark.js";
 export * as canvasTests from "./canvas_tests.js";
 
+export * as placeableVertices from "./placeable_vertices/_module.mjs";
 export * as placeableGeometry from "./placeable_geometry/_module.mjs";
-export * as placeableTracking from "./placeable_tracking/_module.mjs";
-export * as placeableGeometryTracking from "./placeable_tracking/_module_geometry.mjs";
+export * as placeableGeometryTracking from "./placeable_tracking/_module.mjs";
 
 export * from "./AABB.js";
 export * from "./ClipperPaths.js";

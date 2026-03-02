@@ -1,14 +1,11 @@
 /* globals
-canvas,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { FixedLengthTrackingBuffer } from "./TrackingBuffer.js";
+import { FixedLengthTrackingBuffer } from "../placeable_tracking/TrackingBuffer.js";
 
 // LibGeometry
-import { PlaceableHooksMixin } from "./AbstractPlaceableTracker.js";
-import { mix } from "../mixwith.js";
 import { GEOMETRY_LIB_ID, GEOMETRY_ID } from "../const.js";
 import { MatrixFloat32, ModelMatrix } from "../Matrix.js";
 import { AABB3d } from "../3d/AABB3d.js";
@@ -33,112 +30,66 @@ Stored on each placeable.
 Once registered, will create tracking objects for each placeable created.
 */
 
-/**
- * @typedef {Object} TrackerKeys
- * @prop {class<AbstractPlaceableTracker>} <TRACKER_METHOD_NAMES>
- * e.g., { position: TilePositionTracker }
- */
-
-/** Abstract class
-- Create object on each placeable
-- Use tracking update numbers to lazily update the geometry as needed.
-- Mix-ins to track different properties.
-*/
-class AbstractPlaceableGeometryTracker {
-  /**
-   * The tracker will be saved at placeable[GEOMETRY_LIB_ID][ID] with updateId property.
-   * @type {string}
-   */
-  static ID = GEOMETRY_ID;
-
-  static HOOKS_TO_USE = ["draw", "destroy"];
-
-
-  /**
-   * Create a handler for all placeables.
-   */
-  static registerExistingPlaceables(placeables) {
-    placeables ??= canvas[this.layer].placeables;
-
-    // Ensure update trackers are in place as needed.
-    Object.values(this.TRACKERS).forEach(tracker => {
-      tracker.registerPlaceableHooks();
-      tracker.registerExistingPlaceables(placeables)
-    });
-    super.registerExistingPlaceables(placeables);
-  }
+export class PlaceableGeometry {
 
   // ----- NOTE: Constructor ----- //
 
   /** @type {Placeable} */
   placeable;
 
-  constructor(placeable) {
-    this.placeable = placeable;
-  }
+  /**
+   * @param {PlaceableObject} placeable
+   */
+  constructor(placeable) { this.placeable = placeable; }
 
+  /**
+   * Create geometry on a given placeable.
+   * Enforces uniqueness per placeable.
+   * @param {Placeable} placeable
+   * @returns {AbstractPlaceableGeometry}
+   */
   static create(placeable) {
-    // Confirm the trackers we need are present.
-    Object.values(this.TRACKERS).forEach(tracker => {
-      if ( !placeable[tracker.ID] ) tracker.registerExistingPlaceables([placeable]);
-    });
+    const obj = placeable[GEOMETRY_LIB_ID] ??= {};
+    let geom = obj[GEOMETRY_ID];
+    if ( !geom ) {
+      geom = new this(placeable);
+      geom.initialize();
+    }
+    return geom;
   }
-
-  // ----- NOTE: Updating ----- //
 
   initialize() { }
 
-  /**
-   * Track the current placeable updates.
-   * If the placeable update number varies from this,
-   * @type {number}
-   */
-  #updateIds = {
-    "shape": -1,
-    "position": -1,
-    "rotation": -1,
-    "scale": -1,
-  };
+  positionUpdated() { }
 
-  getUpdateId(type) { return this.#updateIds[type]; }
+  scaleUpdated() { }
 
-  /** @type {string:callbackName} */
-  static TRACKER_METHOD_NAMES = {
-    shape: "updateShape",
-    position: "updatePosition",
-    rotation: "updateRotation",
-    scale: "updateScale",
-  };
+  rotationUpdated() { }
 
-  update() {
-    let updated = false;
-    for ( const [type, trackerClass] of Object.entries(this.constructor.TRACKERS) ) {
-      const placeableUpdateId = this.placeable[GEOMETRY_LIB_ID][trackerClass.ID].updateId;
-      if ( this.#updateIds[type] >= placeableUpdateId ) continue;
-      const typeMethodName = this.constructor.TRACKER_METHOD_NAMES[type];
-      this[typeMethodName]();
-      this.#updateIds[type] = placeableUpdateId;
-      updated ||= true;
-    }
-    if ( updated ) this._placeableUpdated();
-  }
+  shapeUpdated() { }
 
-  updateShape() {}
-
-  updatePosition() {}
-
-  updateRotation() {}
-
-  updateScale() {}
-
-  _placeableUpdated() {}
-
-  destroy() {
-    delete this.placeable[GEOMETRY_LIB_ID][this.constructor.ID];
-  }
+  placeablePropertiesUpdated() { }
 }
 
-export class PlaceableGeometryTracker extends mix(AbstractPlaceableGeometryTracker).with(PlaceableHooksMixin) { }
+// ----- NOTE: Placeable Mixins ----- //
+
+/*
+Each mixin has a basic calculation method that may be extended by subclasses.
+Each relies on 1+ update methods.
+
+Changes to placeable dimensions:
+- position
+- scale
+- rotation
+- shape (called when any of position/scale/rotation) triggered
+
+Changes to other placeable characteristics that result in full reset, such as token shape
+- placeableProperties
+
+Other updates may be defined by subclasses but those must
+
+
+*/
 
 // ----- NOTE: PlaceableAABBMixin ----- //
 
@@ -152,9 +103,17 @@ export class PlaceableGeometryTracker extends mix(AbstractPlaceableGeometryTrack
 export const PlaceableAABBMixin = superclass => class extends superclass {
   aabb = new AABB3d(); // Allow non-private access so update can be called separately first.
 
+  initialize() {
+    super.initialize();
+    this.calculateAABB();
+  }
+
   // AABB is fairly basic, so no need to handle position/rotation/scale separately.
-  _placeableUpdated() { super._placeableUpdated(); this.calculateAABB(); }
+  shapeUpdated() { super.shapeUpdated(); this.calculateAABB(); }
+
+  calculateAABB() { console.error(`${this.constructor.name} must implement calculateAABB method.`); }
 }
+
 
 // ----- NOTE: PlaceableModelMatrixMixin ----- //
 
@@ -240,26 +199,19 @@ export const PlaceableModelMatrixMixin = superclass => {
      */
     get placeableId() { return this.placeable.sourceId; }
 
-    updatePosition() {
+    positionUpdated() {
+      super.positionUpdated();
       this.calculateTranslationMatrix();
-      super.updatePosition();
     }
 
-    updateRotation() {
+    rotationUpdated() {
+      super.rotationUpdated();
       this.calculateRotationMatrix();
-      super.updateRotation();
     }
 
-    updateScale() {
+    scaleUpdated() {
+      super.scaleUpdated();
       this.calculateScaleMatrix();
-      super.updateScale();
-    }
-
-    updateShape() {
-      const mm = this.modelMatrix;
-      this.calculateTranslationMatrix(mm.translation);
-      this.calculateRotationMatrix(mm.rotation);
-      this.calculateScaleMatrix(mm.scale);
     }
 
     calculateTranslationMatrix() { return this.modelMatrix.translation; }
@@ -272,6 +224,10 @@ export const PlaceableModelMatrixMixin = superclass => {
       super.initialize();
       this.constructor.modelMatrixTracker.addFacet({ id: this.placeableId, newValues: identityM.arr });
       this.constructor._incrementTrackerCounter();
+      const mm = this.modelMatrix;
+      this.calculateTranslationMatrix(mm.translation);
+      this.calculateRotationMatrix(mm.rotation);
+      this.calculateScaleMatrix(mm.scale);
     }
 
     destroy() {
@@ -283,7 +239,7 @@ export const PlaceableModelMatrixMixin = superclass => {
   }
 }
 
-// ----- NOTE: PlaceableAABBMixin ----- //
+// ----- NOTE: PlaceableFacesMixin ----- //
 
 /**
  * @typedef {object} Faces
@@ -352,6 +308,7 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
   initialize() {
     super.initialize();
     this._initializePrototypeFaces();
+    this._updateFaces();
   }
 
   _initializePrototypeFaces() {
@@ -379,7 +336,17 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
     for ( let i = 0, iMax = this._prototypeFaces.sides.length; i < iMax; i += 1 ) this._prototypeFaces.sides[i].transform(M, this.faces.sides[i]);
   }
 
-  _placeableUpdated() { super._placeableUpdated(); this._updateFaces(); }
+  shapeUpdated() {
+    super.shapeUpdated();
+    this._updateFaces();
+  }
+
+  placeablePropertiesUpdated() {
+    super.placeablePropertiesUpdated();
+    this._initializePrototypeFaces();
+    this._updateFaces();
+  }
+
 
   /**
    * Determine where a ray hits this object in 3d.
@@ -392,14 +359,18 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
    * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
    * @returns {number|null} The distance along the ray, as a multiple of rayDirection
    */
-  rayIntersection(rayOrigin, rayDirection, opts) { return this.constructor.rayIntersectionForFaces(this.iterateFaces(), rayOrigin, rayDirection, opts); }
-
-  static rayIntersectionForFaces(iter, rayOrigin, rayDirection, { minT = 0, maxT = 1 } = {}) {
-    for ( const face of iter ) {
-      if ( !face.isFacing(rayOrigin) ) continue;
-      const t = face.intersectionT(rayOrigin, rayDirection);
-      if ( t !== null && almostBetween(t, minT, maxT) ) return t;
+  rayIntersection(rayOrigin, rayDirection, opts) {
+    for ( const face of this.iterateFaces() ) {
+      const t = this.constructor.rayIntersectionForFace(face, rayOrigin, rayDirection, opts);
+      if ( t !== null ) return t;
     }
+    return null;
+  }
+
+  static rayIntersectionForFace(face, rayOrigin, rayDirection, { minT = 0, maxT = 1 } = {}) {
+    if ( !face.isFacing(rayOrigin) ) return null;
+    const t = face.intersectionT(rayOrigin, rayDirection);
+    if ( t !== null && almostBetween(t, minT, maxT) ) return t;
     return null;
   }
 
@@ -425,74 +396,3 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
     for ( const face of this.iterateFaces() ) face.draw2d(opts);
   }
 }
-
-
-// export const allGeometryMixin = function(Base) {
-//   // The order for super will be outside --> inside --> base.
-//   // So aabbMixin(matricesMixin(Base)) calls aabb, matrix, base.
-//   return aabbMixin(matricesMixin(facesMixin(Base)));
-// }
-//
-// export const noVertexGeometryMixin = function(Base) {
-//   return aabbMixin(matricesMixin(facesMixin(Base)));
-// }
-
-
-/* Testing
-Draw = CONFIG.GeometryLib.lib.Draw;
-
-tracking = CONFIG.GeometryLib.lib.placeableGeometryTracking
-tracking.TileGeometryTracker.registerPlaceableHooks()
-tracking.TileGeometryTracker.registerExistingPlaceables()
-
-tracking.WallGeometryTracker.registerPlaceableHooks()
-tracking.WallGeometryTracker.registerExistingPlaceables()
-
-tracking.TokenGeometryTracker.registerPlaceableHooks()
-tracking.TokenGeometryTracker.registerExistingPlaceables()
-
-tracking.RegionGeometryTracker.registerPlaceableHooks()
-tracking.RegionGeometryTracker.registerExistingPlaceables()
-
-tile = canvas.tiles.placeables[0]
-for ( const tile of canvas.tiles.placeables ) {
-  const geometry = tile.GeometryLib.geometry
-  geometry.aabb.draw2d();
-  // geometry.iterateFaces().forEach(face => face.draw2d({ color: Draw.COLORS.red }));
-  geometry._alphaThresholdPolygons.top.draw2d({ color: Draw.COLORS.orange })
-  geometry._alphaThresholdPolygons.bottom.draw2d({ color: Draw.COLORS.orange })
-  // geometry._alphaThresholdTriangles.top.draw2d({ color: Draw.COLORS.yellow })
-  // geometry._alphaThresholdTriangles.bottom.draw2d({ color: Draw.COLORS.yellow })
-}
-
-wall = canvas.walls.placeables[0]
-for ( const wall of canvas.walls.placeables ) {
-  const geometry = wall.GeometryLib.geometry
-  geometry.aabb.draw2d();
-  geometry.iterateFaces().forEach(face => face.draw2d({ color: Draw.COLORS.red }))
-}
-
-token = canvas.tokens.placeables[0]
-for ( const token of canvas.tokens.placeables ) {
-  const geometry = token.GeometryLib.geometry
-  geometry.aabb.draw2d();
-  geometry.iterateFaces().forEach(face => face.draw2d({ color: Draw.COLORS.red }))
-
-  if ( geometry.isLit && geometry.isConstrainedLit ) geometry.iterateConstrainedLitFaces().forEach(face => face.draw2d({ color: Draw.COLORS.orange }))
-  if ( geometry.isBrightLit && geometry.isConstrainedBrightLit ) geometry.iterateConstrainedBrightLitFaces().forEach(face => face.draw2d({ color: Draw.COLORS.yellow }))
-}
-
-region = canvas.regions.placeables[0]
-for ( const region of canvas.regions.placeables ) {
-  const geometry = region.GeometryLib.geometry
-  geometry.aabb.draw2d();
-  geometry.iterateFaces().forEach(face => face.draw2d({ color: Draw.COLORS.red }))
-
-  // geometry.shapes.forEach(shape => shape.aabb.draw2d({ color: Draw.COLORS.blue }))
-  // geometry.shapes.forEach(shape => shape.iterateFaces().forEach(face => face.draw2d({ color: Draw.COLORS.blue })))
-}
-
-
-
-*/
-

@@ -1,7 +1,6 @@
 /* globals
 canvas,
 CONFIG,
-CONST,
 foundry,
 PIXI,
 */
@@ -9,8 +8,6 @@ PIXI,
 
 import { GEOMETRY_LIB_ID } from "./const.js";
 import { ConstrainedTokenBorder } from "./ConstrainedTokenBorder.js";
-import { Hex3dVertices } from "./placeable_geometry/BasicVertices.js";
-import { Ellipse } from "./Ellipse.js";
 
 // Patches for the Token class
 export const PATCHES = {};
@@ -40,7 +37,7 @@ function isConstrainedTokenBorder() { return !ConstrainedTokenBorder.get(this)._
  * @returns {PIXI.Polygon|PIXI.Rectangle}
  */
 function tokenBorder() {
-  const { x, y, width, height } = this.document;
+  const { width, height } = this.document;
   const center = this.center;
   const pixelWidth = width * canvas.dimensions.size;
   const pixelHeight = height * canvas.dimensions.size;
