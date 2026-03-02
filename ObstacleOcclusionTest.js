@@ -397,12 +397,10 @@ export class ObstacleOcclusionTest {
 // TODO: Do we need the geom.update here?
 function placeableIntersection(placeable, rayOrigin, rayDirection) {
   const geom = placeable[GEOMETRY_LIB_ID][GEOMETRY_ID];
-  geom.update();
   return geom.rayIntersection(rayOrigin, rayDirection);
 }
 
 function placeableAABB(placeable) {
   const geom = placeable[GEOMETRY_LIB_ID][GEOMETRY_ID];
-  geom.update();
   return geom.aabb;
 }

@@ -290,7 +290,6 @@ export class Frustum {
   overlapsEdge(edge) {
     // TODO: Could assume vertical walls and avoid a generic convex polygon test.
     const geom = edge.object[GEOMETRY_LIB_ID][GEOMETRY_ID];
-    geom.update();
     return this.poly3dWithinFrustum(geom.faces.top);
   }
 
@@ -304,7 +303,6 @@ export class Frustum {
     if ( tile.elevationE < tile.document.parent?.foregroundElevation ) return false;
 
     const geom = tile[GEOMETRY_LIB_ID][GEOMETRY_ID];
-    geom.update();
     return this.poly3dWithinFrustum(geom.faces.top);
   }
 
@@ -325,7 +323,6 @@ export class Frustum {
     if ( shape.data.hole ) return false;
 
     const geom = shape[GEOMETRY_LIB_ID][GEOMETRY_ID];
-    geom.update();
     return this.aabb.overlapsAABB(geom.aabb);
   }
 
