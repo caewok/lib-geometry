@@ -262,9 +262,17 @@ export class Polygon3d {
    * @returns {Polygon3d} A new polygon
    */
   clone(out) {
-    out ??= new this.constructor(this.points.length);
+    const n = this.points.length;
+    out ??= new this.constructor(n);
     out.isHole = this.isHole;
-    if ( out.points.length !== this.points.length ) out.points = this.points.map(_pt => Point3d.tmp);
+
+    // If out was supplied, it may be the wrong point length.
+    if ( out.points.length > n ) out.points.length = n;
+    else if ( out.points.length < n ) {
+      const missingIdx = out.points.length;
+      out.points.length = n;
+      for ( let i = missingIdx; i < n; i += 1 ) out.points[i] = Point3d.tmp;
+    }
     this.points.forEach((pt, idx) => out.points[idx].copyFrom(pt));
     return out;
   }
@@ -534,21 +542,21 @@ export class Polygon3d {
    * @returns {Polygon3d} The modified tri.
    */
   transform(M, poly3d) {
-    poly3d ??= this.clone();
+    this.clone(poly3d);
     poly3d.points.forEach((pt, idx) => M.multiplyPoint3d(this.points[idx], pt));
     poly3d.clearCache();
     return poly3d;
   }
 
   multiplyScalar(multiplier, poly3d) {
-    poly3d ??= this.clone();
+    this.clone(poly3d);
     poly3d.points.forEach(pt => pt.multiplyScalar(multiplier, pt));
     poly3d.clearCache();
     return poly3d;
   }
 
   translate({ x = 0, y = 0, z = 0} = {}, poly3d) {
-    poly3d ??= this.clone();
+    this.clone(poly3d);
     using txPt = Point3d.tmp.set(x, y, z);
     poly3d.points.forEach(pt => pt.add(txPt, pt));
     poly3d.clearCache();
@@ -556,7 +564,7 @@ export class Polygon3d {
   }
 
   scale({ x = 1, y = 1, z = 1} = {}, poly3d) {
-    poly3d ??= this.clone();
+    this.clone(poly3d);
     using scalePt = Point3d.tmp.set(x, y, z);
     poly3d.points.forEach(pt => pt.multiply(scalePt, pt));
     poly3d.clearCache();
@@ -564,7 +572,7 @@ export class Polygon3d {
   }
 
   divideByZ(poly3d) {
-    poly3d ??= this.clone();
+    this.clone(poly3d);
     poly3d.points.forEach(pt => {
       const zInv = 1 / pt.z;
       pt.x *= zInv;
@@ -1856,7 +1864,7 @@ export class Polygons3d extends Polygon3d {
   #applyMethodToAllWithReturn(method, ...args) { return this.polygons.map(poly => poly[method](...args)); }
 
   #applyMethodToAllWithClone(method, poly3d, ...args) {
-    poly3d ??= this.clone();
+    this.clone(poly3d);
     poly3d.polygons.forEach(poly => poly[method](...args, poly));
     return poly3d;
   }
@@ -1958,8 +1966,22 @@ export class Polygons3d extends Polygon3d {
   }
 
   clone(out) {
-    out ??= new this.constructor(0);
-    out.polygons = this.polygons.map(poly => poly.clone());
+    const n = this.polygons.length;
+    out ??= new this.constructor(n);
+
+    // If out was supplied, it may be the wrong polygon length.
+    const outPolys = out.polygons;
+    const thisPolys = this.polygons;
+    if ( outPolys.length !== n ) outPolys.length = m;
+
+    // Clone each polygon. If the polygon is the same, use it. Otherwise, clone anew.
+    for ( let i = 0; i < n; i += 1 ) {
+      const outPoly = outPolys[i];
+      const thisPoly = thisPolys[i];
+      if ( outPoly instanceof thisPoly.constructor
+        && thisPoly instanceo outPoly.constructor ) thisPoly.clone(outPoly);
+      else outPolys[i] = thisPoly.clone();
+    }
     return out;
   }
 
