@@ -276,8 +276,10 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
     const tile = this.tile;
     const pixelCache = tile.evPixelCache;
     if ( !(pixelCache && this.alphaThreshold) ) {
-      this.faces.top = new Quad3d();  // TODO: Is this necessary or will this already be a Quad3d given initialization?
-      this.faces.bottom = new Quad3d();
+      if ( !(this.faces.top instanceof Quad3d) ) {
+        this.faces.top = new Quad3d();
+        this.faces.bottom = new Quad3d();
+      }
       return super._updateFaces();
     }
 
@@ -297,6 +299,11 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
       }
       Quad3d.fromRectangle(alphaShape, elevZ, this.faces.top);
     }
+
+    // Confirm orientation.
+    const ctr = this.tile.center;
+    const ctrTop = Point3d.tmp.set(ctr.x, ctr.y, elevZ + 100);
+    if ( !this.faces.top.isFacing(ctrTop) ) this.faces.top.reverseOrientation();
 
     // Create the bottom as a mirror of the top.
     this.faces.top.clone(this.faces.bottom);
