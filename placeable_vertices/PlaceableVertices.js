@@ -226,7 +226,6 @@ export class AbstractInstancedVertices {
     opts = this._optionsForPlaceable(placeable, {...opts}); // Shallow copy; avoid modifying the opts directly.
     const vo = this.getVertexObject(opts);
     const geom = placeable[GEOMETRY_LIB_ID][GEOMETRY_ID];
-    geom.update();
     return vo.transformToModel(geom.modelMatrix);
   }
 }
