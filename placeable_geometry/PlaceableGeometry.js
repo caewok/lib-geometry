@@ -50,12 +50,11 @@ export class PlaceableGeometry {
    */
   static create(placeable) {
     const obj = placeable[GEOMETRY_LIB_ID] ??= {};
-    let geom = obj[GEOMETRY_ID];
-    if ( !geom ) {
-      geom = new this(placeable);
-      geom.initialize();
+    if ( !obj[GEOMETRY_ID] ) {
+      obj[GEOMETRY_ID] = new this(placeable);
+      obj[GEOMETRY_ID].initialize();
     }
-    return geom;
+    return obj[GEOMETRY_ID];
   }
 
   initialize() { }
@@ -69,6 +68,8 @@ export class PlaceableGeometry {
   shapeUpdated() { }
 
   placeablePropertiesUpdated() { }
+
+  destroy() { }
 }
 
 // ----- NOTE: Placeable Mixins ----- //

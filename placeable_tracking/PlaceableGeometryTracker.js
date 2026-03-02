@@ -90,10 +90,10 @@ export class PlaceableGeometryTracker {
 
   activate() {
     if ( !this._createHookId ) { // Avoid duplicate hooks.
-      this._createHookId = Hooks.on(`create${this.DOCUMENT_NAME}`, this._onPlaceableDocumentCreation);
+      this._createHookId = Hooks.on(`create${this.documentName}`, this.constructor._onPlaceableDocumentCreation.bind(this.constructor));
     }
     if ( !this._deleteHookId ) {
-      this._deleteHookId = Hooks.on(`destroy${this.DOCUMENT_NAME}`, this._onPlaceableDestroy);
+      this._deleteHookId = Hooks.on(`destroy${this.documentName}`, this.constructor._onPlaceableDestroy.bind(this.constructor));
     }
 
     // Register tracking of placeable updates.
@@ -106,6 +106,7 @@ export class PlaceableGeometryTracker {
       }
       watcher.register(keys, updateFn);
     }
+    watcher.activate();
   }
 
   deactivate() {
@@ -117,6 +118,8 @@ export class PlaceableGeometryTracker {
       Hooks.off(`destroy${this.documentName}`, this._deleteHookId);
       this._deleteHookId = null;
     }
+    const watcher = PlaceableUpdateWatcher.create(this.documentName);
+    watcher.deactivate();
   }
 
   /**
@@ -138,3 +141,16 @@ export class PlaceableGeometryTracker {
     geom.destroy();
   }
 }
+
+/* Testing
+
+PlaceableUpdateWatcher = CONFIG.GeometryLib.lib.placeableGeometryTracking.PlaceableUpdateWatcher
+WallGeometryTracker = CONFIG.GeometryLib.lib.placeableGeometryTracking.WallGeometryTracker
+
+Draw = CONFIG.GeometryLib.lib.Draw;
+canvasTests = CONFIG.GeometryLib.lib.canvasTests
+canvasTests.drawWallGeometries()
+canvasTests.drawTokenGeometries()
+canvasTests.drawConstrainedTokenGeometries()
+
+*/
