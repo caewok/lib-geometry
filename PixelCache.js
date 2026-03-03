@@ -2390,6 +2390,38 @@ export class PixelCache extends LocalCoordinateCache {
   // ----- NOTE: Debug drawing ----- //
 
   /**
+   * Creates a function that maps a value to a color between blue and red.
+   *
+   * @param {number} min      The minimum value of the range (Blue/Cold).
+   * @param {number} max      The maximum value of the range (Red/Hot).
+   * @returns {function}
+   *  - @param {number} value   Value clamped between min and max
+   *  - @returns {number} PIXI-compatible hex integer
+   */
+  static createHeatMap(min, max) {
+    return function(value) {
+      // 1. Normalize the value to a 0-1 range
+      // Clamp the value to ensure it stays within the min/max bounds
+      const clampedValue = Math.max(min, Math.min(max, value));
+
+      // Calculate ratio (0 = min, 1 = max)
+      const ratio = (clampedValue - min) / (max - min);
+
+      // 2. Map ratio to Hue
+      // Blue is 240°, Red is 0°.
+      // We want to go from 240 down to 0 based on the ratio.
+      const hue = (1 - ratio) * 240;
+
+      // 3. Convert HSL to RGB
+      // Using standard saturation (100%) and lightness (50%) for vibrant colors
+      const saturation = 100;
+      const lightness = 50;
+
+      return Draw.hslToHex(hue, saturation, lightness);
+    };
+  }
+
+  /**
    * Draw a representation of this pixel cache on the canvas, where alpha channel is used
    * to represent values. For debugging.
    */

@@ -1430,3 +1430,28 @@ export function getObjectProperty(obj, str) {
     .filter(t => t !== "")
     .reduce((prev, cur) => prev && prev[cur], obj);
 }
+
+/**
+ * Get unique array values and sort low-to-high.
+ * @param {TypedArray} arr
+ * @returns {number[]}
+ */
+export function sortedUnique(arr) {
+  const s = new Set(arr);
+  const out = [...s];
+  out.sort((a, b) => a - b);
+  return out;
+}
+
+/**
+ * Histogram using map
+ * @param {TypedArray} arr
+ * @returns {Map<number, number>} Number and total count for each
+ */
+export function histogram(arr) {
+  const s = new Set(arr);
+  const m = new Map();
+  for ( const n of s ) m.set(n, 0);
+  for ( const n of arr ) m.set(n, m.get(n) + 1);
+  return m;
+}

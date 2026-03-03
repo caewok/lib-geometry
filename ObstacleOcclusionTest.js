@@ -394,7 +394,6 @@ export class ObstacleOcclusionTest {
   }
 }
 
-// TODO: Do we need the geom.update here?
 function placeableIntersection(placeable, rayOrigin, rayDirection) {
   const geom = placeable[GEOMETRY_LIB_ID][GEOMETRY_ID];
   return geom.rayIntersection(rayOrigin, rayDirection);

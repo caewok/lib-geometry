@@ -39,6 +39,34 @@ export class Draw {
     white: 0xFFFFFF
   };
 
+  // ----- Static color methods ----- //
+
+  /**
+   * Helper: Converts HSL values to a PIXI-friendly Hex Integer.
+   * * @param {number} h - Hue (0-360)
+   * @param {number} s - Saturation (0-100)
+   * @param {number} l - Lightness (0-100)
+   * @returns {number} - Hex integer (e.g., 0xFF0000)
+   */
+  static hslToHex(h, s, l) {
+    s /= 100;
+    l /= 100;
+
+    const k = n => (n + (h / 30)) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = n =>
+      l - (a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1))));
+
+    // Calculate RGB components (0-255)
+    const r = Math.round(255 * f(0));
+    const g = Math.round(255 * f(8));
+    const b = Math.round(255 * f(4));
+
+    // Combine bitwise into a single integer
+    return (r << 16) + (g << 8) + b;
+  }
+
+
   // ----- Static methods for backwards compatibility and ease-of-use ----- //
   static point(...args) {
     const d = new this();
