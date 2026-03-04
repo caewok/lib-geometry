@@ -685,58 +685,6 @@ export function bresenhamLine(x1, y1, x2, y2) {
   return points;
 }
 
-/**
- * Bresenham's line algorithm
- * Returns an array of coordinates.
- * @param {number} x1   First coordinate x value
- * @param {number} y1   First coordinate y value
- * @param {number} z1   First coordinate z value
- * @param {number} x2   Second coordinate x value
- * @param {number} y2   Second coordinate y value
- * @param {number} z2   Second coordinate z value
- * @returns {number[]}
- */
-export function bresenhamLine3d_old(x1, y1, z1, x2, y2, z2) {
-  x1 = Math.round(x1);
-  y1 = Math.round(y1);
-  z1 = Math.round(z1);
-  x2 = Math.round(x2);
-  y2 = Math.round(y2);
-  z2 = Math.round(z2);
-
-  // Calculate differences
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const dz = z2 - z1;
-
-  // Determine the maximum absolute difference
-  const n = Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz));
-
-  // Calculate increments.
-  const incX = dx / n;
-  const incY = dy / n;
-  const incZ = dz / n;
-
-  // Initialize the result array with the starting point
-  const points = Array((n * 3) + 3);
-  points[0] = x1;
-  points[1] = y1;
-  points[2] = z1;
-
-  // Iterate through the line
-  for ( let i = 3, ln = points.length; i < ln; i += 3 ) {
-    // Calculate the next point
-    x1 += incX;
-    y1 += incY;
-    z1 += incZ;
-
-    // Add the adjusted point to the result array
-    points[i] = Math.round(x1);
-    points[i + 1] = Math.round(y1);
-    points[i + 2] = Math.round(z1);
-  }
-  return points;
-}
 
 /**
  * Bresenham's line algorithm for 3D grid coordinates.
