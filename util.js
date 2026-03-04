@@ -8,6 +8,7 @@ PIXI
 "use strict";
 
 import { GEOMETRY_LIB_ID } from "./const.js";
+import { Point3d } from "./3d/Point3d.js";
 
 // Simple extensions
 Math.minMax = function(...args) {
@@ -651,36 +652,41 @@ export function roundFastPositive(n) { return (n + 0.5) << 0; }
  * @returns {number[]}
  */
 export function bresenhamLine(x1, y1, x2, y2) {
-  x1 = Math.round(x1);
-  y1 = Math.round(y1);
-  x2 = Math.round(x2);
-  y2 = Math.round(y2);
+  // Round for integer conversion.
+  let x = Math.round(x1);
+  let y = Math.round(y1);
+  const targetX = Math.round(x2);
+  const targetY = Math.round(y2);
 
-  // Calculate differences
-  const dx = x2 - x1;
-  const dy = y2 - y1;
+  // Calculate deltas.
+  const dx = Math.abs(targetX - x);
+  const dy = -Math.abs(targetY - y);
+  const sx = x < targetX ? 1 : -1;
+  const sy = y < targetY ? 1 : -1;
 
-  // Determine the maximum absolute difference
-  const n = Math.max(Math.abs(dx), Math.abs(dy));
+  // Initialize the error at dx - dy, which balances out as we step in either direction.
+  let err = dx + dy;
 
-  // Calculate increments.
-  const incX = dx / n;
-  const incY = dy / n;
+  // Driving axis determines the number of points
+  const numPoints = Math.max(dx, -dy) + 1;
+  const n = numPoints * 2;
+  const points = new Int32Array(n);
 
-  // Initialize the result array with the starting point
-  const points = Array((n * 2) + 2);
-  points[0] = x1;
-  points[1] = y1;
+  // Step toward the target.
+  let i = 0;
+  while ( i < n ) {
+    points[i++] = x;
+    points[i++] = y;
 
-  // Iterate through the line
-  for ( let i = 2, ln = points.length; i < ln; i += 2 ) {
-    // Calculate the next point
-    x1 += incX;
-    y1 += incY;
-
-    // Add the adjusted point to the result array
-    points[i] = Math.round(x1);
-    points[i + 1] = Math.round(y1);
+    const e2 = 2 * err;
+    if ( e2 >= dy ) {
+      err += dy;
+      x += sx;
+    }
+    if ( e2 <= dx ) {
+      err += dx;
+      y += sy;
+    }
   }
   return points;
 }
@@ -775,38 +781,40 @@ export function bresenhamLine3d(x1, y1, z1, x2, y2, z2) {
  * @returns {Iterator<PIXI.Point>}
  */
 export function* bresenhamLineIterator(a, b) {
-  yield PIXI.Point.tmp.set(a.x, a.y);
+  // Round for integer conversion.
+  a = a.clone().roundDecimals();
+  b = b.clone().roundDecimals();
 
-  let x1 = Math.round(a.x);
-  let y1 = Math.round(a.y);
-  let x2 = Math.round(b.x);
-  let y2 = Math.round(b.y);
+  // Calculate deltas.
+  const d = b.subtract(a);
+  d.abs(d);
+  d.y *= -1;
+  const s = PIXI.Point.tmp.set(
+    a.x < b.x ? 1 : -1,
+    a.y < b.y ? 1 : -1,
+  );
 
-  // Calculate differences
-  const dx = x2 - x1;
-  const dy = y2 - y1;
+  // Initialize the error at dx - dy, which balances out as we step in either direction.
+  let err = d.x + d.y;
 
-  // Determine the maximum absolute difference
-  const n = Math.max(Math.abs(dx), Math.abs(dy));
+  // Driving axis determines the number of points
+  const numPoints = Math.max(d.x, -d.y) + 1;
 
-  // Calculate increments.
-  const incX = dx / n;
-  const incY = dy / n;
+  // Step toward the target.
+  for ( let i = 0; i < numPoints; i += 1 ) {
+    yield a.clone();
 
-  // Initialize the result array with the starting point
-  const points = Array((n * 2) + 2);
-  points[0] = x1;
-  points[1] = y1;
-
-  // Iterate through the line
-  for ( let i = 2, ln = (n * 2) + 2; i < ln; i += 2 ) {
-    // Calculate the next point
-    x1 += incX;
-    y1 += incY;
-
-    // Return the point.
-    yield PIXI.Point.tmp.set(Math.round(x1), Math.round(y1));
+    const e2 = 2 * err;
+    if ( e2 >= d.y ) {
+      err += d.y;
+      a.x += s.x;
+    }
+    if ( e2 <= d.x ) {
+      err += d.x;
+      a.y += s.y;
+    }
   }
+  PIXI.Point.release(a, b, d, s);
 }
 
 
