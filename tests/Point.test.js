@@ -110,9 +110,9 @@ describe("PIXI.Point Basic Extensions", () => {
         expect(p.key).to.equal(expected);
       });
 
-      it("pointFromKey should reconstruct a point from a key", () => {
+      it("invertKey should reconstruct a point from a key", () => {
         const key = (Math.pow(2, 16) * 500) + 250;
-        const p = PIXI.Point.pointFromKey(key);
+        const p = PIXI.Point.invertKey(key);
 
         expect(p.x).to.equal(500);
         expect(p.y).to.equal(250);

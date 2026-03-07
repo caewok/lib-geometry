@@ -106,6 +106,17 @@ Hooks.on("quenchReady", (quench) => {
         expect(p.key).to.equal(pSame.key);
         expect(p.key).to.not.equal(pDiff.key);
       });
+
+      it("invertKey should reconstruct a point from a key", () => {
+        const pOrig = new Point3d(1, 2, 3);
+        const p = Point3d.invertKey(pOrig.key);
+
+        expect(p.x).to.equal(pOrig.x);
+        expect(p.y).to.equal(pOrig.y);
+        expect(p.z).to.equal(pOrig.z);
+        p.release();
+      });
+
     });
 
     describe("Static Factory Methods", () => {

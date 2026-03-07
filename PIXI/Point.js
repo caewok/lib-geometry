@@ -31,19 +31,6 @@ function clone(out) {
   return out;
 }
 
-/**
- * Invert a wall key to get the coordinates.
- * Key = (MAX_TEXTURE_SIZE * x) + y, where x and y are integers.
- * @param {number} key      Integer key
- * @returns {PIXI.Point} coordinates
- */
-function pointFromKey(key, outPoint) {
-  outPoint ??= this.tmp;
-  const x = Math.floor(key * MAX_TEXTURE_SIZE_INV);
-  const y = key - (MAX_TEXTURE_SIZE * x);
-  outPoint.set(x, y);
-  return outPoint;
-}
 
 /**
  * Use roundDecimals to round the point coordinates to a certain number of decimals, in place.
@@ -146,6 +133,21 @@ function staticKey(pt) {
   const y = Math.round(pt.y);
   return (x << 16) ^ y;
 }
+
+/**
+ * Invert a wall key to get the coordinates.
+ * Key = (MAX_TEXTURE_SIZE * x) + y, where x and y are positive integers.
+ * @param {number} key      Integer key
+ * @returns {PIXI.Point} coordinates
+ */
+function invertKey(key, outPoint) {
+  outPoint ??= this.tmp;
+  outPoint.x = key >> 16;
+  // const x = Math.floor(key * MAX_TEXTURE_SIZE_INV);
+  outPoint.y = key - (MAX_TEXTURE_SIZE * outPoint.x);
+  return outPoint;
+}
+
 
 /**
  * Take an array of 2d points and flatten them to an array of numbers,
@@ -548,8 +550,7 @@ PATCHES.PIXI.STATIC_METHODS = {
   angleBetween,
   flatMapPoints,
   fromObject,
-  pointFromKey,
-  invertKey: pointFromKey,  // Alias for backward compatibility.
+  invertKey,
   key: staticKey,
   rotate,
 
