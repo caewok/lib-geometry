@@ -402,8 +402,8 @@ describe("Pixel Setting", () => {
 describe("Ray Extraction & Aggregation", () => {
   it("should extract pixel values along a local ray", () => {
     const pc = PixelCache.fromPixelArray(pixels, width);
-    const a = { x: 2, y: 5 };
-    const b = { x: 8, y: 5 };
+    const a = new PIXI.Point(2, 5);
+    const b = new PIXI.Point(8, 5);
 
     // This ray crosses the 4x4 block of 255s.
     // Path: (2,5)=0, (3,5)=255, (4,5)=255, (5,5)=255, (6,5)=255, (7,5)=0, (8,5)=0
@@ -416,8 +416,8 @@ describe("Ray Extraction & Aggregation", () => {
 
   it("should find the next marked pixel using a threshold function", () => {
     const pc = PixelCache.fromPixelArray(pixels, width);
-    const a = { x: 0, y: 5 };
-    const b = { x: 9, y: 5 };
+    const a = new PIXI.Point(0, 5);
+    const b = new PIXI.Point(9, 5);
 
     // Mark when we transition from 0 to something > 0
     const markFn = (curr, prev) => curr > 0 && (prev === 0 || prev === null);
