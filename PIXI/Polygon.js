@@ -9,6 +9,7 @@ foundry,
 export const PATCHES = {};
 PATCHES.PIXI = {};
 
+import { AABB2d } from "../AABB.js";
 import { lineSegmentCrosses } from "../util.js";
 import { CutawayPolygon } from "../CutawayPolygon.js";
 
@@ -437,9 +438,38 @@ function envelops(shape) {
   if ( shape instanceof PIXI.Polygon ) { return this._envelopsPolygon(shape); }
   if ( shape instanceof PIXI.Circle ) { return this._envelopsCircle(shape); }
   if ( shape instanceof PIXI.Rectangle ) { return this._envelopsRectangle(shape); }
+  if ( shape instanceof PIXI.Point ) { return this._envelopsPoint(shape); }
   if ( shape.toPolygon) return this._envelopsPolygon(shape.toPolygon());
   console.warn("overlaps|shape not recognized.", shape);
   return false;
+}
+
+/**
+ * Determine if a point is strictly inside a PIXI.Polygon.
+ * Returns false if the point is outside OR on the boundary.
+ * @param {PIXI.Point} pt     Point to test
+ * @returns {boolean}
+ */
+function _envelopsPoint(pt) {
+  const { lineSegmentIntersects, orient2dFast } = foundry.utils;
+  using aabb = new AABB2d();
+  using rightPt = PIXI.Point.tmp.set(Number.MAX_SAFE_INTEGER, pt.y);
+  let inside = false;
+
+  // Iterate through each edge.
+  for ( const edge of this.iterateEdges({ close: true }) ) {
+    if ( orient2dFast(edge.a, edge.b, pt).almostEqual(0) ) {
+      // Collinear. Determine if within bounds.
+      AABB2d.fromEdge(edge, aabb);
+      if ( aabb.containsPoint(pt) ) return false; // On the border.
+    }
+
+    // Ray casting (Jordan Curve Theorem).
+    // Shoot imaginary point from the point to the right.
+    // Toggle inside every time the ray crosses the edge.
+    if ( lineSegmentIntersects(edge.a, edge.b, pt, rightPt) ) inside = !inside;
+  }
+  return inside;
 }
 
 /**
@@ -1235,6 +1265,7 @@ PATCHES.PIXI.METHODS = {
   _envelopsCircle,
   _envelopsRectangle,
   _envelopsPolygon,
+  _envelopsPoint,
 
   // 2d cutaway
   cutaway,

@@ -83,6 +83,51 @@ describe("PIXI.Polygon Extensions", () => {
       const pokingOut = new PIXI.Polygon([90, 90, 110, 90, 110, 110, 90, 110]);
       expect(square.envelops(pokingOut)).to.be.false;
     });
+
+    // We'll use a concave "L-shape" or notched square to test line-of-sight properties.
+    // Vertices: (0,0), (100,0), (100,100), (50,50), (0,100)
+    const poly = new PIXI.Polygon([0, 0, 100, 0, 100, 100, 50, 50, 0, 100]);
+
+    it('should return TRUE for points clearly inside the polygon', () => {
+      const pointInside = new PIXI.Point(50, 25);
+      expect(poly.envelops(pointInside)).to.be.true;
+    });
+
+    it('should return FALSE for points clearly outside the polygon', () => {
+      const pointOutside = new PIXI.Point(150, 50);
+      expect(poly.envelops(pointOutside)).to.be.false;
+    });
+
+    it('should return FALSE for points located on a horizontal edge', () => {
+      const pointOnEdge = new PIXI.Point(50, 0); // Top edge
+      expect(poly.envelops(pointOnEdge)).to.be.false;
+    });
+
+    it('should return FALSE for points located on a vertical edge', () => {
+      const pointOnEdge = new PIXI.Point(100, 50); // Right edge
+      expect(poly.envelops(pointOnEdge)).to.be.false;
+    });
+
+    it('should return FALSE for points located on a diagonal/concave edge', () => {
+      const pointOnDiagonal = new PIXI.Point(75, 75); // On the line between (100,100) and (50,50)
+      expect(poly.envelops(pointOnDiagonal)).to.be.false;
+    });
+
+    it('should return FALSE for points exactly on a vertex (corner)', () => {
+      const vertex = new PIXI.Point(50, 50); // The inner concave point
+      expect(poly.envelops(vertex)).to.be.false;
+    });
+
+    it('should return TRUE for points extremely close to the edge but inside', () => {
+      const nearInside = new PIXI.Point(50, 0.00001);
+      expect(poly.envelops(nearInside)).to.be.true;
+    });
+
+    it('should handle "empty" space in concave notches correctly', () => {
+      // Point (50, 75) is inside the bounding box, but outside the notched area
+      const inNotch = new PIXI.Point(50, 75);
+      expect(poly.envelops(inNotch)).to.be.false;
+    });
   });
 
   // --- Line Intersections ---
