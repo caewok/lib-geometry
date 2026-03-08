@@ -19,7 +19,11 @@ Hooks.on("quenchReady", (quench) => {
 
 // ----- NOTE: AABB2d.overlapsAABB -----
 describe("Walls", () => {
-  before(() => WallGeometryTracker.registerExistingPlaceables());
+  before(() => {
+    const tracking = WallGeometryTracker.create();
+    tracking.activate();
+    tracking.registerExistingPlaceables()
+  });
 
   describe("Model Matrix", () => {
     it("should have numeric values", () => {
@@ -32,7 +36,11 @@ describe("Walls", () => {
 });
 
 describe("Tokens", () => {
-  before(() => TokenGeometryTracker.registerExistingPlaceables());
+  before(() => {
+    const tracking = TokenGeometryTracker.create();
+    tracking.activate();
+    tracking.registerExistingPlaceables()
+  });
 
   describe("Model Matrix", () => {
     it("should have numeric values", () => {
@@ -45,7 +53,11 @@ describe("Tokens", () => {
 });
 
 describe("Tiles", () => {
-  before(() => TileGeometryTracker.registerExistingPlaceables());
+  before(() => {
+    const tracking = TileGeometryTracker.create();
+    tracking.activate();
+    tracking.registerExistingPlaceables()
+  });
 
   describe("Model Matrix", () => {
     it("should have numeric values", () => {
@@ -58,7 +70,11 @@ describe("Tiles", () => {
 });
 
 describe("Regions", () => {
-  before(() => RegionGeometryTracker.registerExistingPlaceables());
+  before(() => {
+    const tracking = RegionGeometryTracker.create();
+    tracking.activate();
+    tracking.registerExistingPlaceables()
+  });
 
   describe("Model Matrix", () => {
     // Region shapes have the model matrix
