@@ -128,6 +128,41 @@ describe("PIXI.Polygon Extensions", () => {
       const inNotch = new PIXI.Point(50, 75);
       expect(poly.envelops(inNotch)).to.be.false;
     });
+
+    // Test when a polygon has a right edge endpoint in line with the contained point.
+    // Test when a polygon has a right edge collinear to the contained point.
+    const poly2 = new PIXI.Polygon([0, 0, 100, 0, 150, 100, 150, 200, 300, 200, 300, 300, 0, 300]);
+    it('should return TRUE for point contained to left of endpoint', () => {
+      const pt = new PIXI.Point(100, 100);
+      expect(poly2.envelops(pt)).to.be.true;
+    });
+
+    it('should return FALSE for point not contained to left of endpoint', () => {
+      const pt = new PIXI.Point(-100, 100);
+      expect(poly2.envelops(pt)).to.be.false;
+    });
+
+    it('should return FALSE for point on edge, not contained to left of endpoint', () => {
+      const pt = new PIXI.Point(0, 100);
+      expect(poly2.envelops(pt)).to.be.false;
+    });
+
+    it('should return TRUE for point contained to left of horizontal edge', () => {
+      const pt = new PIXI.Point(100, 200);
+      expect(poly2.envelops(pt)).to.be.true;
+    });
+
+    it('should return FALSE for point not contained to left of horizontal edge', () => {
+      const pt = new PIXI.Point(-100, 200);
+      expect(poly2.envelops(pt)).to.be.false;
+    });
+
+    it('should return FALSE for point on edge, not contained to left of horizontal edge', () => {
+      const pt = new PIXI.Point(0, 200);
+      expect(poly2.envelops(pt)).to.be.false;
+    });
+
+
   });
 
   // --- Line Intersections ---

@@ -462,12 +462,22 @@ function _envelopsPoint(pt) {
       // Collinear. Determine if within bounds.
       AABB2d.fromEdge(edge, aabb);
       if ( aabb.containsPoint(pt) ) return false; // On the border.
+
+      // If horizontal and to the right of the point, skip.
+      // As if we count each endpoint, which would be inside = !!inside.
+      // (Line segment intersection will treat as no intersection.)
+      // The edge before will intersect as will the edge after.
+      // Per below ray casting, we will skip the edge before.
+      // Note, we already know the edge is collinear with the point.
+      if ( edge.a.y.almostEqual(edge.b.y) && edge.a.x > pt.x ) continue;
     }
 
     // Ray casting (Jordan Curve Theorem).
     // Shoot imaginary point from the point to the right.
     // Toggle inside every time the ray crosses the edge.
-    if ( lineSegmentIntersects(edge.a, edge.b, pt, rightPt) ) inside = !inside;
+    // Don't double count the same endpoint when switching from one edge to another
+    if ( lineSegmentIntersects(edge.a, edge.b, pt, rightPt) &&
+         !(edge.b.y.almostEqual(pt.y) && edge.b.x > pt.x) ) inside = !inside;
   }
   return inside;
 }
