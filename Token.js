@@ -37,15 +37,14 @@ function isConstrainedTokenBorder() { return !ConstrainedTokenBorder.get(this)._
  * @returns {PIXI.Polygon|PIXI.Rectangle}
  */
 function tokenBorder() {
-  const { width, height } = this.document;
-  const center = this.center;
-  const pixelWidth = width * canvas.dimensions.size;
-  const pixelHeight = height * canvas.dimensions.size;
-
   // TODO: Does rotation count?
 
   // Treat sphere as circle at largest radii.
   if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.useTokenSphere ) {
+    const { width, height } = this.document;
+    const center = this.center;
+    const pixelWidth = width * canvas.dimensions.size;
+    const pixelHeight = height * canvas.dimensions.size;
     const radius = Math.max(pixelWidth, pixelHeight) * 0.5; // Only care about 2d here.
     return new PIXI.Circle(center.x, center.y, radius);
   }
@@ -70,7 +69,9 @@ function tokenBorder() {
 
   // If square grid, use token bounds, which form a rectangle, instead of token shape (polygon).
   // If canvas not fully loaded, this.shape may be undefined.
-  const shape = canvas.grid.isSquare ? this.bounds : (this.shape ?? this.getShape());
+
+  if ( canvas.grid.isSquare ) return this.bounds;
+  const shape = this.shape ?? this.getShape();
   return shape.translate(this.document.x, this.document.y); // Return new shape; do not modify original.
 }
 
