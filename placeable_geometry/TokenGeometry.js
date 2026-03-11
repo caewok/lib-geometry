@@ -326,6 +326,33 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
     super._initializePrototypeFaces()
   }
 
+  /**
+   * Determine where a ray hits this object in 3d.
+   * Stops at the first hit for a triangle facing the correct direction.
+   * Ignores intersections behind the ray.
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @param {object} [opts]
+   * @param {"constrained"|"lit"|"bright"|"normal"} [type="constrained"]      What group of faces to use?
+   * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
+   * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
+   * @returns {number|null} The distance along the ray, as a multiple of rayDirection
+   */
+  rayIntersection(rayOrigin, rayDirection, { type = "constrained", ...opts } = {}) {
+    let faces;
+    switch ( type ) {
+      case "constrained": faces = this.iterateConstrainedFaces(); break;
+      case "lit": faces = this.iterateConstrainedLitFaces(); break;
+      case "bright": faces = this.iterateConstrainedBrightLitFaces(); break;
+      default: faces = this.iterateFaces();
+    }
+    for ( const face of faces ) {
+      const t = this.constructor.rayIntersectionForFace(face, rayOrigin, rayDirection, opts);
+      if ( t !== null ) return t;
+    }
+    return null;
+  }
+
   // ----- NOTE: Token properties ----- //
 
   static SPACER = 2; // Shrink tokens slightly to avoid z-fighting with walls and tiles.
