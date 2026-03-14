@@ -47,10 +47,7 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMix
     return tmHandler.isRamp && tmHandler.splitPolygons;
   }
 
-  initialize() {
-    // Initialize the shapes for this region.
-    this.shapes.forEach(shape => this._initializeShape(shape));
-  }
+
 
   // ----- NOTE: AABB ----- //
   calculateAABB() {
@@ -62,7 +59,19 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMix
 
   // ----- NOTE: Faces ---- //
 
-  _initializeShape(shape) {
+  _updateFaces() {
+    this.buildRegionPolygons3d();
+  }
+
+  // ----- NOTE: Update underlying shapes ----- //
+
+  static create(placeable) {
+    const geom = super.create(placeable);
+    geom.shapes.forEach(shape => geom._createShape(shape));
+    return geom;
+  }
+
+  _createShape(shape) {
     let geomClass;
     switch ( shape.type ) {
       case "rectangle": geomClass = RegionRectangleShapeGeometry; break;
@@ -70,22 +79,19 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMix
       case "ellipse": geomClass = RegionEllipseShapeGeometry; break;
       case "circle": geomClass = RegionCircleShapeGeometry; break;
     }
-    let shapeGeom = shape[GEOMETRY_LIB_ID]?.[GEOMETRY_ID];
-    if ( !(shapeGeom instanceof geomClass) ) {
-      shapeGeom = geomClass.create(shape, this.region);
-    }
-    shapeGeom.placeable = shape;
+    return geomClass.create(shape, this.region);
   }
 
-  _updateFaces() {
-    this.buildRegionPolygons3d();
+  initialize() {
+    // Initialize the shapes for this region.
+    this.shapes.forEach(shape => shape[GEOMETRY_LIB_ID][GEOMETRY_ID].initialize());
+    super.initialize();
   }
-
-  // ----- NOTE: Update underlying shapes ----- //
 
   shapeUpdated() {
     this._initializePrototypeFaces(); // Must rebuild the shape b/c they likely were changed.
     this.shapes.forEach(shape => shape[GEOMETRY_LIB_ID][GEOMETRY_ID].shapeUpdated());
+    super.shapeUpdated();
   }
 
   // ----- NOTE: Combine underlying shapes ----- //
@@ -246,6 +252,7 @@ class AbstractRegionShapeGeometry extends mix(PlaceableGeometry).with(PlaceableA
   initialize() {
     this.unrotatedShapePIXI = this.constructor.shapePIXI(this.shape, false);
     this.shapePIXI = this.shape.rotation ? this.constructor.shapePIXI(this.shape, true) : this.unrotatedShapePIXI;
+    super.initialize();
   }
 
   // ----- NOTE: AABB ----- //

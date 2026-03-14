@@ -15,7 +15,7 @@ Hooks.on("quenchReady", (quench) => {
     "libGeometry.GeometryTracking",
 
   (context) => {
-      const { describe, it, expect } = context;
+      const { describe, it, expect, before } = context;
 
 // ----- NOTE: AABB2d.overlapsAABB -----
 describe("Walls", () => {
@@ -86,6 +86,36 @@ describe("Regions", () => {
          }
       });
     });
+  });
+
+  describe("AABB", () => {
+    // Region shapes have aabb
+    it("shapes should have numeric values", () => {
+      canvas.regions.placeables.forEach(region => {
+        for ( const shape of region.document.shapes ) {
+          const geom = shape[GEOMETRY_LIB_ID].geometry;
+          expect(isFinite(geom.aabb.min.x)).to.be.true;
+          expect(isFinite(geom.aabb.min.y)).to.be.true;
+          expect(isFinite(geom.aabb.min.z)).to.be.true;
+          expect(isFinite(geom.aabb.max.x)).to.be.true;
+          expect(isFinite(geom.aabb.max.y)).to.be.true;
+          expect(isFinite(geom.aabb.max.z)).to.be.true;
+         }
+      });
+    });
+
+    it("should have numeric values", () => {
+      canvas.regions.placeables.forEach(region => {
+        const geom = region[GEOMETRY_LIB_ID].geometry;
+        expect(isFinite(geom.aabb.min.x)).to.be.true;
+        expect(isFinite(geom.aabb.min.y)).to.be.true;
+        expect(isFinite(geom.aabb.min.z)).to.be.true;
+        expect(isFinite(geom.aabb.max.x)).to.be.true;
+        expect(isFinite(geom.aabb.max.y)).to.be.true;
+        expect(isFinite(geom.aabb.max.z)).to.be.true;
+      });
+    });
+
   });
 });
 

@@ -50,10 +50,7 @@ export class PlaceableGeometry {
    */
   static create(placeable) {
     const obj = placeable[GEOMETRY_LIB_ID] ??= {};
-    if ( !obj[GEOMETRY_ID] ) {
-      obj[GEOMETRY_ID] = new this(placeable);
-      obj[GEOMETRY_ID].initialize();
-    }
+    obj[GEOMETRY_ID] ??= new this(placeable);
     return obj[GEOMETRY_ID];
   }
 

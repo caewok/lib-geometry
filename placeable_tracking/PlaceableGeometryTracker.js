@@ -137,7 +137,8 @@ export class PlaceableGeometryTracker {
   static _onPlaceableDocumentCreation(placeableD, _options, _userId) {
     const placeable = placeableD.object;
     if ( !placeable ) return;
-    this.GEOMETRY.create(placeable);
+    const geom = this.GEOMETRY.create(placeable);
+    geom.initialize();
   }
 
   static _onPlaceableDestroy(placeable) {
