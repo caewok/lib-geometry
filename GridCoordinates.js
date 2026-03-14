@@ -128,6 +128,7 @@ export class GridCoordinates extends mix(PIXI.Point).with(PoolableMixin) {
 
   /**
    * Add an offset to this point, returning a new point.
+   * Adds the offsets to the x,y coordinates, so that if it is off-grid it will remain off-grid.
    * @param {pt} offset
    * @param {GridCoordinates} [outPoint]
    * @return {GridCoordinates}
@@ -135,8 +136,8 @@ export class GridCoordinates extends mix(PIXI.Point).with(PoolableMixin) {
   addOffset(offset, outPoint) {
     outPoint ??= this.constructor.tmp;
     this.clone(outPoint);
-    outPoint.i += (offset.i || 0);
-    outPoint.j += (offset.j || 0);
+    outPoint.x += canvas.grid.size * (offset.i || 0);
+    outPoint.y += canvas.grid.size * (offset.j || 0);
     return outPoint;
   }
 

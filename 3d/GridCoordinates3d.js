@@ -4,7 +4,7 @@ canvas,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { roundNearWhole, pixelsToGridUnits, gridUnitsToPixels } from "../util.js";
+import { roundNearWhole, gridUnitsToPixels } from "../util.js";
 import { ElevatedPoint } from "./ElevatedPoint.js";
 import { GridCoordinates } from "../GridCoordinates.js";
 
@@ -189,9 +189,17 @@ export class GridCoordinates3d extends ElevatedPoint {
     return this.i === other.i && this.j === other.j;
   }
 
+  /**
+   * Add an offset to this point, returning a new point.
+   * Adds the offsets to the x,y,z coordinates, so that if it is off-grid it will remain off-grid.
+   * @param {pt} offset
+   * @param {GridCoordinates} [outPoint]
+   * @return {GridCoordinates}
+   */
   addOffset(offset, outPoint) {
-    outPoint = super.addOffset(offset, outPoint);
-    outPoint.k += (offset.k || 0);
+    outPoint ??= this.constructor.tmp;
+    outPoint = GridCoordinates.prototype.addOffset.call(this, offset, outPoint);
+    outPoint.k = canvas.grid.size * (offset.k || 0);
     return outPoint;
   }
 
