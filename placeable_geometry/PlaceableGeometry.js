@@ -66,6 +66,8 @@ export class PlaceableGeometry {
 
   placeablePropertiesUpdated() { }
 
+  _updateFaces() { }
+
   destroy() { }
 }
 
@@ -219,13 +221,13 @@ export const PlaceableModelMatrixMixin = superclass => {
     calculateScaleMatrix() { return this.modelMatrix.scale; }
 
     initialize() {
-      super.initialize();
       this.constructor.modelMatrixTracker.addFacet({ id: this.placeableId, newValues: identityM.arr });
       this.constructor._incrementTrackerCounter();
       const mm = this.modelMatrix;
       this.calculateTranslationMatrix(mm.translation);
       this.calculateRotationMatrix(mm.rotation);
       this.calculateScaleMatrix(mm.scale);
+      super.initialize();
     }
 
     destroy() {
@@ -332,6 +334,7 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
     if ( this._prototypeFaces.top ) this._prototypeFaces.top.transform(M, this.faces.top)
     if ( this._prototypeFaces.bottom ) this._prototypeFaces.bottom.transform(M, this.faces.bottom)
     for ( let i = 0, iMax = this._prototypeFaces.sides.length; i < iMax; i += 1 ) this._prototypeFaces.sides[i].transform(M, this.faces.sides[i]);
+    super._updateFaces();
   }
 
   shapeUpdated() {

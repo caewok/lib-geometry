@@ -28,7 +28,7 @@ function constrainedTokenBorder() { return ConstrainedTokenBorder.get(this).cons
  * I.e., the token overlaps a wall.
  * @returns {boolean}
  */
-function isConstrainedTokenBorder() { return !ConstrainedTokenBorder.get(this)._unrestricted; }
+function isConstrainedTokenBorder() { return !ConstrainedTokenBorder.get(this).unrestricted; }
 
 /**
  * New getter: Token.prototype.tokenBorder

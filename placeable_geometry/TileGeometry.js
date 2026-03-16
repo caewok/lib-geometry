@@ -308,6 +308,7 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
     // Create the bottom as a mirror of the top.
     this.faces.top.clone(this.faces.bottom);
     this.faces.bottom.reverseOrientation();
+    super._updateFaces();
   }
 
   /**

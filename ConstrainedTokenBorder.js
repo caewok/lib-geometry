@@ -58,6 +58,7 @@ export class ConstrainedTokenBorder extends foundry.canvas.geometry.ClockwiseSwe
     // console.log(`Updating constrained border shape for ${this._token.name}`, this.points);
     this.#wallsID = ConstrainedTokenBorder._wallsID;
     this.#updateTokenMovementProperties();
+    this.#dirtyConstrainedShape = !canvas.ready; // Avoid caching values until edges loaded.
   }
 
   _updateLitShape() {
@@ -78,11 +79,8 @@ export class ConstrainedTokenBorder extends foundry.canvas.geometry.ClockwiseSwe
    * @returns {PIXI.Polygon|PIXI.Rectangle}
    */
   constrainedBorder() {
-    if ( this.#dirtyConstrainedShape ) {
-      this._updateConstrainedShape();
-      this.#dirtyConstrainedShape = !canvas.ready; // Avoid caching values until edges loaded.
-    }
-    if ( !this._unrestricted && this.points.length >= 3 ) return new PIXI.Polygon(this.points);
+    if ( this.#dirtyConstrainedShape ) this._updateConstrainedShape();
+    if ( !this.#unrestricted && this.points.length >= 3 ) return new PIXI.Polygon(this.points);
     return this._token.tokenBorder;
   }
 
@@ -179,7 +177,12 @@ export class ConstrainedTokenBorder extends foundry.canvas.geometry.ClockwiseSwe
    * If true, no walls constrain token.
    * @type {boolean}
    */
-  _unrestricted = true;
+  #unrestricted = null;
+
+  get unrestricted() {
+    if ( this.#dirtyConstrainedShape ) this._updateConstrainedShape();
+    return this.#unrestricted;
+  }
 
   /** @type {boolean} */
   #dirtyConstrainedShape = true;
@@ -219,7 +222,7 @@ export class ConstrainedTokenBorder extends foundry.canvas.geometry.ClockwiseSwe
     // Clockwise sweep refuses to compute outside the scene border.
     const { x, y } = this._token.center;
     if ( !canvas.dimensions.sceneRect.contains(x, y) ) {
-      this._unrestricted = true;
+      this.#unrestricted = true;
       return;
     }
     super.compute();
@@ -234,17 +237,15 @@ export class ConstrainedTokenBorder extends foundry.canvas.geometry.ClockwiseSwe
       this._identifyVertices();
       this._executeSweep();
       this._constrainBoundaryShapes();
-      this._unrestricted = false;
-    } else {
-      this._unrestricted = true;
-    }
+      this.#unrestricted = false;
+    } else this.#unrestricted = true;
 
     this.vertices.clear();
     this.edges.clear();
     this.rays.length = 0;
 
     // If we screwed up, fall back on unrestricted.
-    if ( this.points.length < 6 ) this._unrestricted = true;
+    if ( this.points.length < 6 ) this.#unrestricted = true;
   }
 
   /**
@@ -312,8 +313,7 @@ export class ConstrainedTokenBorder extends foundry.canvas.geometry.ClockwiseSwe
   /** @override */
   contains(x, y) {
     const inBounds = this._token.bounds.contains(x, y);
-    if ( this._unrestricted || !inBounds ) return inBounds;
-
+    if ( this.#unrestricted || !inBounds ) return inBounds;
     return PIXI.Polygon.prototype.contains.call(this, x, y);
   }
 

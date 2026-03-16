@@ -72,9 +72,9 @@ const TokenConstrainedFacesMixin = superclass => class extends superclass {
     for ( const side of faces.sides ) yield side;
   }
 
-  shapeUpdated() {
-    super.shapeUpdated();
+  _updateFaces() {
     this.updateConstrainedFaces();
+    super._updateFaces();
   }
 
   updateConstrainedFaces() {
@@ -131,8 +131,8 @@ const TokenConstrainedLitFacesMixin = superclass => class extends superclass {
     for ( const side of faces.sides ) yield side;
   }
 
-  shapeUpdated() {
-    super.shapeUpdated();
+  _updateFaces() {
+    super._updateFaces();
     this.updateConstrainedLitFaces();
   }
 
@@ -190,8 +190,8 @@ const TokenConstrainedBrightLitFacesMixin = superclass => class extends supercla
     for ( const side of faces.sides ) yield side;
   }
 
-  shapeUpdated() {
-    super.shapeUpdated();
+  _updateFaces() {
+    super._updateFaces();
     this.updateConstrainedBrightLitFaces();
   }
 
