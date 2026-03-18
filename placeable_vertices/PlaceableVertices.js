@@ -235,7 +235,6 @@ export class AbstractInstancedVertices {
   placeable;
 
   constructor(placeable) {
-    super();
     this.placeable = placeable;
   }
 
