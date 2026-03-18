@@ -6,10 +6,9 @@ CONST,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { AbstractInstancedVertices, AbstractModelVerticesMixin, VertexObject } from "./PlaceableVertices.js";
+import { AbstractInstancedVertices, VertexObject } from "./PlaceableVertices.js";
 import { Rectangle3dVertices, Polygon3dVertices, Hex3dVertices, SphereVertices, Ellipse3dVertices } from "./BasicVertices.js";
 import { GEOMETRY_LIB_ID } from "../const.js";
-import { mix } from "../mixwith.js";
 
 export class TokenInstancedVertices extends AbstractInstancedVertices {
 
@@ -117,7 +116,7 @@ export class TokenInstancedVertices extends AbstractInstancedVertices {
 
 // ----- NOTE: Constrained Models ----- //
 
-export class ConstrainedTokenModelVertices extends mix(TokenInstancedVertices).with(AbstractModelVerticesMixin) {
+export class ConstrainedTokenModelVertices extends TokenInstancedVertices {
 
   get token() { return this.placeable; }
 
@@ -135,7 +134,7 @@ export class ConstrainedTokenModelVertices extends mix(TokenInstancedVertices).w
   }
 }
 
-export class LitTokenModelVertices extends mix(TokenInstancedVertices).with(AbstractModelVerticesMixin) {
+export class LitTokenModelVertices extends TokenInstancedVertices {
 
   get token() { return this.placeable; }
 
@@ -158,7 +157,7 @@ export class LitTokenModelVertices extends mix(TokenInstancedVertices).with(Abst
   }
 }
 
-export class BrightLitTokenModelVertices extends mix(TokenInstancedVertices).with(AbstractModelVerticesMixin) {
+export class BrightLitTokenModelVertices extends TokenInstancedVertices {
 
   get token() { return this.placeable; }
 

@@ -5,13 +5,12 @@ PIXI,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { AbstractInstancedVertices, AbstractModelVerticesMixin, VertexObject } from "./PlaceableVertices.js";
+import { AbstractInstancedVertices, VertexObject } from "./PlaceableVertices.js";
 import { Rectangle3dVertices, Polygon3dVertices, Ellipse3dVertices, Circle3dVertices } from "./BasicVertices.js";
 import { RegionGeometry } from "../placeable_geometry/RegionGeometry.js";
 import { gridUnitsToPixels } from "../util.js";
 import { ElevatedPoint } from "../3d/ElevatedPoint.js";
 import { GEOMETRY_LIB_ID, GEOMETRY_ID, OTHER_MODULES } from "../const.js";
-import { mix } from "../mixwith.js";
 
 export class RegionRectangleInstancedVertices extends AbstractInstancedVertices {
   static type = "RegionRectangle";
@@ -39,7 +38,7 @@ export class RegionEllipseInstancedVertices extends AbstractInstancedVertices {
 class AbstractRegionVertices {}
 
 const tmpPoly = new PIXI.Polygon();
-export class RegionPolygonModelVertices extends mix(AbstractRegionVertices).with(AbstractModelVerticesMixin)  {
+export class RegionPolygonModelVertices extends AbstractRegionVertices  {
 
   static type = "RegionPolygon";
 
@@ -69,7 +68,7 @@ export class RegionPolygonModelVertices extends mix(AbstractRegionVertices).with
 export class RegionPolygonRampVertices extends RegionPolygonModelVertices {
   // TODO: Can we cache the untrimmed vertices or untrimmed + elevation change?
   calculateModel(_opts) {
-    const elev = RegionGeometryTracker.regionElevation(this.region);
+    const elev = RegionGeometry.regionElevation(this.region);
     let untrimmedVertices;
     if ( this.placeable ) untrimmedVertices = Polygon3dVertices.calculateVertices(this.poly, elev);
 

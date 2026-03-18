@@ -228,12 +228,9 @@ export class AbstractInstancedVertices {
     const geom = placeable[GEOMETRY_LIB_ID][GEOMETRY_ID];
     return vo.transformToModel(geom.modelMatrix);
   }
-}
 
-/**
- * Instantiated object that tracks vertices and indices for one-off shapes, like constrained tokens.
- */
-export const AbstractModelVerticesMixin = superclass => class extends superclass {
+  // Instantiation, for model-based vertices.
+
   /** @type {PlaceableObject} */
   placeable;
 
@@ -243,16 +240,13 @@ export const AbstractModelVerticesMixin = superclass => class extends superclass
   }
 
   calculateModel(opts) {
-    // Default to the instance vertices.
     return this.constructor.calculateModelForPlaceable(this.placeable, opts);
   }
 
-  static getVertexObjectForPlaceable(placeable, opts) {
-    const vModel = new this(placeable);
-    return vModel.calculateModel(opts);
+  getVertexObject(opts) {
+    return this.constructor.getVertexObjectForPlaceable(this.placeable, opts);
   }
 }
-
 
 
 /* Testing
