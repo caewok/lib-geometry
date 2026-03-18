@@ -40,6 +40,8 @@ export class TileGeometryTracker extends PlaceableGeometryTracker {
 
   static LAYER = "tiles";
 
+  static TRACKER_TYPES = TRACKER_TYPES;
+
   static TRACKERS = {
     position: TRACKER_TYPES.position,
     scale: TRACKER_TYPES.scale,

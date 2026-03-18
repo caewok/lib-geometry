@@ -34,6 +34,8 @@ export class TokenGeometryTracker extends PlaceableGeometryTracker {
 
   static LAYER = "tokens";
 
+  static TRACKER_TYPES = TRACKER_TYPES;
+
   static TRACKERS = {
     position: TRACKER_TYPES.position,
     scale: TRACKER_TYPES.scale,

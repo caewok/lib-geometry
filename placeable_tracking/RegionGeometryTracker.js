@@ -27,6 +27,8 @@ export class RegionGeometryTracker extends PlaceableGeometryTracker {
 
   static LAYER = "regions";
 
+  static TRACKER_TYPES = TRACKER_TYPES;
+
   static TRACKERS = {
     shape: [...TRACKER_TYPES.elevation, ...TRACKER_TYPES.shapes], // Treat altogether for now; may split in the future if useful.
   };

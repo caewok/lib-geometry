@@ -40,6 +40,8 @@ export class WallGeometryTracker extends PlaceableGeometryTracker {
 
   static LAYER = "walls";
 
+  static TRACKER_TYPES = TRACKER_TYPES;
+
   static TRACKERS = {
     shape: TRACKER_TYPES.position,
     direction: TRACKER_TYPES.direction,
