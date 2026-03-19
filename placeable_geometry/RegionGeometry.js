@@ -332,7 +332,7 @@ class AbstractRegionShapeGeometry extends mix(PlaceableGeometry).with(PlaceableA
 
 
 
-class RegionRectangleShapeGeometry extends AbstractRegionShapeGeometry {
+export class RegionRectangleShapeGeometry extends AbstractRegionShapeGeometry {
 
   // ----- NOTE: Faces ---- //
 
@@ -363,7 +363,7 @@ class RegionRectangleShapeGeometry extends AbstractRegionShapeGeometry {
   }
 }
 
-class RegionEllipseShapeGeometry extends AbstractRegionShapeGeometry {
+export class RegionEllipseShapeGeometry extends AbstractRegionShapeGeometry {
 
   // ----- NOTE: Faces ---- //
 
@@ -393,7 +393,7 @@ class RegionEllipseShapeGeometry extends AbstractRegionShapeGeometry {
   }
 }
 
-class RegionCircleShapeGeometry extends AbstractRegionShapeGeometry {
+export class RegionCircleShapeGeometry extends AbstractRegionShapeGeometry {
 
   // ----- NOTE: Faces ---- //
 
@@ -423,7 +423,7 @@ class RegionCircleShapeGeometry extends AbstractRegionShapeGeometry {
   }
 }
 
-class RegionPolygonShapeGeometry extends AbstractRegionShapeGeometry {
+export class RegionPolygonShapeGeometry extends AbstractRegionShapeGeometry {
 
   // ----- NOTE: Faces ---- //
 
