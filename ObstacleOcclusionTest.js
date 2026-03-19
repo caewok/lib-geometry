@@ -11,6 +11,7 @@ PIXI,
 import { NULL_SET } from "./util.js";
 import { OTHER_MODULES, GEOMETRY_LIB_ID, GEOMETRY_ID } from "./const.js";
 import { AABB2d } from "./AABB.js";
+import { Draw } from "./Draw.js";
 
 /**
  * An instance that, for a given configuration, tracks potential obstacles.
@@ -296,7 +297,6 @@ export class ObstacleOcclusionTest {
   _constructObstacleTester() {
     // Obstacle found should follow the blocking config.
     // Note that obstacles will have NULL_SET if config is not set to block.
-    const blocking = this._config;
     const fnNames = [];
     if ( this.obstacles.walls.size ) fnNames.push("wallsOcclude");
     if ( this.obstacles.terrainWalls.size ) fnNames.push("terrainWallsOcclude");
@@ -391,6 +391,35 @@ export class ObstacleOcclusionTest {
         wallSubset.add(w);
       });
     return wallSubset;
+  }
+
+  // ----- NOTE: Debug ----- //
+
+  _drawFrustum(draw) {
+    const drawOpts = { draw, width: 0, fill: Draw.COLORS.gray, fillAlpha: 0.1 }
+    if ( this.frustum.draw2d ) this.frustum.draw2d(drawOpts);
+    else Draw.shape(this.frustum, drawOpts);
+  }
+
+/**
+   * For debugging.
+   * Draw outlines for the various objects that can be detected on the canvas.
+   */
+  _drawDetectedObjects(draw) {
+    const colors = Draw.COLORS;
+    const OBSTACLE_COLORS = {
+      walls: colors.lightred,
+      terrainWalls: colors.lightgreen,
+      proximateWalls: colors.lightblue,
+      tiles: colors.yellow,
+      tokens: colors.orange,
+      regions: colors.red,
+    }
+    for ( const [key, obstacles] of Object.entries(this.obstacles) ) {
+      const color = OBSTACLE_COLORS[key];
+      const drawOpts = { draw, color, fillAlpha: 0.1, fill: color };
+      obstacles.forEach(placeable => placeable[GEOMETRY_LIB_ID][GEOMETRY_ID].faces.top.draw2d(drawOpts));
+    }
   }
 }
 
