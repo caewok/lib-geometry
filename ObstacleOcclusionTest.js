@@ -418,14 +418,7 @@ export class ObstacleOcclusionTest {
     for ( const [key, obstacles] of Object.entries(this.obstacles) ) {
       const color = OBSTACLE_COLORS[key];
       const drawOpts = { draw, color, fillAlpha: 0.1, fill: color };
-
-      if ( key === "regions" ) obstacles.forEach(placeable =>
-        placeable[GEOMETRY_LIB_ID][GEOMETRY_ID].combinedFaces.forEach(cf => cf.top.draw2d(drawOpts)));
-      else obstacles.forEach(placeable => {
-        const geom = placeable[GEOMETRY_LIB_ID][GEOMETRY_ID];
-        const face = geom.faces.top || geom.faces.bottom;
-        face.draw2d(drawOpts));
-      }
+      obstacles.forEach(placeable => placeable[GEOMETRY_LIB_ID][GEOMETRY_ID].draw2d(drawOpts));
     }
   }
 }
