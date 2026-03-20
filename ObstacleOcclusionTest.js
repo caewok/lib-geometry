@@ -193,7 +193,7 @@ export class ObstacleOcclusionTest {
 
     // Specialized exclusion tests
     if ( this.#frustum.aabb ) walls = walls.filter(wall => this.#frustum.aabb.overlapsAABB(placeableAABB(wall)));
-    if ( this.#frustum.overlapsEdge ) walls = walls.filter(wall => this.#frustum.overlapsEdge(wall));
+    if ( this.#frustum.overlapsWall ) walls = walls.filter(wall => this.#frustum.overlapsWall(wall));
     return walls;
   }
 
