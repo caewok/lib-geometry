@@ -166,6 +166,7 @@ export class ObstacleOcclusionTest {
   }
 
   update() {
+    if ( !canvas.ready ) return;
     this._updateObstacles();
     this._constructObstacleTester();
   }
