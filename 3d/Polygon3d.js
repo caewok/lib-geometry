@@ -1064,8 +1064,8 @@ export class Ellipse3d extends Polygon3d {
     const isUniform = Math.abs(sxM - syM) > EPSILON || Math.abs(syM - sz.magnitude()) > EPSILON;
 
     // A non-uniform scale will result in an ellipse.
-    if ( !isUniform && !(ellipse3d instanceof Ellipse3d) ) ellipse3d = this.cloneEmpty();
-    ellipse3d ??= this.cloneEmpty();
+    if ( !isUniform && !(ellipse3d instanceof Ellipse3d) ) ellipse3d = this._cloneEmpty();
+    ellipse3d ??= this._cloneEmpty();
 
     // Transform the center.
     using txCenter = M.multiplyPoint3d(this.centroid);
@@ -1117,7 +1117,7 @@ export class Ellipse3d extends Polygon3d {
   }
 
  multiplyScalar(multiplier, ellipse3d) {
-    ellipse3d ??= this.cloneEmpty();
+    ellipse3d ??= this.._cloneEmpty();
     this.clone(ellipse3d);
 
     // Store temporary in case ellipse3d is circle to avoid multiplying radius twice.
@@ -1314,18 +1314,18 @@ export class Circle3d extends Ellipse3d {
    * @returns {Polygon3d} The modified tri.
    */
   transform(M, circle3d) {
-    circle3d ??= this.cloneEmpty();
+    circle3d ??= this._cloneEmpty();
     return super.transform(M, circle3d);
   }
 
   multiplyScalar(multiplier, circle3d) {
-    circle3d ??= this.cloneEmpty();
+    circle3d ??= this._cloneEmpty();
     this.clone(circle3d);
     circle3d.radius *= multiplier;
   }
 
   scale(axes, circle3d) {
-    circle3d ??= this.cloneEmpty();
+    circle3d ??= this._cloneEmpty();
     return super.scale(axes, circle3d);
   }
 }
