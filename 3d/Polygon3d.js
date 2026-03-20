@@ -1117,7 +1117,7 @@ export class Ellipse3d extends Polygon3d {
   }
 
  multiplyScalar(multiplier, ellipse3d) {
-    ellipse3d ??= this.._cloneEmpty();
+    ellipse3d ??= this._cloneEmpty();
     this.clone(ellipse3d);
 
     // Store temporary in case ellipse3d is circle to avoid multiplying radius twice.
