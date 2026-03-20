@@ -13,6 +13,7 @@ import { Plane } from "./Plane.js";
 import { pointsAreCollinear, almostBetween } from "../util.js";
 import { AABB3d } from "./AABB3d.js";
 import { Draw } from "../Draw.js";
+import { Matrix } from "../Matrix.js";
 
 /*
 3d Polygon representing a flat polygon plane.
@@ -763,6 +764,8 @@ export class Ellipse3d extends Polygon3d {
   /** @type {Point3d} */
   get center() { return this.points[0]; }
 
+  get centroid() { return this.points[0]; }
+
   /** @type {number} */
   #radiusX = 0;
 
@@ -775,6 +778,14 @@ export class Ellipse3d extends Polygon3d {
   get radiusY() { return this.#radiusY; }
 
   set radiusY(value) { this.#radiusY = value; }
+
+  get halfWidth() { return this.radiusX; }
+
+  get halfHeight() { return this.radiuxY; }
+
+  set halfWidth(value) { this.radiusX = value; }
+
+  set halfHeight(value) { this.radiusY = value; }
 
   constructor() {
     super(1); // 1 point representing the center.
@@ -815,10 +826,6 @@ export class Ellipse3d extends Polygon3d {
   // ----- NOTE: Plane ----- //
 
   get ellipse() { return new PIXI.Ellipse(this.center.x, this.center.y, this.radiusX, this.radiusY); }
-
-  // ----- NOTE: Centroid ----- //
-
-  get centroid() { return this.points[0]; }
 
   // ----- NOTE: Factory methods ----- //
 
@@ -1033,8 +1040,6 @@ export class Ellipse3d extends Polygon3d {
     return contained;
   }
 
-
-
   // ----- NOTE: Transformations ----- //
   isValid() {
     this.clean();
@@ -1048,57 +1053,81 @@ export class Ellipse3d extends Polygon3d {
    * @returns {Polygon3d} The modified tri.
    */
   transform(M, ellipse3d) {
-    // Get the x and y points along the ellipse.
-    const { center, x, y } = this.#ellipsePoints();
-    using txCenter = M.multiplyPoint3d(center);
-    using txX = M.multiplyPoint3d(x);
-    using txY = M.multiplyPoint3d(y);
+    // Determine if scaling is not uniform.
+    // Look to the length of the basis vectors.
+    using sx = Point3d.set(M.getIndex(0, 0), M.getIndex(0, 1), M.getIndex(0, 2));
+    using sy = Point3d.set(M.getIndex(1, 0), M.getIndex(1, 1), M.getIndex(1, 2));
+    using sz = Point3d.set(M.getIndex(2, 0), M.getIndex(2, 1), M.getIndex(2, 2));
+    const sxM = sx.magnitude();
+    const syM = sy.magnitude();
+    const EPSILON = 1e-06;
+    const isUniform = Math.abs(sxM - syM) > EPSILON || Math.abs(syM - sz.magnitude()) > EPSILON;
 
-    ellipse3d ??= this.clone();
+    // A non-uniform scale will result in an ellipse.
+    if ( !isUniform && !(ellipse3d instanceof Ellipse3d) ) ellipse3d = this.cloneEmpty();
+    ellipse3d ??= this.cloneEmpty();
+
+    // Transform the center.
+    using txCenter = M.multiplyPoint3d(this.centroid);
     ellipse3d.points[0].copyFrom(txCenter);
-    ellipse3d.radiusX = Point3d.distanceBetween(txCenter, txX);
-    ellipse3d.radiusY = Point3d.distanceBetween(txCenter, txY);
+
+    // Transform Normal. (Inverse transpose the 3x3 portion of the matrix.)
+    using mat3 = M.subset({ rowEnd: 2, colEnd: 2 });
+    using mat3Inv = mat3.inverse();
+    using matNormal = Matrix.fromPoint3d(this.plane.normal, { homogenous: false });
+    mat3Inv.transpose(mat3Inv);
+    mat3Inv.multiply1x3(matNormal, matNormal);
+
+    ellipse3d.normal.x = matNormal.getIndex(0, 1);
+    ellipse3d.normal.y = matNormal.getIndex(0, 2);
+    ellipse3d.normal.z = matNormal.getIndex(0, 3);
+    ellipse3d.normal.normalize(ellipse3d.normal);
+
+    if ( isUniform ) {
+      // Store temporary in case elllipse3d is radius to avoid multiplying radius twice.
+      const newRX = ellipse3d.radiusX * sxM;
+      const newRY = ellipse3d.radiusY * sxM;
+      ellipse3d.radiusX = newRX;
+      ellipse3d.radiusY = newRY;
+
+    } else {
+      // Ellipse: Find two orthogonal vectors on the original plane.
+      using tangent = Point3d.tmp;
+      using bitangent = Point3d.tmp;
+
+      // Find arbitrary vector not parallel to the normal.
+      using helper = Math.abs(this.plane.normal.y) < 0.9 ? Point3d.tmp.set(0, 1, 0) : Point3d.tmp.set(1, 0, 0);
+      this.plane.normal.cross(helper, tangent);
+      tangent.normalize(tangent);
+      this.plane.normal.cross(tangent, bitangent);
+
+      // Transform vectors by directions only; ignore translation.
+      using transformedT = Matrix.fromPoint3d(tangent, { homogenous: false });
+      using transformedB = Matrix.fromPoint3d(bitangent, { homogenous: false });
+      mat3.multiply1x3(transformedT, transformedT);
+      mat3.multiply1x3(transformedB, transformedB);
+
+      ellipse3d.radiusX *= transformedT.magnitude();
+      ellipse3d.radiusY *= transformedB.magnitude();
+    }
     return ellipse3d;
   }
 
-  multiplyScalar(multiplier, ellipse3d) {
-    // Get the x and y points along the ellipse.
-    const { center, x, y } = this.#ellipsePoints();
-    using txCenter = center.multiplyScalar(multiplier);
-    using txX = x.multiplyScalar(multiplier);
-    using txY = y.multiplyScalar(multiplier);
+ multiplyScalar(multiplier, ellipse3d) {
+    ellipse3d ??= this.cloneEmpty();
+    this.clone(ellipse3d);
 
-    ellipse3d ??= this.clone();
-    ellipse3d.points[0].copyFrom(txCenter);
-    ellipse3d.radiusX = Point3d.distanceBetween(txCenter, txX);
-    ellipse3d.radiusY = Point3d.distanceBetween(txCenter, txY);
+    // Store temporary in case ellipse3d is circle to avoid multiplying radius twice.
+    const newRX = ellipse3d.radiusX * multiplier;
+    const newRY = ellipse3d.radiusY * multiplier;
+    ellipse3d.radiusX = newRX;
+    ellipse3d.radiusY = newRY;
     return ellipse3d;
   }
 
-  scale({ x = 1, y = 1, z = 1} = {}, ellipse3d) {
-    // Get the x and y points along the ellipse.
-    const { center, x: xPt, y: yPt } = this.#ellipsePoints();
-    using scalePt = Point3d.tmp.set(x, y, z);
-    using txCenter = center.multiply(scalePt);
-    using txX = xPt.multiply(scalePt);
-    using txY = yPt.multiply(scalePt);
-
-    ellipse3d ??= this.clone();
-    ellipse3d.points[0].copyFrom(txCenter);
-    ellipse3d.radiusX = Point3d.distanceBetween(txCenter, txX);
-    ellipse3d.radiusY = Point3d.distanceBetween(txCenter, txY);
-    return ellipse3d;
-  }
-
-  #ellipsePoints() {
-    const ellipse2d = this.toPlanarEllipse();
-    using w = PIXI.Point.tmp.set(ellipse2d.width, 0);
-    using h = PIXI.Point.tmp.set(0, ellipse2d.height);
-
-    using xPt2d = ellipse2d.center.add(w);
-    using yPt2d = ellipse2d.center.add(h);
-    const [x, y] = this._convert2dPointsTo3d([xPt2d, yPt2d]);
-    return { center: this.points[0], x,  y };
+  scale({ x = 1, y = 1, z = 1 } = {}, ellipse3d) {
+    using scaleM = Matrix.scale(x, y, z);
+    return this.transform(scaleM, ellipse3d);
   }
 
   // divideByZ: same for ellipse.
@@ -1232,7 +1261,7 @@ export class Circle3d extends Ellipse3d {
    * @param {Point3d} pt
    * @returns {boolean}
    */
-  _intersetionWithinPolygon(ix) {
+  _intersectionWithinPolygon(ix) {
     // If the plane is not vertical, can do a simple projection onto the x/y plane as a 2d polygon.
     let ix2d;
     if ( this.plane.normal.z ) ix2d = ix.to2d();
@@ -1253,62 +1282,25 @@ export class Circle3d extends Ellipse3d {
 
   /**
    * Transform the points using a transformation matrix.
+   * If the x and y scales are different, this will result in an ellipse, not a circle.
    * @param {Matrix} M
    * @param {Polygon3d} [poly]    The triangle to modify
    * @returns {Polygon3d} The modified tri.
    */
   transform(M, circle3d) {
-    // TODO: If the x and y scales are different, this will result in an ellipse, not a circle.
-    // Get the x and y points along the ellipse.
-    const { center, x, y } = this.#circlePoints();
-    using txCenter = M.multiplyPoint3d(center);
-    using txX = M.multiplyPoint3d(x);
-    using txY = M.multiplyPoint3d(y);
-
-    circle3d ??= this.clone();
-    circle3d.points[0].copyFrom(txCenter);
-    circle3d.radius = Math.max(Point3d.distanceBetween(txCenter, txX), Point3d.distanceBetween(txCenter, txY));
-    return circle3d;
+    circle3d ??= this.cloneEmpty();
+    return super.transform(M, circle3d);
   }
 
   multiplyScalar(multiplier, circle3d) {
-    // Get the x and y points along the ellipse.
-    const { center, x, y } = this.#circlePoints();
-    using txCenter = center.multiplyScalar(multiplier);
-    using txX = x.multiplyScalar(multiplier);
-    using txY = y.multiplyScalar(multiplier);
-
-    circle3d ??= this.clone();
-    circle3d.points[0].copyFrom(txCenter);
-    circle3d.radius = Math.max(Point3d.distanceBetween(txCenter, txX), Point3d.distanceBetween(txCenter, txY));
-    return circle3d;
+    circle3d ??= this.cloneEmpty();
+    this.clone(circle3d);
+    circle3d.radius *= multiplier;
   }
 
-  scale({ x = 1, y = 1, z = 1} = {}, circle3d) {
-    // TODO: If the x and y scales are different, this will result in an ellipse, not a circle.
-
-    // Get the x and y points along the ellipse.
-    const { center, x: xPt, y: yPt } = this.#circlePoints();
-    using scalePt = Point3d.tmp.set(x, y, z);
-    using txCenter = center.multiply(scalePt);
-    using txX = xPt.multiply(scalePt);
-    using txY = yPt.multiply(scalePt);
-
-    circle3d ??= this.clone();
-    circle3d.points[0].copyFrom(txCenter);
-    circle3d.radius = Math.max(Point3d.distanceBetween(txCenter, txX), Point3d.distanceBetween(txCenter, txY));
-    return circle3d;
-  }
-
-  #circlePoints() {
-    const circle2d = this.toPlanarCircle();
-    using w = PIXI.Point.tmp.set(circle2d.radius, 0);
-    using h = PIXI.Point.tmp.set(0, circle2d.radius);
-
-    using xPt2d = circle2d.center.add(w);
-    using yPt2d = circle2d.center.add(h);
-    const [x, y] = this._convert2dPointsTo3d([xPt2d, yPt2d]);
-    return { center: this.points[0], x,  y };
+  scale(axes, circle3d) {
+    circle3d ??= this.cloneEmpty();
+    return super.scale(axes, circle3d);
   }
 }
 
