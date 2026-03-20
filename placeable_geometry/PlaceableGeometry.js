@@ -1,4 +1,5 @@
 /* globals
+CONFIG,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
@@ -245,7 +246,7 @@ export const PlaceableModelMatrixMixin = superclass => {
  * @typedef {object} Faces
  *
  * Faces of a placeable object.
- * @prop {Polygon3d} top
+ * @prop {Polygon3d|null} top
  * @prop {Polygon3d|null} bottom
  * @prop {Polygon3d[]} sides
  */
@@ -395,5 +396,54 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
    */
   draw2d(opts) {
     for ( const face of this.iterateFaces() ) face.draw2d(opts);
+  }
+}
+
+/**
+ * @typedef {function} PlaceableFacePointsMixin
+ *
+ * Add face points for this placeable class.
+ * Requires matrices.
+ * @param {function} superclass
+ * @returns {function} A subclass of `superclass.`
+ */
+
+/**
+ * @typedef FacePoints
+ *
+ * Faces of a placeable object.
+ * @prop {Point3d[]|null} top
+ * @prop {Point3d[]|null} bottom
+ * @prop {Point3d[][]} sides
+ */
+
+export const PlaceableFacePointsMixin = superclass => class extends superclass {
+
+  /** @typedef {FacePoints} */
+  facePoints = {
+    top: null,
+    bottom: null,
+    sides: [],
+  };
+
+  _updateFaces() {
+    super._updateFaces();
+    this._generateFacePoints();
+  }
+
+  /**
+   * For each face, generate points encompassed by its surface.
+   */
+  _generateFacePoints() {
+    if ( !this.faces ) return; // Requires the FacesMixin.
+
+    const opts = { spacing: CONFIG[GEOMETRY_LIB_ID].CONFIG.perPixelSpacing || 10, startAtEdge: false };
+    if ( this.faces.top ) this.facePoints.top = this.faces.top.pointsLattice(opts);
+    if ( this.faces.bottom ) this.facePoints.bottom = this.faces.bottom.pointsLattice(opts);
+
+    // Process each side; store in equivalent structure to face.sides array.
+    const numSides = this.faces.sides.length;
+    this.facePoints.sides = new Array(numSides);
+    for ( let i = 0; i < numSides; i += 1 ) this.facePoints.sides[i] = this.faces.sides[i].pointsLattice(opts);
   }
 }

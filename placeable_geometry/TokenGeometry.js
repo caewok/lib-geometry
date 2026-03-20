@@ -15,7 +15,8 @@ import {
   PlaceableGeometry,
   PlaceableAABBMixin,
   PlaceableModelMatrixMixin,
-  PlaceableFacesMixin
+  PlaceableFacesMixin,
+  PlaceableFacePointsMixin,
 } from "./PlaceableGeometry.js";
 
 // LibGeometry
@@ -212,7 +213,7 @@ const TokenConstrainedBrightLitFacesMixin = superclass => class extends supercla
  */
 export class TokenGeometry extends mix(PlaceableGeometry).with(
   TokenConstrainedBrightLitFacesMixin, TokenConstrainedLitFacesMixin, TokenConstrainedFacesMixin,
-  PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin) {
+  PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin, PlaceableFacePointsMixin) {
   /** @type {string} */
   static PLACEABLE_NAME = "Token";
 
