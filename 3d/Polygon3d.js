@@ -1073,14 +1073,14 @@ export class Ellipse3d extends Polygon3d {
 
     // Transform Normal. (Inverse transpose the 3x3 portion of the matrix.)
     using mat3 = M.subset({ rowEnd: 2, colEnd: 2 });
-    using mat3Inv = mat3.inverse();
+    using mat3Inv = mat3.invert();
     using matNormal = Matrix.fromPoint3d(this.plane.normal, { homogenous: false });
     mat3Inv.transpose(mat3Inv);
-    mat3Inv.multiply1x3(matNormal, matNormal);
+    matNormal.multiply1x3(mat3Inv, matNormal);
 
-    ellipse3d.normal.x = matNormal.getIndex(0, 1);
-    ellipse3d.normal.y = matNormal.getIndex(0, 2);
-    ellipse3d.normal.z = matNormal.getIndex(0, 3);
+    ellipse3d.normal.x = matNormal.getIndex(0, 0);
+    ellipse3d.normal.y = matNormal.getIndex(0, 1);
+    ellipse3d.normal.z = matNormal.getIndex(0, 2);
     ellipse3d.normal.normalize(ellipse3d.normal);
 
     if ( isUniform ) {
