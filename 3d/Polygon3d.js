@@ -1079,11 +1079,12 @@ export class Ellipse3d extends Polygon3d {
     matNormal.multiply1x3(mat3Inv, matNormal);
 
     const newPlane = ellipse3d.plane;
-    plane.point.copyFrom(this.centroid); // Because centroid was already transformed.
-    plane.normal.x = matNormal.getIndex(0, 0);
-    plane.normal.y = matNormal.getIndex(0, 1);
-    plane.normal.z = matNormal.getIndex(0, 2);
-    plane.normal.normalize(plane.normal);
+    const N = newPlane.normal;
+    newPlane.point.copyFrom(this.centroid); // Because centroid was already transformed.
+    N.x = matNormal.getIndex(0, 0);
+    N.y = matNormal.getIndex(0, 1);
+    N.z = matNormal.getIndex(0, 2);
+    N.normalize(N);
 
     if ( isUniform ) {
       // Store temporary in case elllipse3d is radius to avoid multiplying radius twice.
