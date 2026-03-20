@@ -542,21 +542,21 @@ export class Polygon3d {
    * @returns {Polygon3d} The modified tri.
    */
   transform(M, poly3d) {
-    this.clone(poly3d);
+    poly3d = this.clone(poly3d);
     poly3d.points.forEach((pt, idx) => M.multiplyPoint3d(this.points[idx], pt));
     poly3d.clearCache();
     return poly3d;
   }
 
   multiplyScalar(multiplier, poly3d) {
-    this.clone(poly3d);
+    poly3d = this.clone(poly3d);
     poly3d.points.forEach(pt => pt.multiplyScalar(multiplier, pt));
     poly3d.clearCache();
     return poly3d;
   }
 
   translate({ x = 0, y = 0, z = 0} = {}, poly3d) {
-    this.clone(poly3d);
+    poly3d = this.clone(poly3d);
     using txPt = Point3d.tmp.set(x, y, z);
     poly3d.points.forEach(pt => pt.add(txPt, pt));
     poly3d.clearCache();
@@ -564,7 +564,7 @@ export class Polygon3d {
   }
 
   scale({ x = 1, y = 1, z = 1} = {}, poly3d) {
-    this.clone(poly3d);
+    poly3d = this.clone(poly3d);
     using scalePt = Point3d.tmp.set(x, y, z);
     poly3d.points.forEach(pt => pt.multiply(scalePt, pt));
     poly3d.clearCache();
@@ -572,7 +572,7 @@ export class Polygon3d {
   }
 
   divideByZ(poly3d) {
-    this.clone(poly3d);
+    poly3d = this.clone(poly3d);
     poly3d.points.forEach(pt => {
       const zInv = 1 / pt.z;
       pt.x *= zInv;
@@ -1864,7 +1864,7 @@ export class Polygons3d extends Polygon3d {
   #applyMethodToAllWithReturn(method, ...args) { return this.polygons.map(poly => poly[method](...args)); }
 
   #applyMethodToAllWithClone(method, poly3d, ...args) {
-    this.clone(poly3d);
+    poly3d = this.clone(poly3d);
     poly3d.polygons.forEach(poly => poly[method](...args, poly));
     return poly3d;
   }
