@@ -1107,11 +1107,13 @@ export class Ellipse3d extends Polygon3d {
       // Transform vectors by directions only; ignore translation.
       using transformedT = Matrix.fromPoint3d(tangent, { homogenous: false });
       using transformedB = Matrix.fromPoint3d(bitangent, { homogenous: false });
-      mat3.multiply1x3(transformedT, transformedT);
-      mat3.multiply1x3(transformedB, transformedB);
+      transformedT.multiply1x3(mat3, transformedT);
+      transformedB.multiply1x3(mat3, transformedB);
+      transformedT.toPoint3d({ homogenous: false, outPoint: tangent });
+      transformedB.toPoint3d({ homogenous: false, outPoint: bitangent });
 
-      ellipse3d.radiusX *= transformedT.magnitude();
-      ellipse3d.radiusY *= transformedB.magnitude();
+      ellipse3d.radiusX *= tangent.magnitude();
+      ellipse3d.radiusY *= bitangent.magnitude();
     }
     return ellipse3d;
   }
