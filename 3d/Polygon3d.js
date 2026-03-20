@@ -1055,9 +1055,9 @@ export class Ellipse3d extends Polygon3d {
   transform(M, ellipse3d) {
     // Determine if scaling is not uniform.
     // Look to the length of the basis vectors.
-    using sx = Point3d.set(M.getIndex(0, 0), M.getIndex(0, 1), M.getIndex(0, 2));
-    using sy = Point3d.set(M.getIndex(1, 0), M.getIndex(1, 1), M.getIndex(1, 2));
-    using sz = Point3d.set(M.getIndex(2, 0), M.getIndex(2, 1), M.getIndex(2, 2));
+    using sx = Point3d.tmp.set(M.getIndex(0, 0), M.getIndex(0, 1), M.getIndex(0, 2));
+    using sy = Point3d.tmp.set(M.getIndex(1, 0), M.getIndex(1, 1), M.getIndex(1, 2));
+    using sz = Point3d.tmp.set(M.getIndex(2, 0), M.getIndex(2, 1), M.getIndex(2, 2));
     const sxM = sx.magnitude();
     const syM = sy.magnitude();
     const EPSILON = 1e-06;
