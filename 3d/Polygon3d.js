@@ -1132,6 +1132,29 @@ export class Ellipse3d extends Polygon3d {
 
   // divideByZ: same for ellipse.
 
+  /**
+   * Clip this ellipse in the z direction.
+   * @param {number} z
+   * @param {boolean} [keepLessThan=true]
+   * @returns {Polygon3d}
+   */
+  clipZ({ z = -0.1, keepLessThan = true, density } = {}) {
+    // If the plane is along the z axis, every point has the same z. Reject or keep.
+    if ( this.plane.normal.x.almostEqual(0) && this.plane.normal.y.almostEqual(0) ) {
+      const out = this._cloneEmpty();
+      const toKeep = this.clipPlanePoints({
+        cutoff: z,
+        coordinate: "z",
+        cmp: keepLessThan ? "lessThan" : "greaterThan"
+      });
+      out.points = toKeep; // Either keep or reject the center point.
+      return out;
+    }
+
+    // Otherwise, convert to polygon and keep or reject
+    const poly = this.toPolygon3d({ density });
+    return poly.clipZ({ z, keepLessThan });
+  }
 
 }
 
