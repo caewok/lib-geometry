@@ -1,5 +1,4 @@
 /* globals
-CONFIG,
 PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
@@ -18,7 +17,7 @@ import {
 import { CenteredPolygon } from "../CenteredPolygon/CenteredPolygon.js";
 import { CenteredRectangle } from "../CenteredPolygon/CenteredRectangle.js";
 import { Ellipse } from "../Ellipse.js";
-import { GEOMETRY_LIB_ID, OTHER_MODULES } from "../const.js";
+import { OTHER_MODULES } from "../const.js";
 import { AABB3d } from "../3d/AABB3d.js";
 import { MatrixFloat32 } from "../Matrix.js";
 import { Quad3d, Polygon3d, Polygons3d, Ellipse3d, Circle3d } from "../3d/Polygon3d.js";
@@ -34,12 +33,7 @@ import { Point3d } from "../3d/Point3d.js";
   Regions store combined shapes as region.polygons.
 */
 
-
-/**
- * Prototype order:
- * WallGeometryTracker -> PlaceableFacesMixin -> PlaceableMatricesMixin -> PlaceableAABBMixin -> PlaceableGeometry
- */
-export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin) {
+export class RegionGeometry extends PlaceableGeometry {
   /** @type {string} */
   static PLACEABLE_NAME = "Region";
 
@@ -54,17 +48,6 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMix
     ELLIPSE: 3,
     CIRCLE: 4,
   };
-
-  constructor(placeable) {
-    super(placeable);
-
-    // Delete the instance properties created by mixins so the getters on this class are used.
-    delete this.aabb;
-    delete this.faces;
-    delete this._prototypeFaces;
-    delete this.modelMatrix;
-    delete this._model;
-  }
 
   get region() { return this.placeable; }
 
@@ -117,15 +100,15 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMix
 
   // ----- NOTE: AABB ----- //
 
-  calculateAABB() { this.shapeGeom.calculateAABB(); }
-
   get aabb() { return this.shapeGeom.aabb; }
 
   // ----- NOTE: Matrices ---- //
 
-  get model() { return this.shapeGeom.model; }
+  get modelMatrix() { return this.shapeGeom.modelMatrix; }
 
-  get _model() { return this.shapeGeom._model; }
+  get placeableId() { return this.shapeGeom.placeableId; }
+
+  destroy() { this.shapeGeom.destroy(); super.destroy(); }
 
   // ----- NOTE: Faces ---- //
 
@@ -133,7 +116,11 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMix
 
   get faces() { return this.shapeGeom.faces; }
 
-  _updateFaces() { this.shapeGeom._updateFaces(); }
+  *iterateFaces() { yield* this.shapeGeom.iterateFaces(); }
+
+  rayIntersection(rayOrigin, rayDirection, opts) { return this.shapeGeom.rayIntersection(rayOrigin, rayDirection, opts); }
+
+  draw2d(opts) { this.shapeGeom.draw2d(opts); }
 
   // ----- NOTE: Update underlying shapes ----- //
 
@@ -141,7 +128,6 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMix
     // Must rebuild the shape; likely changed.
     this.shapeGeom = this.buildGeometry();
     this.shapeGeom.initialize();
-    this._initializePrototypeFaces();
     super.shapeUpdated();
   }
 
