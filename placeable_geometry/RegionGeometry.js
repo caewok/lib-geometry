@@ -36,6 +36,15 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMix
   /** @type {string} */
   static layer = "regions";
 
+  static getShapeGeom(shape) {
+    const idx = shape.parent.shapes.indexOf(shape);
+    const region = shape.parent?.object;
+    if ( !region ) return;
+    const regionGeom = region[GEOMETRY_LIB_ID][GEOMETRY_LIB];
+    if ( !regionGeom ) return;
+    return regionGeom.shapeGeometries[idx];
+  }
+
   get region() { return this.placeable; }
 
   get shapes() { return this.placeable.document.shapes; }

@@ -313,19 +313,14 @@ export class Frustum {
 
     // For each region shape, use the ideal version to test b/c circles and ellipses can be tested faster than polys.
     // Ignore holes (some shape with holes may get included but rather be over-inclusive here)
-    for ( const shape of region.document.regionShapes ) {
-      if ( this.overlapsRegionShape(shape) ) return true;
-    }
-    return false;
+    const geom = region[GEOMETRY_LIB_ID][GEOMETRY_ID];
+    return geom.shapeGeometries.some(shapeGeom => this._overlapsRegionShapeGeom(shapeGeom));
   }
 
-  overlapsRegionShape(shape) {
-    if ( shape.data.hole ) return false;
-
-    const geom = shape[GEOMETRY_LIB_ID][GEOMETRY_ID];
+  _overlapsRegionShapeGeom(geom) {
+    if ( geom.isHole ) return false;
     return this.aabb.overlapsAABB(geom.aabb);
   }
-
 
   /**
    * Test if an elevation range might be within the frustum, as determined by the AABB.

@@ -4,7 +4,7 @@ PIXI
 */
 "use strict";
 
-import { GEOMETRY_LIB_ID } from "../const.js";
+import { GEOMETRY_LIB_ID, GEOMETRY_ID } from "../const.js";
 import { WallGeometryTracker } from "../placeable_tracking/WallGeometryTracker.js";
 import { TokenGeometryTracker } from "../placeable_tracking/TokenGeometryTracker.js";
 import { TileGeometryTracker } from "../placeable_tracking/TileGeometryTracker.js";
@@ -28,7 +28,7 @@ describe("Walls", () => {
   describe("Model Matrix", () => {
     it("should have numeric values", () => {
       canvas.walls.placeables.forEach(wall => {
-        const geom = wall[GEOMETRY_LIB_ID].geometry;
+        const geom = wall[GEOMETRY_LIB_ID][GEOMETRY_ID];
         expect(geom.modelMatrix.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
       });
     });
@@ -45,7 +45,7 @@ describe("Tokens", () => {
   describe("Model Matrix", () => {
     it("should have numeric values", () => {
       canvas.tokens.placeables.forEach(token => {
-        const geom = token[GEOMETRY_LIB_ID].geometry;
+        const geom = token[GEOMETRY_LIB_ID][GEOMETRY_ID];
         expect(geom.modelMatrix.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
       });
     });
@@ -62,7 +62,7 @@ describe("Tiles", () => {
   describe("Model Matrix", () => {
     it("should have numeric values", () => {
       canvas.tiles.placeables.forEach(tile => {
-        const geom = tile[GEOMETRY_LIB_ID].geometry;
+        const geom = tile[GEOMETRY_LIB_ID][GEOMETRY_ID];
         expect(geom.modelMatrix.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
       });
     });
@@ -80,9 +80,9 @@ describe("Regions", () => {
     // Region shapes have the model matrix
     it("should have numeric values", () => {
       canvas.regions.placeables.forEach(region => {
-        for ( const shape of region.document.shapes ) {
-          const geom = shape[GEOMETRY_LIB_ID].geometry;
-          expect(geom.modelMatrix.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
+        const regionGeom = region[GEOMETRY_LIB_ID][GEOMETRY_ID];
+        for ( const shapeGeom of regionGeom.shapeGeometries ) {
+          expect(shapeGeom.modelMatrix.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
          }
       });
     });
@@ -92,21 +92,21 @@ describe("Regions", () => {
     // Region shapes have aabb
     it("shapes should have numeric values", () => {
       canvas.regions.placeables.forEach(region => {
-        for ( const shape of region.document.shapes ) {
-          const geom = shape[GEOMETRY_LIB_ID].geometry;
-          expect(isFinite(geom.aabb.min.x)).to.be.true;
-          expect(isFinite(geom.aabb.min.y)).to.be.true;
-          expect(Number.isNumeric(geom.aabb.min.z)).to.be.true;
-          expect(isFinite(geom.aabb.max.x)).to.be.true;
-          expect(isFinite(geom.aabb.max.y)).to.be.true;
-          expect(Number.isNumeric(geom.aabb.max.z)).to.be.true;
+        const regionGeom = region[GEOMETRY_LIB_ID][GEOMETRY_ID];
+        for ( const shapeGeom of regionGeom.shapeGeometries ) {
+          expect(isFinite(shapeGeom.aabb.min.x)).to.be.true;
+          expect(isFinite(shapeGeom.aabb.min.y)).to.be.true;
+          expect(Number.isNumeric(shapeGeom.aabb.min.z)).to.be.true;
+          expect(isFinite(shapeGeom.aabb.max.x)).to.be.true;
+          expect(isFinite(shapeGeom.aabb.max.y)).to.be.true;
+          expect(Number.isNumeric(shapeGeom.aabb.max.z)).to.be.true;
          }
       });
     });
 
     it("should have numeric values", () => {
       canvas.regions.placeables.forEach(region => {
-        const geom = region[GEOMETRY_LIB_ID].geometry;
+        const geom = region[GEOMETRY_LIB_ID][GEOMETRY_ID];
         expect(isFinite(geom.aabb.min.x)).to.be.true;
         expect(isFinite(geom.aabb.min.y)).to.be.true;
         expect(Number.isNumeric(geom.aabb.min.z)).to.be.true;
