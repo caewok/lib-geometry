@@ -270,8 +270,9 @@ class AbstractRegionShapeGeometry extends mix(PlaceableGeometry).with(PlaceableA
   /** @type {TrackerKeys} */
   static TRACKERS = {};
 
-  /** @type {Region} */
-  region;
+  get region() { return this.placeable; }
+
+  get shapes() { return this.placeable.document.shapes; }
 
   static create(region) { return new this(region); }
 }
