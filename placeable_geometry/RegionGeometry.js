@@ -91,15 +91,15 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMix
     switch ( this.type ) {
       case ST.EMPTY:
       case ST.HOLE:
-      case ST.POLYGONS: this.shapeGeom = RegionPolygonShapeGeometry.create(this.region); break;
-      case ST.RECTANGLE: this.shapeGeom = RegionRectangleShapeGeometry.create(this.region); break;
-      case ST.ELLIPSE: this.shapeGeom = RegionRectangleShapeGeometry.create(this.region); break;
-      case ST.CIRCLE: this.shapeGeom = RegionRectangleShapeGeometry.create(this.region); break;
+      case ST.POLYGONS: return RegionPolygonShapeGeometry.create(this.region);
+      case ST.RECTANGLE: return RegionRectangleShapeGeometry.create(this.region);
+      case ST.ELLIPSE: return RegionRectangleShapeGeometry.create(this.region);
+      case ST.CIRCLE: return RegionRectangleShapeGeometry.create(this.region);
     }
-
   }
 
   initialize() {
+    this.shapeGeom = this.buildGeometry();
     this.shapeGeom.initialize();
     super.initialize();
   }
@@ -134,7 +134,7 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMix
 
   shapeUpdated() {
     // Must rebuild the shape; likely changed.
-    this.buildGeometry();
+    this.shapeGeom = this.buildGeometry();
     this.shapeGeom.initialize();
     this._initializePrototypeFaces();
     super.shapeUpdated();
