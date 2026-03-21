@@ -106,6 +106,8 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMix
 
   // ----- NOTE: AABB ----- //
 
+  calculateAABB() { this.shapeGeom.calculateAABB(); }
+
   get aabb() { return this.shapeGeom.aabb; }
 
   // ----- NOTE: Matrices ---- //
