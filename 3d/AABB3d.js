@@ -32,76 +32,101 @@ export class AABB3d extends AABB2d {
   max = new this.constructor.POINT_CLASS(Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY);
 
   /**
+   * Determine the min/max for a number or array of numbers.
+   * Default to [-∞, ∞]
+   * @param {number|number[]}
+   * @returns {object}
+   * - @prop {number} min
+   * - @prop {number} max
+   */
+  static getMinMaxForValues(values) {
+    values ??= [Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY];
+    if ( isNumeric(values) ) values = [values];
+    return Math.minMax(...values);
+  }
+
+  /**
    * Convert a 2d AABB to a 3d AABB, by adding min and max z.
-   * @param {AABB2d} aabb2d
-   * @param {number} [maxZ=0]
-   * @param {number} [minZ=maxZ]
+   * @param {AABB2d} aabb2d           The 2d aabb
+   * @param {number|number[]} z       Elevation(s) to use
+   * @param {AABB3d} [out]
    * @returns {AABB3d}
    */
-  static fromAABB2d(aabb2d, out, { maxZ = 0, minZ = maxZ } = {}) {
+  static fromAABB2d(aabb2d, z, out) {
     out ??= new this();
-    out.min.set(aabb2d.min.x, aabb2d.min.y, minZ);
-    out.max.set(aabb2d.max.z, aabb2d.max.y, maxZ);
+    z = this.constructor.getMinMaxForValues(z);
+    out.min.set(aabb2d.min.x, aabb2d.min.y, z.min);
+    out.max.set(aabb2d.max.z, aabb2d.max.y, z.max);
     return out;
   }
 
   /**
    * @param {PIXI.Circle} circle            2d circle, assumed to be flat on the plane
-   * @param {number} [elevationZ=0]         Intended elevation in the z axis
-   * @returns {AABB3d}
+   * @param {number|number[]} z             Elevation(s) to use
+   * @param {AABB3d} [out]
    */
-  static fromCircle(circle, out, { maxZ = 0, minZ = maxZ } = {}) {
+  static fromCircle(circle, z, out) {
     out ??= new this();
     super.fromCircle(circle, out);
-    out.min.z = minZ;
-    out.max.z = maxZ;
+    z = this.constructor.getMinMaxForValues(z);
+    out.min.z = z.min;
+    out.max.z = z.max;
     return out;
   }
 
   /**
    * @param {PIXI.Ellipse} ellipse          2d ellipse, assumed to be flat on the plane
-   * @param {number} [elevationZ=0]         Intended elevation in the z axis
-   * @returns {AABB3d}
+   * @param {number|number[]} z             Elevation(s) to use
+   * @param {AABB3d} [out]
    */
-  static fromEllipse(ellipse, out, { maxZ = 0, minZ = maxZ } = {}) {
+  static fromEllipse(ellipse, z, out) {
     out ??= new this();
     super.fromEllipse(ellipse, out);
-    out.min.z = minZ;
-    out.max.z = maxZ;
+    z = this.constructor.getMinMaxForValues(z);
+    out.min.z = z.min;
+    out.max.z = z.max;
     return out;
   }
 
   /**
    * @param {PIXI.Rectangle} rect           2d rectangle, assumed to be flat on the plane
-   * @param {number} [elevationZ=0]         Intended elevation in the z axis
-   * @returns {AABB3d}
+   * @param {number|number[]} z
+   * @param {AABB3d} [out]
    */
-  static fromRectangle(rect, out, { maxZ = 0, minZ = maxZ } = {}) {
+  static fromRectangle(rect, z, out) {
     out ??= new this();
     super.fromRectangle(rect, out);
-    out.min.z = minZ;
-    out.max.z = maxZ;
+    z = this.constructor.getMinMaxForValues(z);
+    out.min.z = z.min;
+    out.max.z = z.max;
     return out;
   }
 
   /**
    * @param {PIXI.Polygon} poly             2d polygon, assumed to be flat on the plane
-   * @param {number} [elevationZ=0]         Intended elevation in the z axis
-   * @returns {AABB3d}
+   * @param {number|number[]} z             Elevation(s) to use
+   * @param {AABB3d} [out]
    */
-  static fromPolygon(poly, out, { maxZ = 0, minZ = maxZ } = {}) {
+  static fromPolygon(poly, z, out) {
     out ??= new this();
     super.fromPolygon(poly, out);
-    out.min.z = minZ;
-    out.max.z = maxZ;
+    z = this.constructor.getMinMaxForValues(z);
+    out.min.z = z.min;
+    out.max.z = z.max;
     return out;
   }
 
-  static fromShape(shape, out, { maxZ = 0, minZ = maxZ } = {}) {
+  /**
+   * @param {PIXI.Polygon|PIXI.Circle|PIXI.Ellipse|PIXI.Rectangle} poly   2d polygon, assumed flat
+   * @param {number|number[]} z             Elevation(s) to use
+   * @param {AABB3d} [out]
+   */
+  static fromShape(shape, z, out) {
     out ??= new this();
     super.fromShape(shape, out);
-    out.min.z = minZ;
-    out.max.z = maxZ;
+    z = this.constructor.getMinMaxForValues(z);
+    out.min.z = z.min;
+    out.max.z = z.max;
     return out;
   }
 
