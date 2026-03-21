@@ -187,11 +187,11 @@ export class AABB2d {
    */
   static fromShape(shape, out) {
     out ??= new this();
-    if ( shape instanceof PIXI.Rectangle ) this.fromRectangle(shape, out);
-    else if ( shape instanceof PIXI.Polygon ) this.fromPolygon(shape, out);
-    else if ( shape instanceof PIXI.Circle ) this.fromCircle(shape, out);
-    else if ( shape instanceof PIXI.Ellipse ) this.fromEllipse(shape, out);
-    else if ( shape.toPolygon ) this.fromPolygon(shape.toPolygon(), out);
+    if ( shape instanceof PIXI.Rectangle ) AABB2d.fromRectangle(shape, out);
+    else if ( shape instanceof PIXI.Polygon ) AABB2d.fromPolygon(shape, out);
+    else if ( shape instanceof PIXI.Circle ) AABB2d.fromCircle(shape, out);
+    else if ( shape instanceof PIXI.Ellipse ) AABB2d.fromEllipse(shape, out);
+    else if ( shape.toPolygon ) AABB2d.fromPolygon(shape.toPolygon(), out);
     else throw Error("AABB2d.fromShape|Shape not recognized", shape);
     return out;
   }
@@ -201,14 +201,14 @@ export class AABB2d {
    * @returns {AABB2d}
    */
   static fromTile(tile, out) {
-    return this.fromRectangle(tile.bounds, out);
+    return AABB2d.fromRectangle(tile.bounds, out);
   }
 
   static fromTileAlpha(tile, alphaThreshold, out) {
     alphaThreshold ??= tile.document.texture.alphaThreshold || 0;
     if ( !(alphaThreshold && tile.texture && tile.evPixelCache) ) return this.fromTile(tile, out);
     const bbox = tile.evPixelCache.getThresholdCanvasBoundingBox(alphaThreshold);
-    return bbox instanceof PIXI.Polygon ? this.fromPolygon(bbox, out) : this.fromRectangle(bbox, out);
+    return bbox instanceof PIXI.Polygon ? AABB2d.fromPolygon(bbox, out) : AABB2d.fromRectangle(bbox, out);
   }
 
   /**
