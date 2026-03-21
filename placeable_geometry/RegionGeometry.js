@@ -355,9 +355,9 @@ export class RegionPolygonShapeGeometry extends AbstractRegionShapeGeometry {
   _buildPolygonFace(poly) {
     const { topZ, bottomZ } = this.region;
     const top = Polygon3d.fromPolygon(poly, topZ);
-    const bottom = this.faces.top.clone().reverseOrientation();
+    const bottom = top.clone().reverseOrientation();
     bottom.setZ(bottomZ);
-    const sides = this.faces.top.buildTopSides(bottomZ);
+    const sides = top.buildTopSides(bottomZ);
 
     // TODO: Is hole orientation correct for each face?
     return { top, bottom, sides };
