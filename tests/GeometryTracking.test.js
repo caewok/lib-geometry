@@ -81,7 +81,7 @@ describe("Regions", () => {
     it("should have numeric values", () => {
       canvas.regions.placeables.forEach(region => {
         const regionGeom = region[GEOMETRY_LIB_ID][GEOMETRY_ID];
-        expect(regionGeom.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
+        expect(regionGeom.modelMatrix.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
       });
     });
   });

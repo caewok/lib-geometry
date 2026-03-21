@@ -318,8 +318,6 @@ export class RegionPolygonShapeGeometry extends AbstractRegionShapeGeometry {
   /** @type {PIXI.Polygon[]} */
   get polygons() { return this.placeable.polygons; }
 
-  initialize() { /* Unused */ }
-
   calculateAABB() {
     const { topZ, bottomZ } = this.region;
     const z = [topZ, bottomZ];
