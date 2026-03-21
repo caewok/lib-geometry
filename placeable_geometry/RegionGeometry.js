@@ -39,7 +39,7 @@ import { Point3d } from "../3d/Point3d.js";
  * Prototype order:
  * WallGeometryTracker -> PlaceableFacesMixin -> PlaceableMatricesMixin -> PlaceableAABBMixin -> PlaceableGeometry
  */
-export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin, PlaceableFacesMixin) {
+export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin) {
   /** @type {string} */
   static PLACEABLE_NAME = "Region";
 
@@ -54,6 +54,17 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMix
     ELLIPSE: 3,
     CIRCLE: 4,
   };
+
+  constructor(placeable) {
+    super(placeable);
+
+    // Delete the instance properties created by mixins so the getters on this class are used.
+    delete this.aabb;
+    delete this.faces;
+    delete this._prototypeFaces;
+    delete this.modelMatrix;
+    delete this._model;
+  }
 
   get region() { return this.placeable; }
 
