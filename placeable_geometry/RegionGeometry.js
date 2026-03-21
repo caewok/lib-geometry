@@ -114,7 +114,7 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMix
 
   // ----- NOTE: Faces ---- //
 
-  _updateFaces() { this.shapeGeom._updateFaces(); super._updateFaces(); }
+  _updateFaces() { this.shapeGeom._updateFaces(); }
 
   // ----- NOTE: Update underlying shapes ----- //
 
