@@ -310,12 +310,15 @@ export class RegionCircleShapeGeometry extends InstancedShape {
 
 export class RegionPolygonShapeGeometry extends AbstractRegionShapeGeometry {
 
+  /** @type {PIXI.Polygon[]} */
+  get polygons() { return this.placeable.polygons; }
+
   initialize() { /* Unused */ }
 
   calculateAABB() {
     const { topZ, bottomZ } = this.region;
     const z = [topZ, bottomZ];
-    const aabbs = this.region.polygons.map(poly => AABB3d.fromPolygon(poly, z));
+    const aabbs = this.polygons.map(poly => AABB3d.fromPolygon(poly, z));
     const out = AABB3d.union(aabbs);
     aabbs.forEach(aabb => aabb.release());
     return out;
