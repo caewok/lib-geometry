@@ -41,7 +41,7 @@ export class AABB3d extends AABB2d {
    */
   static getMinMaxForValues(values) {
     values ??= [Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY];
-    if ( isNumeric(values) ) values = [values];
+    if ( Number.isNumeric(values) ) values = [values];
     return Math.minMax(...values);
   }
 
