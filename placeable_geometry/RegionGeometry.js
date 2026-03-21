@@ -105,14 +105,20 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMix
   }
 
   // ----- NOTE: AABB ----- //
-  calculateAABB() {
-    if ( this.aabb !== this.shapeGeom.aabb ) this.aabb.release();
-    this.aabb = this.shapeGeom.aabb;
-  }
+
+  get aabb() { return this.shapeGeom.aabb; }
 
   // ----- NOTE: Matrices ---- //
 
+  get model() { return this.shapeGeom.model; }
+
+  get _model() { return this.shapeGeom._model; }
+
   // ----- NOTE: Faces ---- //
+
+  get _prototypeFaces() { return this.shapeGeom._prototypeFaces; }
+
+  get faces() { return this.shapeGeom.faces; }
 
   _updateFaces() { this.shapeGeom._updateFaces(); }
 

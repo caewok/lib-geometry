@@ -89,21 +89,6 @@ describe("Regions", () => {
   });
 
   describe("AABB", () => {
-    // Region shapes have aabb
-    it("shapes should have numeric values", () => {
-      canvas.regions.placeables.forEach(region => {
-        const regionGeom = region[GEOMETRY_LIB_ID][GEOMETRY_ID];
-        for ( const shapeGeom of regionGeom.shapeGeometries ) {
-          expect(isFinite(shapeGeom.aabb.min.x)).to.be.true;
-          expect(isFinite(shapeGeom.aabb.min.y)).to.be.true;
-          expect(Number.isNumeric(shapeGeom.aabb.min.z)).to.be.true;
-          expect(isFinite(shapeGeom.aabb.max.x)).to.be.true;
-          expect(isFinite(shapeGeom.aabb.max.y)).to.be.true;
-          expect(Number.isNumeric(shapeGeom.aabb.max.z)).to.be.true;
-         }
-      });
-    });
-
     it("should have numeric values", () => {
       canvas.regions.placeables.forEach(region => {
         const geom = region[GEOMETRY_LIB_ID][GEOMETRY_ID];
