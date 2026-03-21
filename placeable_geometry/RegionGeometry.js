@@ -121,8 +121,6 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMix
 
   // ----- NOTE: Update underlying shapes ----- //
 
-
-
   _createShape(shape) {
     let geomClass;
     switch ( shape.type ) {
@@ -133,9 +131,6 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMix
     }
     return geomClass.create(shape, this.region);
   }
-
-
-
 
   shapeUpdated() {
     // Must rebuild the shape; likely changed.

@@ -54,7 +54,7 @@ export class AABB3d extends AABB2d {
    */
   static fromAABB2d(aabb2d, z, out) {
     out ??= new this();
-    z = this.constructor.getMinMaxForValues(z);
+    z = this.getMinMaxForValues(z);
     out.min.set(aabb2d.min.x, aabb2d.min.y, z.min);
     out.max.set(aabb2d.max.z, aabb2d.max.y, z.max);
     return out;
@@ -68,7 +68,7 @@ export class AABB3d extends AABB2d {
   static fromCircle(circle, z, out) {
     out ??= new this();
     super.fromCircle(circle, out);
-    z = this.constructor.getMinMaxForValues(z);
+    z = this.getMinMaxForValues(z);
     out.min.z = z.min;
     out.max.z = z.max;
     return out;
@@ -82,7 +82,7 @@ export class AABB3d extends AABB2d {
   static fromEllipse(ellipse, z, out) {
     out ??= new this();
     super.fromEllipse(ellipse, out);
-    z = this.constructor.getMinMaxForValues(z);
+    z = this.getMinMaxForValues(z);
     out.min.z = z.min;
     out.max.z = z.max;
     return out;
@@ -96,7 +96,7 @@ export class AABB3d extends AABB2d {
   static fromRectangle(rect, z, out) {
     out ??= new this();
     super.fromRectangle(rect, out);
-    z = this.constructor.getMinMaxForValues(z);
+    z = this.getMinMaxForValues(z);
     out.min.z = z.min;
     out.max.z = z.max;
     return out;
@@ -110,7 +110,7 @@ export class AABB3d extends AABB2d {
   static fromPolygon(poly, z, out) {
     out ??= new this();
     super.fromPolygon(poly, out);
-    z = this.constructor.getMinMaxForValues(z);
+    z = this.getMinMaxForValues(z);
     out.min.z = z.min;
     out.max.z = z.max;
     return out;
@@ -124,7 +124,7 @@ export class AABB3d extends AABB2d {
   static fromShape(shape, z, out) {
     out ??= new this();
     super.fromShape(shape, out);
-    z = this.constructor.getMinMaxForValues(z);
+    z = this.getMinMaxForValues(z);
     out.min.z = z.min;
     out.max.z = z.max;
     return out;
