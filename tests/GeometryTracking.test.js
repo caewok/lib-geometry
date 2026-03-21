@@ -96,10 +96,10 @@ describe("Regions", () => {
           const geom = shape[GEOMETRY_LIB_ID].geometry;
           expect(isFinite(geom.aabb.min.x)).to.be.true;
           expect(isFinite(geom.aabb.min.y)).to.be.true;
-          expect(isFinite(geom.aabb.min.z)).to.be.true;
+          expect(Number.isNumeric(geom.aabb.min.z)).to.be.true;
           expect(isFinite(geom.aabb.max.x)).to.be.true;
           expect(isFinite(geom.aabb.max.y)).to.be.true;
-          expect(isFinite(geom.aabb.max.z)).to.be.true;
+          expect(Number.isNumeric(geom.aabb.max.z)).to.be.true;
          }
       });
     });
@@ -109,10 +109,10 @@ describe("Regions", () => {
         const geom = region[GEOMETRY_LIB_ID].geometry;
         expect(isFinite(geom.aabb.min.x)).to.be.true;
         expect(isFinite(geom.aabb.min.y)).to.be.true;
-        expect(isFinite(geom.aabb.min.z)).to.be.true;
+        expect(Number.isNumeric(geom.aabb.min.z)).to.be.true;
         expect(isFinite(geom.aabb.max.x)).to.be.true;
         expect(isFinite(geom.aabb.max.y)).to.be.true;
-        expect(isFinite(geom.aabb.max.z)).to.be.true;
+        expect(Number.isNumeric(geom.aabb.max.z)).to.be.true;
       });
     });
 

@@ -112,6 +112,7 @@ export class RegionVertices {
    * Combines the region shapes where necessary.
    * Returns vertex class
    */
+  /*
   combineShapes() {
     const geom = this.region[GEOMETRY_LIB_ID][GEOMETRY_ID];
     const shapePaths = geom.buildRegionPaths();
@@ -132,6 +133,7 @@ export class RegionVertices {
     }
     return out;
   }
+  */
 }
 
 

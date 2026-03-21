@@ -18,7 +18,7 @@ import {
 import { CenteredPolygon } from "../CenteredPolygon/CenteredPolygon.js";
 import { CenteredRectangle } from "../CenteredPolygon/CenteredRectangle.js";
 import { Ellipse } from "../Ellipse.js";
-import { GEOMETRY_LIB_ID, GEOMETRY_ID, OTHER_MODULES } from "../const.js";
+import { GEOMETRY_LIB_ID, OTHER_MODULES } from "../const.js";
 import { AABB3d } from "../3d/AABB3d.js";
 import { MatrixFloat32 } from "../Matrix.js";
 import { Quad3d, Polygon3d, Polygons3d, Ellipse3d, Circle3d } from "../3d/Polygon3d.js";
@@ -47,11 +47,16 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMix
     return tmHandler.isRamp && tmHandler.splitPolygons;
   }
 
-
+  /**
+   * NOTE: Shapes can be destroyed/recreated without an update hook.
+   * Presumably, they are not getting changed without a hook.
+   * Store here by index and update accordingly.
+   * @type {AbstractRegionShapeGeometry[]} */
+  shapeGeometries = [];
 
   // ----- NOTE: AABB ----- //
   calculateAABB() {
-    AABB3d.union(this.shapes.map(shape => shape[GEOMETRY_LIB_ID][GEOMETRY_ID].aabb), this.aabb);
+    AABB3d.union(this.shapeGeometries.map(geom => geom.aabb), this.aabb);
   }
 
   // ----- NOTE: Matrices ---- //
@@ -60,14 +65,17 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMix
   // ----- NOTE: Faces ---- //
 
   _updateFaces() {
-    this.buildRegionPolygons3d();
+    this.buildRegionFaces();
   }
 
   // ----- NOTE: Update underlying shapes ----- //
 
   static create(placeable) {
     const geom = super.create(placeable);
-    geom.shapes.forEach(shape => geom._createShape(shape));
+    const shapes = geom.shapes;
+    for ( let i = 0, n = shapes.length; i < n; i += 1 ) {
+      geom.shapeGeometries[i] = geom._createShape(shapes[i]);
+    }
     return geom;
   }
 
@@ -84,13 +92,19 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMix
 
   initialize() {
     // Initialize the shapes for this region.
-    this.shapes.forEach(shape => shape[GEOMETRY_LIB_ID][GEOMETRY_ID].initialize());
+    this.shapeGeometries.forEach(geom => geom.initialize());
     super.initialize();
   }
 
   shapeUpdated() {
-    this._initializePrototypeFaces(); // Must rebuild the shape b/c they likely were changed.
-    this.shapes.forEach(shape => shape[GEOMETRY_LIB_ID][GEOMETRY_ID].shapeUpdated());
+    // Must rebuild the shape; likely changed.
+    this._initializePrototypeFaces();
+    const shapes = this.shapes;
+    for ( let i = 0, n = shapes.length; i < n; i += 1 ) {
+      const geom = this._createShape(shapes[i]);
+      this.shapeGeometries[i] = geom
+      geom.initialize();
+    }
     super.shapeUpdated();
   }
 
@@ -111,107 +125,97 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMix
 
   get faces() { return this.combinedFaces; }
 
-  buildRegionPolygons3d() {
-    const shapePaths = this.buildRegionPaths();
-
-    // Clear prior data.
+  buildRegionFaces() {
+    const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
+    const { topZ, bottomZ } = this.constructor.regionElevation(this.region);
     this.combinedFaces.length = 0;
 
     // TODO: Handle ramps.
     // TODO: Handle steps.
     // TODO: Handle multi-plane ramps. this.hasMultiPlaneRamp
     // TODO: Handle multi-plane steps. this.hasMultiPlaneRamp
-    const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
-    const { topZ, bottomZ } = this.constructor.regionElevation(this.region);
-    for ( const shapePath of shapePaths ) {
-      if ( shapePath instanceof ClipperPaths ) {
-        const polys = Polygons3d.fromClipperPaths(shapePath, topZ);
+
+    const uniqueGeoms = this.combineRegionShapes();
+    for ( const geomGroup of uniqueGeoms ) {
+      if ( geomGroup.length === 1 ) {
+        const geom = geomGroup[0];
+        if ( geom.isHole ) continue;
+        this.combinedFaces.push(geom.faces);
+      } else {
+        let path;
+        try {
+          // Combine paths
+          const paths = geomGroup.map(geom => geom.toClipperPath());
+          const combinedPaths = paths.length === 1 ? paths[0] : ClipperPaths.joinPaths(paths);
+          path = combinedPaths.union();
+        } catch (error) {
+          console.error(`${this.constructor.name}|buildRegionPolygons3d failed build`, error);
+          path = new ClipperPaths();
+          switch ( CONFIG[GEOMETRY_LIB_ID].CONFIG.clipperVersion ) {
+            case 1: path.paths = this.region.document.clipperPaths; break;
+            case 2: this.region.document.clipperPaths.forEach(p => path.addPathClipper1Points(p)); break;
+          }
+        }
+
+        // Build a set of faces for the polygons.
+        const polys = Polygons3d.fromClipperPaths(path, topZ);
         const face = {
           top: polys,
           bottom: polys.clone().reverseOrientation().setZ(bottomZ),
           sides: [],
         };
-        // Build all the side polys.
         face.sides = face.top.buildTopSides(bottomZ);
         this.combinedFaces.push(face);
-
-      } else {
-        const geometry = shapePath[GEOMETRY_LIB_ID][GEOMETRY_ID];
-        this.combinedFaces.push(geometry.faces);
       }
     }
+
+    return this.combinedFaces;
   }
 
-  buildRegionPaths() {
-    const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
-    const pathShapes = [];
-
-    // TODO: Handle ramps.
-    // TODO: Handle steps.
-    // TODO: Handle multi-plane ramps. this.hasMultiPlaneRamp
-    // TODO: Handle multi-plane steps. this.hasMultiPlaneRamp
-    try {
-      const uniqueShapes = this.combineRegionShapes();
-      for ( const shapeGroup of uniqueShapes ) {
-        if ( shapeGroup.length === 1 ) {
-          const geometry = shapeGroup[0][GEOMETRY_LIB_ID][GEOMETRY_ID];
-          if ( geometry.isHole ) continue;
-          pathShapes.push(shapeGroup[0]);
-        } else {
-          // Combine and convert to Polygons3d.
-          const paths = shapeGroup.map(shape => shape[GEOMETRY_LIB_ID][GEOMETRY_ID].toClipperPath());
-          const combinedPaths = paths.length === 1 ? paths[0] : ClipperPaths.joinPaths(paths);
-          const path = combinedPaths.union();
-          pathShapes.push(path);
-        }
-      }
-    } catch (error) {
-      this.combinedFaces.length = 0;
-      console.error(`${this.constructor.name}|buildRegionPolygons3d failed build`, error);
-
-      const cp = new ClipperPaths();
-      switch ( CONFIG[GEOMETRY_LIB_ID].CONFIG.clipperVersion ) {
-        case 1: cp.paths = this.region.document.clipperPaths; break;
-        case 2: this.region.document.clipperPaths.forEach(path => cp.addPathClipper1Points(path)); break;
-      }
-      pathShapes.push(cp);
-    }
-    return pathShapes;
-  }
-
+  /**
+   * Form groups of shapes. If any shape overlaps another, they share a group.
+   * So if A overlaps B and B overlaps C, [A,B,C] form a group
+   * regardless of whether A overlaps C.
+   * @returns {AbstractRegionShapeGeometry[][]} Array, each holding an array of grouped geoms.
+   */
   combineRegionShapes() {
     // Form groups of shapes. If any shape overlaps another, they share a group.
     // So if A overlaps B and B overlaps C, [A,B,C] form a group regardless of whether A overlaps C.
-    const shapes = this.shapes;
-    const nShapes = shapes.length;
+    const geoms = this.shapeGeometries;
+    const nShapes = geoms.length;
     const usedShapes = new Set();
-    const uniqueShapes = [];
+    const uniqueGeoms = [];
      for ( let i = 0; i < nShapes; i += 1 ) {
       if ( usedShapes.has(i) ) continue;
-      const shape = shapes[i];
-      const shapeGroup = [shape];
-      uniqueShapes.push(shapeGroup);
+      const geom = geoms[i];
+      const geomGroup = [geom];
+      uniqueGeoms.push(geomGroup);
       for ( let j = i + 1; j < nShapes; j += 1 ) {
         if ( usedShapes.has(j) ) continue;
-        const other = shapes[j];
-        const otherGeometry = other[GEOMETRY_LIB_ID][GEOMETRY_ID];
-        const otherPIXI = otherGeometry.shapePIXI;
+        const other = geoms[j];
+        const otherPIXI = other.shapePIXI;
 
         // Any overlap counts.
-        for ( const shape of shapeGroup ) {
-          const shapeGeometry = shape[GEOMETRY_LIB_ID][GEOMETRY_ID];
-          const shapePIXI = shapeGeometry.shapePIXI;
+        for ( const geom of geomGroup ) {
+          const shapePIXI = geom.shapePIXI;
           if ( shapePIXI.overlaps(otherPIXI) ) {
-            shapeGroup.push(other);
+            geomGroup.push(other);
             usedShapes.add(j);
             break;
           }
         }
       }
     }
-    return uniqueShapes;
+    return uniqueGeoms;
   }
 
+  /**
+   * Top and bottom elevation of a region, accounting for plateaus.
+   * @param {Region} region
+   * @returns {object}
+   * - @prop {number} topZ
+   * - @prop {number} bottomZ
+   */
   static regionElevation(region) {
     const MAX_ELEV = 1e06;
     let topZ = region.topZ;
