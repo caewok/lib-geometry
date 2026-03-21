@@ -111,26 +111,12 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMix
   }
 
   // ----- NOTE: Matrices ---- //
-  // Not used for the region itself.
 
   // ----- NOTE: Faces ---- //
 
-  _updateFaces() {
-    this.buildRegionFaces();
-  }
+  _updateFaces() { this.shapeGeom._updateFaces(); super._updateFaces(); }
 
   // ----- NOTE: Update underlying shapes ----- //
-
-  _createShape(shape) {
-    let geomClass;
-    switch ( shape.type ) {
-      case "rectangle": geomClass = RegionRectangleShapeGeometry; break;
-      case "polygon": geomClass = RegionPolygonShapeGeometry; break;
-      case "ellipse": geomClass = RegionEllipseShapeGeometry; break;
-      case "circle": geomClass = RegionCircleShapeGeometry; break;
-    }
-    return geomClass.create(shape, this.region);
-  }
 
   shapeUpdated() {
     // Must rebuild the shape; likely changed.
@@ -138,107 +124,6 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMix
     this.shapeGeom.initialize();
     this._initializePrototypeFaces();
     super.shapeUpdated();
-  }
-
-  // ----- NOTE: Combine underlying shapes ----- //
-
-  combinedFaces = [];
-
-  /**
-   * Iterate over the faces.
-   */
-  *iterateFaces() {
-    for ( const face of this.combinedFaces ) {
-      yield face.top;
-      yield face.bottom;
-      for ( const side of face.sides ) yield side;
-    }
-  }
-
-  get faces() { return this.combinedFaces; }
-
-  buildRegionFaces() {
-    const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
-    const { topZ, bottomZ } = this.constructor.regionElevation(this.region);
-    this.combinedFaces.length = 0;
-
-    // TODO: Handle ramps.
-    // TODO: Handle steps.
-    // TODO: Handle multi-plane ramps. this.hasMultiPlaneRamp
-    // TODO: Handle multi-plane steps. this.hasMultiPlaneRamp
-
-    const uniqueGeoms = this.combineRegionShapes();
-    for ( const geomGroup of uniqueGeoms ) {
-      if ( geomGroup.length === 1 ) {
-        const geom = geomGroup[0];
-        if ( geom.isHole ) continue;
-        this.combinedFaces.push(geom.faces);
-      } else {
-        let path;
-        try {
-          // Combine paths
-          const paths = geomGroup.map(geom => geom.toClipperPath());
-          const combinedPaths = paths.length === 1 ? paths[0] : ClipperPaths.joinPaths(paths);
-          path = combinedPaths.union();
-        } catch (error) {
-          console.error(`${this.constructor.name}|buildRegionPolygons3d failed build`, error);
-          path = new ClipperPaths();
-          switch ( CONFIG[GEOMETRY_LIB_ID].CONFIG.clipperVersion ) {
-            case 1: path.paths = this.region.document.clipperPaths; break;
-            case 2: this.region.document.clipperPaths.forEach(p => path.addPathClipper1Points(p)); break;
-          }
-        }
-
-        // Build a set of faces for the polygons.
-        const polys = Polygons3d.fromClipperPaths(path, topZ);
-        const face = {
-          top: polys,
-          bottom: polys.clone().reverseOrientation().setZ(bottomZ),
-          sides: [],
-        };
-        face.sides = face.top.buildTopSides(bottomZ);
-        this.combinedFaces.push(face);
-      }
-    }
-
-    return this.combinedFaces;
-  }
-
-  /**
-   * Form groups of shapes. If any shape overlaps another, they share a group.
-   * So if A overlaps B and B overlaps C, [A,B,C] form a group
-   * regardless of whether A overlaps C.
-   * @returns {AbstractRegionShapeGeometry[][]} Array, each holding an array of grouped geoms.
-   */
-  combineRegionShapes() {
-    // Form groups of shapes. If any shape overlaps another, they share a group.
-    // So if A overlaps B and B overlaps C, [A,B,C] form a group regardless of whether A overlaps C.
-    const geoms = this.shapeGeometries;
-    const nShapes = geoms.length;
-    const usedShapes = new Set();
-    const uniqueGeoms = [];
-     for ( let i = 0; i < nShapes; i += 1 ) {
-      if ( usedShapes.has(i) ) continue;
-      const geom = geoms[i];
-      const geomGroup = [geom];
-      uniqueGeoms.push(geomGroup);
-      for ( let j = i + 1; j < nShapes; j += 1 ) {
-        if ( usedShapes.has(j) ) continue;
-        const other = geoms[j];
-        const otherPIXI = other.shapePIXI;
-
-        // Any overlap counts.
-        for ( const geom of geomGroup ) {
-          const shapePIXI = geom.shapePIXI;
-          if ( shapePIXI.overlaps(otherPIXI) ) {
-            geomGroup.push(other);
-            usedShapes.add(j);
-            break;
-          }
-        }
-      }
-    }
-    return uniqueGeoms;
   }
 
   /**
