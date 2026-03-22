@@ -22,14 +22,6 @@ export class RegionVertices extends AbstractInstancedVertices  {
     return geom.type > ST.POLYGONS;
   }
 
-  /** @type {enum<string, class>} */
-  static VERTEX_CLASSES = {
-    rectangle: RegionRectangleInstancedVertices,
-    ellipse: RegionEllipseInstancedVertices,
-    circle: RegionCircleInstancedVertices,
-    polygon: RegionPolygonModelVertices,
-  }
-
   calculateModel() {
     const geom = this.region[GEOMETRY_LIB_ID][GEOMETRY_ID];
     const ST = this.constructor.SHAPE_TYPES;
