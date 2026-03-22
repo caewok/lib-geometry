@@ -322,9 +322,8 @@ export class RegionPolygonShapeGeometry extends AbstractRegionShapeGeometry {
     const { topZ, bottomZ } = this.region;
     const z = [topZ, bottomZ];
     const aabbs = this.polygons.map(poly => AABB3d.fromPolygon(poly, z));
-    const out = AABB3d.union(aabbs);
+    AABB3d.union(aabbs, this.aabb);
     aabbs.forEach(aabb => aabb.release());
-    return out;
   }
 
   // ----- NOTE: Faces ---- //
@@ -335,10 +334,17 @@ export class RegionPolygonShapeGeometry extends AbstractRegionShapeGeometry {
   _updateFaces() {
     // TODO: Handle ramps
     const polys = this.polygons;
+    if ( !polys.length ) {
+      this.faces.top = null;
+      this.faces.bottom = null;
+      this.faces.sides = [];
+      return;
+    }
+
     let top;
     let bottom;
     let sides;
-    if ( polys.length > 1 ) ({ top, bottom, sides } = this._buildPolygonFace(polys[0]));
+    if ( polys.length === 1 ) ({ top, bottom, sides } = this._buildPolygonFace(polys[0]));
     else {
       top = new Polygons3d();
       bottom = new Polygons3d();
