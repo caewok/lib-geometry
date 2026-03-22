@@ -1,6 +1,4 @@
 /* globals
-CONFIG,
-PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
@@ -12,92 +10,16 @@ import { gridUnitsToPixels } from "../util.js";
 import { ElevatedPoint } from "../3d/ElevatedPoint.js";
 import { GEOMETRY_LIB_ID, GEOMETRY_ID, OTHER_MODULES } from "../const.js";
 
-export class RegionRectangleInstancedVertices extends AbstractInstancedVertices {
-  static type = "RegionRectangle";
+export class RegionVertices extends AbstractInstancedVertices  {
 
-  static calculateVertices() { return Rectangle3dVertices._getUnitVertices(); }
-}
+  static type = "Region";
 
-export class RegionCircleInstancedVertices extends AbstractInstancedVertices {
-  static type = "RegionCircle";
+  get region() { return this.placeable; }
 
-  static numTopVertices = 6; // 2 triangles, 3 points each.
-
-  static calculateVertices() { return Circle3dVertices._getUnitVertices(); }
-}
-
-export class RegionEllipseInstancedVertices extends AbstractInstancedVertices {
-  static type = "RegionEllipse";
-
-  static numTopVertices = 6; // 2 triangles, 3 points each.
-
-  static calculateVertices() { return Ellipse3dVertices._getUnitVertices(); }
-}
-
-
-class AbstractRegionVertices {}
-
-const tmpPoly = new PIXI.Polygon();
-export class RegionPolygonModelVertices extends AbstractRegionVertices  {
-
-  static type = "RegionPolygon";
-
-  get instanced() { return false; }
-
-  /** @type {RegionShape} */
-  get shape() { return this.placeable; }
-
-  /** @type {Region} */
-  region;
-
-  constructor(shape, region) {
-    super(shape);
-    this.region = region;
-  }
-
-  calculateModel(opts = {}) {
-    tmpPoly.points = this.shape.points;
-    const elev = RegionGeometry.regionElevation(this.region);
-    const vo = new VertexObject();
-    vo.vertices = Polygon3dVertices.calculateVertices(tmpPoly, elev);
-    vo.dropNormalsAndUVs({ keepNormals: opts.hasNormals, keepUVs: opts.hasUVs, out: vo });
-    return vo;
-  }
-}
-
-export class RegionPolygonRampVertices extends RegionPolygonModelVertices {
-  // TODO: Can we cache the untrimmed vertices or untrimmed + elevation change?
-  calculateModel(_opts) {
-    const elev = RegionGeometry.regionElevation(this.region);
-    let untrimmedVertices;
-    if ( this.placeable ) untrimmedVertices = Polygon3dVertices.calculateVertices(this.poly, elev);
-
-    const vs = untrimmedVertices;
-    const tm = this.region[OTHER_MODULES.TERRAIN_MAPPER.ID];
-    const useSteps = false;
-    const round = false;
-
-    // Modify elevation for ramp.
-    // Replace each top elevation with elevation at that point.
-    const out = new Float32Array(untrimmedVertices); // Make a copy so untrimmed is not changed.
-    for ( let i = 0, iMax = vs.length; i < iMax; i += 8 ) {
-      const [x, y, z] = out.subarray(i, i + 3);
-      if ( z !== elev.topZ ) continue;
-      const waypoint = ElevatedPoint.fromPoint({ x, y, z });
-      out[i + 2] = gridUnitsToPixels(tm._rampElevation(waypoint, useSteps, round));
-    }
-
-    return out;
-  }
-}
-
-export class RegionVertices {
-
-  /** @type {Region} */
-  region;
-
-  constructor(region) {
-    this.region = region;
+  get instanced() {
+    const geom = this.region[GEOMETRY_LIB_ID][GEOMETRY_ID];
+    const ST = this.constructor.SHAPE_TYPES;
+    return geom.type > ST.POLYGONS;
   }
 
   /** @type {enum<string, class>} */
@@ -108,32 +30,104 @@ export class RegionVertices {
     polygon: RegionPolygonModelVertices,
   }
 
-  /**
-   * Combines the region shapes where necessary.
-   * Returns vertex class
-   */
-  /*
-  combineShapes() {
+  calculateModel() {
     const geom = this.region[GEOMETRY_LIB_ID][GEOMETRY_ID];
-    const shapePaths = geom.buildRegionPaths();
-    const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
-    const out = [];
-    for ( const shapePath of shapePaths ) {
-      // Create a fake shape to use in lieu of a PolygonShape.
-      if ( shapePath instanceof ClipperPaths ) {
-        const polys = ClipperPaths.toPolygons();
-        for ( const poly of polys ) {
-          const shapePoly = {
-            points: poly.points,
-            type: "polygon",
-          };
-          out.push(shapePoly);
-        }
-      } else out.push(shapePath);
+    const ST = this.constructor.SHAPE_TYPES;
+    const type = geom.type;
+    if ( type === ST.HOLE || type === ST.EMPTY ) return new VertexObject();
+    if ( this.instanced ) {
+      let cl;
+      switch ( type ) {
+        case ST.EMPTY:
+        case ST.HOLE: return new VertexObject();
+        case ST.POLYGONS: cl = RegionPolygonModelVertices; break;
+        case ST.RECTANGLE: cl = RegionRectangleInstancedVertices; break;
+        case ST.ELLIPSE: cl = RegionEllipseInstancedVertices; break;
+        case ST.CIRCLE: cl = RegionCircleInstancedVertices; break;
+      }
+      const obj = new cl(this.placeable);
+      return obj.calculateModel();
     }
-    return out;
   }
-  */
+}
+
+export class RegionPolygonModelVertices extends RegionVertices {
+
+  /** @type {boolean} */
+  instanced = false;
+
+  static type = "RegionPolygon";
+
+  calculateModel(opts = {}) {
+    const elev = RegionGeometry.regionElevation(this.region);
+    const vo = new VertexObject();
+    for ( const poly of this.region.polygons ) {
+      vo.vertices.push(...Polygon3dVertices.calculateVertices(poly, elev));
+    }
+    vo.dropNormalsAndUVs({ keepNormals: opts.hasNormals, keepUVs: opts.hasUVs, out: vo });
+    return vo;
+  }
+}
+
+export class RegionRectangleInstancedVertices extends RegionVertices {
+  /** @type {boolean} */
+  instanced = true;
+
+  static type = "RegionRectangle";
+
+  static calculateVertices() { return Rectangle3dVertices._getUnitVertices(); }
+}
+
+export class RegionCircleInstancedVertices extends RegionVertices {
+
+  /** @type {boolean} */
+  instanced = true;
+
+  static type = "RegionCircle";
+
+  static numTopVertices = 6; // 2 triangles, 3 points each.
+
+  static calculateVertices() { return Circle3dVertices._getUnitVertices(); }
+}
+
+export class RegionEllipseInstancedVertices extends RegionVertices {
+
+  /** @type {boolean} */
+  instanced = true;
+
+  static type = "RegionEllipse";
+
+  static numTopVertices = 6; // 2 triangles, 3 points each.
+
+  static calculateVertices() { return Ellipse3dVertices._getUnitVertices(); }
 }
 
 
+export class RegionPolygonRampVertices extends RegionPolygonModelVertices {
+  static type = "RegionPolygonRamp";
+
+  // TODO: Can we cache the untrimmed vertices or untrimmed + elevation change?
+  calculateModel(opts) {
+    const tm = this.region[OTHER_MODULES.TERRAIN_MAPPER.ID];
+    const useSteps = false;
+    const round = false;
+    const elev = RegionGeometry.regionElevation(this.region);
+    const vo = new VertexObject();
+    for ( const poly of this.region.polygons ) {
+      const untrimmedVertices = Polygon3dVertices.calculateVertices(poly, elev);
+
+      // Modify elevation for ramp.
+      // Replace each top elevation with elevation at that point.
+      const out = new Float32Array(untrimmedVertices); // Make a copy so untrimmed is not changed.
+      for ( let i = 0, n = out.length; i < n; i += 8 ) {
+        const [x, y, z] = out.subarray(i, i + 3);
+        if ( z !== elev.topZ ) continue;
+        const waypoint = ElevatedPoint.fromPoint({ x, y, z });
+        out[i + 2] = gridUnitsToPixels(tm._rampElevation(waypoint, useSteps, round));
+      }
+      vo.vertices.push(...out);
+    }
+    vo.dropNormalsAndUVs({ keepNormals: opts.hasNormals, keepUVs: opts.hasUVs, out: vo });
+    return vo;
+  }
+}
