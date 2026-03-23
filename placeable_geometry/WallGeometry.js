@@ -15,10 +15,39 @@ import {
 } from "./PlaceableGeometry.js";
 
 // LibGeometry
+import { NULL_SET } from "../util.js";
 import { AABB3d } from "../3d/AABB3d.js";
 import { MatrixFloat32 } from "../Matrix.js";
 import { Quad3d } from "../3d/Polygon3d.js";
 import { gridUnitsToPixels } from "../util.js";
+
+const TRACKER_TYPES = {
+  position: [
+    "c",
+    "flags-wall-height.top",
+    "flags.wall-height.bottom",
+  ],
+  direction: [
+    "dir",
+  ],
+  restriction: [
+    "light",
+    "move",
+    "sight",
+    "sound",
+  ],
+  door: [
+    "door",
+    "ds",
+  ],
+  threshold: [
+    "threshold.attenuation",
+    "threshold.light",
+    "threshold.sight",
+    "threshold.sound",
+  ],
+};
+
 
 /**
  * Prototype order:
@@ -31,22 +60,24 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
   /** @type {string} */
   static layer = "walls";
 
+  static TRACKER_TYPES = TRACKER_TYPES;
+
+  static UPDATE_KEYS = {
+    position: new Set(TRACKER_TYPES.position),
+    scale: new Set(TRACKER_TYPES.position),
+    rotation: new Set(TRACKER_TYPES.position),
+    shape: NULL_SET,
+    properties: new Set(TRACKER_TYPES.direction),
+  };
+
   get wall() { return this.placeable; }
 
   get edge() { return this.placeable.edge; }
 
   // ----- NOTE: Updating ----- //
 
-  shapeUpdated() {
-    // Handle as one group b/c wall coordinate changes impact all three.
-    this.calculateTranslationMatrix();
-    this.calculateRotationMatrix();
-    this.calculateScaleMatrix();
-    super.shapeUpdated();
-  }
-
-  directionUpdated() {
-    this._updateFaces();
+  propertiesUpdated() {
+    this._initializePrototypeFaces(); // In case wall direction changed.
   }
 
   // ----- NOTE: AABB ----- //
@@ -111,11 +142,6 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
       this.faces.bottom ??= new Quad3d();
       this._prototypeFaces.bottom.transform(M, this.faces.bottom);
     } else this.faces.bottom = null;
-  }
-
-  updateShape() {
-    this._initializePrototypeFaces(); // In case wall direction changed.
-    super.updateShape();
   }
 
   /**

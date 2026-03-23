@@ -14,6 +14,7 @@ import {
 } from "./PlaceableGeometry.js";
 
 // LibGeometry
+import { NULL_SET } from "../util.js";
 import { CenteredPolygon } from "../CenteredPolygon/CenteredPolygon.js";
 import { CenteredRectangle } from "../CenteredPolygon/CenteredRectangle.js";
 import { Ellipse } from "../Ellipse.js";
@@ -33,6 +34,22 @@ import { Point3d } from "../3d/Point3d.js";
   Regions store combined shapes as region.polygons.
 */
 
+const TRACKER_TYPES = {
+  elevation: [
+    "elevation.bottom",
+    "elevation.top",
+    "flags.terrainmapper.plateauElevation",
+    "flags.terrainmapper.rampFloor",
+  ],
+  shapes: [
+    "shapes",
+    "flags.terrainmapper.rampDirection",
+    "flags.terrainmapper.splitPolygons",
+    "flags.terrainmapper.elevationAlgorithm",
+  ],
+};
+
+
 export class RegionGeometry extends PlaceableGeometry {
   /** @type {string} */
   static PLACEABLE_NAME = "Region";
@@ -47,6 +64,16 @@ export class RegionGeometry extends PlaceableGeometry {
     RECTANGLE: 2,
     ELLIPSE: 3,
     CIRCLE: 4,
+  };
+
+  static TRACKER_TYPES = TRACKER_TYPES;
+
+  static UPDATE_KEYS = {
+    position: new Set(TRACKERS_TYPES.elevation),
+    scale: NULL_SET,
+    rotation: NULL_SET,
+    shape: new Set(TRACKER_TYPES.shapes),
+    properties: NULL_SET,
   };
 
   get region() { return this.placeable; }

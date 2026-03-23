@@ -20,6 +20,7 @@ import {
 } from "./PlaceableGeometry.js";
 
 // LibGeometry
+import { NULL_SET } from "../util.js";
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { AABB3d } from "../3d/AABB3d.js";
 import { MatrixFloat32 } from "../Matrix.js";
@@ -36,6 +37,30 @@ function buildPolygonCube(poly2d, topZ, bottomZ, faces) {
   faces.sides = faces.top.buildTopSides(bottomZ);
   return faces;
 }
+
+const TRACKER_TYPES = {
+  position: [
+    "x",
+    "y",
+    "elevation",
+  ],
+  scale: [
+    "width",
+    "height"
+  ],
+  shape: [
+    "shape",
+  ],
+  disposition: [
+    "disposition",
+  ],
+  refresh: [
+    "refreshPosition",
+    "refreshElevation",
+  ]
+};
+
+
 /**
  * @typedef {function} TokenConstrainedFacesMixin
  *
@@ -220,6 +245,16 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
   /** @type {string} */
   static layer = "tokens";
 
+  static TRACKER_TYPES = TRACKER_TYPES;
+
+  static UPDATE_KEYS = {
+    position: new Set([...TRACKER_TYPES.position, ...TRACKER_TYPES.refresh]),
+    scale: new Set(TRACKER_TYPES.scale),
+    rotation: NULL_SET,
+    shape: new Set(TRACKER_TYPES.shape),
+    properties: NULL_SET,
+  };
+
   get token() { return this.placeable; }
 
   // ----- NOTE: AABB ----- //
@@ -230,7 +265,7 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
 
   calculateTranslationMatrix() {
     const mat = super.calculateTranslationMatrix();
-    const ctr = Point3d.fromTokenCenter(this.token); // Translate from 3d center of token.
+    const ctr = this.constructor.tokenCenter(this.token); // Translate from 3d center of token.
     return MatrixFloat32.translation(ctr.x, ctr.y, ctr.z, mat);
   }
 
@@ -374,6 +409,23 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
       height: (height * canvas.dimensions.size) - this.SPACER,
       zHeight: zHeight - this.SPACER,
     };
+  }
+
+  /**
+   * Determine the token center, in pixel units.
+   * Uses document source to avoid issues when tokens are moving.
+   * (Token update triggers prior to token.document updating.)
+   * @param {Token} token
+   * @returns {Point3d}
+   * @prop {number} x       In x direction
+   * @prop {number} y      In y direction
+   * @prop {number} z     In z direction
+   */
+  static tokenCenter(token) {
+    const src = token.document._source || token.document;
+    const { x, y } = token.getCenterPoint(src);
+    const z = token.topZ - token.bottomZ;
+    return Point3d.tmp.set(x, y, z);
   }
 }
 

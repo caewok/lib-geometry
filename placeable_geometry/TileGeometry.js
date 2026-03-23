@@ -16,6 +16,7 @@ import {
 } from "./PlaceableGeometry.js";
 
 // LibGeometry
+import { NULL_SET } from "../util.js";
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { AABB3d } from "../3d/AABB3d.js";
 import { MatrixFloat32 } from "../Matrix.js";
@@ -25,6 +26,34 @@ import { Quad3d, Polygon3d, Polygons3d, Triangle3d } from "../3d/Polygon3d.js";
 // Tile alpha bounds
 import { Polygon3dVertices } from "../placeable_vertices/BasicVertices.js";
 import * as MarchingSquares from "./marchingsquares-esm.js";
+
+const TRACKER_TYPES = {
+  position: [
+    "x",
+    "y",
+    "elevation",
+  ],
+  scale: [
+    "width",
+    "height",
+  ],
+  rotation: [
+    "rotation",
+  ],
+  texture: [
+    "texture.alphaThreshold",
+    "texture.anchorX",
+    "texture.anchorY",
+    "texture.fit",
+    "texture.fill",
+    "texture.offsetX",
+    "texture.offsetY",
+    "texture.rotation",
+    "texture.scaleX",
+    "texture.scaleY",
+    "texture.src",
+  ],
+};
 
 const AbstractTileAlpha = superclass => class extends superclass {
   /**
@@ -217,6 +246,14 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
 
   /** @type {string} */
   static layer = "tiles";
+
+  static UPDATE_KEYS = {
+    position: new Set(TRACKER_TYPES.position),
+    scale: new Set(TRACKER_TYPES.scale),
+    rotation: new Set(TRACKER_TYPES.rotation),
+    shape: NULL_SET,
+    properties: NULL_SET,
+  };
 
   get tile() { return this.placeable; }
 

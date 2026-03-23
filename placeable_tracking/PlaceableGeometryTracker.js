@@ -7,7 +7,7 @@ Hooks,
 
 // LibGeometry
 import { GEOMETRY_LIB_ID, GEOMETRY_ID } from "../const.js";
-import { PlaceableUpdateWatcher } from "./PlaceableUpdateWatcher.js";
+import { NULL_SET } from "../util.js";
 
 /* Store key geometry information for each placeable, in 3d.
 - AABB
@@ -34,97 +34,57 @@ Once registered, will create tracking objects for each placeable created.
  */
 export class PlaceableGeometryTracker {
 
-  // ----- NOTE: Constructor ----- //
+  static UPDATE_KEYS;
 
-  /** @type {string} */
-  documentName = "";
+  static REFRESH_KEYS;
 
-  /** @type {string} */
-  layer = "";
+  static registerHooks() {
+    const docName = this.DOCUMENT_NAME;
+    const docWatcher = this.documentWatcher;
+    const refreshWatcher = this.refreshWatcher;
+    const id = `${docName}Geometry`;
 
-  /**
-   * @typedef TrackerTypes
-   * @prop {string} : {string[]}  Type of callback to track and array of keys that trigger it
-   */
+    // Creation
+    refreshWatcher.register("draw", id, this._onPlaceableDraw.bind(this));
 
-  /** @type {TrackerTypes} */
-  trackers;
+    // Deletion
+    refreshWatcher.register("destroy", id, this._onPlaceableDestroy);
 
-  /* @type {number} */
-  _createHookId = null;
-
-  /* @type {number} */
-  _deleteHookId = null;
-
-  /**
-   * @param {string} documentName   Name of document to watch.
-   */
-  constructor(documentName, trackers = {}, layer = `${documentName.toLowerCase()}s`) {
-    this.layer = layer; // E.g. Wall -> walls
-    this.documentName = documentName;
-    this.trackers = trackers;
+    // Updates
+    if ( this.UPDATE_KEYS ) docWatcher.register("update", id, this._onPlaceableUpdate, this.UPDATE_KEYS);
+    if ( this.REFRESH_KEYS ) docWatcher.register("refresh", id, this._onPlaceableUpdate, this.REFRESH_KEYS);
   }
 
-  // ----- NOTE: Tracking ----- //
-
-  /** @type {PlaceableGeometryTracker} */
-  static watcher;
-
-  /**
-   * Creation function that enforces singular function.
-   * @returns {PlaceableGeometryTracker}
-   */
-  // TODO: Might need to resolve when two modules use geometry subsets, like
-  // one only needs AABB while another only needs ModelMatrix.
-  static create() {
-    if ( !(this.DOCUMENT_NAME || this.TRACKERS ) ) throw Error(`${this.constructor.name} missing static properties`);
-
-    this.watcher ??= new this(this.DOCUMENT_NAME, this.TRACKERS, this.LAYER);
-    return this.watcher;
+  static get documentWatcher() {
+    const PlaceableUpdateWatcher = CONFIG[GEOMETRY_LIB].lib.placeableGeometryTracking.PlaceableUpdateWatcher;
+    const docName = this.DOCUMENT_NAME;
+    return PlaceableUpdateWatcher.getWatcher(docName);
   }
 
-  registerExistingPlaceables(placeables) {
-    placeables ??= canvas[this.layer].placeables;
-    for ( const placeable of placeables ) this.constructor._onPlaceableDocumentCreation(placeable.document);
+  static get refreshWatcher() {
+    const PlaceableRefreshWatcher = CONFIG[GEOMETRY_LIB].lib.placeableGeometryTracking.PlaceableRefreshWatcher;
+    const docName = this.DOCUMENT_NAME;
+    return PlaceableRefreshWatcher.getWatcher(docName);
   }
 
-  deRegisterExistingPlaceables(placeables) {
-    placeables ??= canvas[this.layer].placeables;
-    for ( const placeable of placeables ) this.constructor._onPlaceableDestroy(placeable);
+  static registerExistingPlaceables(placeables) {
+    placeables ??= canvas[this.LAYER].placeables;
+    for ( const placeable of placeables ) this._onPlaceableDrawing(placeable.document);
   }
 
-  activate() {
-    if ( !this._createHookId ) { // Avoid duplicate hooks.
-      this._createHookId = Hooks.on(`create${this.documentName}`, this.constructor._onPlaceableDocumentCreation.bind(this.constructor));
-    }
-    if ( !this._deleteHookId ) {
-      this._deleteHookId = Hooks.on(`destroy${this.documentName}`, this.constructor._onPlaceableDestroy.bind(this.constructor));
-    }
-
-    // Register tracking of placeable updates.
-    const watcher = PlaceableUpdateWatcher.create(this.documentName);
-    for ( const [updateType, keys] of Object.entries(this.trackers) ) {
-      const updateFn = (placeable, _change, _userId) => {
-        const geom = placeable[GEOMETRY_LIB_ID]?.[GEOMETRY_ID];
-        if ( !geom ) return;
-        geom[`${updateType}Updated`]();
-      }
-      watcher.register(keys, updateFn);
-    }
-    watcher.activate();
+  static deRegisterExistingPlaceables(placeables) {
+    placeables ??= canvas[this.LAYER].placeables;
+    for ( const placeable of placeables ) this._onPlaceableDestroy(placeable);
   }
 
-  deactivate() {
-    if (this._createHookId) {
-      Hooks.off(`create${this.documentName}`, this._createHookId);
-      this._createHookId = null;
-    }
-    if (this._deleteHookId) {
-      Hooks.off(`destroy${this.documentName}`, this._deleteHookId);
-      this._deleteHookId = null;
-    }
-    const watcher = PlaceableUpdateWatcher.create(this.documentName);
-    watcher.deactivate();
+  static activate() {
+    this.documentWatcher.activate();
+    this.refreshWatcher.activate();
+  }
+
+  static deactivate() {
+    this.documentWatcher.deactivate();
+    this.refreshWatcher.deactivate();
   }
 
   /**
@@ -134,9 +94,7 @@ export class PlaceableGeometryTracker {
    * @param {Partial<DatabaseCreateOperation>} options Additional options which modified the creation request
    * @param {string} userId                           The ID of the User who triggered the creation workflow
    */
-  static _onPlaceableDocumentCreation(placeableD, _options, _userId) {
-    const placeable = placeableD.object;
-    if ( !placeable ) return;
+  static _onPlaceableDraw(placeable) {
     const geom = this.GEOMETRY.create(placeable);
     geom.initialize();
   }
@@ -145,6 +103,12 @@ export class PlaceableGeometryTracker {
     const geom = placeable[GEOMETRY_LIB_ID]?.[GEOMETRY_ID];
     if ( !geom ) return;
     geom.destroy();
+  }
+
+  static _onPlaceableUpdate(placeable, changeKeys) {
+    const geom = placeable[GEOMETRY_LIB_ID]?.[GEOMETRY_ID];
+    if ( !geom ) return;
+    geom.update(changeKeys);
   }
 }
 

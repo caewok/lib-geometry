@@ -29,6 +29,16 @@ Tracks only changes to the physical representation of the placeable in the scene
 Stored on each placeable.
 
 Once registered, will create tracking objects for each placeable created.
+
+Update methods:
+
+positionUpdated
+scaleUpdated
+rotationUpdated
+shapeUpdated
+propertiesUpdated
+
+
 */
 
 export class PlaceableGeometry {
@@ -57,6 +67,23 @@ export class PlaceableGeometry {
 
   initialize() { }
 
+  update(updateKeys) {
+    // Update in order. If any updates, update the shape.
+    const KEYS = this.constructor.UPDATE_KEYS;
+    const updateProperties = KEYS.properties.size && updateKeys.some(key => KEYS.properties.has(key));
+    const updatePosition = KEYS.position.size && updateKeys.some(key => KEYS.position.has(key))
+    const updateScale = KEYS.scale.size && updateKeys.some(key => KEYS.scale.has(key))
+    const updateRotation = KEYS.rotation.size && updateKeys.some(key => KEYS.rotation.has(key))
+    const updateShape = updateProperties || updatePosition || updateScale || updateRotation
+      || KEYS.shape.size && updateKeys.some(key => KEYS.shape.has(key))
+
+    if ( updateProperties ) this.propertiesUpdated();
+    if ( updatePosition ) this.positionUpdated();
+    if ( updateScale ) this.scaleUpdated();
+    if ( updateRotation ) this.rotationUpdated();
+    if ( updateShape ) this.shapeUpdated();
+  }
+
   positionUpdated() { }
 
   scaleUpdated() { }
@@ -65,9 +92,7 @@ export class PlaceableGeometry {
 
   shapeUpdated() { }
 
-  placeablePropertiesUpdated() { }
-
-  _updateFaces() { }
+  propertiesUpdated() { }
 
   destroy() { }
 }
@@ -343,10 +368,9 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
     this._updateFaces();
   }
 
-  placeablePropertiesUpdated() {
-    super.placeablePropertiesUpdated();
+  propertiesUpdated() {
+    super.propertiesUpdated();
     this._initializePrototypeFaces();
-    this._updateFaces();
   }
 
 
