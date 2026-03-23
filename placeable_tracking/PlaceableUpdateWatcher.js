@@ -70,7 +70,7 @@ export class PlaceableUpdateWatcher {
    */
   static getWatcher(documentName) {
     const id = `${this.name}_${documentName}`;
-    if ( this.watchers.has(id) return this.watchers.get(id);
+    if ( this.watchers.has(id) ) return this.watchers.get(id);
     const watcher = new this(documentName);
     this.watchers.set(id, watcher);
     return watcher;

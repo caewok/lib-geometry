@@ -8,6 +8,12 @@ import { Draw } from "./Draw.js";
 
 // Testing functions that require a loaded canvas.
 
+/*
+canvasTests = CONFIG.GeometryLib.lib.canvasTests
+
+
+*/
+
 // ----- NOTE: Constrained Tokens ----- //
 
 /**

@@ -1,13 +1,12 @@
 /* globals
 canvas,
-Hooks,
+CONFIG,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
 // LibGeometry
 import { GEOMETRY_LIB_ID, GEOMETRY_ID } from "../const.js";
-import { NULL_SET } from "../util.js";
 
 /* Store key geometry information for each placeable, in 3d.
 - AABB
@@ -56,13 +55,13 @@ export class PlaceableGeometryTracker {
   }
 
   static get documentWatcher() {
-    const PlaceableUpdateWatcher = CONFIG[GEOMETRY_LIB].lib.placeableGeometryTracking.PlaceableUpdateWatcher;
+    const PlaceableUpdateWatcher = CONFIG[GEOMETRY_LIB_ID].lib.placeableGeometryTracking.PlaceableUpdateWatcher;
     const docName = this.DOCUMENT_NAME;
     return PlaceableUpdateWatcher.getWatcher(docName);
   }
 
   static get refreshWatcher() {
-    const PlaceableRefreshWatcher = CONFIG[GEOMETRY_LIB].lib.placeableGeometryTracking.PlaceableRefreshWatcher;
+    const PlaceableRefreshWatcher = CONFIG[GEOMETRY_LIB_ID].lib.placeableGeometryTracking.PlaceableRefreshWatcher;
     const docName = this.DOCUMENT_NAME;
     return PlaceableRefreshWatcher.getWatcher(docName);
   }
