@@ -78,6 +78,14 @@ export class Frustum {
    * @returns {object}
    */
   static computeTriangle(viewpoint, border2d) {
+    // Shrink border2d by 2 pixels to avoid picking walls on the back edge.
+    try {
+      border2d = border2d.clone();
+      border2d.pad(-2);
+    } catch(error) {
+      console.warn("Border padding not supported.", error);
+    }
+
     const keyPoints = border2d.viewablePoints(viewpoint, { outermostOnly: false }) ?? [];
     let b;
     let c;
