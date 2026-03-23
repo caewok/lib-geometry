@@ -247,6 +247,8 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
   /** @type {string} */
   static layer = "tiles";
 
+  static TRACKER_TYPES = TRACKER_TYPES;
+
   static UPDATE_KEYS = {
     position: new Set(TRACKER_TYPES.position),
     scale: new Set(TRACKER_TYPES.scale),
