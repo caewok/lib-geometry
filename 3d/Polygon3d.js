@@ -1076,9 +1076,9 @@ export class Ellipse3d extends Polygon3d {
     // Check uniformity based on axis alignment, falling back on full check if plane is tilted.
     const EPSILON = 1e-08;
     let isUniform = false;
-    if ( n.x > (1 - EPSILON) ) isUniform = Math.abs(s.x - s.y) < EPSILON;
+    if ( n.z > (1 - EPSILON) ) isUniform = Math.abs(s.x - s.y) < EPSILON;
     else if ( n.y > (1 - EPSILON) ) isUniform = Math.abs(s.x - s.z) < EPSILON;
-    else if ( n.z > (1 - EPSILON) ) isUniform = Math.abs(s.y - s.z) < EPSILON;
+    else if ( n.x > (1 - EPSILON) ) isUniform = Math.abs(s.y - s.z) < EPSILON;
     else isUniform = Math.abs(s.x - s.y) < EPSILON && Math.abs(s.y - s.z) < EPSILON;
 
     // A non-uniform scale will result in an ellipse.
