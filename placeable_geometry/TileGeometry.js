@@ -106,7 +106,8 @@ const AbstractTileAlpha = superclass => class extends superclass {
     const height = cache.bufferHeight;
     const rowViews = new Array(height);
     for ( let r = 0, start = 0, rMax = height; r < rMax; r += 1, start += width ) {
-      rowViews[r] = [...pixels.slice(start, start + width)];
+      // TODO: Use single Typed view instead of slicing?
+      rowViews[r] = pixels.slice(start, start + width);
     }
 
     let bands;
