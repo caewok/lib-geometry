@@ -43,6 +43,29 @@ export class Plane {
   }
 
   /**
+   * Copy this Plane to a new object
+   * @param {Plane} [out]     Plane object to copy to
+   * @returns {Plane}
+   */
+  clone(out) {
+    out ??= new Plane();
+    out.point.copyFrom(this.point);
+    out.normal.copyFrom(this.normal);
+    return out;
+  }
+
+  /**
+   * Set this plane to another. Opposite of clone.
+   * @param {Plane} other
+   * @returns {this}
+   */
+  copyFrom(other) {
+    this.point.copyFrom(other.point);
+    this.normal.copyFrom(other.normal);
+    return this;
+  }
+
+  /**
    * Normalize the plane.
    * See https://web.archive.org/web/20120531231005/http://crazyjoke.free.fr/doc/3D/plane%20extraction.pdf
    */
@@ -69,17 +92,19 @@ export class Plane {
    * @param {Point3d} c
    * @returns {Plane}
    */
-  static fromPoints(a, b, c) {
+  static fromPoints(a, b, c, out) {
     a = a.clone();
     b = b.clone();
     c = c.clone();
     const N = this.normalFromPoints(a, b, c);
-    const plane = new Plane(a, N);
-    plane._threePoints = {a, b, c};
-    return plane;
+    out ??= new Plane();
+    out.point.copyFrom(a);
+    out.normal.copyFrom(N)
+    out._threePoints = {a, b, c};
+    return out;
   }
 
-  static fromMultiplePoints(pts) {
+  static fromMultiplePoints(pts, out) {
     const iter = Iterator.from(pts);
     const a = iter.next().value;
 
@@ -103,8 +128,7 @@ export class Plane {
       console.error("Insufficient number of points to calculate plane.", pts);
       return new this();
     }
-
-    return this.fromPoints(a, b, c);
+    return this.fromPoints(a, b, c, out);
   }
 
 

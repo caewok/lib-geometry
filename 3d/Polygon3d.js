@@ -60,7 +60,7 @@ export class Polygon3d {
    */
   clearCache() {
     this.#dirtyAABB = true;
-    this.#plane = undefined;
+    this.#dirtyPlane = true;
     this.#dirtyCentroid = true;
     this.#cleaned = false;
   }
@@ -130,17 +130,26 @@ export class Polygon3d {
   // ----- NOTE: Plane ----- //
 
   /** @type {Plane} */
-  #plane;
+  #plane = new Plane();
+
+  #dirtyPlane = true;
+
+  get dirtyPlane() { return this.#dirtyPlane; }
+
+  set dirtyPlane(value) { this.#dirtyPlane ||= value; }
 
   get plane() {
-    if ( !this.#plane ) this.#plane = this._calculatePlane();
+    if ( this.#dirtyPlane ) {
+      this._calculatePlane(this.#plane);
+      this.#dirtyPlane = false;
+    }
     return this.#plane;
   }
 
-  _calculatePlane() {
+  _calculatePlane(plane) {
     // Assumes without testing that points are not collinear.
     // Construct the plane so the center of the polygon is the origin.
-    return Plane.fromMultiplePoints(this.points);
+    Plane.fromMultiplePoints(this.points, plane);
   }
 
   set plane(value) { this.#plane = value; }
@@ -265,6 +274,7 @@ export class Polygon3d {
   clone(out) {
     const n = this.points.length;
     out ??= new this.constructor(n);
+    out.plane.copyFrom(this.plane);
     out.isHole = this.isHole;
 
     // If out was supplied, it may be the wrong point length.
@@ -793,7 +803,7 @@ export class Ellipse3d extends Polygon3d {
 
   // ----- NOTE: In-place modifiers ----- //
 
-  _calculatePlane() {
+  _calculatePlane(plane) {
     const center = this.centroid;
     using normal = Point3d.tmp;
 
@@ -801,7 +811,8 @@ export class Ellipse3d extends Polygon3d {
     using b = Point3d.tmp.set(center.x + this.radiusX, center.y, center.z);
     using c = Point3d.tmp.set(center.x, center.y - this.radiusY, center.z);
     Plane.normalFromPoints(center, b, c, normal);
-    return new Plane(center, normal);
+    plane.point.copyFrom(center);
+    plane.normal.copyFrom(normal);
   }
 
   _setDimensions(center, radiusX, radiusY) {
