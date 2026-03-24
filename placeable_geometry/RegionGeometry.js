@@ -114,8 +114,8 @@ export class RegionGeometry extends PlaceableGeometry {
       case ST.HOLE:
       case ST.POLYGONS: return RegionPolygonShapeGeometry.create(this.region);
       case ST.RECTANGLE: return RegionRectangleShapeGeometry.create(this.region);
-      case ST.ELLIPSE: return RegionRectangleShapeGeometry.create(this.region);
-      case ST.CIRCLE: return RegionRectangleShapeGeometry.create(this.region);
+      case ST.ELLIPSE: return RegionEllipseShapeGeometry.create(this.region);
+      case ST.CIRCLE: return RegionCircleShapeGeometry.create(this.region);
     }
   }
 
