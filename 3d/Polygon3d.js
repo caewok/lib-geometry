@@ -198,7 +198,7 @@ export class Polygon3d {
    */
   static convexHull(points) {
     // Assuming flat points, determine plane and then convert to 2d
-    const plane = Plane.fromPoints(points[0], points[1], points[2]);
+    const plane = Plane.fromMultiplePoints(points[0], points[1], points[2]);
     const M2d = plane.conversion2dMatrix;
     const points2d = points.map(pt3d => M2d.multiplyPoint3d(pt3d));
     const convex2dPoints = convexHull(points2d);
@@ -781,7 +781,7 @@ export class Ellipse3d extends Polygon3d {
 
   get halfWidth() { return this.radiusX; }
 
-  get halfHeight() { return this.radiuxY; }
+  get halfHeight() { return this.radiusY; }
 
   set halfWidth(value) { this.radiusX = value; }
 
@@ -1061,10 +1061,10 @@ export class Ellipse3d extends Polygon3d {
     const sxM = sx.magnitude();
     const syM = sy.magnitude();
     const EPSILON = 1e-06;
-    const isUniform = Math.abs(sxM - syM) > EPSILON || Math.abs(syM - sz.magnitude()) > EPSILON;
+    const isUniform = Math.abs(sxM - syM) < EPSILON && Math.abs(syM - sz.magnitude()) < EPSILON;
 
     // A non-uniform scale will result in an ellipse.
-    if ( !isUniform && !(ellipse3d instanceof Ellipse3d) ) ellipse3d = this._cloneEmpty();
+    if ( !isUniform && !(ellipse3d instanceof Ellipse3d) ) ellipse3d = Ellipse3d._cloneEmpty();
     ellipse3d ??= this._cloneEmpty();
 
     // Transform the center.
@@ -1935,7 +1935,7 @@ export class Polygons3d extends Polygon3d {
   #centroid;
 
   centroid() {
-    if ( !this.centroid ) {
+    if ( !this.#centroid ) {
       // Assuming flat points, determine plane and then convert to 2d
       const plane = this.plane;
       const points = this.polygons.flatMap(poly => poly.points);
