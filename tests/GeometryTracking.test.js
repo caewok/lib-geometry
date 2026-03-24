@@ -20,9 +20,7 @@ Hooks.on("quenchReady", (quench) => {
 // ----- NOTE: AABB2d.overlapsAABB -----
 describe("Walls", () => {
   before(() => {
-    const tracking = WallGeometryTracker.create();
-    tracking.activate();
-    tracking.registerExistingPlaceables()
+    WallGeometryTracker.registerExistingPlaceables()
   });
 
   describe("Model Matrix", () => {
@@ -37,9 +35,7 @@ describe("Walls", () => {
 
 describe("Tokens", () => {
   before(() => {
-    const tracking = TokenGeometryTracker.create();
-    tracking.activate();
-    tracking.registerExistingPlaceables()
+    TokenGeometryTracker.registerExistingPlaceables()
   });
 
   describe("Model Matrix", () => {
@@ -54,9 +50,7 @@ describe("Tokens", () => {
 
 describe("Tiles", () => {
   before(() => {
-    const tracking = TileGeometryTracker.create();
-    tracking.activate();
-    tracking.registerExistingPlaceables()
+    TileGeometryTracker.registerExistingPlaceables()
   });
 
   describe("Model Matrix", () => {
@@ -71,9 +65,7 @@ describe("Tiles", () => {
 
 describe("Regions", () => {
   before(() => {
-    const tracking = RegionGeometryTracker.create();
-    tracking.activate();
-    tracking.registerExistingPlaceables()
+    RegionGeometryTracker.registerExistingPlaceables()
   });
 
   describe("Model Matrix", () => {
