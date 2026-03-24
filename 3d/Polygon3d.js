@@ -1062,17 +1062,29 @@ export class Ellipse3d extends Polygon3d {
   transform(M, ellipse3d) {
     // Determine if scaling is not uniform.
     // Look to the length of the basis vectors.
+    // If the plane is aligned with an axis, ignore that axis's scaling factor.
+
+    // Scaling factors from the matrix.
     using sx = Point3d.tmp.set(M.getIndex(0, 0), M.getIndex(0, 1), M.getIndex(0, 2));
     using sy = Point3d.tmp.set(M.getIndex(1, 0), M.getIndex(1, 1), M.getIndex(1, 2));
     using sz = Point3d.tmp.set(M.getIndex(2, 0), M.getIndex(2, 1), M.getIndex(2, 2));
-    const sxM = sx.magnitude();
-    const syM = sy.magnitude();
-    const EPSILON = 1e-06;
-    const isUniform = Math.abs(sxM - syM) < EPSILON && Math.abs(syM - sz.magnitude()) < EPSILON;
+    using s = Point3d.tmp.set(sx.magnitude(), sy.magnitude(), sz.magnitude());
+
+    // Identify the primary orientation of the plane normal.
+    using n = this.plane.normal.abs();
+
+    // Check uniformity based on axis alignment, falling back on full check if plane is tilted.
+    const EPSILON = 1e-08;
+    let isUniform = false;
+    if ( n.x > (1 - EPSILON) ) isUniform = Math.abs(s.x - s.y) < EPSILON;
+    else if ( n.y > (1 - EPSILON) ) isUniform = Math.abs(s.x - s.z) < EPSILON;
+    else if ( n.z > (1 - EPSILON) ) isUniform = Math.abs(s.y - s.z) < EPSILON;
+    else isUniform = Math.abs(s.x - s.y) < EPSILON && Math.abs(s.y - s.z) < EPSILON;
 
     // A non-uniform scale will result in an ellipse.
     if ( !isUniform && !(ellipse3d instanceof Ellipse3d) ) ellipse3d = new Ellipse3d();
     ellipse3d ??= this._cloneEmpty();
+    ellipse3d.isHole = this.isHole;
 
     // Transform the center.
     using txCenter = M.multiplyPoint3d(this.centroid);
@@ -1086,19 +1098,21 @@ export class Ellipse3d extends Polygon3d {
     matNormal.multiply1x3(mat3Inv, matNormal);
 
     const newPlane = ellipse3d.plane;
-    const N = newPlane.normal;
+    const newN = newPlane.normal;
     newPlane.point.copyFrom(this.centroid); // Because centroid was already transformed.
-    N.x = matNormal.getIndex(0, 0);
-    N.y = matNormal.getIndex(0, 1);
-    N.z = matNormal.getIndex(0, 2);
-    N.normalize(N);
+    newN.x = matNormal.getIndex(0, 0);
+    newN.y = matNormal.getIndex(0, 1);
+    newN.z = matNormal.getIndex(0, 2);
+    newN.normalize(newN);
 
     if ( isUniform ) {
-      // Store temporary in case elllipse3d is radius to avoid multiplying radius twice.
-      const newRX = ellipse3d.radiusX * sxM;
-      const newRY = ellipse3d.radiusY * sxM;
-      ellipse3d.radiusX = newRX;
-      ellipse3d.radiusY = newRY;
+      // Use scale factor relevant to the plane.
+      const effectiveScale = (n.z > 1 - EPSILON) ? s.x : (n.y > 1 - EPSILON ? s.x : s.y);
+
+      // Store temporary in case ellipse3d === this, to avoid multiplying radius twice if it is a circle.
+      const { radiusX, radiusY } = this;
+      ellipse3d.radiusX = radiusX * effectiveScale;
+      ellipse3d.radiusY = radiusY * effectiveScale;
 
     } else {
       // Ellipse: Find two orthogonal vectors on the original plane.
