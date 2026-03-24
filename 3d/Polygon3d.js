@@ -274,7 +274,7 @@ export class Polygon3d {
   clone(out) {
     const n = this.points.length;
     out ??= new this.constructor(n);
-    out.plane.copyFrom(this.plane);
+    out.#plane.copyFrom(this.plane);
     out.isHole = this.isHole;
 
     // If out was supplied, it may be the wrong point length.
