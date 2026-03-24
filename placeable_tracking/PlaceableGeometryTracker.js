@@ -68,7 +68,7 @@ export class PlaceableGeometryTracker {
 
   static registerExistingPlaceables(placeables) {
     placeables ??= canvas[this.LAYER].placeables;
-    for ( const placeable of placeables ) this._onPlaceableDrawing(placeable.document);
+    for ( const placeable of placeables ) this._onPlaceableDraw(placeable.document);
   }
 
   static deRegisterExistingPlaceables(placeables) {
