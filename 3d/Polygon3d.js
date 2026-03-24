@@ -274,8 +274,8 @@ export class Polygon3d {
   clone(out) {
     const n = this.points.length;
     out ??= new this.constructor(n);
-    out.#plane.copyFrom(this.plane);
     out.isHole = this.isHole;
+    // Don't copy plane; prefer to recalculate it based on the points.
 
     // If out was supplied, it may be the wrong point length.
     if ( out.points.length > n ) out.points.length = n;
@@ -803,16 +803,11 @@ export class Ellipse3d extends Polygon3d {
 
   // ----- NOTE: In-place modifiers ----- //
 
+  /**
+   * For Ellipse, the plane normal must be set, not calculated.
+   */
   _calculatePlane(plane) {
-    const center = this.centroid;
-    using normal = Point3d.tmp;
-
-    // Add 2 points to form a flat plane. Form CCW.
-    using b = Point3d.tmp.set(center.x + this.radiusX, center.y, center.z);
-    using c = Point3d.tmp.set(center.x, center.y - this.radiusY, center.z);
-    Plane.normalFromPoints(center, b, c, normal);
-    plane.point.copyFrom(center);
-    plane.normal.copyFrom(normal);
+    plane.point.copyFrom(this.centroid);
   }
 
   _setDimensions(center, radiusX, radiusY) {
@@ -901,7 +896,7 @@ export class Ellipse3d extends Polygon3d {
     out ??= new this();
     out._setDimensions(res.center, res.radiusX, res.radiusY);
     out.points[0] = res.center;
-    out.plane = Plane.fromMultiplePoints([res.center, ...pts]);
+    Plane.fromMultiplePoints([res.center, ...pts], out.plane);
     return out;
   }
 
@@ -914,7 +909,7 @@ export class Ellipse3d extends Polygon3d {
     }
     const out = new this();
     out._setDimensions(center, radiusX, radiusY);
-    out.plane = plane;
+    out.plane.copyFrom(plane);
     return out;
   }
 
@@ -934,15 +929,16 @@ export class Ellipse3d extends Polygon3d {
     }
     out ??= new this();
     out._setDimensions(center3d, ellipse2d.width, ellipse2d.height);
-    out.plane = plane;
+    out.plane.copyFrom(plane);
     center3d.release();
     return out;
   }
 
   clone(out) {
-    out ??= super.clone();
+    out = super.clone(out);
     out.radiusX = this.radiusX;
     out.radiusY = this.radiusY;
+    out.plane.copyFrom(this.plane);
     return out;
   }
 
