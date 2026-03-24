@@ -1083,12 +1083,10 @@ export class Ellipse3d extends Polygon3d {
 
     // A non-uniform scale will result in an ellipse.
     if ( !isUniform && !(ellipse3d instanceof Ellipse3d) ) ellipse3d = new Ellipse3d();
-    ellipse3d ??= this._cloneEmpty();
-    ellipse3d.isHole = this.isHole;
+    this.clone(ellipse3d);
 
     // Transform the center.
-    using txCenter = M.multiplyPoint3d(this.centroid);
-    ellipse3d.points[0].copyFrom(txCenter);
+    M.multiplyPoint3d(this.centroid, ellipse3d.points[0]);
 
     // Transform Normal. (Inverse transpose the 3x3 portion of the matrix.)
     using mat3 = M.subset({ rowEnd: 2, colEnd: 2 });
