@@ -108,7 +108,7 @@ const TokenConstrainedFacesMixin = superclass => class extends superclass {
     const SPACER = this.constructor.SPACER;
     const token = this.token;
     const poly = token.constrainedTokenBorder.toPolygon();
-    buildPolygonCube(poly, token.topZ * SPACER, token.bottomZ * SPACER, this._constrainedFaces);
+    buildPolygonCube(poly, token.topZ - SPACER, token.bottomZ + SPACER, this._constrainedFaces);
     this.#wallsID = ConstrainedTokenBorder.wallsID;
   }
 }
@@ -174,7 +174,7 @@ const TokenConstrainedLitFacesMixin = superclass => class extends superclass {
 }
 
 /**
- * @typedef {function} PlaceableFacesMixin
+ * @typedef {function} TokenConstrainedBrightLitFacesMixin
  *
  * Add faces for this placeable class.
  * Requires matrices.
