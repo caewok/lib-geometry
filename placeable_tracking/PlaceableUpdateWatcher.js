@@ -198,8 +198,8 @@ export class PlaceableRefreshWatcher extends PlaceableUpdateWatcher {
   _handleUpdate(placeable, flags) {
     // Walk through each callback in turn, triggering it if it matches one or more change keys.
     const changeKeys = Object.keys(flags);
-    for ( const { keys, callback } of this.callbacks ) {
-      if ( changeKeys.some(key => keys.has(key)) ) callback(placeable, flags);
+    for ( const { keys, callback } of this.callbacks.update.values() ) {
+      if ( changeKeys.some(key => keys.has(key)) ) callback(placeable, changeKeys);
     }
   }
 
