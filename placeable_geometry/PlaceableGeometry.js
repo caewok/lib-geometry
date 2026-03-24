@@ -360,7 +360,6 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
     if ( this._prototypeFaces.top ) this._prototypeFaces.top.transform(M, this.faces.top)
     if ( this._prototypeFaces.bottom ) this._prototypeFaces.bottom.transform(M, this.faces.bottom)
     for ( let i = 0, iMax = this._prototypeFaces.sides.length; i < iMax; i += 1 ) this._prototypeFaces.sides[i].transform(M, this.faces.sides[i]);
-    super._updateFaces();
   }
 
   shapeUpdated() {
