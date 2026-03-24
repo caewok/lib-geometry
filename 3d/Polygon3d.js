@@ -1064,7 +1064,7 @@ export class Ellipse3d extends Polygon3d {
     const isUniform = Math.abs(sxM - syM) < EPSILON && Math.abs(syM - sz.magnitude()) < EPSILON;
 
     // A non-uniform scale will result in an ellipse.
-    if ( !isUniform && !(ellipse3d instanceof Ellipse3d) ) ellipse3d = Ellipse3d._cloneEmpty();
+    if ( !isUniform && !(ellipse3d instanceof Ellipse3d) ) ellipse3d = new Ellipse3d();
     ellipse3d ??= this._cloneEmpty();
 
     // Transform the center.
