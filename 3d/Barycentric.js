@@ -56,8 +56,6 @@ export class BaryTriangleData {
 
 export class BarycentricPoint extends Point3d {
 
-  static classTypes = new Set([this.name]); // Alternative to instanceof
-
   static BaryTriangleData;
 
   get u() { return this.x; }

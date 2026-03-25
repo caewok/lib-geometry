@@ -110,6 +110,5 @@ export function HexCoordinateMixin(Base) {
  */
 export class HexGridCoordinates extends HexCoordinateMixin(GridCoordinates) {
 
-  static classTypes = new Set([this.name]); // Alternative to instanceof
 
 }

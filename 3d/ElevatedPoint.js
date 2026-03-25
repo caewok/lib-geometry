@@ -24,8 +24,6 @@ import { Point3d } from "./Point3d.js";
  */
 export class ElevatedPoint extends Point3d {
 
-  static classTypes = new Set([this.name, "ElevatedPoint"]); // Alternative to instanceof
-
   /** @type {number<grid units>} */
   get elevation() { return pixelsToGridUnits(this.z); }
 

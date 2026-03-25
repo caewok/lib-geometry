@@ -29,8 +29,6 @@ import { pixelsToGridUnits } from "../util.js";
  */
 export class HexGridCoordinates3d extends HexCoordinateMixin(GridCoordinates3d) {
 
-  static classTypes = new Set([this.name]); // Alternative to instanceof
-
   /**
    * Create this point from hex coordinates plus optional elevation.
    * @param {HexagonalGridCube} hexCube
