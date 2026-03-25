@@ -385,13 +385,12 @@ export class RegionPolygonShapeGeometry extends AbstractRegionShapeGeometry {
     let top;
     let bottom;
     let sides;
-    if ( polys.length === 1 )
-      ({ top, bottom, sides } = {this._buildPolygonFace(polys[0]));
+    if ( polys.length === 1 ) {
+      ({ top, bottom, sides } = this._buildPolygonFace(polys[0]));
       this._polygonFaces.top.push(top);
       this._polygonFaces.bottom.push(bottom);
       this._polygonFaces.sides.push(sides);
-    }
-    else {
+    } else {
       top = new Polygons3d();
       bottom = new Polygons3d();
       sides = [];
