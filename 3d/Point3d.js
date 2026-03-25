@@ -65,7 +65,7 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
 
   static onRelease(obj) {
     obj.z = 0;
-    super.onRelease(obj);
+    PIXI.Point.onRelease(obj);
   }
 
   /**
