@@ -117,7 +117,7 @@ export class PlaceableUpdateWatcher {
    */
   activate() {
     // Avoid multiple hooks by checking against this.hooks.
-    const HL = this.constructor.HOOK_LABELS;
+    const HL = foundry.utils.invertObject(this.constructor.HOOK_LABELS);
     this.hooks.create ||= Hooks.on(`${HL.create}${this.documentName}`, this._handleCreation.bind(this));
     this.hooks.update ||= Hooks.on(`${HL.update}${this.documentName}`, this._handleUpdate.bind(this));
     this.hooks.delete ||= Hooks.on(`${HL.delete}${this.documentName}`, this._handleDeletion.bind(this));
@@ -127,7 +127,7 @@ export class PlaceableUpdateWatcher {
    * Stop listening to the update hook.
    */
   deactivate() {
-    const HL = this.constructor.HOOK_LABELS;
+    const HL = foundry.utils.invertObject(this.constructor.HOOK_LABELS);
     if ( this.hooks.create ) Hooks.off(`${HL.create}${this.documentName}`, this.hooks.create);
     if ( this.hooks.update ) Hooks.off(`${HL.update}${this.documentName}`, this.hooks.update);
     if ( this.hooks.delete ) Hooks.off(`${HL.delete}${this.documentName}`, this.hooks.delete);

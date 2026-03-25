@@ -20,11 +20,11 @@ canvasTests.drawTokenGeometries()
 canvasTests.drawTileGeometries()
 canvasTests.drawRegionGeometries()
 
-incorrectProtoTokens = testTokenPrototypeGeometryContainment()
-incorrectTokens = testTokenGeometryContainment();
-incorrectWalls = testWallGeometryContainment();
-incorrectTiles = testTileGeometryContainment();
-incorrectRegions = testRegionGeometryContainment();
+incorrectProtoTokens = canvasTests.testTokenPrototypeGeometryContainment()
+incorrectTokens = canvasTests.testTokenGeometryContainment();
+incorrectWalls = canvasTests.testWallGeometryContainment();
+incorrectTiles = canvasTests.testTileGeometryContainment();
+incorrectRegions = canvasTests.testRegionGeometryContainment();
 
 */
 
