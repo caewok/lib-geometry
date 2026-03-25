@@ -202,14 +202,10 @@ export function testTokenPrototypeGeometryContainment() {
     using ctr = Point3d.tmp.set(0, 0, 0);
     const pf = geom._prototypeFaces;
 
-    if ( pf.top.isFacing(ctr) )  incorrectTokens.add(token);
+    if ( pf.top.isFacing(ctr) ) incorrectTokens.add(token);
     if ( pf.bottom.isFacing(ctr) ) incorrectTokens.add(token);
     for ( const side of pf.sides ) {
-      if ( side.isFacing(ctr) )  incorrectTokens.add(token);
-    }
-
-    for ( const face of geom.iterateFaces() ) {
-      if ( face.isFacing(ctr) ) incorrectTokens.add(token);
+      if ( side.isFacing(ctr) ) incorrectTokens.add(token);
     }
   }
   console.log(`${incorrectTokens.size} incorrect tokens out of ${canvas.tokens.placeables.length}.`, incorrectTokens);

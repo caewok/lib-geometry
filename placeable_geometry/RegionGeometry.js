@@ -363,9 +363,9 @@ export class RegionPolygonShapeGeometry extends AbstractRegionShapeGeometry {
   // can we infer a 1:1 relationship?
   // And if so, can we use the actual shape (circle/ellipse/rectangle/poly)?
   _polygonFaces = {
-    top = [],
-    bottom = [],
-    sides = [],
+    top: [],
+    bottom: [],
+    sides: [],
   };
 
   _updateFaces() {
