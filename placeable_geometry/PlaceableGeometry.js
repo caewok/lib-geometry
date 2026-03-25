@@ -317,7 +317,7 @@ const QUADS = {
 }
 
 // Set the normals.
-(function() {
+(() => {
   // QUADS.up is set correctly.
   // Multiply by -1 by hand to avoid "super" issues b/c PIXI.Point not yet extended.
   let n = QUADS.down.plane.normal;
