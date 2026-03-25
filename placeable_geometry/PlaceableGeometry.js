@@ -283,25 +283,43 @@ const QUADS = {
     Point3d.tmp.set(0.5, 0.5, 0),
     Point3d.tmp.set(0.5, -0.5, 0),
   ),
-  down: null,
+  down: Quad3d.from4Points(
+    Point3d.tmp.set(0.5, -0.5, 0),
+    Point3d.tmp.set(0.5, 0.5, 0),
+    Point3d.tmp.set(-0.5, 0.5, 0),
+    Point3d.tmp.set(-0.5, -0.5, 0),
+  ),
   south: Quad3d.from4Points( // E.g., wall facing south.
     Point3d.tmp.set(-0.5, 0, 0.5),
     Point3d.tmp.set(-0.5, 0, -0.5),
     Point3d.tmp.set(0.5, 0, -0.5),
     Point3d.tmp.set(0.5, 0, 0.5),
   ),
-  north: null,
+  north: Quad3d.from4Points(
+    Point3d.tmp.set(0.5, 0, 0.5),
+    Point3d.tmp.set(0.5, 0, -0.5),
+    Point3d.tmp.set(-0.5, 0, -0.5),
+    Point3d.tmp.set(-0.5, 0, 0.5),
+  ),
   west: Quad3d.from4Points( // E.g., wall facing west.
     Point3d.tmp.set(0, -0.5, 0.5),
     Point3d.tmp.set(0, -0.5, -0.5),
     Point3d.tmp.set(0, 0.5, -0.5),
     Point3d.tmp.set(0, 0.5, 0.5),
   ),
-  east: null,
+  east: Quad3d.from4Points(
+    Point3d.tmp.set(0, 0.5, 0.5),
+    Point3d.tmp.set(0, 0.5, -0.5),
+    Point3d.tmp.set(0, -0.5, -0.5),
+    Point3d.tmp.set(0, -0.5, 0.5),
+  ),
 }
+
+/* Cannot use reverseOrientation b/c methods not fully defined on initial load.
 QUADS.down = QUADS.up.clone().reverseOrientation();
 QUADS.north = QUADS.south.clone().reverseOrientation();
 QUADS.east = QUADS.west.clone().reverseOrientation();
+*/
 
 /**
  * @typedef {function} PlaceableFacesMixin
