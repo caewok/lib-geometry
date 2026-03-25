@@ -53,7 +53,7 @@ export class RegionPolygonModelVertices extends RegionVertices {
   calculateModel(opts = {}) {
     const elev = RegionGeometry.regionElevation(this.region);
     const vo = new VertexObject();
-    for ( const poly of this.region.polygons ) {
+    for ( const poly of this.region.document.polygons ) {
       vo.vertices.push(...Polygon3dVertices.calculateVertices(poly, elev));
     }
     vo.dropNormalsAndUVs({ keepNormals: opts.hasNormals, keepUVs: opts.hasUVs, out: vo });
@@ -105,7 +105,7 @@ export class RegionPolygonRampVertices extends RegionPolygonModelVertices {
     const round = false;
     const elev = RegionGeometry.regionElevation(this.region);
     const vo = new VertexObject();
-    for ( const poly of this.region.polygons ) {
+    for ( const poly of this.region.document.polygons ) {
       const untrimmedVertices = Polygon3dVertices.calculateVertices(poly, elev);
 
       // Modify elevation for ramp.

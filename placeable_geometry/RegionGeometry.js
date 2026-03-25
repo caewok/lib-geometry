@@ -80,7 +80,7 @@ export class RegionGeometry extends PlaceableGeometry {
 
   get shapes() { return this.placeable.document.shapes; }
 
-  get polygons() { return this.placeable.polygons; }
+  get polygons() { return this.placeable.document.polygons; }
 
   get hasMultiPlaneRamp() {
     const TM = OTHER_MODULES.TERRAIN_MAPPER;
@@ -358,8 +358,22 @@ export class RegionPolygonShapeGeometry extends AbstractRegionShapeGeometry {
   /** @type {Faces} */
   _initializePrototypeFaces() { /* Unused */ }
 
+  // Mostly for debugging at the moment, but may become important for ramps.
+  // TODO: if the number of region polygons === number of region shapes,
+  // can we infer a 1:1 relationship?
+  // And if so, can we use the actual shape (circle/ellipse/rectangle/poly)?
+  _polygonFaces = {
+    top = [],
+    bottom = [],
+    sides = [],
+  };
+
   _updateFaces() {
     // TODO: Handle ramps
+
+    this._polygonFaces.top.length = 0;
+    this._polygonFaces.bottom.length = 0;
+    this._polygonFaces.sides.length = 0;
     const polys = this.polygons;
     if ( !polys.length ) {
       this.faces.top = null;
@@ -371,7 +385,12 @@ export class RegionPolygonShapeGeometry extends AbstractRegionShapeGeometry {
     let top;
     let bottom;
     let sides;
-    if ( polys.length === 1 ) ({ top, bottom, sides } = this._buildPolygonFace(polys[0]));
+    if ( polys.length === 1 )
+      ({ top, bottom, sides } = {this._buildPolygonFace(polys[0]));
+      this._polygonFaces.top.push(top);
+      this._polygonFaces.bottom.push(bottom);
+      this._polygonFaces.sides.push(sides);
+    }
     else {
       top = new Polygons3d();
       bottom = new Polygons3d();
@@ -381,6 +400,10 @@ export class RegionPolygonShapeGeometry extends AbstractRegionShapeGeometry {
         top.polygons.push(res.top);
         bottom.polygons.push(res.bottom);
         sides.push(...res.sides);
+
+        this._polygonFaces.top.push(res.top);
+        this._polygonFaces.bottom.push(res.bottom);
+        this._polygonFaces.sides.push(res.sides);
       }
     }
     this.faces.top = top;
