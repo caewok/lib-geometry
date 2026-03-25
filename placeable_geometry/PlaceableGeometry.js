@@ -276,6 +276,7 @@ export const PlaceableModelMatrixMixin = superclass => {
  * @prop {Polygon3d[]} sides
  */
 // All CCW because default GPU test is counter-clockwise
+
 const QUADS = {
   up: Quad3d.from4Points( // E.g., tile top.
     Point3d.tmp.set(-0.5, -0.5, 0),
@@ -314,6 +315,21 @@ const QUADS = {
     Point3d.tmp.set(0, -0.5, 0.5),
   ),
 }
+
+// Set the normals.
+(function() {
+  // QUADS.up is set correctly.
+  // Multiply by -1 by hand to avoid "super" issues b/c PIXI.Point not yet extended.
+  let n = QUADS.down.plane.normal;
+  n.x = -n.x;
+  n.y = -n.y;
+  n.z = -n.z;
+
+  n = QUADS.down.plane.normal;
+  n.x = -n.x;
+  n.y = -n.y;
+  n.z = -n.z;
+}());
 
 /* Cannot use reverseOrientation b/c methods not fully defined on initial load.
 QUADS.down = QUADS.up.clone().reverseOrientation();
