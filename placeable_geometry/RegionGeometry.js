@@ -22,7 +22,6 @@ import { OTHER_MODULES } from "../const.js";
 import { AABB3d } from "../3d/AABB3d.js";
 import { MatrixFloat32 } from "../Matrix.js";
 import { Quad3d, Polygon3d, Polygons3d, Ellipse3d, Circle3d } from "../3d/Polygon3d.js";
-import { Point3d } from "../3d/Point3d.js";
 
 /**
   Region will either be a single shape or a group of polygons.
@@ -288,17 +287,16 @@ export class RegionRectangleShapeGeometry extends InstancedShape {
    * Normal walls have front (top) and back (bottom). One-directional walls have only top.
    */
   _initializePrototypeFaces() {
+    // Same as TokenGeometry#initializeCubeFaces.
     this.constructor.QUADS.up.clone(this._prototypeFaces.top);
     this.constructor.QUADS.down.clone(this._prototypeFaces.bottom);
-    const RECT_SIDES = this.constructor.RECT_SIDES;
-    for ( const side of Object.keys(RECT_SIDES) ) this.constructor.QUADS[side].clone(this._prototypeFaces.sides[RECT_SIDES[side]]);
-
-    // Adjust sides so they are 0.5 from center in each direction.
-    this._prototypeFaces.sides[RECT_SIDES.north].translate({ y: -0.5 }, this._prototypeFaces.sides[RECT_SIDES.north]);
-    this._prototypeFaces.sides[RECT_SIDES.south].translate({ y: 0.5 }, this._prototypeFaces.sides[RECT_SIDES.south]);
-    this._prototypeFaces.sides[RECT_SIDES.west].translate({ x: -0.5 }, this._prototypeFaces.sides[RECT_SIDES.west]);
-    this._prototypeFaces.sides[RECT_SIDES.east].translate({ x: 0.5 }, this._prototypeFaces.sides[RECT_SIDES.east]);
-
+    this._prototypeFaces.sides.length = 0;
+    this._prototypeFaces.sides.push(
+      this.constructor.QUADS.north.clone(),
+      this.constructor.QUADS.west.clone(),
+      this.constructor.QUADS.south.clone(),
+      this.constructor.QUADS.east.clone(),
+    );
     super._initializePrototypeFaces();
   }
 }
@@ -320,9 +318,14 @@ export class RegionEllipseShapeGeometry extends InstancedShape {
    */
   _initializePrototypeFaces() {
     // By default, the Ellipse3d faces up.
-    Ellipse3d.fromCenterPoint(Point3d.tmp.set(0, 0, 0.5), 1.0, 1.0, this._prototypeFaces.top);
-    this._prototypeFaces.top.clone(this._prototypeFaces.bottom).reverseOrientation();
+    // Same as TokenGeometry#initializeEllipseFaces
+    this._prototypeFaces.top.radiusX = 1;
+    this._prototypeFaces.top.radiusY = 1;
+    this._prototypeFaces.top.clone(this._prototypeFaces.bottom);
+    this._prototypeFaces.bottom.reverseOrientation();
+    this._prototypeFaces.top.setZ(0.5);
     this._prototypeFaces.bottom.setZ(-0.5);
+
     const density = PIXI.Circle.approximateVertexDensity(Math.max(this.shape.radiusX, this.shape.radiusY));
     this._prototypeFaces.sides = this._prototypeFaces.top.buildTopSides(-0.5, { density });
     super._initializePrototypeFaces();
@@ -346,9 +349,13 @@ export class RegionCircleShapeGeometry extends InstancedShape {
    */
   _initializePrototypeFaces() {
     // By default, the Circle3d faces up.
-    Circle3d.fromCenterPoint(Point3d.tmp.set(0, 0, 0.5), 0.5, this._prototypeFaces.top);
-    this._prototypeFaces.top.clone(this._prototypeFaces.bottom).reverseOrientation();
+    // Same as TokenGeometry#initializeEllipseFaces
+    this._prototypeFaces.top.radius = 1;
+    this._prototypeFaces.top.clone(this._prototypeFaces.bottom);
+    this._prototypeFaces.bottom.reverseOrientation();
+    this._prototypeFaces.top.setZ(0.5);
     this._prototypeFaces.bottom.setZ(-0.5);
+
     const density = PIXI.Circle.approximateVertexDensity(this.shape.radius);
     this._prototypeFaces.sides = this._prototypeFaces.top.buildTopSides(-0.5, { density });
     super._initializePrototypeFaces();
@@ -401,7 +408,7 @@ export class RegionPolygonShapeGeometry extends AbstractRegionShapeGeometry {
     let bottom;
     let sides;
     if ( polys.length === 1 ) {
-      ({ top, bottom, sides } = this._buildPolygonFace(polys[0]));
+      ({ top, bottom, sides } = this._buildPolygonFaces(polys[0]));
       this._polygonFaces.top.push(top);
       this._polygonFaces.bottom.push(bottom);
       this._polygonFaces.sides.push(sides);
@@ -410,7 +417,7 @@ export class RegionPolygonShapeGeometry extends AbstractRegionShapeGeometry {
       bottom = new Polygons3d();
       sides = [];
       for ( const poly of polys ) {
-        const res = this._buildPolygonFace(poly);
+        const res = this._buildPolygonFaces(poly);
         top.polygons.push(res.top);
         bottom.polygons.push(res.bottom);
         sides.push(...res.sides);
@@ -425,14 +432,27 @@ export class RegionPolygonShapeGeometry extends AbstractRegionShapeGeometry {
     this.faces.sides = sides;
   }
 
-  _buildPolygonFace(poly) {
+  _buildPolygonFaces(poly) {
     const { topZ, bottomZ } = this.region;
     const top = Polygon3d.fromPolygon(poly, topZ);
-    const bottom = top.clone().reverseOrientation();
+    const bottom = top.clone()
+    top.setZ(topZ);
     bottom.setZ(bottomZ);
-    const sides = top.buildTopSides(bottomZ);
 
-    // TODO: Is hole orientation correct for each face?
+    // Top faces up.
+    // Bottom faces down
+    // Holes are ignored.
+    top.plane.normal.set(0, 0, 1);
+    bottom.plane.normal.set(0, 0, -1);
+
+    // Foundry default is for positive polygons to be normal; not positive are holes.
+    if ( !poly.isPositive ) {
+      top.isHole = true;
+      bottom.isHole = true;
+    }
+
+    // Sides will orient based on the isHole parameter.
+    const sides = top.buildTopSides(bottomZ);
     return { top, bottom, sides };
   }
 

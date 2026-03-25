@@ -50,7 +50,7 @@ export class Plane {
   clone(out) {
     out ??= new Plane();
     out.point.copyFrom(this.point);
-    out.normal.copyFrom(this.normal);
+    out.normal.copyFrom(this.normal); // Should already be normalized.
     return out;
   }
 
@@ -61,7 +61,7 @@ export class Plane {
    */
   copyFrom(other) {
     this.point.copyFrom(other.point);
-    this.normal.copyFrom(other.normal);
+    this.normal.copyFrom(other.normal); // Should already be normalized.
     return this;
   }
 
@@ -77,9 +77,16 @@ export class Plane {
 
   static normalFromPoints(a, b, c, outPoint) {
     outPoint ??= Point3d.tmp;
-    using vAB = b.subtract(a);
-    using vAC = c.subtract(a);
-    return vAC.cross(vAB, outPoint); // So the orientation matches.
+
+    // In JavaScript (and math, really), ∞ - ∞ is NaN.
+    // For our purposes, we can assume these would go to 0.
+    // To catch this possibility, make a, b, c finite before subtracting.
+    using aTmp = a.makeFinite();
+    using bTmp = b.makeFinite();
+    using cTmp = c.makeFinite();
+    using vAB = bTmp.subtract(aTmp);
+    using vAC = cTmp.subtract(aTmp);
+    return vAC.cross(vAB, outPoint); // Ordered so the orientation matches.
   }
 
   /**
@@ -99,7 +106,7 @@ export class Plane {
     const N = this.normalFromPoints(a, b, c);
     out ??= new Plane();
     out.point.copyFrom(a);
-    out.normal.copyFrom(N)
+    out.normal = N;
     out._threePoints = {a, b, c};
     return out;
   }

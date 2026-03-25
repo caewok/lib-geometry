@@ -370,6 +370,21 @@ function ceil(outPoint) {
   return outPoint;
 }
 
+/**
+ * Make all coordinates finite.
+ * @param {PIXI.Point} [outPoint]    A point-like object in which to store the value.
+ *   (Will create new point if none provided.)
+ * @returns {PIXI.Point}
+ */
+function makeFinite(outPoint) {
+  outPoint ??= this.constructor.tmp;
+  const { x, y } = this;
+  outPoint.x = isFinite(x) ? x : Number.MAX_SAFE_INTEGER * Math.sign(x);
+  outPoint.y = isFinite(y) ? y : Number.MAX_SAFE_INTEGER * Math.sign(y);
+  return outPoint;
+}
+
+
 
 /**
  * Dot product of this point with another.
@@ -577,6 +592,7 @@ PATCHES.PIXI.METHODS = {
   abs,
   floor,
   ceil,
+  makeFinite,
   dot,
   magnitude,
   magnitudeSquared,

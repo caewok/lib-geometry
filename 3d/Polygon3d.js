@@ -149,6 +149,10 @@ export class Polygon3d {
     if ( this.#dirtyPlane ) {
       this._calculatePlane(this.#plane);
       if ( !this.#orientation ) this.#plane.normal.multiplyScalar(-1, this.#plane.normal)
+
+      // Plane point is linked to the first point here, which helps with transforms.
+      this.#plane.point = this.points[0];
+
       this.#dirtyPlane = false;
     }
     return this.#plane;
@@ -435,6 +439,7 @@ export class Polygon3d {
    * @returns {Quad3d[]}
    */
   buildTopSides(bottomZ, { heightZ = 0 } = {}) {
+    const ctr = this.centroid;
     const numSides = this.points.length;
     const sides = new Array(numSides);
     let i = 0;
@@ -444,7 +449,10 @@ export class Polygon3d {
       const z0 = bottomZ ?? edge.a.z - heightZ;
       const z1 = bottomZ ?? edge.b.z - heightZ;
       const side = Quad3d.from4Points(edge.b, edge.a, a.set(edge.a.x, edge.a.y, z0), b.set(edge.b.x, edge.b.y, z1));
+      if ( side.isFacing(ctr) ^ this.isHole ) side.reverseOrientation(); // Face outwards.
       sides[i++] = side;
+      // Usually we don't want sides to be holes, just reversed orientation.
+      // Example: hole inside a rectangle. We want the interior sides to block when at the center.
     }
     return sides;
   }
@@ -543,7 +551,9 @@ export class Polygon3d {
    * @param {Point3d} p
    * @returns {boolean}
    */
-  isFacing(p) { return this.plane.whichSide(p) > 0; }
+  isFacing(p) {
+    return this.plane.whichSide(p) > 0;
+  }
 
   // ----- NOTE: Transformations ----- //
 
@@ -608,9 +618,14 @@ export class Polygon3d {
    * Does not consider whether this polygon is facing.
    * @param {Point3d} rayOrigin
    * @param {Point3d} rayDirection
+   * @param {object} [opts]
+   * @param {boolean} [opts.ignoreHoles = true]        If true, polygon holes return null
+   *   Important for Polygons3d, which deal with multiple polygon intersections.
    * @returns {number|null} The t value of the plane intersection.
    */
-  intersectionT(rayOrigin, rayDirection) {
+  intersectionT(rayOrigin, rayDirection, { holesBlock = false } = {}) {
+    if ( !holesBlock && this.isHole ) return null;
+
     // First get the plane intersection.
     const plane = this.plane;
     const t = plane.rayIntersection(rayOrigin, rayDirection);
@@ -647,11 +662,18 @@ export class Polygon3d {
 
   /**
    * Test if a ray intersects the polygon. Does not consider whether this polygon is facing.
+   * Ignores holes.
    * @param {Point3d} rayOrigin
    * @param {Point3d} rayDirection
+   * @param {object} [opts]
+   * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
+   * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
+   * @param {boolean} [opts.holesBlock = false]        If false, polygon holes return null
+   *   Important for Polygons3d, which deal with multiple polygon intersections.
    * @returns {Point3d|null}
    */
-  intersection(rayOrigin, rayDirection, minT = 0, maxT = Number.POSITIVE_INFINITY) {
+  intersection(rayOrigin, rayDirection, { minT = 0, maxT = 1, holesBlock = false } = {}) {
+    if ( !holesBlock && this.isHole ) return null;
     const t = this.intersectionT(rayOrigin, rayDirection);
     if ( t === null || !almostBetween(t, minT, maxT) ) return null;
     if ( t.almostEqual(0) ) return rayOrigin;
@@ -776,8 +798,6 @@ function pointFromVertices(i, vertices, indices, stride = 3, offset = 0, outPoin
  */
 export class Ellipse3d extends Polygon3d {
 
-  static classTypes = new Set([this.name], "Ellipse", "PlanarEllipse"); // Alternative to instanceof
-
   /** @type {Point3d} */
   get center() { return this.points[0]; }
 
@@ -811,12 +831,10 @@ export class Ellipse3d extends Polygon3d {
   // ----- NOTE: In-place modifiers ----- //
 
   /**
-   * For Ellipse, the plane normal must be set, not calculated.
+   * For Ellipse, the plane normal typically must be set, not calculated.
    * By default, the ellipse will face straight up, with normal {0, 0, 1}.
    */
-  _calculatePlane(plane) {
-    plane.point.copyFrom(this.centroid);
-  }
+  _calculatePlane(plane) { }
 
   _setDimensions(center, radiusX, radiusY) {
     this.points[0].copyFrom(center);
@@ -1095,14 +1113,11 @@ export class Ellipse3d extends Polygon3d {
     using matNormal = Matrix.fromPoint3d(this.plane.normal, { homogenous: false });
     mat3Inv.transpose(mat3Inv);
     matNormal.multiply1x3(mat3Inv, matNormal);
-
-    const newPlane = ellipse3d.plane;
-    const newN = newPlane.normal;
-    newPlane.point.copyFrom(this.centroid); // Because centroid was already transformed.
-    newN.x = matNormal.getIndex(0, 0);
-    newN.y = matNormal.getIndex(0, 1);
-    newN.z = matNormal.getIndex(0, 2);
-    newN.normalize(newN);
+    ellipse3d.plane.normal = {
+      x: matNormal.getIndex(0, 0),
+      y: matNormal.getIndex(0, 1),
+      z: matNormal.getIndex(0, 2),
+    };
 
     if ( isUniform ) {
       // Use scale factor relevant to the plane.
@@ -1187,8 +1202,6 @@ export class Ellipse3d extends Polygon3d {
  * Planar circle. Not to be confused with a sphere! This is a slice of a sphere in a plane.
  */
 export class Circle3d extends Ellipse3d {
-
-  static classTypes = new Set([this.name], "Circle", "PlanarCircle"); // Alternative to instanceof
 
   /** @type {number} */
   #radius = 0;
@@ -1357,8 +1370,6 @@ export class Circle3d extends Ellipse3d {
  * Planar triangle shape.
  */
 export class Triangle3d extends Polygon3d {
-
-  static classTypes = new Set([this.name], "Triangle", "PlanarTriangle"); // Alternative to instanceof
 
   constructor() {
     super(3);
@@ -1615,7 +1626,6 @@ export class Triangle3d extends Polygon3d {
  */
 export class Quad3d extends Polygon3d {
 
-  static classTypes = new Set([this.name], "Quad", "PlanarQuad"); // Alternative to instanceof
 
   constructor() {
     super(4);
@@ -1884,7 +1894,20 @@ export class Quad3d extends Polygon3d {
  */
 export class Polygons3d extends Polygon3d {
 
-  static classTypes = new Set([this.name], "Polygons", "PlanarPolygons"); // Alternative to instanceof
+  /** @type {boolean|null} */
+  get isHole() {
+    let hasHoles = false;
+    let hasSolids = false;
+    for ( const poly of this.polygons ) {
+      hasHoles ||= poly.isHole;
+      hasSolids ||= !poly.isHole;
+    }
+    if ( hasHoles && hasSolids ) {
+      console.debug(`${this.constructor.name}|isHole called on object with holes and solids.`, this);
+      return null;
+    }
+    return hasHoles;
+  }
 
   /** @type {Polygon3d[]} */
   polygons = [];
@@ -1954,7 +1977,7 @@ export class Polygons3d extends Polygon3d {
   /** @type {Point3d} */
   #centroid;
 
-  centroid() {
+  get centroid() {
     if ( !this.#centroid ) {
       // Assuming flat points, determine plane and then convert to 2d
       const plane = this.plane;
@@ -2087,8 +2110,13 @@ export class Polygons3d extends Polygon3d {
   // ----- NOTE: Property tests ----- //
 
   isFacing(p) {
-    const poly = this.polygons[0];
-    return poly.isFacing(p) ^ poly.isHole; // Holes have reverse orientation.
+    // All polygons should face the same way for purposes of Polygons3d.
+    // But to be sure, find a solid, not a hole.
+    for ( const poly of this.polygons ) {
+      if ( poly.isHole ) continue;
+      return poly.isFacing(p);
+    }
+    return null;
   }
 
   // Valid if it forms at least one polygon.
@@ -2127,24 +2155,52 @@ export class Polygons3d extends Polygon3d {
   // ----- NOTE: Intersection ----- //
 
   /**
+   * Test if a ray is within the polygon bounds and intersects the polygon's plane.
+   * Does not consider whether this polygon is facing.
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @param {object} [opts]
+   * @param {boolean} [holesBlock = false]        If false, polygon holes return null
+   * @returns {number|null} The t value of the plane intersection.
+   */
+  intersectionT(rayOrigin, rayDirection, { holesBlock = false } = {}) {
+    // First get the plane intersection.
+    const plane = this.plane;
+    const t = plane.rayIntersection(rayOrigin, rayDirection);
+    if ( t === null ) return null;
+    const ix = Point3d.tmp;
+    rayOrigin.add(rayDirection.multiplyScalar(t, ix), ix)
+
+    // Test 3d bounding box.
+    if ( !this.aabb.almostContainsPoint(ix) ) return null;
+    return this._isIntersectionWithinPolygon(ix, holesBlock) ? t : null;
+  }
+
+  /**
    * Test if a ray intersects the polygon. Does not consider whether this polygon is facing.
    * Ignores holes. If 2+ polygons overlap, it will count as an intersection if it intersects
    * more outer than holes.
    * @param {Point3d} rayOrigin
    * @param {Point3d} rayDirection
+   * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
+   * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
+   * @param {boolean} [opts.holesBlock = false]        If false, polygon holes return null
    * @returns {Point3d|null}
    */
-  intersection(rayOrigin, rayDirection, minT) {
-    let ixNum = 0;
+  intersection(rayOrigin, rayDirection, opts = {}) {
+    // Polygons with holes may have intersections on the solid polygon + the hole.
+    // Need more solid than hole to count.
+    let holeCount = 0;
     let ix;
+    opts.holesBlock ??= false;
     for ( const poly of this.polygons ) {
-      const polyIx = poly.intersection(rayOrigin, rayDirection, minT);
-      if ( polyIx ) {
-        ix = polyIx;
-        ixNum += (poly.isHole ? -1 : 1);
-      }
+      const polyIx = poly.intersection(rayOrigin, rayDirection, opts);
+      if ( !polyIx ) continue;
+      ix ??= polyIx;
+      if ( opts.holesBlock ) return ix;
+      holeCount += poly.isHole ? 1 : -1;
     }
-    return ixNum > 0 ? ix : null;
+    return holeCount < 0 ? ix : null;
   }
 
 
@@ -2152,14 +2208,21 @@ export class Polygons3d extends Polygon3d {
    * Is a 3d point that is on the plane within the polygon?
    * Does not check bounding box or if it is in fact on the plane.
    * @param {Point3d} ix
+   * @param {boolean} [holesBlock = false]        If false, polygon holes return null
    * @returns {boolean}
    */
-  _isIntersectionWithinPolygon(ix) {
+  _isIntersectionWithinPolygon(ix, holesBlock = true) {
+    // Polygons with holes may have intersections on the solid polygon + the hole.
+    // Need more solid than hole to count.
+    let holeCount = 0;
     for ( const poly of this.polygons ) {
       if ( !poly.aabb.almostContainsPoint(ix) ) continue;
-      if ( poly._isIntersectionWithinPolygon(ix) ) return true;
+      const hasIx = poly._isIntersectionWithinPolygon(ix);
+      if ( !hasIx ) continue;
+      if ( holesBlock ) return true;
+      holeCount += poly.isHole ? 1 : -1;
     }
-    return false;
+    return holeCount < 0;
   }
 
   /**

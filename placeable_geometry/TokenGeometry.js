@@ -2,6 +2,7 @@
 canvas,
 CONFIG,
 CONST,
+PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
@@ -286,30 +287,55 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
     this._prototypeFaces.sides.length = 0;
   }
 
-  #initializeEllipseTopFace() {
+  #initializeEllipseFaces() {
     if ( !(this._prototypeFaces.top instanceof Ellipse3d) ) {
       this._prototypeFaces.top = new Ellipse3d();
       this._prototypeFaces.bottom = new Ellipse3d();
     }
     this._prototypeFaces.top.radiusX = 0.5;
     this._prototypeFaces.top.radiusY = 0.5;
+
+    // Default ellipse points up; set up the rest.
+    const density = PIXI.Circle.approximateVertexDensity(100);
+    this.#initializePolyFaces(density);
   }
 
-  #initializeHexagonalTopFace() {
+  #initializeHexagonalFaces() {
     if ( !(this._prototypeFaces.top instanceof Polygon3d) ) {
       this._prototypeFaces.top = new Polygon3d();
       this._prototypeFaces.bottom = new Polygon3d();
     }
     const poly = Hex3dVertices.hexagonalUnitShapeForToken(this.token);
+
+    // Ensure the top is pointing up by passing a counter-clockwise polygon.
+    if ( poly.isPositive ) poly.reverseOrientation();
     Polygon3d.fromPolygon(poly, 0.5, this._prototypeFaces.top);
+    this.#initializePolyFaces();
   }
 
-  #initializeCubeTopFace() {
+  #initializePolyFaces(density) {
+    // Assumed here that the top face is pointing up and is correctly set.
+    this._prototypeFaces.top.clone(this._prototypeFaces.bottom);
+    this._prototypeFaces.bottom.reverseOrientation();
+    this._prototypeFaces.top.setZ(0.5);
+    this._prototypeFaces.bottom.setZ(-0.5);
+    this._prototypeFaces.sides = this._prototypeFaces.top.buildTopSides(-0.5, { density });
+  }
+
+  #initializeCubeFaces() {
     if ( !(this._prototypeFaces.top instanceof Quad3d) ) {
       this._prototypeFaces.top = new Quad3d();
       this._prototypeFaces.bottom = new Quad3d();
     }
     this.constructor.QUADS.up.clone(this._prototypeFaces.top);
+    this.constructor.QUADS.down.clone(this._prototypeFaces.bottom);
+    this._prototypeFaces.sides.length = 0;
+    this._prototypeFaces.sides.push(
+      this.constructor.QUADS.north.clone(),
+      this.constructor.QUADS.west.clone(),
+      this.constructor.QUADS.south.clone(),
+      this.constructor.QUADS.east.clone(),
+    );
   }
 
   /**
@@ -337,28 +363,25 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
      */
     const TYPES = CONST.GRID_TYPES;
     switch ( canvas.grid.type ) {
-      case TYPES.SQUARE: this.#initializeCubeTopFace(); break;
+      case TYPES.SQUARE: this.#initializeCubeFaces(); break;
       case TYPES.GRIDLESS: {
         const shape = this.token.document.shape;
         if ( shape === CONST.TOKEN_SHAPES.ELLIPSE_1
-          || shape === CONST.TOKEN_SHAPES.ELLIPSE_2 ) this.#initializeEllipseTopFace();
-        else this.#initializeCubeTopFace();
+          || shape === CONST.TOKEN_SHAPES.ELLIPSE_2 ) this.#initializeEllipseFaces();
+        else this.#initializeCubeFaces();
         break;
       }
-      default: this.#initializeHexagonalTopFace();
+      default: this.#initializeHexagonalFaces();
     }
-    // Confirm orientation by testing against the center of the unit token.
-    using ctr = Point3d.tmp.set(0, 0, 0);
-    if ( this._prototypeFaces.top.isFacing(ctr) ) this._prototypeFaces.top.reverseOrientation();
 
-    // Build bottom from the top and set the unit elevation.
-    this._prototypeFaces.top.clone(this._prototypeFaces.bottom);
-    this._prototypeFaces.bottom.reverseOrientation(); // Face down.
-    this._prototypeFaces.top.setZ(0.5);
-    this._prototypeFaces.bottom.setZ(-0.5);
+    // Confirm orientation against the origin.
+    const ctr = new Point3d();
+    if ( this._prototypeFaces.top.isFacing(ctr) ) console.error(`${this.constructor.name}|Prototype face for ${this.placeable.id} has wrong top orientation.`);
+    if ( this._prototypeFaces.bottom && this._prototypeFaces.bottom.isFacing(ctr) ) console.error(`${this.constructor.name}|Prototype face for ${this.placeable.id} has wrong bottom orientation.`);
+    for ( const side of this._prototypeFaces.sides ) {
+     if ( side.isFacing(ctr) ) console.error(`${this.constructor.name}|Prototype face for ${this.placeable.id} has wrong side orientation.`);
+    }
 
-    // Build sides from the top shape to the bottom elevation.
-    this._prototypeFaces.sides = this._prototypeFaces.top.buildTopSides(-0.5);
     super._initializePrototypeFaces()
   }
 

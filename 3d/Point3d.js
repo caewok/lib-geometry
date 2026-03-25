@@ -600,6 +600,20 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
   }
 
   /**
+   * Make all values finite.
+   * @param {Point3d} [outPoint]    A point-like object in which to store the value.
+   *   (Will create new point if none provided.)
+   * @returns {Point3d}
+   */
+  makeFinite(outPoint) {
+    outPoint ??= this.constructor.tmp;
+    super.makeFinite(outPoint);
+    const z = this.z;
+    outPoint.z = isFinite(z) ? z : Number.MAX_SAFE_INTEGER * Math.sign(z);
+    return outPoint;
+  }
+
+  /**
    * Dot product of this point with another.
    * (Sum of the products of the components)
    * @param {Point3d} other
