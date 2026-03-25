@@ -39,7 +39,6 @@ export class PlaceableGeometryTracker {
 
   static registerHooks() {
     const docName = this.DOCUMENT_NAME;
-    const docWatcher = this.documentWatcher;
     const refreshWatcher = this.refreshWatcher;
     const id = `${docName}Geometry`;
 
@@ -50,8 +49,11 @@ export class PlaceableGeometryTracker {
     refreshWatcher.register("destroy", id, this._onPlaceableDestroy);
 
     // Updates
-    if ( this.UPDATE_KEYS ) docWatcher.register("update", id, this._onPlaceableUpdate, this.UPDATE_KEYS);
-    if ( this.REFRESH_KEYS ) docWatcher.register("refresh", id, this._onPlaceableUpdate, this.REFRESH_KEYS);
+    if ( this.UPDATE_KEYS ) {
+      const docWatcher = this.documentWatcher;
+      docWatcher.register("update", id, this._onPlaceableUpdate, this.UPDATE_KEYS);
+    }
+    if ( this.REFRESH_KEYS ) refreshWatcher.register("refresh", id, this._onPlaceableUpdate, this.REFRESH_KEYS);
   }
 
   static get documentWatcher() {

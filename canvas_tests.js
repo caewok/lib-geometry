@@ -20,6 +20,7 @@ canvasTests.drawTokenGeometries()
 canvasTests.drawTileGeometries()
 canvasTests.drawRegionGeometries()
 
+incorrectProtoTokens = testTokenPrototypeGeometryContainment()
 incorrectTokens = testTokenGeometryContainment();
 incorrectWalls = testWallGeometryContainment();
 incorrectTiles = testTileGeometryContainment();
