@@ -97,12 +97,19 @@ export class Polygon3d {
   setZ(z = 0) { this.points.forEach(pt => pt.z = z); this.clearCache(); return this; }
 
   /**
+   * If orientation is 1, then the plane normal corresponds the polygon's points layout.
+   * If orientation is -1, then the plane normal is multiplied by -1.
+   * @type {1|-1}
+   */
+  #orientation = 1;
+
+  /**
    * Reverse the orientation of this polygon. Done in place.
    */
   reverseOrientation() {
-    this.points.reverse();
-    // if ( this.#plane ) this.plane.normal.multiplyScalar(-1);
-    this.clearCache();
+    const plane = this.plane; // Do first in case plane has not been calculated
+    this.#orientation = -this.#orientation;
+    plane.normal.multiplyScalar(-1, plane.normal);
     return this;
   }
 
@@ -141,6 +148,7 @@ export class Polygon3d {
   get plane() {
     if ( this.#dirtyPlane ) {
       this._calculatePlane(this.#plane);
+      if ( !this.#orientation ) this.#plane.normal.multiplyScalar(-1, this.#plane.normal)
       this.#dirtyPlane = false;
     }
     return this.#plane;
@@ -532,7 +540,6 @@ export class Polygon3d {
 
   /**
    * Does this polygon face a given point?
-   * Defined as counter-clockwise.
    * @param {Point3d} p
    * @returns {boolean}
    */
@@ -805,6 +812,7 @@ export class Ellipse3d extends Polygon3d {
 
   /**
    * For Ellipse, the plane normal must be set, not calculated.
+   * By default, the ellipse will face straight up, with normal {0, 0, 1}.
    */
   _calculatePlane(plane) {
     plane.point.copyFrom(this.centroid);
@@ -821,13 +829,6 @@ export class Ellipse3d extends Polygon3d {
   clean() { return; }
 
   setZ(z = 0) { this.center.z = z; super.setZ(z); return this; }
-
-  reverseOrientation() {
-    // No points to reverse.
-    // this.plane.normal.multiplyScalar(-1);
-    this.clearCache();
-    return this;
-  }
 
   // ----- NOTE: Plane ----- //
 

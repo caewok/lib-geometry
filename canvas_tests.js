@@ -24,7 +24,7 @@ incorrectProtoTokens = canvasTests.testTokenPrototypeGeometryContainment()
 incorrectTokens = canvasTests.testTokenGeometryContainment();
 incorrectWalls = canvasTests.testWallGeometryContainment();
 incorrectTiles = canvasTests.testTileGeometryContainment();
-incorrectRegions = canvasTests.testRegionGeometryContainment();
+incorrectRegions = midZ = bottomZ + ((topZ - bottomZ) * 0.5);
 
 tracking = CONFIG.GeometryLib.lib.placeableGeometryTracking
 
@@ -259,6 +259,16 @@ export function testRegionGeometryContainment() {
     const geom = region.GeometryLib.geometry;
     if ( !geom.faces.top ) continue;
 
+    // Plain circles, ellipses, and rectangles are instanced.
+    if ( geom._prototypeFaces.top ) {
+      using ctr = Point3d.tmp.set(0, 0, 0);
+      if ( geom._prototypeFaces.top.isFacing(ctr) ) console.error(`region ${region.id} prototype top is wrong.`);
+      if ( geom._prototypeFaces.bottom.isFacing(ctr) ) console.error(`region ${region.id} prototype top is wrong.`);
+      for ( const side of geom._prototypeFaces.sides ) {
+        if ( side.isFacing(ctr) ) console.error(`region ${region.id} prototype side is wrong.`);
+      }
+    }
+
     const bottomZ = isFinite(region.bottomZ) ? region.bottomZ : -1e06;
     const topZ = isFinite(region.topZ) ? region.topZ : 1e06;
     const midZ = bottomZ + ((topZ - bottomZ) * 0.5);
@@ -272,15 +282,23 @@ export function testRegionGeometryContainment() {
       // _polygonFaces should match polygons.
       const polyTop = geom._polygonFaces.top[i];
       if ( polyTop.isHole ^ isHole ) console.error(`region ${region.id} poly top holes are wrong at ${i}.`);
-      if ( polyTop.isFacing(ctr) ^ (isHole ^ isContained) ) incorrectRegions.add(region);
+      if ( polyTop.isFacing(ctr) == (isHole ^ isContained) ) incorrectRegions.add(region);
 
       const polyBottom = geom._polygonFaces.bottom[i];
-      if ( polyBottom.isFacing(ctr) ^ (isHole ^ isContained) ) incorrectRegions.add(region);
+      if ( polyBottom.isFacing(ctr) == (isHole ^ isContained) ) incorrectRegions.add(region);
+
+      /*
+      hole  | contained | facing
+      x         x           √         hole ^ contained !== facing
+      x         √           x
+      √         x           x
+      √         √           √
+      */
 
       if ( polyBottom.isHole ^ isHole ) console.error(`region ${region.id} poly bottom holes are wrong at ${i}.`);
       for ( const polySide of geom._polygonFaces.sides[i] ) {
         if ( polySide.isHole ^ isHole ) console.error(`region ${region.id} poly sides holes are wrong at ${i}.`);
-        if ( polySide.isFacing(ctr) ^ (isHole ^ isContained) ) incorrectRegions.add(region);
+        if ( polySide.isFacing(ctr) == (isHole ^ isContained) ) incorrectRegions.add(region);
       }
     }
 

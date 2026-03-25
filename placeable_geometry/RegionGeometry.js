@@ -319,6 +319,7 @@ export class RegionEllipseShapeGeometry extends InstancedShape {
    * Uses 1 x 1 x 0.5 b/c the scale matrix is set using the half-radii.
    */
   _initializePrototypeFaces() {
+    // By default, the Ellipse3d faces up.
     Ellipse3d.fromCenterPoint(Point3d.tmp.set(0, 0, 0.5), 1.0, 1.0, this._prototypeFaces.top);
     this._prototypeFaces.top.clone(this._prototypeFaces.bottom).reverseOrientation();
     this._prototypeFaces.bottom.setZ(-0.5);
@@ -344,6 +345,7 @@ export class RegionCircleShapeGeometry extends InstancedShape {
    * Normal walls have front (top) and back (bottom). One-directional walls have only top.
    */
   _initializePrototypeFaces() {
+    // By default, the Circle3d faces up.
     Circle3d.fromCenterPoint(Point3d.tmp.set(0, 0, 0.5), 0.5, this._prototypeFaces.top);
     this._prototypeFaces.top.clone(this._prototypeFaces.bottom).reverseOrientation();
     this._prototypeFaces.bottom.setZ(-0.5);
@@ -356,7 +358,7 @@ export class RegionCircleShapeGeometry extends InstancedShape {
 export class RegionPolygonShapeGeometry extends AbstractRegionShapeGeometry {
 
   /** @type {PIXI.Polygon[]} */
-  get polygons() { return this.placeable.polygons; }
+  get polygons() { return this.placeable.document.polygons; }
 
   calculateAABB() {
     const { topZ, bottomZ } = this.region;
