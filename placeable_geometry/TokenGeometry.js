@@ -413,8 +413,6 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
 
   /**
    * Determine the token center, in pixel units.
-   * Uses document source to avoid issues when tokens are moving.
-   * (Token update triggers prior to token.document updating.)
    * @param {Token} token
    * @returns {Point3d}
    * @prop {number} x       In x direction
@@ -422,10 +420,7 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
    * @prop {number} z     In z direction
    */
   static tokenCenter(token) {
-    const src = token.document._source || token.document;
-    const { x, y } = token.getCenterPoint(src);
-    const z = token.topZ - token.bottomZ;
-    return Point3d.tmp.set(x, y, z);
+    return Point3d.fromTokenCenter(token);
   }
 }
 
