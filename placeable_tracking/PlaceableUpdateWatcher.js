@@ -183,9 +183,9 @@ export class PlaceableUpdateWatcher {
 export class PlaceableRefreshWatcher extends PlaceableUpdateWatcher {
   /** @type {enum<string>} */
   static HOOK_LABELS = {
-    create: "draw",
-    update: "refresh",
-    delete: "destroy",
+    draw: "create",
+    refresh: "update",
+    destroy: "delete",
   };
 
 
