@@ -149,6 +149,19 @@ export class RegionGeometry extends PlaceableGeometry {
 
   draw2d(opts) { this.shapeGeom.draw2d(opts); }
 
+  // Mostly for debugging at the moment, but may become important for ramps.
+  // TODO: if the number of region polygons === number of region shapes,
+  // can we infer a 1:1 relationship?
+  // And if so, can we use the actual shape (circle/ellipse/rectangle/poly)?
+  get _polygonFaces() { return this._polygonGeom._polygonFaces; }
+
+  get _polygonGeom() {
+    if ( this.shapeGeom instanceof RegionPolygonShapeGeometry ) return this.shapeGeom;
+    const geom = RegionPolygonShapeGeometry.create(this.region);
+    geom.initialize();
+    return geom;
+  };
+
   // ----- NOTE: Update underlying shapes ----- //
 
   shapeUpdated() {

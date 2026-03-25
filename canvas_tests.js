@@ -26,6 +26,9 @@ incorrectWalls = canvasTests.testWallGeometryContainment();
 incorrectTiles = canvasTests.testTileGeometryContainment();
 incorrectRegions = canvasTests.testRegionGeometryContainment();
 
+tracking = CONFIG.GeometryLib.lib.placeableGeometryTracking
+
+
 */
 
 // ----- NOTE: Constrained Tokens ----- //
