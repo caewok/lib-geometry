@@ -288,8 +288,13 @@ export class RegionRectangleShapeGeometry extends InstancedShape {
    */
   _initializePrototypeFaces() {
     // Same as TokenGeometry#initializeCubeFaces.
+    // Build top/bottom.
     this.constructor.QUADS.up.clone(this._prototypeFaces.top);
     this.constructor.QUADS.down.clone(this._prototypeFaces.bottom);
+    this._prototypeFaces.top.setZ(0.5);
+    this._prototypeFaces.bottom.setZ(-0.5);
+
+    // Build sides.
     this._prototypeFaces.sides.length = 0;
     this._prototypeFaces.sides.push(
       this.constructor.QUADS.north.clone(),
