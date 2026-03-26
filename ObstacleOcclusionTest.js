@@ -184,6 +184,9 @@ export class ObstacleOcclusionTest {
 
   // ----- NOTE: Filter potential obstacles ----- //
 
+  /**
+   * @returns {Set<Wall>}
+   */
   findBlockingWalls() {
     if ( !this._config.walls ) return NULL_SET;
     let walls = canvas.walls.quadtree.getObjects(this.#frustum2dBounds);
@@ -197,6 +200,9 @@ export class ObstacleOcclusionTest {
     return walls;
   }
 
+  /**
+   * @returns {Set<Token>}
+   */
   findBlockingTokens() {
     const tokensCfg = this._config.tokens;
     if ( !(tokensCfg.dead || tokensCfg.live) ) return NULL_SET;
@@ -223,6 +229,9 @@ export class ObstacleOcclusionTest {
     return tokens;
   }
 
+  /**
+   * @returns {Set<Tile>}
+   */
   findBlockingTiles() {
     if ( !this._config.tiles ) return NULL_SET;
     let tiles = canvas.tiles.quadtree.getObjects(this.#frustum2dBounds);
@@ -233,9 +242,12 @@ export class ObstacleOcclusionTest {
     return tiles;
   }
 
+  /**
+   * @returns {Set<Region>}
+   */
   findBlockingRegions() {
-    if ( !this._config.regions ) return NULL_SET;
-    let regions = canvas.regions.placeables; // No quadtree for regions.
+    if ( !this._config.regions || !canvas.regions.placeables.length ) return NULL_SET;
+    let regions = new Set(canvas.regions.placeables); // No quadtree for regions.
 
     // Specialized exclusion tests
     if ( this.#frustum.aabb ) regions = regions.filter(region => this.#frustum.aabb.overlapsAABB(placeableAABB(region)));
