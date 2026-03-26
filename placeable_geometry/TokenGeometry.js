@@ -83,7 +83,7 @@ const TokenConstrainedFacesMixin = superclass => class extends superclass {
 
   get constrainedFaces() {
     if ( this.isConstrained ) {
-      if ( this.#wallsID < ConstrainedTokenBorder.wallsID ) this.updateConstrainedFaces();
+      if ( this.#wallsID < ConstrainedTokenBorder._wallsID ) this.updateConstrainedFaces();
       return this._constrainedFaces;
     }
     return this.faces;
@@ -110,7 +110,7 @@ const TokenConstrainedFacesMixin = superclass => class extends superclass {
     const token = this.token;
     const poly = token.constrainedTokenBorder.toPolygon();
     buildPolygonCube(poly, token.topZ - SPACER, token.bottomZ + SPACER, this._constrainedFaces);
-    this.#wallsID = ConstrainedTokenBorder.wallsID;
+    this.#wallsID = ConstrainedTokenBorder._wallsID;
   }
 }
 
@@ -141,8 +141,8 @@ const TokenConstrainedLitFacesMixin = superclass => class extends superclass {
 
   get constrainedLitFaces() {
     if ( this.isConstrainedLit ) {
-      if ( this.#wallsID < ConstrainedTokenBorder.wallsID
-        || this.#lightsID < ConstrainedTokenBorder.lightsID  ) this.updateConstrainedLitFaces();
+      if ( this.#wallsID < ConstrainedTokenBorder._wallsID
+        || this.#lightsID < ConstrainedTokenBorder._lightsID  ) this.updateConstrainedLitFaces();
       return this._constrainedLitFaces;
     }
     return this.faces;
@@ -169,8 +169,8 @@ const TokenConstrainedLitFacesMixin = superclass => class extends superclass {
     const token = this.token;
     const poly = token.litTokenBorder.toPolygon();
     buildPolygonCube(poly, token.topZ * SPACER, token.bottomZ * SPACER, this._constrainedLitFaces);
-    this.#wallsID = ConstrainedTokenBorder.wallsID;
-    this.#lightsID = ConstrainedTokenBorder.lightsID;
+    this.#wallsID = ConstrainedTokenBorder._wallsID;
+    this.#lightsID = ConstrainedTokenBorder._lightsID;
   }
 }
 
@@ -200,8 +200,8 @@ const TokenConstrainedBrightLitFacesMixin = superclass => class extends supercla
 
   get constrainedBrightLitFaces() {
     if ( this.isConstrainedBrightLit ) {
-      if ( this.#wallsID < ConstrainedTokenBorder.wallsID
-        || this.#lightsID < ConstrainedTokenBorder.lightsID  ) this.updateConstrainedBrightLitFaces();
+      if ( this.#wallsID < ConstrainedTokenBorder._wallsID
+        || this.#lightsID < ConstrainedTokenBorder._lightsID  ) this.updateConstrainedBrightLitFaces();
       return this._constrainedBrightLitFaces;
     }
     return this.faces;
@@ -228,8 +228,8 @@ const TokenConstrainedBrightLitFacesMixin = superclass => class extends supercla
     const token = this.token;
     const poly = token.brightLitTokenBorder.toPolygon();
     buildPolygonCube(poly, token.topZ * SPACER, token.bottomZ * SPACER, this._constrainedBrightLitFaces);
-    this.#wallsID = ConstrainedTokenBorder.wallsID;
-    this.#lightsID = ConstrainedTokenBorder.lightsID;
+    this.#wallsID = ConstrainedTokenBorder._wallsID;
+    this.#lightsID = ConstrainedTokenBorder._lightsID;
   }
 }
 
