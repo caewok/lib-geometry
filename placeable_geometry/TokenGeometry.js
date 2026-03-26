@@ -336,6 +336,14 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
       this.constructor.QUADS.south.clone(),
       this.constructor.QUADS.east.clone(),
     );
+
+    // Adjust the sides so that they are at the token edge.
+    for ( let i = 0; i < 4; i += 1 ) {
+      this._prototypeFaces.sides[0].points[i].y = -0.5; // North.
+      this._prototypeFaces.sides[1].points[i].x = -0.5; // West.
+      this._prototypeFaces.sides[2].points[i].y = 0.5; // South.
+      this._prototypeFaces.sides[3].points[i].x = 0.5; // East.
+    }
   }
 
   /**
