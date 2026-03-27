@@ -344,7 +344,7 @@ export class ObstacleOcclusionTest {
     // Regions do not have a quadtree.
     // For all other placeables, narrow by quadtree first.
     let placeables;
-    if ( placeableName === "region" ) placeables = new Set(canvas.regions.placeables); // Array
+    if ( placeableName === "regions" ) placeables = new Set(canvas.regions.placeables); // Array
     else {
       const bounds = this.#tmpBounds;
       AABB2d.fromPoints([rayOrigin, rayEnd], bounds);
