@@ -24,7 +24,7 @@ export class RegionVertices extends AbstractInstancedVertices  {
 
   calculateModel() {
     const geom = this.region[GEOMETRY_LIB_ID][GEOMETRY_ID];
-    const ST = this.constructor.SHAPE_TYPES;
+    const ST = geom.constructor.SHAPE_TYPES;
     const type = geom.type;
     if ( type === ST.HOLE || type === ST.EMPTY ) return new VertexObject();
     if ( this.instanced ) {

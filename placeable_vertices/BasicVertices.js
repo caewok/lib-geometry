@@ -59,12 +59,16 @@ ShapeVertices:
 if ( !Array.prototype.subarray ) Array.prototype.subarray = Array.prototype.slice;
 
 /**
- * Mimics TypedArray#set by using splice.
- * @param {Array|TypedArray} array    The array from which to copy values. All values from the source array are copied into the target array, unless the length of the source array plus the target offset exceeds the length of the target array, in which case an exception is thrown.
- * @param {number} [targetArray=0]    The offset into the target array at which to begin writing values from the source array. If this value is omitted, 0 is assumed (that is, the source array will overwrite values in the target array starting at index 0).
+ * Polyfill for Array.prototype.set to match TypedArray.set behavior.
+ * Overwrites elements in the array starting at the target offset.
+ * @param {Array|TypedArray} sourceArray    The array from which to copy values. All values from the source array are copied into the target array, unless the length of the source array plus the target offset exceeds the length of the target array, in which case an exception is thrown.
+ * @param {number} [targetOffset=0]         The offset into the target array at which to begin writing values from the source array. If this value is omitted, 0 is assumed (that is, the source array will overwrite values in the target array starting at index 0).
  */
-if ( !Array.prototype.set ) Array.prototype.set = function(array, targetOffset = 0) {
-  this.splice(targetOffset, 0, ...array);
+if ( !Array.prototype.set ) Array.prototype.set = function(sourceArray, targetOffset = 0) {
+  for ( let i = 0, n = sourceArray.length; i < n; i += 1 ) this[targetOffset + i] = sourceArray[i];
+
+  // Performant alternative?
+  // Object.assign(this, { ...sourceArray, length: sourceArray.length + targetOffset });
 }
 
 export class BasicVertices {
@@ -121,7 +125,9 @@ export class BasicVertices {
     for ( let i = positionOffset, iMax = vertices.length; i < iMax; i += stride ) {
       pt.set(vertices[i], vertices[i+1], vertices[i+2]);
       M.multiplyPoint3d(pt, pt);
-      vertices.set([...pt], i);
+      vertices[i] = pt.x;
+      vertices[i+1] = pt.y;
+      vertices[i+2] = pt.z;
     }
     return vertices;
   }
@@ -194,11 +200,26 @@ export class BasicVertices {
     return outArr;
   }
 
-  static condenseVertexData(vertices, { stride = 3 } = {}) {
+  /**
+   * For given array of vertices, create indices and remove duplicate entries.
+   * @param {Float32Array} vertices
+   * @param {object} [opts]
+   * @param {number} [opts.stride=3]          Number of elements per vertex
+   * @param {number} [opts.precision=8]       Decimals to round to for comparison
+   * @returns {object}
+   * - @prop {Uint32Array|Uint16Array} indices
+   * - @prop {Float32Array} vertices
+   * - @prop {number} numVertices
+   * - @prop {number} stride
+   */
+  static condenseVertexData(vertices, { stride = 3, precision = 8 } = {}) {
     // For given array of vertices, create indices and remove duplicate vertices.
     const vLen = vertices.length;
     const nVertices = Math.floor(vertices.length / stride);
-    const indices = new Uint16Array(nVertices);
+    const indicesClass = nVertices > 65535 ? Uint32Array : Uint16Array;
+    const indices = new indicesClass(nVertices);
+
+
 
     // Cannot use resizable buffer with WebGL2 bufferData.
     // Instead, construct a maximum-length array buffer and copy it over later once we know how
@@ -212,15 +233,28 @@ export class BasicVertices {
     // If seen, get the original index, otherwise add this one to the tracking set.
     // Set the index accordingly and copy over the vertex data if necessary.
     const uniqueV = new Map();
-    for ( let v = 0, i = 0; v < vLen; v += stride, i += 1 ) {
-      const dat = vertices.subarray(v, v + stride);
-      const key = dat.join("_");
-      if ( !uniqueV.has(key) ) {
-        const offset = uniqueV.size;
-        newVertices.set(dat, offset * stride);
-        uniqueV.set(key, offset);
+    precision = 10 ** precision;
+    let vIdx = 0;
+    for ( let i = 0; i < nVertices; i += 1 ) {
+      const v = i * stride;
+
+      // Faster key generation using a manual loop to avoid using subarray.
+      // Precision to handle floating point drift.
+      let key = "";
+      for ( let k = 0; k < stride; k += 1 ) key += `${Math.round(vertices[v + k] * precision)}|`;
+
+      let uniqueIdx = uniqueV.get(key);
+      if ( !uniqueIdx ) {
+        // New unique vertex found.
+        uniqueIdx = uniqueV.size;
+        uniqueV.set(key, uniqueIdx);
+
+        // Copy vertex data to the buffer.
+        for ( let k = 0; k < stride; k += 1 ) newVertices[vIdx++] = vertices[v + k];
       }
-      indices[i] = uniqueV.get(key);
+
+      // Assign index to the current vertex position.
+      indices[i] = uniqueIdx;
     }
 
     // Copy the vertices to a new buffer.
@@ -290,19 +324,27 @@ export class BasicVertices {
    * @param {number|Float32Array} outArr              The stride of the new array or a new array
    * @returns {Float32Array|number[]} Array of normal values
    */
-  static calculateNormals(vertices, { stride = 3, positionOffset = 0 } = {} ) {
+  static calculateNormals(vertices, { stride = 3, positionOffset = 0, outArr } = {} ) {
     const numVertices = Math.floor(vertices.length / stride);
-    const normals = new vertices.constructor(numVertices);
+
+    // Each normal requires 3 components; 1 normal per vertex.
+    const normalsLength = numVertices * 3;
+    outArr ||= new vertices.constructor(normalsLength);
     for ( let i = 0, j = 0, iMax = vertices.length; i < iMax; i += (stride * 3) ) {
+      // Calculate the triangle normal.
       using v0 = this._getSinglePosition(vertices, i, positionOffset);
       using v1 = this._getSinglePosition(vertices, i + stride, positionOffset);
       using v2 = this._getSinglePosition(vertices, i + (stride * 2), positionOffset);
       using n = this._calculateNormalForTriangle3d(v0, v1, v2);
-      normals[j++] = n.x;
-      normals[j++] = n.y;
-      normals[j++] = n.z;
+
+      // Set the normal for each of the three vertices.
+      for ( let k = 0; k < 3; k += 1 ) {
+        outArr[j++] = n.x;
+        outArr[j++] = n.y;
+        outArr[j++] = n.z;
+      }
     }
-    return normals;
+    return outArr; // Just the normals.
   }
 
   static _getSinglePosition(vertices, startIndex = 0, offset = 0) {
@@ -333,9 +375,9 @@ export class BasicVertices {
    * @param {number|Float32Array} outArr              The stride of the new array or a new array
    * @returns {Float32Array|number[]} Array of normal values
    */
-  static calculateUVs(vertices, { stride = 3, positionOffset = 0 } = {} ) {
+  static calculateUVs(vertices, { stride = 3, positionOffset = 0, outArr } = {} ) {
     const numVertices = Math.floor(vertices.length / stride);
-    if ( numVertices < 3 ) return new vertices.constructor();
+    if ( numVertices < 3 ) return outArr || new vertices.constructor();
 
     // Determine the normal for the vertices, using the first three.
     using v0 = this._getSinglePosition(vertices, 0, positionOffset);
@@ -353,28 +395,31 @@ export class BasicVertices {
     let uMin = Number.POSITIVE_INFINITY;
     let uMax = Number.NEGATIVE_INFINITY;
     let vMin = Number.POSITIVE_INFINITY;
-    let vMax = Number.POSITIVE_INFINITY;
-    const rawUVs = new vertices.constructor(numVertices * 2);
-    for ( let i = 0, j = 0; i < numVertices; i += 1 ) {
+    let vMax = Number.NEGATIVE_INFINITY;
+
+    outArr ||= new vertices.constructor(numVertices * 2);
+    for ( let i = 0, j = 0, n = vertices.length; i < n; i += stride ) {
       const vertex = this._getSinglePosition(vertices, i, positionOffset);
       const u = vertex[uAxis];
       const v = vertex[vAxis];
+
       uMin = Math.min(uMin, u);
       uMax = Math.max(uMax, u);
       vMin = Math.min(vMin, v);
       vMax = Math.max(vMax, v);
-      rawUVs[j++] = u;
-      rawUVs[j++] = v;
+
+      outArr[j++] = u;
+      outArr[j++] = v;
     }
 
-    // Normalize to between 0.0 and 1.0
+    // Normalize to between 0.0 and 1.0 (texture space).
     const uRange = (uMax - uMin) || 1;
     const vRange = (vMax - vMin) || 1;
-    for ( let i = 0, iMax = rawUVs.length; i < iMax; i += 2 ) {
-      rawUVs[i] = (rawUVs[i] - uMin) / uRange;
-      rawUVs[i+1] = (rawUVs[i+1] - vMin) / vRange;
+    for ( let i = 0, iMax = outArr.length; i < iMax; i += 2 ) {
+      outArr[i] = (outArr[i] - uMin) / uRange;
+      outArr[i+1] = (outArr[i+1] - vMin) / vRange;
     }
-    return rawUVs;
+    return outArr;
   }
 
   // ----- Vertex array modifications ---- //
@@ -603,7 +648,7 @@ export class HorizontalQuadVertices extends BasicVertices {
     // If the topZ and bottomZ are unbalanced, translate in the z direction to reset topZ to correct elevation.
     // (scale - topZ)
     // e.g. elev 20, -100. zHeight = 120. Untranslated topZ would be 120/2 = 60. Move 20 - 60 = -40.
-    const radians = Math.toRadians(rotateZ);
+    const radians = toRadians(rotateZ);
     const center = rect.center;
 
     // Build transform matrix.
@@ -686,7 +731,7 @@ export class VerticalQuadVertices extends BasicVertices {
 
     const dy = b.y - a.y;
     const dx = b.x - a.x;
-    const radians = Math.atan2(dy, dx) + Math.toRadians(rotateZ);
+    const radians = Math.atan2(dy, dx) + toRadians(rotateZ);
     const center = PIXI.Point.tmp.set(a.x + (dx / 2), a.y + (dy / 2));
     const length = PIXI.Point.distanceBetween(a, b);
 
@@ -702,28 +747,6 @@ export class Rectangle3dVertices extends BasicVertices {
   static NUM_FACES = 6; // 6 faces to a cube.
 
   static NUM_FACE_ELEMENTS = 2 * this.NUM_TRIANGLE_ELEMENTS; // 2 triangles per face.
-
-//   static top = setFloatView([
-//     // Position     Normal      UV
-//     W, N, T,        0, 0, 1,    0, 0,
-//     W, S, T,        0, 0, 1,    0, 1,
-//     E, S, T,        0, 0, 1,    1, 1,
-//
-//     E, N, T,        0, 0, 1,    1, 0,
-//     W, N, T,        0, 0, 1,    0, 0,
-//     E, S, T,        0, 0, 1,    1, 1,
-//   ], this.verticesBuffer, this.NUM_FACE_ELEMENTS * 0);
-
-//   static bottom = setFloatView([
-//     // Position     Normal      UV
-//     E, S, B,        0, 0, -1,   1, 0,
-//     W, S, B,        0, 0, -1,   0, 0,
-//     W, N, B,        0, 0, -1,   0, 1,
-//
-//     E, S, B,        0, 0, -1,   1, 0,
-//     W, N, B,        0, 0, -1,   0, 1,
-//     E, N, B,        0, 0, -1,   1, 1,
-//   ], this.verticesBuffer, this.NUM_FACE_ELEMENTS * 1);
 
   static get top() { return HorizontalQuadVertices.getUnitVertices("up"); }
 
@@ -813,7 +836,7 @@ export class Rectangle3dVertices extends BasicVertices {
     const zHeight = topZ - bottomZ;
     const z = bottomZ + (zHeight * 0.5);
     const center = rect.center;
-    const radians = Math.toRadians(rotateZ);
+    const radians = toRadians(rotateZ);
 
     MatrixFloat32.scale(rect.width, rect.height, zHeight, modelMatrix.scale);
     MatrixFloat32.translation(center.x, center.y, z, modelMatrix.translation);
@@ -1038,6 +1061,14 @@ Ex: 6 points, 6 outer edges.
     return { top, bottom };
   }
 
+  /**
+   * Generate side face vertices for a polygon or ClipperPaths.
+   * @param {PIXI.Polygon|ClipperPaths} poly
+   * @param {object} [opts]
+   * @param {number} [opts.topZ=0.5]
+   * @param {number} [opts.bottomZ=-0.5]
+   * @param {Float32Array} [opts.sides]       The output view for sides
+   */
   static polygonSideFaces(poly, { topZ = T, bottomZ = B, sides } = {}) {
 
     sides ??= new Float32Array(this.sidesLength(poly));
@@ -1055,11 +1086,11 @@ Ex: 6 points, 6 outer edges.
     if ( !(poly instanceof PIXI.Polygon) ) poly = poly.toPolygon();
 
     // Some temporary points.
-    using a = Point3d.tmp;
-    using b = Point3d.tmp;
-    using c = Point3d.tmp;
-    using d = Point3d.tmp;
-    const triPts = [a, b, c, d];
+    using triA = Point3d.tmp;
+    using triB = Point3d.tmp;
+    using triC = Point3d.tmp;
+    using triD = Point3d.tmp;
+    const triPts = [triA, triB, triC, triD];
     using n = Point3d.tmp;
     using deltaAB = Point3d.tmp;
     using deltaAC = Point3d.tmp;
@@ -1093,14 +1124,14 @@ Ex: 6 points, 6 outer edges.
       // B.x, B.y, topZ     nx, ny, nz      0, 0
       // A.x, A.y, bottomZ  nx, ny, nz      0, 0
 
-      a.set(a.x, a.y, topZ);
-      b.set(b.x, b.y, topZ);
-      c.set(a.x, a.y, bottomZ);
-      d.set(b.x, b.y, bottomZ);
+      triA.set(a.x, a.y, topZ);
+      triB.set(b.x, b.y, topZ);
+      triC.set(a.x, a.y, bottomZ);
+      triD.set(b.x, b.y, bottomZ);
 
       // Calculate the normal
-      b.subtract(a, deltaAB);
-      c.subtract(a, deltaAC);
+      triB.subtract(triA, deltaAB);
+      triC.subtract(triA, deltaAC);
       deltaAB.cross(deltaAC, n).normalize(n);
 
       // Define each vertex.
@@ -1252,7 +1283,7 @@ export class Ellipse3dVertices extends Polygon3dVertices {
     const zHeight = topZ - bottomZ;
     const z = bottomZ + (zHeight * 0.5);
     const { width, height } = ellipse;
-    const radians = Math.toRadians(rotateZ ?? ellipse.rotation ?? 0);
+    const radians = toRadians(rotateZ ?? ellipse.rotation ?? 0);
     const center = ellipse.center;
 
     // Build transform matrix.
@@ -1725,6 +1756,14 @@ function createHexagonalRectangle(width, height, shape) {
     anchor: even ? {x: 0.5, y: 0.5} : {x: 0.0, y: 0.5}
   };
 }
+
+/**
+ * Convert an angle (in degrees) to radians.
+ * @param {number<degrees>} angle
+ * @returns {number<radians>}
+ */
+const pi180 = Math.PI / 180;
+function toRadians(angle) { return angle * pi180;}
 
 function duplicateArray(arr, times) {
   if ( !arr.length ) return new arr.constructor(times);

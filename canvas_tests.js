@@ -1,5 +1,6 @@
 /* globals
 canvas,
+CONFIG,
 */
 "use strict";
 
@@ -28,6 +29,12 @@ incorrectTiles = canvasTests.testTileGeometryContainment();
 incorrectRegions = canvasTests.testRegionGeometryContainment();
 
 tracking = CONFIG.GeometryLib.lib.placeableGeometryTracking
+
+canvasTests.drawWallVertices()
+canvasTests.drawTokenVertices()
+canvasTests.drawTileVertices()
+canvasTests.drawRegionVertices()
+
 
 
 */
@@ -314,4 +321,108 @@ export function testRegionGeometryContainment() {
   return incorrectRegions;
 }
 
+
+/**
+ * Draw 2d walls based on geometry face.
+ * @param {object} [opts]
+ * @param {Wall[]} [opts.walls]                 Walls to draw; otherwise test entire canvas
+ * @param {"top"|"bottom"} [opts.face="top"]    Draw top or bottom face
+ * @param {boolean} [opts.aabb=false]           If true, draw the bounding box
+ * @param {*} [opts]                            Other opts passed to drawing
+ */
+export function drawWallVertices({ walls, ...drawingOpts } = {}) {
+  const WallInstancedVertices = CONFIG.GeometryLib.lib.placeableVertices.WallInstancedVertices;
+  walls ??= canvas.walls.placeables;
+  for ( const wall of walls ) {
+    let color;
+    switch ( wall.edge.direction ) {
+      case 0: color = "blue"; break;
+      case 1: color = "green"; break;
+      case 2: color = "red"; break;
+    }
+    const vo = WallInstancedVertices.calculateModelForPlaceable(wall)
+    vo.debugDraw({ color, ...drawingOpts });
+  }
+}
+
+/**
+ * Draw 2d tokens based on geometry face.
+ * @param {object} [opts]
+ * @param {Token[]} [opts.tokens]               Tokens to draw; otherwise test entire canvas
+ * @param {"all"|"bright"|"lit"|"constrained"|"normal"}   What type of border to draw
+ * @param {*} [opts]                            Other opts passed to drawing
+ */
+export function drawTokenVertices({ tokens, type = "all", ...drawingOpts } = {}) {
+  const TokenInstancedVertices = CONFIG.GeometryLib.lib.placeableVertices.TokenInstancedVertices;
+  const ConstrainedTokenModelVertices = CONFIG.GeometryLib.lib.placeableVertices.ConstrainedTokenModelVertices;
+  const LitTokenModelVertices = CONFIG.GeometryLib.lib.placeableVertices.LitTokenModelVertices;
+  const BrightLitTokenModelVertices = CONFIG.GeometryLib.lib.placeableVertices.BrightLitTokenModelVertices;
+
+  tokens ??= canvas.tokens.placeables;
+  for ( const token of tokens ) {
+    let vToken;
+    let vo;
+
+    if ( type === "all" || type === "bright" ) {
+        vToken = new BrightLitTokenModelVertices(token);
+        vo = vToken.calculateModel();
+        vo.debugDraw({ color: "white", ...drawingOpts });
+    }
+
+    if ( type === "all" || type === "lit" ) {
+      vToken = new LitTokenModelVertices(token);
+      vo = vToken.calculateModel();
+      vo.debugDraw({ color: "yellow", ...drawingOpts });
+    }
+
+    if ( type === "all" || type === "constrained" ) {
+      vToken = new ConstrainedTokenModelVertices(token);
+      vo = vToken.calculateModel();
+      vo.debugDraw({ color: "red", ...drawingOpts });
+    }
+
+    if ( type === "all" || type === "normal" ) {
+      vo = TokenInstancedVertices.calculateModelForPlaceable(token);
+      vo.debugDraw({ color: "orange", ...drawingOpts });
+    }
+  }
+}
+
+/**
+ * Draw 2d tiles based on top geometry face.
+ * @param {object} [opts]
+ * @param {Tile[]} [opts.tiles]                 Tiles to draw; otherwise test entire canvas
+ * @param {"top"|"bottom"} [opts.face="top"]    Draw top or bottom face
+ * @param {boolean} [opts.aabb=false]           If true, draw the bounding box
+ * @param {*} [opts]                            Other opts passed to drawing
+ */
+export function drawTileVertices({ tiles, ...drawingOpts } = {}) {
+  const TileInstancedVertices = CONFIG.GeometryLib.lib.placeableVertices.TileInstancedVertices;
+  tiles ??= canvas.tiles.placeables;
+  const color = "yellow";
+  for ( const tile of tiles ) {
+    const vo = TileInstancedVertices.calculateModelForPlaceable(tile)
+    vo.debugDraw({ color, ...drawingOpts });
+  }
+}
+
+
+/**
+ * Draw 2d regions based on top geometry face.
+ * @param {object} [opts]
+ * @param {Region[]} [opts.regions]             Regions to draw; otherwise test entire canvas
+ * @param {"top"|"bottom"} [opts.face="top"]    Draw top or bottom face
+ * @param {boolean} [opts.aabb=false]           If true, draw the bounding box
+ * @param {*} [opts]                            Other opts passed to drawing
+ */
+export function drawRegionVertices({ regions, ...drawingOpts } = {}) {
+  const RegionVertices = CONFIG.GeometryLib.lib.placeableVertices.RegionVertices;
+  regions ??= canvas.regions.placeables;
+  const color = "green";
+  for ( const region of regions ) {
+    let vRegion = new RegionVertices(region);
+    let vo = vRegion.calculateModel();
+    vo.debugDraw({ color, ...drawingOpts });
+  }
+}
 

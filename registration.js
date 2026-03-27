@@ -18,6 +18,7 @@ import "./tests/Point.test.js";
 import "./tests/Point3d.test.js";
 import "./tests/GeometryTracking.test.js";
 import "./tests/Polygon.test.js";
+import "./tests/Vertices.test.js";
 
 // Execute immediately on load to identify modules using lib geometry.
 (() => {

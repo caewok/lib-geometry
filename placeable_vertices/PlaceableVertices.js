@@ -264,26 +264,26 @@ tracking.TokenGeometryTracker.registerExistingPlaceables()
 tracking.RegionGeometryTracker.registerPlaceableHooks()
 tracking.RegionGeometryTracker.registerExistingPlaceables()
 
-placeableGeometry = CONFIG.GeometryLib.lib.placeableGeometry;
+placeableVertices = CONFIG.GeometryLib.lib.placeableVertices;
 
-TileInstancedVertices = placeableGeometry.TileInstancedVertices
+TileInstancedVertices = placeableVertices.TileInstancedVertices
 TileInstancedVertices.getVertexObject({ addNormals: true, addUVs: true })
 tile = canvas.tiles.placeables[0]
 vo = TileInstancedVertices.calculateModelForPlaceable(tile)
 vo.debugDraw({ color: Draw.COLORS.orange })
 
-WallInstancedVertices = placeableGeometry.WallInstancedVertices
+WallInstancedVertices = placeableVertices.WallInstancedVertices
 wall = canvas.walls.placeables[0]
 vo = WallInstancedVertices.calculateModelForPlaceable(wall)
 vo.debugDraw({ color: Draw.COLORS.orange })
 
-TokenInstancedVertices = placeableGeometry.TokenInstancedVertices
+TokenInstancedVertices = placeableVertices.TokenInstancedVertices
 token = canvas.tokens.placeables[0]
 vo = TokenInstancedVertices.calculateModelForPlaceable(token)
 vo.debugDraw({ color: Draw.COLORS.orange })
 
 
-ConstrainedTokenModelVertices = placeableGeometry.ConstrainedTokenModelVertices
+ConstrainedTokenModelVertices = placeableVertices.ConstrainedTokenModelVertices
 token = canvas.tokens.placeables[0]
 vModel = new ConstrainedTokenModelVertices(token);
 vo = vModel.calculateModel()
