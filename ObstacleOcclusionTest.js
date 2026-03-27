@@ -11,6 +11,7 @@ PIXI,
 import { NULL_SET } from "./util.js";
 import { OTHER_MODULES, GEOMETRY_LIB_ID, GEOMETRY_ID } from "./const.js";
 import { AABB2d } from "./AABB.js";
+import { Point3d } from "./3d/Point3d.js";
 import { Draw } from "./Draw.js";
 
 /**
@@ -332,15 +333,36 @@ export class ObstacleOcclusionTest {
 
   /**
    * Return canvas placeables that are within a ray.
-   * @param {"walls"|"tokens"|"regions"|"tiles"} placeable
+   * @param {"walls"|"tokens"|"regions"|"tiles"} placeableName
    * @param {Point3d} rayOrigin
    * @param {Point3d} rayDirection
+   * @returns {Set<Placeable>}
    */
-  #placeablesWithinRay(placeable, rayOrigin, rayDirection) {
+  #placeablesWithinRay(placeableName, rayOrigin, rayDirection) {
     using rayEnd = rayOrigin.add(rayDirection);
-    const bounds = this.#tmpBounds;
-    AABB2d.fromPoints([rayOrigin, rayEnd], bounds);
-    return canvas[placeable].quadtree.getObjects(bounds);
+
+    // Regions do not have a quadtree.
+    // For all other placeables, narrow by quadtree first.
+    let placeables;
+    if ( placeableName === "region" ) placeables = new Set(canvas.regions.placeables); // Array
+    else {
+      const bounds = this.#tmpBounds;
+      AABB2d.fromPoints([rayOrigin, rayEnd], bounds);
+      placeables = canvas[placeableName].quadtree.getObjects(bounds); // Note this is a Set.
+
+      // If the ray is vertical or horizontal, quadtree bounds are sufficient.
+      if ( !rayDirection.z && !(rayDirection.x || rayDirection.y) ) return placeables;
+
+      // If the ray is very small, quadtree bounds are sufficient.
+      if ( Point3d.distanceSquaredBetween(rayOrigin, rayEnd) < (canvas.dimensions.size ** 2) ) return placeables;
+    }
+
+    // Narrow by aabb of the placeable, which gives a much closer fit for long rays
+    for ( const placeable of placeables ) {
+      const geom = placeable[GEOMETRY_LIB_ID][GEOMETRY_ID];
+      if ( !geom.aabb.overlapsSegment(rayOrigin, rayEnd) ) placeables.delete(placeable);
+    }
+    return placeables;
   }
 
   wallsOcclude(rayOrigin, rayDirection) {
