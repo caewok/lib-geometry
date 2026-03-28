@@ -57,6 +57,7 @@ export class RegionPolygonModelVertices extends RegionVertices {
       vo.vertices.push(...Polygon3dVertices.calculateVertices(poly, elev));
     }
     vo.dropNormalsAndUVs({ keepNormals: opts.hasNormals, keepUVs: opts.hasUVs, out: vo });
+    vo.condense(vo);
     return vo;
   }
 }
