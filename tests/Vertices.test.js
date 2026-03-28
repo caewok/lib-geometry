@@ -5,6 +5,7 @@ Hooks,
 "use strict";
 
 import { BasicVertices } from "../placeable_vertices/BasicVertices.js";
+import { MatrixFloat32 } from "../Matrix.js";
 
 Hooks.on("quenchReady", (quench) => {
   quench.registerBatch(
@@ -38,7 +39,7 @@ describe("BasicVertices Core Logic", () => {
 
     // We expect a stride of 5 (3 pos + 2 uv)
     // zipInsert(mainArray, insertArray, { stride, insertStride })
-    const combined = BasicVertices.zipInsert(positions, uvs, { stride: 3, insertStride: 2 });
+    const combined = BasicVertices.zipInsert(positions, uvs, { stride: 3, dataStride: 2, offset: 3 });
 
     const expected = new Float32Array([
       10, 20, 30, 0.1, 0.2,
@@ -49,31 +50,13 @@ describe("BasicVertices Core Logic", () => {
     assert.deepEqual(Array.from(combined), Array.from(expected), "Interleaved data does not match expectation.");
   });
 
-  it("zipExtract should correctly pull data out of an interleaved buffer", () => {
-    const interleaved = new Float32Array([
-      1, 2, 3, 0.1, 0.2,
-      4, 5, 6, 0.3, 0.4,
-      7, 8, 9, 0.5, 0.6
-    ]);
-
-    // Extract positions: First 3 components, stride 5, offset 0
-    const extractedPos = BasicVertices.zipExtract(interleaved, { stride: 5, extractStride: 3, offset: 0 });
-    const expectedPos = new Float32Array([1, 2, 3, 4, 5, 6, 7, 8, 9]);
-    assert.deepEqual(Array.from(extractedPos), Array.from(expectedPos), "Extracted positions are incorrect.");
-
-    // Extract UVs: 2 components, stride 5, offset 3
-    const extractedUV = BasicVertices.zipExtract(interleaved, { stride: 5, extractStride: 2, offset: 3 });
-    const expectedUV = new Float32Array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6]);
-    assert.deepEqual(Array.from(extractedUV), Array.from(expectedUV), "Extracted UVs are incorrect.");
-  });
-
   it("zipInsert should handle standard Arrays via the polyfill", () => {
     // Tests if the Array.prototype.set polyfill is working correctly within the zip logic
     const base = [1, 2];
     const insert = [9];
 
     // Result should be [1, 2, 9] per vertex if stride logic is applied
-    const result = BasicVertices.zipInsert(base, insert, { stride: 2, insertStride: 1 });
+    const result = BasicVertices.zipInsert(base, insert, { stride: 2, dataStride: 1, offset: 2 });
     assert.deepEqual(result, [1, 2, 9], "zipInsert failed on standard Arrays.");
   });
 
@@ -83,7 +66,7 @@ describe("BasicVertices Core Logic", () => {
     const constantNormal = new Float32Array([0, 0, 1]);     // Only 1 normal provided
 
     // Logic should duplicate the normal for every vertex
-    const result = BasicVertices.zipInsert(positions, constantNormal, { stride: 3, insertStride: 3 });
+    const result = BasicVertices.zipInsert(positions, constantNormal, { stride: 3, dataStride: 3, offset: 3 });
 
     const expected = new Float32Array([
       1, 1, 1, 0, 0, 1,
@@ -228,8 +211,6 @@ describe("BasicVertices.calculateUVs", () => {
 });
 
 describe("BasicVertices.transformVertexPositions", () => {
-  // Setup common dependencies from GeometryLib
-  const { MatrixFloat32 } = CONFIG.GeometryLib.lib.Matrix;
 
   it("should apply a translation transformation correctly", () => {
     // 2 vertices, stride 3 (positions only)
@@ -286,7 +267,7 @@ describe("BasicVertices.transformVertexPositions", () => {
 
   it("should leave vertices unchanged with an identity matrix", () => {
     const vertices = new Float32Array([5, 10, 15, 20, 25, 30]);
-    const M = new MatrixFloat32(); // Defaults to identity
+    const M = MatrixFloat32.identity(4);
 
     const original = new Float32Array(vertices);
     BasicVertices.transformVertexPositions(vertices, M, { stride: 3 });

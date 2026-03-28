@@ -520,7 +520,7 @@ export class BasicVertices {
    *  - If data is not long enough, it cycles around; if too long it omits the end.
    *  - If data is not provided, empty values (or 0 for typed arrays) will be added.
    * @param {number} [stride]           Stride of the original array
-   * @param {number} [offset=0]         Where to put the new data relative to the array elements
+   * @param {number} [offset=0]         Where to put the new data relative to the old array elements
    * @param {number} [dataStride=1]     Stride of the data array
    * @param {[]|TypedArray} outArr      Array to store the result; must be length required
    * @returns {[]|TypedArray} The out array.
@@ -537,6 +537,8 @@ export class BasicVertices {
     const nVertices = Math.floor(src.length / stride);
     const requiredDataLength = dataStride * nVertices;
     const newLength = overwrite ? src.length : src.length + requiredDataLength;
+
+    // Ensure newData is available and sufficient length.
     newData ??= new src.constructor();
     if ( newData.length < requiredDataLength ) newData = duplicateArray(newData, Math.ceil(requiredDataLength / newData.length));
 
@@ -553,7 +555,7 @@ export class BasicVertices {
     if ( !offset ) pullFn = (oldStartIndex, newStartIndex, newElem) => {
       const oldElem = src.subarray(oldStartIndex + overwriteShift, oldStartIndex + stride);
       outArr.set(newElem, newStartIndex);
-      outArr.set(oldElem, newStartIndex + newElem.length);
+      outArr.set(oldElem, newStartIndex + dataStride);
     };
 
     // Offset is at the end of the original stride:
@@ -570,14 +572,17 @@ export class BasicVertices {
       const oldElem0 = src.subarray(oldStartIndex, oldStartIndex + offset); // All prior to the data offset
       const oldElem1 = src.subarray(oldStartIndex + offset + overwriteShift, oldStartIndex + stride); // All after the data offset, not including data
       outArr.set(oldElem0, newStartIndex);
-      outArr.set(newElem, newStartIndex + oldElem0.length);
-      outArr.set(oldElem1, newStartIndex + oldElem0.length + newElem.length);
+      outArr.set(newElem, newStartIndex + offset);
+      outArr.set(oldElem1, newStartIndex + offset + dataStride);
     };
 
     // Step through the new array, assigning from the original and the new data in turn.
-    for ( let oldI = 0, dataI = 0, newI = 0; newI < newLength; oldI += stride, dataI += dataStride, newI += newArrStride ) {
-      const newElem = newData.subarray(dataI, dataI + dataStride);
-      pullFn(oldI, newI, newElem);
+    for ( let v = 0; v < nVertices; v += 1 ) {
+      const oldStartIndex = v * stride;
+      const newStartIndex = v * newArrStride;
+      const dataIndex = v * dataStride;
+      const newElem = newData.subarray(dataIndex, dataIndex + dataStride);
+      pullFn(oldStartIndex, newStartIndex, newElem);
     }
     return outArr;
   }
@@ -1070,13 +1075,16 @@ Ex: 6 points, 6 outer edges.
    * @param {Float32Array} [opts.sides]       The output view for sides
    */
   static polygonSideFaces(poly, { topZ = T, bottomZ = B, sides } = {}) {
-
     sides ??= new Float32Array(this.sidesLength(poly));
     if ( this.isClipper(poly) ) poly = poly.toPolygons();
     if ( Array.isArray(poly) ) {
-      const multipleSides = poly.map(p => this.polygonSideFaces(p, { topZ, bottomZ }));
-      sides.set(combineTypedArrays(multipleSides));
-      return sides;
+      if ( poly.length === 1 ) {
+        poly = poly[0];
+      } else {
+        const multipleSides = poly.map(p => this.polygonSideFaces(p, { topZ, bottomZ }));
+        sides.set(combineTypedArrays(multipleSides));
+        return sides;
+      }
     }
 
     // TODO: Do we need to test poly orientation?
