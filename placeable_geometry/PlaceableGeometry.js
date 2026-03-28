@@ -161,8 +161,8 @@ export class PlaceableModelMatrix extends ModelMatrix {
 
   constructor(modelMatrixCallback) {
     super();
-    if ( !modelMatrixCallback ) this.#modelMatrixCallback = () => super._model;
-    else this.#modelMatrixCallback = modelMatrixCallback;
+    delete this._model;
+    this.#modelMatrixCallback = modelMatrixCallback;
   }
 }
 
