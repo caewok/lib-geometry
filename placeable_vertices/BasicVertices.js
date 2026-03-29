@@ -596,38 +596,38 @@ export class HorizontalQuadVertices extends BasicVertices {
 
   static get top() { return new Float32Array([
       // Position     Normal      UV
-      W, N, T,        0, 0, 1,    0, 0,
-      W, S, T,        0, 0, 1,    0, 1,
-      E, S, T,        0, 0, 1,    1, 1,
+      W, N, 0,        0, 0, 1,    0, 0,
+      W, S, 0,        0, 0, 1,    0, 1,
+      E, S, 0,        0, 0, 1,    1, 1,
 
-      E, N, T,        0, 0, 1,    1, 0,
-      W, N, T,        0, 0, 1,    0, 0,
-      E, S, T,        0, 0, 1,    1, 1,
+      E, N, 0,        0, 0, 1,    1, 0,
+      W, N, 0,        0, 0, 1,    0, 0,
+      E, S, 0,        0, 0, 1,    1, 1,
     ]);
   }
 
   static get bottom() { return new Float32Array([
       // Position     Normal      UV
-      E, S, B,        0, 0, -1,   1, 0,
-      W, S, B,        0, 0, -1,   0, 0,
-      W, N, B,        0, 0, -1,   0, 1,
+      E, S, 0,        0, 0, -1,   0, 1,
+      W, S, 0,        0, 0, -1,   0, 0,
+      W, N, 0,        0, 0, -1,   1, 0,
 
-      E, S, B,        0, 0, -1,   1, 0,
-      W, N, B,        0, 0, -1,   0, 1,
-      E, N, B,        0, 0, -1,   1, 1,
+      E, S, 0,        0, 0, -1,   0, 1,
+      W, N, 0,        0, 0, -1,   1, 0,
+      E, N, 0,        0, 0, -1,   1, 1,
     ]);
   }
 
   // For tiles, face the texture up, not down as normally expected.
-  static get bottomUp() { return new Float32Array([
+  static get bottomTextureUp() { return new Float32Array([
       // Position     Normal      UV
-      E, S, B,        0, 0, -1,   1, 1,
-      W, S, B,        0, 0, -1,   0, 1,
-      W, N, B,        0, 0, -1,   0, 0,
+      E, S, 0,        0, 0, -1,   1, 1,
+      W, S, 0,        0, 0, -1,   0, 1,
+      W, N, 0,        0, 0, -1,   0, 0,
 
-      E, S, B,        0, 0, -1,   1, 1,
-      W, N, B,        0, 0, -1,   0, 0,
-      E, N, B,        0, 0, -1,   1, 0,
+      E, S, 0,        0, 0, -1,   1, 1,
+      W, N, 0,        0, 0, -1,   0, 0,
+      E, N, 0,        0, 0, -1,   1, 0,
     ]);
   }
 
@@ -637,8 +637,9 @@ export class HorizontalQuadVertices extends BasicVertices {
     switch ( type ) {
       case "up": return this.top;
       case "down": return this.bottom;
+      case "bottomUp": return this.bottomTextureUp;
       case "double": return new Float32Array([...this.top, ...this.bottom]);
-      case "doubleUp": return new Float32Array([...this.top, ...this.bottomUp]);
+      case "doubleUp": return new Float32Array([...this.top, ...this.bottomTextureUp]);
     }
   }
 
