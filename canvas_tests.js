@@ -7,6 +7,7 @@ CONFIG,
 import { GEOMETRY_LIB_ID, GEOMETRY_ID } from "./const.js";
 import { Draw } from "./Draw.js";
 import { Point3d } from "./3d/Point3d.js";
+import { Triangle3d } from "./3d/Polygon3d.js";
 
 // Testing functions that require a loaded canvas.
 
@@ -14,6 +15,9 @@ import { Point3d } from "./3d/Point3d.js";
 Draw = CONFIG.GeometryLib.lib.Draw
 Draw.clearDrawings()
 canvasTests = CONFIG.GeometryLib.lib.canvasTests
+Triangle3d = CONFIG.GeometryLib.lib.threeD.Triangle3d
+Point3d = CONFIG.GeometryLib.lib.threeD.Point3d
+let { BasicVertices, HorizontalQuadVertices, VerticalQuadVertices, Rectangle3dVertices } = CONFIG.GeometryLib.lib.placeableVertices.vertices
 
 canvasTests.drawTokenBorder()
 canvasTests.drawConstrainedTokenBorder()
@@ -389,6 +393,59 @@ export function drawTokenVertices({ tokens, type = "all", ...drawingOpts } = {})
 }
 
 /**
+ * Test that token vertices face the correct direction.
+ * @param {object} [opts]
+ * @param {Token[]} [opts.tokens]                 Walls to draw; otherwise test entire canvas
+ */
+export function testTokenVertices({ tokens, type = "all" } = {}) {
+  const TokenInstancedVertices = CONFIG.GeometryLib.lib.placeableVertices.TokenInstancedVertices;
+  const ConstrainedTokenModelVertices = CONFIG.GeometryLib.lib.placeableVertices.ConstrainedTokenModelVertices;
+  const LitTokenModelVertices = CONFIG.GeometryLib.lib.placeableVertices.LitTokenModelVertices;
+  const BrightLitTokenModelVertices = CONFIG.GeometryLib.lib.placeableVertices.BrightLitTokenModelVertices;
+
+  tokens ??= canvas.tokens.placeables;
+  using ctr = Point3d.tmp;
+  for ( const token of tokens ) {
+    Point3d.fromTokenCenter(token, ctr);
+
+    if ( type === "all" || type === "bright" ) {
+        const vToken = new BrightLitTokenModelVertices(token);
+        const vo = vToken.calculateModel();
+        const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
+        for ( const tri of tris ) {
+          if ( tri.orient3d(ctr) <= 0 ) console.error(`Token ${token.name} (${token.id}) bright triangle facing wrong direction`);
+        }
+    }
+
+    if ( type === "all" || type === "lit" ) {
+      const vToken = new LitTokenModelVertices(token);
+      const vo = vToken.calculateModel();
+      const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
+        for ( const tri of tris ) {
+          if ( tri.orient3d(ctr) <= 0  ) console.error(`Token ${token.name} (${token.id}) lit triangle facing wrong direction`);
+        }
+    }
+
+    if ( type === "all" || type === "constrained" ) {
+      const vToken = new ConstrainedTokenModelVertices(token);
+      const vo = vToken.calculateModel();
+      const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
+        for ( const tri of tris ) {
+          if ( tri.orient3d(ctr) <= 0  ) console.error(`Token ${token.name} (${token.id}) constrained triangle facing wrong direction`);
+        }
+    }
+
+    if ( type === "all" || type === "normal" ) {
+      const vo = TokenInstancedVertices.calculateModelForPlaceable(token);
+      const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
+        for ( const tri of tris ) {
+          if ( tri.orient3d(ctr) <= 0  ) console.error(`Token ${token.name} (${token.id}) normal triangle facing wrong direction`);
+        }
+    }
+  }
+}
+
+/**
  * Draw 2d tiles based on top geometry face.
  * @param {object} [opts]
  * @param {Tile[]} [opts.tiles]                 Tiles to draw; otherwise test entire canvas
@@ -426,3 +483,29 @@ export function drawRegionVertices({ regions, ...drawingOpts } = {}) {
   }
 }
 
+/**
+ * Use the scalar triple (a • (b x c)) to measure the signed volume of the
+ * parallelpiped formed by three vectors.
+ * > 0: CCW w/r/t d
+ * < 0: CW w/r/t d
+ * = 0: Coplanar
+ * @param {Point3d} a
+ * @param {Point3d} b
+ * @param {Point3d} c
+ * @param {Point3d} d
+ * @returns {number}
+ */
+function orient3d(a, b, c , d) {
+  // Shift points so d is the origin.
+  using dA = a.subtract(d);
+  using dB = b.subtract(d);
+  using dC = c.subtract(d);
+
+  // Compute cross of (b - d) and (c - d).
+  using x = dB.cross(dC);
+
+  // Return the scalar triple of (a - p).
+  return dA.dot(x);
+}
+
+// E.g. orient3d(tris[3].a, tris[3].b, tris[3].c, ctr)

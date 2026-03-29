@@ -219,8 +219,6 @@ export class BasicVertices {
     const indicesClass = nVertices > 65535 ? Uint32Array : Uint16Array;
     const indices = new indicesClass(nVertices);
 
-
-
     // Cannot use resizable buffer with WebGL2 bufferData.
     // Instead, construct a maximum-length array buffer and copy it over later once we know how
     // many vertices were copied over.
@@ -243,18 +241,16 @@ export class BasicVertices {
       let key = "";
       for ( let k = 0; k < stride; k += 1 ) key += `${Math.round(vertices[v + k] * precision)}|`;
 
-      let uniqueIdx = uniqueV.get(key);
-      if ( !uniqueIdx ) {
+      if ( !uniqueV.has(key) ) {
         // New unique vertex found.
-        uniqueIdx = uniqueV.size;
-        uniqueV.set(key, uniqueIdx);
+        uniqueV.set(key, uniqueV.size);
 
         // Copy vertex data to the buffer.
         for ( let k = 0; k < stride; k += 1 ) newVertices[vIdx++] = vertices[v + k];
       }
 
       // Assign index to the current vertex position.
-      indices[i] = uniqueIdx;
+      indices[i] = uniqueV.get(key);
     }
 
     // Copy the vertices to a new buffer.
@@ -719,6 +715,8 @@ export class VerticalQuadVertices extends BasicVertices {
     switch ( type ) {
       case "north": return this.north;
       case "south": return this.south;
+      case "right": return this.south;
+      case "left": return this.north;
       case "double": return new Float32Array([...this.north, ...this.south]);
     }
   }
@@ -753,22 +751,50 @@ export class Rectangle3dVertices extends BasicVertices {
 
   static NUM_FACE_ELEMENTS = 2 * this.NUM_TRIANGLE_ELEMENTS; // 2 triangles per face.
 
-  static get top() { return HorizontalQuadVertices.getUnitVertices("up"); }
+  // CCW: (W,N -> W,S -> E,S and E,N -> W,N -> E,S). Normal is {0,0,1}.
+  static get top() {
+    // Same as HorizontalQuadVertices.top but with elevation set to T.
+    return new Float32Array([
+      // Position     Normal      UV
+      W, N, T,        0, 0, 1,    0, 0,
+      W, S, T,        0, 0, 1,    0, 1,
+      E, S, T,        0, 0, 1,    1, 1,
 
-  static get bottom() { return HorizontalQuadVertices.getUnitVertices("down"); }
+      E, N, T,        0, 0, 1,    1, 0,
+      W, N, T,        0, 0, 1,    0, 0,
+      E, S, T,        0, 0, 1,    1, 1,
+    ]);
+  }
 
+  // CCW when looking from below (normal is {0,0,-1}).
+  static get bottom() {
+    // Same as HorizontalQuadVertices.bottom but with elevation set to T.
+    return new Float32Array([
+      // Position     Normal      UV
+      E, S, B,        0, 0, -1,   0, 1,
+      W, S, B,        0, 0, -1,   0, 0,
+      W, N, B,        0, 0, -1,   1, 0,
+
+      E, S, B,        0, 0, -1,   0, 1,
+      W, N, B,        0, 0, -1,   1, 0,
+      E, N, B,        0, 0, -1,   1, 1,
+    ]);
+  }
+
+  // North facing: Normal {0,-1,0}.
   static get north() { return new Float32Array([
       // Position     Normal      UV
-      W, N, B,        0, -1, 0,   1, 1,
       W, N, T,        0, -1, 0,   1, 0,
       E, N, T,        0, -1, 0,   0, 0,
+      E, N, B,        0, -1, 0,   0, 1,
 
       W, N, B,        0, -1, 0,   1, 1,
-      E, N, T,        0, -1, 0,   0, 0,
+      W, N, T,        0, -1, 0,   1, 0,
       E, N, B,        0, -1, 0,   0, 1,
     ]);
   }
 
+  // South facing: Normal {0,1,0}.
   static get south() { return new Float32Array([
       // Position     Normal      UV
       E, S, T,        0, 1, 0,   1, 0,
@@ -781,18 +807,20 @@ export class Rectangle3dVertices extends BasicVertices {
     ]);
   }
 
+  // East facing: Normal {1,0,0}.
   static get east() { return new Float32Array([
       // Position     Normal      UV
-      E, N, B,        1, 0, 0,   1, 1,
       E, N, T,        1, 0, 0,   1, 0,
       E, S, T,        1, 0, 0,   0, 0,
+      E, S, B,        1, 0, 0,   0, 1,
 
       E, N, B,        1, 0, 0,   1, 1,
-      E, S, T,        1, 0, 0,   0, 0,
+      E, N, T,        1, 0, 0,   1, 0,
       E, S, B,        1, 0, 0,   0, 1,
     ]);
   }
 
+  // West facing: Normal {-1,0,0}.
   static get west() { return new Float32Array([
       // Position     Normal      UV
       W, S, T,        -1, 0, 0,   1, 0,

@@ -555,6 +555,31 @@ export class Polygon3d {
     return this.plane.whichSide(p) > 0;
   }
 
+  /**
+   * What is the orientation of the first three points of this polygon w/r/t a point?
+   * Collinear points will fail here.
+   * Use the scalar triple (a • (b x c)) to measure the signed volume of the
+   * parallelpiped formed by three vectors.
+   * > 0: CCW w/r/t d
+   * < 0: CW w/r/t d
+   * = 0: Coplanar
+   * @param {Point3d} d
+   * @returns {number}
+   */
+  orient3d(d) {
+    // Shift points so d is the origin.
+    const [a, b, c] = this.points;
+    using dA = a.subtract(d);
+    using dB = b.subtract(d);
+    using dC = c.subtract(d);
+
+    // Compute cross of (b - d) and (c - d).
+    using x = dB.cross(dC);
+
+    // Return the scalar triple of (a - p).
+    return dA.dot(x);
+  }
+
   // ----- NOTE: Transformations ----- //
 
   // Valid if it forms a polygon, not a line or a point (or null).
@@ -787,7 +812,7 @@ export class Polygon3d {
 
 function pointFromVertices(i, vertices, indices, stride = 3, offset = 0, outPoint) {
   outPoint ??= Point3d.tmp;
-  const idx = (indices[i] * stride) + offset;
+  const idx = (indices[i]  * stride) + offset;
   const v = vertices.slice(idx , idx + stride);
   outPoint.set(v[0], v[1] || 0, v[2] || 0);
   return outPoint;
@@ -1410,7 +1435,7 @@ export class Triangle3d extends Polygon3d {
    */
   static fromVertices(vertices, indices, { positionOffset = 0, stride = 3 } = {}) {
     if ( vertices.length % stride !== 0 ) console.error(`${this.name}.fromVertices|Length of vertices is not divisible by stride ${stride}: ${vertices.length}`);
-    indices ??= Array.fromRange(Math.floor(vertices.length / 3));
+    indices ??= Array.fromRange(Math.floor(vertices.length / stride));
     if ( indices.length % 3 !== 0 ) console.error(`${this.name}.fromVertices|Length of indices is not divisible by 3: ${indices.length}`);
     const tris = new Array(Math.floor(indices.length / 3));
     using a = Point3d.tmp;
