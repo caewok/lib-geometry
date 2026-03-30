@@ -1364,7 +1364,7 @@ export class PixelCache extends LocalCoordinateCache {
    */
   #calculateCanvasBoundingPolygon(threshold=0.75) {
     const localPoly = this.getThresholdLocalBoundingPolygon(threshold);
-    return new PIXI.Polygon([...localPoly.iteratePoints({ close: false })].map(pt => this._toCanvasCoordinates(pt.x, pt.y, pt)))
+    return new PIXI.Polygon([...localPoly.iteratePoints()].map(pt => this._toCanvasCoordinates(pt.x, pt.y, pt)))
   }
 
 

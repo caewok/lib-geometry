@@ -14,6 +14,15 @@ export class RegionVertices extends AbstractInstancedVertices  {
 
   static type = "Region";
 
+  static SHAPE_TYPES = {
+    EMPTY: -1,
+    HOLE: 0,
+    POLYGONS: 1,
+    RECTANGLE: 2,
+    ELLIPSE: 3,
+    CIRCLE: 4,
+  };
+
   get region() { return this.placeable; }
 
   get instanced() {
@@ -26,20 +35,17 @@ export class RegionVertices extends AbstractInstancedVertices  {
     const geom = this.region[GEOMETRY_LIB_ID][GEOMETRY_ID];
     const ST = geom.constructor.SHAPE_TYPES;
     const type = geom.type;
-    if ( type === ST.HOLE || type === ST.EMPTY ) return new VertexObject();
-    if ( this.instanced ) {
-      let cl;
-      switch ( type ) {
-        case ST.EMPTY:
-        case ST.HOLE: return new VertexObject();
-        case ST.POLYGONS: cl = RegionPolygonModelVertices; break;
-        case ST.RECTANGLE: cl = RegionRectangleInstancedVertices; break;
-        case ST.ELLIPSE: cl = RegionEllipseInstancedVertices; break;
-        case ST.CIRCLE: cl = RegionCircleInstancedVertices; break;
-      }
-      const obj = new cl(this.placeable);
-      return obj.calculateModel();
+    let cl;
+    switch ( type ) {
+      case ST.EMPTY:
+      case ST.HOLE: return new VertexObject();
+      case ST.POLYGONS: cl = RegionPolygonModelVertices; break;
+      case ST.RECTANGLE: cl = RegionRectangleInstancedVertices; break;
+      case ST.ELLIPSE: cl = RegionEllipseInstancedVertices; break;
+      case ST.CIRCLE: cl = RegionCircleInstancedVertices; break;
     }
+    const obj = new cl(this.placeable);
+    return obj.calculateModel();
   }
 }
 
@@ -69,6 +75,10 @@ export class RegionRectangleInstancedVertices extends RegionVertices {
   static type = "RegionRectangle";
 
   static calculateVertices() { return Rectangle3dVertices._getUnitVertices(); }
+
+  calculateModel(opts) {
+    return this.constructor.calculateModelForPlaceable(this.placeable, opts);
+  }
 }
 
 export class RegionCircleInstancedVertices extends RegionVertices {
@@ -78,9 +88,11 @@ export class RegionCircleInstancedVertices extends RegionVertices {
 
   static type = "RegionCircle";
 
-  static numTopVertices = 6; // 2 triangles, 3 points each.
-
   static calculateVertices() { return Circle3dVertices._getUnitVertices(); }
+
+  calculateModel(opts) {
+    return this.constructor.calculateModelForPlaceable(this.placeable, opts);
+  }
 }
 
 export class RegionEllipseInstancedVertices extends RegionVertices {
@@ -90,9 +102,11 @@ export class RegionEllipseInstancedVertices extends RegionVertices {
 
   static type = "RegionEllipse";
 
-  static numTopVertices = 6; // 2 triangles, 3 points each.
-
   static calculateVertices() { return Ellipse3dVertices._getUnitVertices(); }
+
+  calculateModel(opts) {
+    return this.constructor.calculateModelForPlaceable(this.placeable, opts);
+  }
 }
 
 

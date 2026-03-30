@@ -319,13 +319,11 @@ function almostEqual(other, epsilon = 1e-08) {
 
 /**
  * Iterate over the rectangles's {x, y} points in order.
- * @param {object} [options]
- * @param {boolean} [options.close]   If close, include the first point again.
  * @returns {x, y} PIXI.Point
  */
-function* iteratePoints({close = true} = {}) {
+function* iteratePoints() {
   const poly = this.toPolygon();
-  for ( const pt of poly.iteratePoints({ close }) ) yield pt;
+  for ( const pt of poly.iteratePoints() ) yield pt;
 }
 
 /**

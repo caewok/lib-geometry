@@ -47,16 +47,13 @@ function almostEqual(other, epsilon = 1e-08) {
 
 /**
  * Iterate over the rectangles's {x, y} points in order.
- * @param {object} [options]
- * @param {boolean} [options.close]   If close, include the first point again.
  * @returns {x, y} PIXI.Point
  */
-function* iteratePoints({close = true} = {}) {
+function* iteratePoints() {
   yield PIXI.Point.tmp.set(this.x, this.y);
   yield PIXI.Point.tmp.set(this.x + this.width, this.y);
   yield PIXI.Point.tmp.set(this.x + this.width, this.y + this.height);
   yield PIXI.Point.tmp.set(this.x, this.y + this.height);
-  if ( close ) yield PIXI.Point.tmp.set(this.x, this.y); // A again.
 }
 
 /**
@@ -139,17 +136,12 @@ function _overlapsPolygon(poly) {
     || poly.contains(this.left, this.bottom)
     || poly.contains(this.right, this.bottom)) return true;
 
-  const pts = poly.iteratePoints({ close: true });
-  let a = pts.next().value;
-  if ( !a ) { a.release(); return false; }
-  if ( this.contains(a.x, a.y) ) { a.release(); return true; }
-
-  for ( const b of pts ) {
-    if ( this.lineSegmentIntersects(a, b) || this.contains(b.x, b.y) ) return true;
-    a.release();
-    a = b;
+  for ( const edge of poly.iterateEdges() ) {
+    const { a, b } = edge;
+    if ( this.contains(a.x, a.y)
+      || this.contains(b.x, b.y)
+      || this.lineSegmentIntersects(a, b) ) return true;
   }
-  a.release();
   return false;
 }
 
@@ -207,7 +199,7 @@ function _envelopsCircle(circle) {
  */
 function _envelopsPolygon(poly) {
   // All points of the polygon must be contained in the circle.
-  const iter = poly.iteratePoints({ close: false });
+  const iter = poly.iteratePoints();
   for ( using pt of iter ) {
     if ( !this.contains(pt.x, pt.y) ) return false;
   }
@@ -453,7 +445,7 @@ function rotateAroundCenter(rotation = 0) {
   const tMat = Matrix.translation(-center.x, -center.y);
   const rMat = Matrix.rotationZ(Math.toRadians(rotation));
   const M = tMat.multiply3x3(rMat).multiply3x3(tMat.invert);
-  const pts = [...this.iteratePoints({ close: true })];
+  const pts = [...this.iteratePoints()];
   const tPts = pts.map(pt => M.multiplyPoint2d(pt, pt));
   const out = new PIXI.Polygon(...tPts);
   PIXI.Point.release(...tPts);

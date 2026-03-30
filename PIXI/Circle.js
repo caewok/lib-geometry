@@ -142,7 +142,7 @@ function _envelopsRectangle(rect) {
  */
 function _envelopsPolygon(poly) {
   // All points of the polygon must be contained in the circle.
-  const iter = poly.iteratePoints({ close: false });
+  const iter = poly.iteratePoints();
   for ( using pt of iter ) {
     if ( !this.contains(pt.x, pt.y) ) return false;
   }

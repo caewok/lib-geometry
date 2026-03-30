@@ -97,7 +97,7 @@ export class Sphere {
    */
   overlapsPolygon3d(poly3d) {
     if ( poly3d instanceof Circle3d ) return this.overlapsCircle3d(poly3d);
-    for ( const pt of poly3d.iteratePoints({ close: false }) ) {
+    for ( const pt of poly3d.iteratePoints() ) {
       const inside = this.contains(pt);
       if ( inside ) return true;
     }
@@ -246,7 +246,7 @@ export class Sphere {
     if ( poly3d instanceof Circle3d ) return this.intersectCircle3d(poly3d);
     let allInside = true;
     let allOutside = true;
-    for ( const pt of poly3d.iteratePoints({ close: false }) ) {
+    for ( const pt of poly3d.iteratePoints() ) {
       const inside = this.contains(pt);
       allInside &&= inside;
       allOutside &&= inside;

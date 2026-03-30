@@ -425,18 +425,19 @@ export class BasicVertices {
    * I.e., copy each vertex in turn, expanding space available for it.
    * @param {Float32Array|number[]} vertices          An array of vertices to copy
    * @param {number} [stride=3]                       The stride of the original vertices array
-   * @param {number|Float32Array} outArr              The stride of the new array or a new array
+   * @param {number} [newStride=8]                    The stride of the new array
+   * @param {Float32Array} outArr                     A new array in which to store the result
    * @returns {Float32Array} The out array
    */
-  static expandArrayStride(arr, { stride = 3, outArr } = {}) {
+  static expandArrayStride(arr, { stride = 3, newStride, outArr } = {}) {
+    if ( !(newStride || outArr) ) throw Error(`expandArrayStride|Either newStride or outArr must be provided.`);
     const vLength = arr.length;
     const nVertices = Math.floor(vLength / stride);
 
     // Build the new array.
-    outArr ||= stride + 3; // Default to arbitrary +3 expansion.
-    if ( Number.isNumeric(outArr) ) outArr = new Float32Array(nVertices * outArr);
-    const newStride = Math.floor(outArr.length / nVertices);
-    if ( newStride < stride ) console.error("expandArrayStride|New array stride not large enough", { arr, stride, outArr });
+    newStride ??= Math.floor(outArr.length / nVertices);
+    outArr ??= new Float32Array(nVertices * newStride);
+    if ( newStride < stride ) throw Error("expandArrayStride|New array stride not large enough", { arr, stride, outArr });
 
     // Copy each vertex to the new array.
     for ( let i = 0, j = 0; i < vLength; i += stride, j += newStride ) outArr.set(arr.subarray(i, i + stride), j);
@@ -474,9 +475,8 @@ export class BasicVertices {
     const nVertices = Math.floor(vertices.length / stride);
 
     // Build the new array if needed.
-    outArr ||= stride + newData.length;
-    if ( Number.isNumeric(outArr) ) outArr = this.expandArrayStride(vertices, { stride, outArr });
-    const newStride = Math.floor(outArr.length / nVertices);
+    const newStride = stride + newData.length;
+    outArr ||= this.expandArrayStride(vertices, { stride, newStride });
 
     // Add in the data.
     for ( let i = offset, iMax = outArr.length; i < iMax; i += newStride ) outArr.set(newData, i)
@@ -965,7 +965,7 @@ Ex: 6 points, 6 outer edges.
     // Test that the segment between centroid and polygon point does not intersect another edge.
     centroid ??= poly.center;
     if ( !poly.contains(centroid.x, centroid.y) ) return false;
-    const lines = [...poly.iteratePoints({ close: false })].map(b => {
+    const lines = [...poly.iteratePoints()].map(b => {
       return { a: centroid, b };
     });
     return !poly.linesCross(lines); // Lines cross ignores lines that only share endpoints.
@@ -985,40 +985,51 @@ Ex: 6 points, 6 outer edges.
     return { poly, centroid, bounds };
   }
 
-  static _polygonTopFaceFan(poly, { topZ = T, stride = 8, centroid } = {}) {
+  /**
+   * Triangulate a polygon using a fan algorithm.
+   * @param {PIXI.Polygon} poly         Polygon or a shape that can be converted to one using simplifyPolygon
+   * @param {object} [opts]
+   * @param {Point3d} [opts.centroid]   Center of the polygon; otherwise will be calculated
+   * @returns {Float32Array} An array of x,y coordinates.
+   */
+  static _fanTriangulatePolygon(poly, { centroid } = {}) {
     const sp = this.simplifyPoly(poly, centroid);
     poly = sp.poly;
     if ( !(poly instanceof PIXI.Polygon) ) console.error("calculateVertices|Polygon is not a PIXI.Polygon", poly);
     centroid = sp.centroid ?? poly.center;
-    if ( poly.isHole ^ poly.isClockwise ) poly.reverseOrientation();
 
-    const numElems = this.topLength(poly) * (stride / 8);
-    const top = new Float32Array(numElems);
+    const numElems = this.topLength(poly);
+    const out = new Float32Array(numElems);
 
-    // Start by copy the x,y from the polygon to an array with 8 vertex "slots" per vertex.
     // Copy the center and two points of the polygon to the array.
     // Triangles should match poly orientation (typically ccw). If poly is ccw, triangles will be ccw.
     centroid = [centroid.x, centroid.y];
     const ln = poly.points.length;
     let a = poly.points.slice(ln - 2, ln); // i, i + 2 for the very last point; cycle through to beginning.
-    for ( let i = 0, j = 0; i < ln; ) {
-      top.set(centroid, j);
-      j += stride;
+    for ( let i = 0, j = 0; i < ln; i += 2 ) {
+      // Only increment i once; next triangle shares one point (and center) with this one.
+      out.set(centroid, j);
+      j += 2;
 
-      top.set(a, j);
-      j += stride;
+      out.set(a, j);
+      j += 2;
 
       const b = poly.points.slice(i, i + 2);
-      top.set(b, j);
-      i += 2; j += stride; // Only increment i once; next triangle shares one point (and center) with this one.
+      out.set(b, j);
+      j += 2;
       a = b;
     }
-    // Append elevation in place.
-    this.overwriteAtOffset(top, [topZ], { stride, offset: 2, outArr: top });
-    return top;
+    return out;
   }
 
-  static _polygonTopFace(poly, { topZ = T, stride = 8 } = {}) {
+  /**
+   * Use earcut to triangulate a polygon.
+   * @param {PIXI.Polygon} poly         Polygon or a shape that can be converted to one using simplifyPolygon
+   * @param {object} [opts]
+   * @param {Point3d} [opts.centroid]   Center of the polygon; otherwise will be calculated
+   * @returns {Float32Array} An array of x,y coordinates.
+   */
+  static _earcutTriangulatePolygon(poly) {
     let vertices2d;
     let holes = [];
     const sp = this.simplifyPoly(poly);
@@ -1032,55 +1043,77 @@ Ex: 6 points, 6 outer edges.
       holes = coords.holes;
     } else {
       if ( !(poly instanceof PIXI.Polygon) ) poly = poly.toPolygon();
-      if ( poly.isHole ^ poly.isClockwise ) poly.reverseOrientation();
       vertices2d = poly.points;
     }
 
     // Earcut the polygon to determine the indices and construct empty arrays to hold top and bottom vertex information.
     const indices = new Uint16Array(PIXI.utils.earcut(vertices2d, holes)); // Note: dimensions = 2.
 
-    // Construct a full vertex array with stride vertex "slots" per vertex.
-    const top = this.expandArrayStride(vertices2d, { stride: 2, outArr: stride });
-
-    // Add in elevation in place.
-    this.overwriteAtOffset(top, [topZ], { stride, offset: 2, outArr: top });
-
     // Expand the vertex array based on earcut indices.
-    const topExpanded = this.expandVertexData(indices, top, { stride });
-    return topExpanded;
+    return this.expandVertexData(indices, vertices2d, { stride: 2 });
   }
 
-  static polygonTopFace(poly, { topZ, centroid, stride, useFan } = {}) {
+  /**
+   * Triangulate a polygon.
+   * @param {PIXI.Polygon} poly         Polygon or a shape that can be converted to one using simplifyPolygon
+   * @param {object} [opts]
+   * @param {Point3d} [opts.centroid]   Center of the polygon; otherwise may be calculated
+   * @param {boolean} [opts.useFan]     Force fan use; otherwise will be determined from the polygon shape
+   * @returns {Float32Array} An array of x,y coordinates.
+   */
+  static triangulatePolygon(poly, { centroid, useFan } = {}) {
     useFan ??= this.canUseFan(poly, centroid);
-    const fnName = useFan ? "_polygonTopFaceFan" : "_polygonTopFace";
-    return this[fnName](poly, { topZ, centroid, stride });
+    const fnName = useFan ? "_fanTriangulatePolygon" : "_earcutTriangulatePolygon";
+    return this[fnName](poly, { centroid });
   }
 
   /**
    * Return vertices for the top or bottom of the polygon.
    * Requires that the polygon be sufficiently convex that it can be described by a fan of
    * polygons joined at its centroid.
+   * Top will face up; bottom will face down (CCW).
    * @param {PIXI.Polygon} poly
    * @param {object} [opts]
    * @returns {object}
    * - @prop {Float32Array} vertices
    * - @prop {Uint16Array} indices
    */
-  static polygonTopBottomFaces(poly, { topZ = T, bottomZ = B, baseStride = 3, addNormals = true, addUVs = true, useFan, centroid } = {}) {
-    const stride = baseStride + (addNormals * 3) + (addUVs * 2);
-    const top = this.polygonTopFace(poly, { topZ, centroid, stride, useFan });
+  static polygonTopBottomFaces(poly, { topZ = T, bottomZ = B, addNormals = true, addUVs = true, useFan, centroid } = {}) {
+    const stride = 3 + (addNormals * 3) + (addUVs * 2);
 
-    // Bottom mirrors the top.
-    const bottom = top.slice(0);
+    // Ensure that the top faces up and bottom faces down.
+    let top;
+    let bottom;
+    if ( poly.isClockwise ) {
+      // Poly faces down so define bottom first.
+      bottom = this.triangulatePolygon(poly, { centroid, useFan });
+      top = bottom.slice(0);
 
-    // Add in elevation in place.
+      // Flip.
+      top = this.flipVertexArrayOrientation(top, 2);
+
+    } else {
+      // Poly faces up so define top first.
+      top = this.triangulatePolygon(poly, { centroid, useFan });
+      bottom = top.slice(0);
+
+      // Flip.
+      bottom = this.flipVertexArrayOrientation(bottom, 2);
+    }
+
+    // Expand top and bottom to the full vertex elements (stride).
+    top = this.expandArrayStride(top, { stride: 2, newStride: stride });
+    bottom = this.expandArrayStride(bottom, { stride: 2, newStride: stride });
+
+    // Append elevation in place.
+    this.overwriteAtOffset(top, [topZ], { stride, offset: 2, outArr: top });
     this.overwriteAtOffset(bottom, [bottomZ], { stride, offset: 2, outArr: bottom });
 
     // Add in Normals in place.
-    let offset = baseStride;
+    let offset = 3;
     if ( addNormals ) {
-      this.overwriteAtOffset(top, [0, 0, 1], { stride, offset, dataStride: 3, outArr: top});
-      this.overwriteAtOffset(bottom, [0, 0, -1], { stride, offset, dataStride: 3, outArr: top});
+      this.overwriteAtOffset(top, [0, 0, 1], { stride, offset, outArr: top});
+      this.overwriteAtOffset(bottom, [0, 0, -1], { stride, offset, outArr: top});
       offset += 3;
     }
 
@@ -1090,8 +1123,6 @@ Ex: 6 points, 6 outer edges.
       this.appendUVs(bottom, { stride, uvsOffset: offset, overwrite: true, outArr: bottom });
     }
 
-    // Flip the bottom.
-    this.flipVertexArrayOrientation(bottom)
     return { top, bottom };
   }
 
@@ -1102,8 +1133,11 @@ Ex: 6 points, 6 outer edges.
    * @param {number} [opts.topZ=0.5]
    * @param {number} [opts.bottomZ=-0.5]
    * @param {Float32Array} [opts.sides]       The output view for sides
+   * @param {boolean|undefined} [opts.isHole]   If defined, sides will face inward if true, outward if false;
+   *   if not defined sids will face inward if polygon is CW
+   * @returns {Float32Array}
    */
-  static polygonSideFaces(poly, { topZ = T, bottomZ = B, sides } = {}) {
+  static polygonSideFaces(poly, { topZ = T, bottomZ = B, sides, isHole } = {}) {
     sides ??= new Float32Array(this.sidesLength(poly));
     if ( this.isClipper(poly) ) poly = poly.toPolygons();
     if ( Array.isArray(poly) ) {
@@ -1115,9 +1149,6 @@ Ex: 6 points, 6 outer edges.
         return sides;
       }
     }
-
-    // TODO: Do we need to test poly orientation?
-    if ( poly.isHole ^ poly.isClockwise ) poly.reverseOrientation();
 
     const vertexOffset = this.NUM_VERTEX_ELEMENTS;
     if ( !(poly instanceof PIXI.Polygon) ) poly = poly.toPolygon();
@@ -1151,8 +1182,12 @@ Ex: 6 points, 6 outer edges.
       { u: 1, v: 1 },
     ];
 
+    // If the polygon is CCW, the edges will be A-->B to form CCW sides facing outward.
+    // If the polygon is CW, the sides will face inward.
+    isHole ??= poly.isHole ?? poly.isClockwise;
+    const orientFn = isHole ^ !poly.isClockwise ? "iterateEdges" : "reverseIterateEdges";
     let j = 0;
-    for ( const { a, b } of poly.iterateEdges({ close: true }) ) {
+    for ( const { a, b } of poly[orientFn]() ) {
       // Position                   Normal          UV
       // B.x, B.y, topZ     nx, ny, nz      0, 0
       // A.x, A.y, topZ     nx, ny, nz      0, 0
@@ -1266,12 +1301,12 @@ export class Hex3dVertices extends Polygon3dVertices {
     return `${shape}_${width}_${height}_${hexColumns}`;
   }
 
-  static polygonTopFaceForToken(token, { topZ, centroid, stride } = {}) {
+  static triangulatePolygonForToken(token, { topZ, centroid, stride } = {}) {
     const poly = this.hexagonalUnitShapeForToken(token);
     const scaledPoly = poly
       .scale(token.document.width, token.document.height)
       .translate(token.center.x, token.center.y);
-    return this._polygonTopFaceFan(scaledPoly, { topZ, centroid, stride });
+    return this._fanTriangulatePolygon(scaledPoly, { topZ, centroid, stride });
   }
 }
 
@@ -1289,14 +1324,14 @@ export class Ellipse3dVertices extends Polygon3dVertices {
 
   static canUseFan(_ellipse) { return true; }
 
-  static _polygonTopFaceFan(ellipse = this.unitEllipse, opts = {}) {
+  static _fanTriangulatePolygon(ellipse = this.unitEllipse, opts = {}) {
     const density = opts.density ?? this.defaultDensity;
     const poly = ellipse.toPolygon({ density });
     opts.center ??= ellipse.center;
-    return Polygon3dVertices.polygonTopFace(poly, opts); // Cannot use super here b/c we want to pretend it is a polygon class.
+    return Polygon3dVertices.triangulatePolygon(poly, opts); // Cannot use super here b/c we want to pretend it is a polygon class.
   }
 
-  static polygonTopFace(ellipse, opts) { return this._polygonTopFaceFan(ellipse, opts); }
+  static triangulatePolygon(ellipse, opts) { return this._fanTriangulatePolygon(ellipse, opts); }
 
   static polygonSideFaces(ellipse, opts = {}) {
     const density = opts.density ?? this.defaultDensity;
@@ -1342,8 +1377,8 @@ export class Circle3dVertices extends Ellipse3dVertices {
 
   static unitCircle = new PIXI.Circle(0, 0, 1); // Radius of 1; scales upwards by provided radius.
 
-  static _polygonTopFaceFan(circle = this.unitCircle, opts) {
-    return super._polygonTopFaceFan(circle, opts);
+  static _fanTriangulatePolygon(circle = this.unitCircle, opts) {
+    return super._fanTriangulatePolygon(circle, opts);
   }
 
   static calculateVertices(circle = this.unitCircle, { density = this.defaultDensity, topZ = T, bottomZ = B } = {}) {
@@ -1445,7 +1480,7 @@ export class SphereVertices extends BasicVertices {
 
   static _getUnitVertices(density = this.defaultDensity) {
     const vertices = this.calculateSphericalVertices({ density })
-    const verticesNormalUVs = this.expandArrayStride(vertices, { stride: 8, outArr: 8 });
+    const verticesNormalUVs = this.expandArrayStride(vertices, { stride: 8, newStride: 8 });
     this.appendNormals(verticesNormalUVs, { stride: 8, positionOffset: 0, normalsOffset: 3, overwrite: true, outArr: verticesNormalUVs });
     this.appendUVs(verticesNormalUVs, { stride: 8, positionOffset: 0, uvsOffset: 6, overwrite: true, outArr: verticesNormalUVs });
     return verticesNormalUVs;

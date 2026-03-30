@@ -69,7 +69,7 @@ export class ConstrainedTokenBorder extends foundry.canvas.geometry.ClockwiseSwe
 
   _updateSoundShape() {
     this.#soundShape = this.constructor.constructSoundTokenShape(this._token);
-    // console.log(`Updating sound border shape for ${this._token.name}`, [...this.#soundShape.iteratePoints({closed: false})]);
+    // console.log(`Updating sound border shape for ${this._token.name}`, [...this.#soundShape.iteratePoints()]);
     this.#soundsID = ConstrainedTokenBorder._soundsID;
   }
 
@@ -399,7 +399,7 @@ export class ConstrainedTokenBorder extends foundry.canvas.geometry.ClockwiseSwe
 
     // Construct convex hull.
     const pts = [];
-    for ( const poly of polys ) pts.push(...poly.iteratePoints({ close: false }));
+    for ( const poly of polys ) pts.push(...poly.iteratePoints());
     return PIXI.Polygon.convexHull(pts);
   }
 

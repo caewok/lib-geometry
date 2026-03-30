@@ -92,7 +92,7 @@ export class Frustum {
     switch ( keyPoints.length ) {
       case 0:
       case 1: {
-        const iter = border2d.toPolygon().iteratePoints({close: false});
+        const iter = border2d.toPolygon().iteratePoints();
         b = iter.next().value;
         c = iter.next().value;
         break;
@@ -108,7 +108,7 @@ export class Frustum {
         b = foundry.utils.lineLineIntersection(viewpoint, k0, center, perpPt);
         c = foundry.utils.lineLineIntersection(viewpoint, k1, center, perpPt);
         if ( !(b && c) ) {
-          const iter = border2d.toPolygon().iteratePoints({close: false});
+          const iter = border2d.toPolygon().iteratePoints();
           b = iter.next().value;
           c = iter.next().value;
         }

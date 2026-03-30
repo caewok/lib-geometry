@@ -73,17 +73,40 @@ export class Polygon3d {
 
   clean() {
     if ( this.#cleaned ) return;
+    if ( this.points.length < 2 ) return;
 
-    // Drop collinear points.
-    const iter = this.iteratePoints({ close: true });
-    let a = iter.next().value;
-    let b = iter.next().value;
-    const newPoints = [a];
-    for ( let c of iter ) {
-      if ( !pointsAreCollinear(a, b, c) ) newPoints.push(b);
-      a = b;
-      b = c;
+    const points = this.iteratePoints();
+    const result = [points.next().value];
+    for ( const curr of points ) {
+      if ( result.at(-1).almostEqual(b, epsilon) ) continue;
+      while ( result.length >= 2
+        && pointsAreCollinear(result.at(-2), result.at(-1), curr) ) result.pop().release();
+      result.push(curr);
     }
+
+    // Clean up where end meets beginning.
+    // Loop b/c removing a point at a seam may expose a new collinearity.
+    while ( result.length >= 3 ) {
+      // Is the last point a duplicate of the first?
+      if ( result[0].almostEqual(result.at(-1)) ) {
+        result.pop().release();
+        break;
+      }
+
+      // Is the last point redundant? (2nd-to-last -> last -> first)
+      if ( pointsAreCollinear(result.at(-2), result.at(-1), result[0]) ) {
+        result.pop().release();
+        break;
+      }
+
+      // Is the first point redundant? (Last -> first -> second)
+      if ( pointsAreCollinear(result.at(-1), result.at(0), result[1]) ) {
+        result.shift().release(); // Remove the first point.
+        break;
+      }
+    }
+
+    // Copy over the points if necessary.
     if ( newPoints.length < this.points.length ) {
       this.points.length = newPoints.length;
       this.points.forEach((pt, idx) => pt.copyFrom(newPoints[idx]));
@@ -252,7 +275,7 @@ export class Polygon3d {
   }
 
   static fromPolygon(poly, elevation = 0, out) {
-    const pts = [...poly.iteratePoints({ close: false })];
+    const pts = [...poly.iteratePoints()];
     out = this.from2dPoints(pts, elevation, out);
     PIXI.Point.release(...pts);
     out.isHole = poly.isHole;
@@ -483,8 +506,6 @@ export class Polygon3d {
 
   /**
    * Iterate over the polygon's edges in order.
-   * If the polygon is closed, the last two points will be ignored.
-   * (Use close = true to return the last --> first edge.)
    * @param {object} [options]
    * @param {boolean} [close]   If true, return last point --> first point as edge.
    * @returns { A: Point3d, B: Point3d } for each edge
@@ -509,15 +530,46 @@ export class Polygon3d {
   }
 
   /**
-   * Iterate over the polygon's {x, y} points in order.
+   * Iterate over the polygon's edges in reverse order.
    * @param {object} [options]
-   * @param {boolean} [options.close]   If close, include the first point again.
+   * @param {boolean} [close]   If true, return last point --> first point as edge.
+   * @returns { A: Point3d, B: Point3d } for each edge
+   * Edges link, such that edge0.b === edge.1.a.
+   */
+  *reverseIterateEdges({close = true} = {}) {
+    const n = this.points.length;
+    if ( n < 2 ) return;
+
+    const firstA = this.points.at(-1);
+    let a = firstA;
+    for ( let i = n - 2; i > 0; i -= 1 ) {
+      const b = this.points[i];
+      yield { a, b };
+      a = b;
+    }
+
+    if ( close ) {
+      const b = firstA;
+      yield { a, b };
+    }
+  }
+
+  /**
+   * Iterate over the polygon's {x, y} points in order.
    * @returns {Point3d}
    */
-  *iteratePoints({ close = true } = {}) {
+  *iteratePoints() {
     const n = this.points.length;
     for ( let i = 0; i < n; i += 1 ) yield this.points[i];
-    if ( close ) yield this.points[0];
+  }
+
+  /**
+   * Iterate over the polygon's {x, y} points in reverse order.
+   * @returns {Point3d}
+   */
+  *iteratePoints() {
+    const n = this.points.length;
+    for ( let i = n - 1; i > 0; i -= 1 ) yield this.points[i];
   }
 
   /**
@@ -947,7 +999,7 @@ export class Ellipse3d extends Polygon3d {
   static fromPlanarPolygon(poly2d, plane, radiusX = null, radiusY = null) {
     const center = poly2d.center;
     if ( !(radiusX || radiusY) ) {
-      const res = this.calculateDimensionsFromPoints(poly2d.iteratePoints({ close: false }), { center, radiusX, radiusY });
+      const res = this.calculateDimensionsFromPoints(poly2d.iteratePoints(), { center, radiusX, radiusY });
       radiusX ??= res.radiusX;
       radiusY ??= res.radiusY;
     }
@@ -1068,6 +1120,16 @@ export class Ellipse3d extends Polygon3d {
   *iteratePoints(opts) {
     const poly3d = this.toPolygon3d();
     for ( const pt of poly3d.iteratePoints(opts) ) yield pt;
+  }
+
+  *reverseIterateEdges(opts) {
+    const poly3d = this.toPolygon3d();
+    for ( const edge of poly3d.reverseIterateEdges(opts) ) yield edge;
+  }
+
+  *reverseIteratePoints(opts) {
+    const poly3d = this.toPolygon3d();
+    for ( const pt of poly3d.reverseIteratePoints(opts) ) yield pt;
   }
 
   // ----- NOTE: Intersection ----- //

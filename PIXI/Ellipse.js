@@ -275,7 +275,7 @@ function _overlapsPolygon(other) {
   const cir = this._toCircle();
 
   // Move polygon to ellipse coordinates.
-  const pts = [...other.iteratePoints({ close: false })].map(pt => this._toCircleCoords(pt));
+  const pts = [...other.iteratePoints()].map(pt => this._toCircleCoords(pt));
   const poly = new PIXI.Polygon(pts);
   return poly._overlapsCircle(cir);
 }

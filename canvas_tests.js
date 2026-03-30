@@ -8,6 +8,7 @@ import { GEOMETRY_LIB_ID, GEOMETRY_ID } from "./const.js";
 import { Draw } from "./Draw.js";
 import { Point3d } from "./3d/Point3d.js";
 import { Triangle3d } from "./3d/Polygon3d.js";
+import { ElevatedPoint } from "./3d/ElevatedPoint.js";
 
 // Testing functions that require a loaded canvas.
 
@@ -17,7 +18,14 @@ Draw.clearDrawings()
 canvasTests = CONFIG.GeometryLib.lib.canvasTests
 Triangle3d = CONFIG.GeometryLib.lib.threeD.Triangle3d
 Point3d = CONFIG.GeometryLib.lib.threeD.Point3d
-let { BasicVertices, HorizontalQuadVertices, VerticalQuadVertices, Rectangle3dVertices } = CONFIG.GeometryLib.lib.placeableVertices.vertices
+let {
+  BasicVertices,
+  HorizontalQuadVertices,
+  VerticalQuadVertices,
+  Rectangle3dVertices,
+  Polygon3dVertices,
+  Ellipse3dVertices,
+  Circle3dVertices } = CONFIG.GeometryLib.lib.placeableVertices.vertices
 
 canvasTests.drawTokenBorder()
 canvasTests.drawConstrainedTokenBorder()
@@ -39,6 +47,8 @@ canvasTests.drawTokenVertices()
 canvasTests.drawTileVertices()
 canvasTests.drawRegionVertices()
 
+canvasTests.testTokenVertices()
+canvasTests.testRegionVertices()
 
 
 */
@@ -407,13 +417,14 @@ export function testTokenVertices({ tokens, type = "all" } = {}) {
   using ctr = Point3d.tmp;
   for ( const token of tokens ) {
     Point3d.fromTokenCenter(token, ctr);
+    Draw.star(ctr);
 
     if ( type === "all" || type === "bright" ) {
         const vToken = new BrightLitTokenModelVertices(token);
         const vo = vToken.calculateModel();
         const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
         for ( const tri of tris ) {
-          if ( tri.orient3d(ctr) <= 0 ) console.error(`Token ${token.name} (${token.id}) bright triangle facing wrong direction`);
+          if ( tri.orient3d(ctr) > 0 ) console.error(`Token ${token.name} (${token.id}) bright triangle facing wrong direction`);
         }
     }
 
@@ -422,7 +433,7 @@ export function testTokenVertices({ tokens, type = "all" } = {}) {
       const vo = vToken.calculateModel();
       const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
         for ( const tri of tris ) {
-          if ( tri.orient3d(ctr) <= 0  ) console.error(`Token ${token.name} (${token.id}) lit triangle facing wrong direction`);
+          if ( tri.orient3d(ctr) > 0  ) console.error(`Token ${token.name} (${token.id}) lit triangle facing wrong direction`);
         }
     }
 
@@ -431,7 +442,7 @@ export function testTokenVertices({ tokens, type = "all" } = {}) {
       const vo = vToken.calculateModel();
       const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
         for ( const tri of tris ) {
-          if ( tri.orient3d(ctr) <= 0  ) console.error(`Token ${token.name} (${token.id}) constrained triangle facing wrong direction`);
+          if ( tri.orient3d(ctr) > 0  ) console.error(`Token ${token.name} (${token.id}) constrained triangle facing wrong direction`);
         }
     }
 
@@ -439,7 +450,7 @@ export function testTokenVertices({ tokens, type = "all" } = {}) {
       const vo = TokenInstancedVertices.calculateModelForPlaceable(token);
       const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
         for ( const tri of tris ) {
-          if ( tri.orient3d(ctr) <= 0  ) console.error(`Token ${token.name} (${token.id}) normal triangle facing wrong direction`);
+          if ( tri.orient3d(ctr) > 0  ) console.error(`Token ${token.name} (${token.id}) normal triangle facing wrong direction`);
         }
     }
   }
@@ -484,28 +495,34 @@ export function drawRegionVertices({ regions, ...drawingOpts } = {}) {
 }
 
 /**
- * Use the scalar triple (a • (b x c)) to measure the signed volume of the
- * parallelpiped formed by three vectors.
- * > 0: CCW w/r/t d
- * < 0: CW w/r/t d
- * = 0: Coplanar
- * @param {Point3d} a
- * @param {Point3d} b
- * @param {Point3d} c
- * @param {Point3d} d
- * @returns {number}
+ * Test that token vertices face the correct direction.
+ * @param {object} [opts]
+ * @param {Token[]} [opts.tokens]                 Walls to draw; otherwise test entire canvas
  */
-function orient3d(a, b, c , d) {
-  // Shift points so d is the origin.
-  using dA = a.subtract(d);
-  using dB = b.subtract(d);
-  using dC = c.subtract(d);
+export function testRegionVertices({ regions } = {}) {
+  const RegionVertices = CONFIG.GeometryLib.lib.placeableVertices.RegionVertices;
 
-  // Compute cross of (b - d) and (c - d).
-  using x = dB.cross(dC);
+  regions ??= canvas.regions.placeables;
+  using ctr = ElevatedPoint.tmp;
+  for ( const region of regions ) {
+    ctr.x = region.center.x;
+    ctr.y = region.center.y;
 
-  // Return the scalar triple of (a - p).
-  return dA.dot(x);
+    const bottomZ = isFinite(region.bottomZ) ? region.bottomZ : -1e06;
+    const topZ = isFinite(region.topZ) ? region.topZ : 1e06;
+    ctr.z = bottomZ + ((topZ - bottomZ) * 0.5);
+    Draw.star(ctr);
+
+    // Depending on holes and region shape, center could be contained or not.
+    // Attempt to determine containment.
+    const contained = region.document.testPoint(ctr);
+    const vRegion = new RegionVertices(region);
+    const vo = vRegion.calculateModel();
+    const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
+    for ( const tri of tris ) {
+      if ( (tri.orient3d(ctr) > 0) ^ !contained ) console.error(`Region ${region.document.name} (${region.id}) triangle facing wrong direction`);
+    }
+  }
 }
 
 // E.g. orient3d(tris[3].a, tris[3].b, tris[3].c, ctr)

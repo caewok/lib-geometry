@@ -30,29 +30,23 @@ function area() {
  * @returns {Point}
  */
 function centroid() {
-  const pts = this.iteratePoints({close: true});
   switch ( this.points.length ) {
     case 0: return undefined;
-    case 1: return pts.next().value; // Should not happen if close is true
+    case 1: return PIXI.Point.tmp.set(this.points[0], this.points[1]); // Should not happen if close is true
     case 2: {
-      using a = pts.next().value;
-      using b = pts.next().value;
+      const [a, b] = [...this.iteratePoints()];
       return PIXI.Point.midPoint(a, b);
     }
   }
   const outPoint = PIXI.Point.tmp;
   let area = 0;
-  let a = pts.next().value;
-  for ( const b of pts ) {
-    const sumX = a.x + b.x;
-    area += sumX * (a.y - b.y); // See signedArea function.
-    const mult = (a.x * b.y) - (b.x * a.y);
+  for ( const edge of this.iterateEdges() ) {
+    const sumX = edge.a.x + edge.b.x;
+    area += sumX * (edge.a.y - edge.b.y); // See signedArea function.
+    const mult = (edge.a.x * edge.b.y) - (edge.b.x * edge.a.y);
     outPoint.x += sumX * mult;
-    outPoint.y += (a.y + b.y) * mult;
-    a.release();
-    a = b;
+    outPoint.y += (edge.a.y + edge.b.y) * mult;
   }
-  a.release();
 
   area = -area * 0.5;
   const areaMult = 1 / (6 * area);
@@ -188,16 +182,15 @@ function isSegmentEnclosed(segment, { epsilon = 1e-08 } = {}) {
 
 /**
  * Iterate over the polygon's edges in order.
- * If the polygon is closed, the last two points will be ignored.
- * (Use close = true to return the last --> first edge.)
  * @param {object} [options]
  * @param {boolean} [close]   If true, return last point --> first point as edge
  * @returns { a: PIXI.Point, b: PIXI.Point }  Return an object for each edge.
  * Edges link, such that edge0.a === edge.1.b. If close === true, the first point will be reused.
  */
-function* iterateEdges({close = true} = {}) {
+function* iterateEdges({ close = true } = {}) {
   const ln = this.points.length;
   if ( ln < 4 ) return;
+
 
   const firstA = PIXI.Point.tmp.set(this.points[0], this.points[1]);
   let a = firstA;
@@ -214,21 +207,50 @@ function* iterateEdges({close = true} = {}) {
 }
 
 /**
+ * Iterate over the polygon's edges in order.
+ * @param {object} [options]
+ * @param {boolean} [close]   If true, return last point --> first point as edge
+ * @returns { a: PIXI.Point, b: PIXI.Point }  Return an object for each edge.
+ * Edges link, such that edge0.a === edge.1.b. If close === true, the first point will be reused.
+ */
+function* reverseIterateEdges({ close = true } = {}) {
+  const ln = this.points.length;
+  if ( ln < 4 ) return;
+
+  const firstA = PIXI.Point.tmp.set(this.points.at(-1), this.points.at(-2));;
+  let a = firstA;
+  for (let i = ln - 2; i > 0; i -= 2) {
+    const b = PIXI.Point.tmp.set(this.points[i], this.points[i - 1]);
+    yield { a, b };
+    a = b;
+  }
+
+  if ( close ) {
+    const b = firstA;
+    yield { a, b };
+  }
+}
+
+/**
+ * Iterate over the polygon's {x, y} points in order.
+ * @returns {PIXI.Point} Each point returned is distinct.
+ */
+function* iteratePoints() {
+  const ln = this.points.length;
+  if ( ln < 2 ) return;
+  for (let i = 0; i < ln; i += 2) yield PIXI.Point.tmp.set(this.points[i], this.points[i + 1]);
+}
+
+/**
  * Iterate over the polygon's {x, y} points in order.
  * @param {object} [options]
  * @param {boolean} [options.close]   If close, include the first point again.
  * @returns {PIXI.Point} Each point returned is distinct; if close === true, a new PIXI.Point is created.
  */
-function* iteratePoints({ close = true } = {}) {
+function* reverseIteratePoints() {
   const ln = this.points.length;
   if ( ln < 2 ) return;
-
-  const num = ln - (this.isClosed ? 2 : 0);
-  for (let i = 0; i < num; i += 2) {
-    yield PIXI.Point.tmp.set(this.points[i], this.points[i + 1]);
-  }
-
-  if ( close ) yield PIXI.Point.tmp.set(this.points[0], this.points[1]);
+  for (let i = ln - 1; i > 0; i -= 2) yield PIXI.Point.tmp.set(this.points[i], this.points[i - 1]);
 }
 
 /**
@@ -257,7 +279,7 @@ function linesCross(lines) {
  */
 function lineSegmentCrossesPolygon(a, b, { inside = false } = {}) {
   if ( this.contains(a.x, a.y) && this.contains(b.x, b.y) ) return inside;
-  for ( const edge of this.pixiEdges() ) {
+  for ( const edge of this.iterateEdges() ) {
     if ( lineSegmentCrosses(a, b, edge.a, edge.b) ) return true;
   }
   return false;
@@ -275,7 +297,7 @@ function lineSegmentCrossesPolygon(a, b, { inside = false } = {}) {
  */
 function lineSegmentIntersects(a, b, { inside = false } = {}) {
   if ( this.contains(a.x, a.y) && this.contains(b.x, b.y) ) return inside;
-  for ( const edge of this.pixiEdges() ) {
+  for ( const edge of this.iterateEdges() ) {
     if ( foundry.utils.lineSegmentIntersects(a, b, edge.a, edge.b) ) return true;
   }
   return false;
@@ -293,7 +315,7 @@ function lineSegmentIntersects(a, b, { inside = false } = {}) {
  *   If intersections returned, the t of each intersection is the distance along the a|b segment.
  */
 function segmentIntersections(a, b, { indices = false, tangents = true } = {}) {
-  const edges = this.pixiEdges();
+  const edges = this.iterateEdges();
   const ixIndices = [];
   const ixs = [];
   edges.forEach((edge, i) => {
@@ -330,7 +352,7 @@ function _ixToPoint(ix) {
  *   If intersections returned, the t of each intersection is the distance along the a|b segment.
  */
 function lineIntersections(a, b, { indices = false, tangents = true } = {}) {
-  const edges = this.pixiEdges();
+  const edges = [...this.iterateEdges()];
   const ixIndices = [];
   const ixs = [];
   edges.forEach((edge, i) => {
@@ -378,7 +400,7 @@ function _isTangentIntersection(a, b, edges, ix, i) {
  * @return { PIXI.Point[]}
  */
 function pointsBetween(a, b) {
-  const edges = this.pixiEdges();
+  const edges = [...this.iterateEdges()];
   const ixIndices = this.segmentIntersections(a, b, { indices: true });
 
   // A is the closest ix
@@ -457,7 +479,7 @@ function _envelopsPoint(pt) {
   let inside = false;
 
   // Iterate through each edge.
-  for ( const edge of this.iterateEdges({ close: true }) ) {
+  for ( const edge of this.iterateEdges() ) {
     if ( orient2dFast(edge.a, edge.b, pt).almostEqual(0) ) {
       // Collinear. Determine if within bounds.
       AABB2d.fromEdge(edge, aabb);
@@ -493,34 +515,18 @@ function _overlapsPolygon(other) {
 
   if ( !polyBounds.overlaps(otherBounds) ) return false;
 
-  const thisIter = this.iteratePoints({ close: true });
-  let a = thisIter.next().value;
-  if ( !a ) {
-    a.release();
-    return false;
-  }
-  if ( other.contains(a.x, a.y) ) {
-    a.release();
-    return true;
-  }
+  for ( const edge of this.iterateEdges() ) {
+    const { a, b } = edge;
+    if ( other.contains(a.x, a.y)
+      || other.contains(b.x, b.y) ) return true;
 
-  for ( let b of thisIter ) {
-    if ( other.contains(b.x, b.y) ) return true;
-    const otherIter = other.iteratePoints({ close: true });
-    let c = otherIter.next().value;
-    for ( const d of otherIter ) {
-      if ( foundry.utils.lineSegmentIntersects(a, b, c, d) || this.contains(d.x, d.y) ) {
-        PIXI.Point.release(a, b, c, d);
-        return true;
-      }
-      c.release();
-      c = d;
+    for ( const otherEdge of other.iterateEdges() ) {
+      const { c, d } = edge;
+      if ( this.contains(c.x, c.y)
+        || this.contains(d.x, d.y) ) return true;
+      if ( foundry.utils.lineSegmentIntersects(a, b, c, d) ) return true;
     }
-    c.release();
-    a.release();
-    a = b;
   }
-  a.release();
   return false;
 }
 
@@ -540,7 +546,7 @@ function _overlapsCircle(circle) {
 
   // If the center of the circle is not contained, then the polygon cannot envelope the circle.
   // Therefore, some part of a polygon edge must be within the circle.
-  const segments = this.iterateEdges({ close: true });
+  const segments = this.iterateEdges();
   for ( const s of segments ) {
     // Get point on the line closest to segment from circle center
     const c = foundry.utils.closestPointToSegment(circle, s.a, s.b);
@@ -562,7 +568,7 @@ function _envelopsPolygon(poly) {
   if ( !this.getBounds().envelops(poly) ) return false;
 
   // Step 2: All polygon points must be contained.
-  const iter = poly.iteratePoints({ close: false });
+  const iter = poly.iteratePoints();
   for ( using pt of iter ) {
     if ( !this.contains(pt.x, pt.y) ) return false;
   }
@@ -661,34 +667,29 @@ function scaledArea({ scalingFactor = 1 } = {}) {
  * @returns {number}  Positive if clockwise. (b/c y-axis is reversed in Foundry)
  */
 function signedArea({ scalingFactor } = {}) {
-  const pts = [...this.iteratePoints({close: true})];
+  const edges = [...this.iterateEdges()];
 
-  if ( scalingFactor ) pts.forEach(pt => {
-    pt.x = Math.round(pt.x * scalingFactor);
-    pt.y = Math.round(pt.y * scalingFactor);
+  if ( scalingFactor ) edges.forEach(edge => {
+    const { a, b } = edge;
+    a.x = Math.round(a.x * scalingFactor);
+    a.y = Math.round(a.y * scalingFactor);
+    b.x = Math.round(b.x * scalingFactor);
+    b.y = Math.round(b.y * scalingFactor);
   });
 
-  const ln = pts.length;
-  if ( ln < 4 ) {
-    PIXI.Point.release(...pts);
-    return 0; // Incl. closing point, should have 4
-  }
+  const ln = edges.length;
+  if ( ln < 3 ) return 0;
 
   // (first + second) * (first - second)
   // ...
   // (last + first) * (last - first)
 
   let area = 0;
-  const iter = ln - 1;
-  for ( let i = 0; i < iter; i += 1 ) {
-    const iPt = pts[i];
-    const jPt = pts[i + 1];
-    area += (iPt.x + jPt.x) * (iPt.y - jPt.y);
+  for ( const edge of edges ) {
+    const { a, b } = edge;
+    area += (a.x + b.x) * (a.y - b.y);
   }
-  PIXI.Point.release(...pts);
-
   if ( scalingFactor ) area /= Math.pow(scalingFactor, 2);
-
   return -area * 0.5;
 }
 
@@ -824,7 +825,7 @@ function viewablePoints(origin, { returnKeys = false, outermostOnly = false } = 
   // It is possible that if the polygon is not simple, one or more points that are on the
   // viewable side
 
-  const pts = [...this.iteratePoints({ close: false })];
+  const pts = [...this.iteratePoints()];
 
   // Handle degenerate polygons.
   // Also, if the polygon contains this origin, use all points of the polygon.
@@ -921,45 +922,50 @@ export function elementsByIndex(arr, indices) {
  * 1. No repeated points, including nearly equal points.
  * 2. No collinear points
  * 3. No closed point
- * 4. Clockwise orientation
  * @returns {PIXI.Polygon}    This polygon
  */
 function clean({epsilon = 1e-8, epsilonCollinear = 1e-12} = {}) {
-  if ( this.points.length < 6 ) return this;
+  if ( this.points.length < 4 ) return this; // Less than two points.
+  const points = this.iteratePoints();
+  const result = [points.next().value];
+  for ( const curr of points ) {
+    if ( result.at(-1).almostEqual(b, epsilon) ) continue;
+    while ( result.length >= 2
+      && foundry.utils.orient2dFast(result.at(-2), result.at(-1), curr) ) result.pop().release();
+    result.push(curr);
+  }
 
-  const pts = this.iteratePoints({close: true});
-  let prev = pts.next().value;
-  let curr = pts.next().value;
-  if ( !prev || !curr ) return this;
-  const cleanPoints = [prev.x, prev.y];
-  for ( const next of pts ) {
-    if ( curr.almostEqual(prev, epsilon)
-      || foundry.utils.orient2dFast(prev, curr, next).almostEqual(0, epsilonCollinear) ) {
-      curr.release();
-      curr = next;
-      continue;
+  // Clean up where end meets beginning.
+  // Loop b/c removing a point at a seam may expose a new collinearity.
+  while ( result.length >= 3 ) {
+    // Is the last point a duplicate of the first?
+    if ( result[0].almostEqual(result.at(-1)) ) {
+      result.pop().release();
+      break;
     }
-    cleanPoints.push(curr.x, curr.y);
-    prev.release();
-    prev = curr;
-    curr = next;
-  }
-  prev.release();
-  curr.release();
 
-  // Check for and remove closing point.
-  const ln = cleanPoints.length;
-  if ( cleanPoints[0] === cleanPoints[ln - 2]
-    && cleanPoints[1] === cleanPoints[ln - 1] ) {
+    // Is the last point redundant? (2nd-to-last -> last -> first)
+    if ( foundry.utils.orient2dFast(result.at(-2), result.at(-1), result[0]) ) {
+      result.pop().release();
+      break;
+    }
 
-    cleanPoints.pop();
-    cleanPoints.pop();
+    // Is the first point redundant? (Last -> first -> second)
+    if ( foundry.utils.orient2dFast(result.at(-1), result.at(0), result[1]) ) {
+      result.shift().release(); // Remove the first point.
+      break;
+    }
   }
 
-  // Set the points and reset clockwise
-  this.points = cleanPoints;
+  // Set the points.
+  const n = result.length;
+  this.points.length = n * 2;
+  for (let i = 0, j = 0; i < n; i += 1 ) {
+    const curr = result[i];
+    this.points[j++] = curr.x;
+    this.points[j++] = curr.y;
+  }
   this._isPositive = undefined;
-  if ( !this.isClockwise ) this.reverseOrientation();
   return this;
 }
 
@@ -1000,8 +1006,8 @@ function equals(other) {
   if ( this.points.length !== other.points.length ) return false;
   if ( this.isClockwise ^ other.isClockwise ) return false;
 
-  const thisPoints = this.iteratePoints({close: false});
-  const otherPoints = [...other.iteratePoints({close: false})];
+  const thisPoints = this.iteratePoints();
+  const otherPoints = [...other.iteratePoints()];
 
   // Find the matching point
   const startPoint = thisPoints.next().value;
@@ -1037,8 +1043,8 @@ function almostEqual(other, epsilon = 1e-08) {
   if ( !(other instanceof PIXI.Polygon) ) return false;
   if ( this.points.length !== other.points.length ) return false;
 
-  const thisPoints = this.iteratePoints({close: false});
-  const otherPoints = [...other.iteratePoints({close: false})];
+  const thisPoints = this.iteratePoints();
+  const otherPoints = [...other.iteratePoints()];
   if ( this.isClockwise ^ other.isClockwise ) otherPoints.reverse();
 
   // Find the matching point
@@ -1080,75 +1086,6 @@ function cutaway(a, b, opts = {}) {
 }
 
 /**
- * Get the points of this polygon.
- * Use a proxy to monitor changes to the points array.
- * Note this does not include the first point.
- * @param {boolean} [options.close]   If close, include the first point again.
- * @returns {PIXI.Point[]}
- */
-function pixiPoints({ close = true } = {}) {
-  if ( !this._pixiPoints ) {
-    if ( !this._pixiPointsProxy ) {
-      // See https://stackoverflow.com/questions/5100376/how-to-watch-for-array-changes
-      // We cannot access the constructor, so do it the hard way.
-      this._pixiPointsProxy = true;
-      const selfPoly = this;
-      this.points = new Proxy(this.points, {
-        deleteProperty: (target, property) => {
-          delete target[property];
-          selfPoly._pixiPoints = undefined;
-          selfPoly._pixiEdges = undefined;
-          return true;
-        },
-        set: (target, property, value, _receiver) => {
-          target[property] = value;
-          selfPoly._pixiPoints = undefined;
-          selfPoly._pixiEdges = undefined;
-          return true;
-        }
-      });
-    }
-    this._pixiPoints = [...this.iteratePoints({ close: true })];
-  }
-  return close ? this._pixiPoints : this._pixiPoints.slice(0, -1);
-}
-
-/**
- * Get the edges of this polygon.
- * Use a proxy to monitor changes to the points array.
- * Includes the closing edge.
- * @returns {object[{A, B}]}
- *   - @prop {PIXI.Point} A
- *   - @prop {PIXI.Point} B
- */
-function pixiEdges({ close = true } = {}) {
-  if ( !this._pixiEdges ) {
-    if ( !this._pixiPointsProxy ) {
-      // See https://stackoverflow.com/questions/5100376/how-to-watch-for-array-changes
-      // We cannot access the constructor, so do it the hard way.
-      this._pixiPointsProxy = true;
-      const selfPoly = this;
-      this.points = new Proxy(this.points, {
-        deleteProperty: (target, property) => {
-          delete target[property];
-          selfPoly._pixiPoints = undefined;
-          selfPoly._pixiEdges = undefined;
-          return true;
-        },
-        set: (target, property, value, _receiver) => {
-          target[property] = value;
-          selfPoly._pixiPoints = undefined;
-          selfPoly._pixiEdges = undefined;
-          return true;
-        }
-      });
-    }
-    this._pixiEdges = [...this.iterateEdges({ close: true })];
-  }
-  return close ? this._pixiEdges : this._pixiEdges.slice(0, -1);
-}
-
-/**
  * Can this polygon be triangulated using a fan?
  * @param {PIXI.Point} centroid       Assumed center point
  * @returns {boolean}
@@ -1156,7 +1093,7 @@ function pixiEdges({ close = true } = {}) {
 function canUseFanTriangulation(centroid) {
   centroid ??= this.center;
   if ( !this.contains(centroid.x, centroid.y) ) return false;
-  const lines = [...this.iteratePoints({ close: false })].map(b => {
+  const lines = [...this.iteratePoints()].map(b => {
     return { a: centroid, b };
   });
   const out = !this.linesCross(lines); // Lines cross ignores lines that only share endpoints.
@@ -1232,10 +1169,8 @@ PATCHES.PIXI.METHODS = {
   // Iterators
   iterateEdges,
   iteratePoints,
-
-  // Cached
-  pixiPoints,
-  pixiEdges,
+  reverseIteratePoints,
+  reverseIterateEdges,
 
   // Equality
   equals,

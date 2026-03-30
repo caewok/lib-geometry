@@ -218,7 +218,7 @@ export class CutawayPolygon extends PIXI.Polygon {
     opts.fill ??= Draw.COLORS.red;
     opts.fillAlpha ??= 0.3;
     const invertedPolyPoints = [];
-    const pts = this.pixiPoints({ close: false });
+    const pts = [...this.iteratePoints()];
 
     // Locate the minimum point that is above an arbitrarily low value so we don't draw excessively large polys.
     const LOWEST = gridUnitsToPixels(-100);

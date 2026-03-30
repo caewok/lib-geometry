@@ -292,7 +292,7 @@ export class AABB3d extends AABB2d {
     if ( !poly3d.points || poly3d.points.length === 0 ) return false;
 
     // Check if any point is inside the AABB for early exit
-    for ( const point of poly3d.iteratePoints({ close: false }) ) {
+    for ( const point of poly3d.iteratePoints() ) {
       if ( this.containsPoint(point) ) return true;
     }
 
@@ -426,7 +426,7 @@ function checkGap(aabb, polygon, axis) {
 function projectPolygon(polygon, axis) {
   let min = Infinity;
   let max = -Infinity;
-  polygon.iteratePoints({ close: false }).forEach(pt => {
+  polygon.iteratePoints().forEach(pt => {
     const val = pt.dot(axis);
     min = Math.min(min, val);
     max = Math.max(max, val);
