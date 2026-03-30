@@ -40,12 +40,9 @@ export class Frustum {
   get viewpoint() { return this.top.a; }
 
   setAABB() {
-    const viewpoint = this.viewpoint;
-    const xMinMax = Math.minMax(this.floor.a.x, this.floor.b.x, this.floor.c.x, this.floor.d.x, viewpoint.x);
-    const yMinMax = Math.minMax(this.floor.a.y, this.floor.b.y, this.floor.c.y, this.floor.d.y, viewpoint.y);
-    const zMinMax = Math.minMax(viewpoint.z, this.top.b.z, this.bottom.b.z);
-    this.aabb.min.set(xMinMax.min, yMinMax.min, zMinMax.min);
-    this.aabb.max.set(xMinMax.max, yMinMax.max, zMinMax.max);
+    AABB3d.union([this.floor.aabb, this.top.aabb], this.aabb);
+
+    // Update the bounds to match.
     this.aabb.toRectangle(this.bounds2d);
   }
 
@@ -270,13 +267,28 @@ export class Frustum {
    * @returns {boolean}
    */
   overlapsAABB(aabb) {
-    for ( const pt of this.iteratePoints() ) {
-      if ( aabb.containsPoint(pt) ) return true;
-    }
+    // For AABB to overlap, it must be on the "inside" side of all frustum planes.
+    // Use n-vertex and p-vertex method (corners closest and furthest from the plane's normal).
+    // Frustum points the planes' normals outside (positive side).
     for ( const face of this.iterateFaces() ) {
-      if ( aabb.overlapsConvexPolygon3d(face) ) return true;
+      const plane = face.plane;
+      const { normal, constant } = plane;
+
+      // Find the "positive" vertex of the AABB (one most likely to be outside).
+      const positiveVertex = Point3d.tmp.set(
+        normal.x >= 0 ? aabb.min.x : aabb.max.x,
+        normal.y >= 0 ? aabb.min.y : aabb.max.y,
+        normal.z >= 0 ? aabb.min.z : aabb.max.z,
+      );
+
+      // Distance from the plane to the positive vetex.
+      // Distance = (n • P) + d.
+      const dist = normal.dot(positiveVertex) + constant;
+
+      // Check if the positive vertex is outside the frustum for this plane.
+      if ( plane.whichSide(positiveVertex) > 0 ) return false;
     }
-    return false;
+    return true;
   }
 
   poly3dWithinFrustum(poly3d) {

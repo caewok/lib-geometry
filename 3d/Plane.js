@@ -29,6 +29,13 @@ export class Plane {
     if ( Number.isNaN(this.#normal.x) || Number.isNaN(this.#normal.x) || Number.isNaN(this.#normal.x) ) throw Error("Plane#normal is undefined.");
   }
 
+  /**
+   * Plane constant (d or w): -(N • pt).
+   * ax + by + cz + d = 0, where Normal = {a, b, c} and {x, y, z} is a point on the plane.
+   * @type {number}
+   */
+  get constant() { return -this.normal.dot(this.point); }
+
   /** @type {Point3d} */
   point = new Point3d();
 
