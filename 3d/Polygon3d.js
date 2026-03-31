@@ -78,7 +78,7 @@ export class Polygon3d {
     const points = this.iteratePoints();
     const result = [points.next().value];
     for ( const curr of points ) {
-      if ( result.at(-1).almostEqual(b, epsilon) ) continue;
+      if ( result.at(-1).almostEqual(curr) ) continue;
       while ( result.length >= 2
         && pointsAreCollinear(result.at(-2), result.at(-1), curr) ) result.pop().release();
       result.push(curr);
@@ -107,9 +107,9 @@ export class Polygon3d {
     }
 
     // Copy over the points if necessary.
-    if ( newPoints.length < this.points.length ) {
-      this.points.length = newPoints.length;
-      this.points.forEach((pt, idx) => pt.copyFrom(newPoints[idx]));
+    if ( result.length < this.points.length ) {
+      this.points.length = result.length;
+      this.points.forEach((pt, idx) => pt.copyFrom(result[idx]));
     }
     this.#cleaned = true;
   }
@@ -542,7 +542,7 @@ export class Polygon3d {
 
     const firstA = this.points.at(-1);
     let a = firstA;
-    for ( let i = n - 2; i > 0; i -= 1 ) {
+    for ( let i = n - 2; i > -1; i -= 1 ) {
       const b = this.points[i];
       yield { a, b };
       a = b;
@@ -567,9 +567,9 @@ export class Polygon3d {
    * Iterate over the polygon's {x, y} points in reverse order.
    * @returns {Point3d}
    */
-  *iteratePoints() {
+  *reverseIteratePoints() {
     const n = this.points.length;
-    for ( let i = n - 1; i > 0; i -= 1 ) yield this.points[i];
+    for ( let i = n - 1; i > -1; i -= 1 ) yield this.points[i];
   }
 
   /**
@@ -911,7 +911,7 @@ export class Ellipse3d extends Polygon3d {
    * For Ellipse, the plane normal typically must be set, not calculated.
    * By default, the ellipse will face straight up, with normal {0, 0, 1}.
    */
-  _calculatePlane(plane) { }
+  _calculatePlane(_plane) { }
 
   _setDimensions(center, radiusX, radiusY) {
     this.points[0].copyFrom(center);

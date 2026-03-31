@@ -217,10 +217,10 @@ function* reverseIterateEdges({ close = true } = {}) {
   const ln = this.points.length;
   if ( ln < 4 ) return;
 
-  const firstA = PIXI.Point.tmp.set(this.points.at(-1), this.points.at(-2));;
+  const firstA = PIXI.Point.tmp.set(this.points.at(-2), this.points.at(-1));;
   let a = firstA;
-  for (let i = ln - 2; i > 0; i -= 2) {
-    const b = PIXI.Point.tmp.set(this.points[i], this.points[i - 1]);
+  for (let i = ln - 4; i > -1; i -= 2) {
+    const b = PIXI.Point.tmp.set(this.points[i], this.points[i + 1]);
     yield { a, b };
     a = b;
   }
@@ -250,7 +250,7 @@ function* iteratePoints() {
 function* reverseIteratePoints() {
   const ln = this.points.length;
   if ( ln < 2 ) return;
-  for (let i = ln - 1; i > 0; i -= 2) yield PIXI.Point.tmp.set(this.points[i], this.points[i - 1]);
+  for (let i = ln - 2; i > -1; i -= 2) yield PIXI.Point.tmp.set(this.points[i], this.points[i + 1]);
 }
 
 /**
@@ -521,7 +521,7 @@ function _overlapsPolygon(other) {
       || other.contains(b.x, b.y) ) return true;
 
     for ( const otherEdge of other.iterateEdges() ) {
-      const { c, d } = edge;
+      const { a:c, b:d } = otherEdge;
       if ( this.contains(c.x, c.y)
         || this.contains(d.x, d.y) ) return true;
       if ( foundry.utils.lineSegmentIntersects(a, b, c, d) ) return true;
@@ -926,34 +926,42 @@ export function elementsByIndex(arr, indices) {
  */
 function clean({epsilon = 1e-8, epsilonCollinear = 1e-12} = {}) {
   if ( this.points.length < 4 ) return this; // Less than two points.
+
+  const orient2d = foundry.utils.orient2dFast;
   const points = this.iteratePoints();
   const result = [points.next().value];
   for ( const curr of points ) {
-    if ( result.at(-1).almostEqual(b, epsilon) ) continue;
+    if ( result.at(-1).almostEqual(curr, epsilon) ) continue;
     while ( result.length >= 2
-      && foundry.utils.orient2dFast(result.at(-2), result.at(-1), curr) ) result.pop().release();
+      && orient2d(result.at(-2), result.at(-1), curr).almostEqual(0, epsilonCollinear) ) result.pop().release();
     result.push(curr);
   }
 
   // Clean up where end meets beginning.
   // Loop b/c removing a point at a seam may expose a new collinearity.
-  while ( result.length >= 3 ) {
+  let seamClean = false;
+  while ( !seamClean && result.length > 2 ) { // Length at least 3.
+    seamClean = true;
+
     // Is the last point a duplicate of the first?
     if ( result[0].almostEqual(result.at(-1)) ) {
       result.pop().release();
-      break;
+      seamClean = false;
+      continue;
     }
 
     // Is the last point redundant? (2nd-to-last -> last -> first)
-    if ( foundry.utils.orient2dFast(result.at(-2), result.at(-1), result[0]) ) {
+    if ( orient2d(result.at(-2), result.at(-1), result[0]).almostEqual(0, epsilonCollinear) ) {
       result.pop().release();
-      break;
+      seamClean = false;
+      continue;
     }
 
     // Is the first point redundant? (Last -> first -> second)
-    if ( foundry.utils.orient2dFast(result.at(-1), result.at(0), result[1]) ) {
+    if ( orient2d(result.at(-1), result.at(0), result[1]).almostEqual(0, epsilonCollinear) ) {
       result.shift().release(); // Remove the first point.
-      break;
+      seamClean = false;
+      continue;
     }
   }
 
