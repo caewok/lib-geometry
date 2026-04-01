@@ -461,26 +461,19 @@ export class BasicVertices {
    *
 
   /**
-   * Overwrite data at each vertex (per stride) at a given offset, returning a new array.
-   * @param {Array|TypedArray} src              Source array
+   * Overwrite data at each vertex (per stride) at a given offset, returning the source array.
+   * @param {Array|TypedArray} src              Source array, overwritten in place
    * @param {Array|TypedArray} newData          Data to add at each stride; will be same for each stride
    * @param {object} [opts]
    * @param {number} [opts.stride=3]                  Stride of the source array
-   * @param {number} [opts.offset=0]                  Offset at which to start to overwrite
-   * @param {Array|TypedArray|number} [opts.outArr]   The array to use as a destination or a number indicating the stride for the new array
-   * @returns {Array|TypedArray} The outArr
+   * @returns {Array|TypedArray} The source array.
    */
-  static overwriteAtOffset(vertices, newData, { stride = 3, offset = 0, outArr } = {}) {
-    offset ??= stride;
-    const nVertices = Math.floor(vertices.length / stride);
-
-    // Build the new array if needed.
-    const newStride = stride + newData.length;
-    outArr ||= this.expandArrayStride(vertices, { stride, newStride });
+  static overwriteAtOffset(vertices, newData, { stride = 3, offset = 0 } = {}) {
+    if ( newData.length > (stride + offset) ) console.warn(`overwriteAtOffset|stride ${stride} + offset ${offset} < data length of ${newData.length}.`);
 
     // Add in the data.
-    for ( let i = offset, iMax = outArr.length; i < iMax; i += newStride ) outArr.set(newData, i)
-    return outArr;
+    for ( let i = offset, iMax = vertices.length; i < iMax; i += stride ) vertices.set(newData, i)
+    return vertices;
   }
 
   /**
@@ -1106,14 +1099,14 @@ Ex: 6 points, 6 outer edges.
     bottom = this.expandArrayStride(bottom, { stride: 2, newStride: stride });
 
     // Append elevation in place.
-    this.overwriteAtOffset(top, [topZ], { stride, offset: 2, outArr: top });
-    this.overwriteAtOffset(bottom, [bottomZ], { stride, offset: 2, outArr: bottom });
+    this.overwriteAtOffset(top, [topZ], { stride, offset: 2 });
+    this.overwriteAtOffset(bottom, [bottomZ], { stride, offset: 2 });
 
     // Add in Normals in place.
     let offset = 3;
     if ( addNormals ) {
-      this.overwriteAtOffset(top, [0, 0, 1], { stride, offset, outArr: top});
-      this.overwriteAtOffset(bottom, [0, 0, -1], { stride, offset, outArr: top});
+      this.overwriteAtOffset(top, [0, 0, 1], { stride, offset });
+      this.overwriteAtOffset(bottom, [0, 0, -1], { stride, offset });
       offset += 3;
     }
 
