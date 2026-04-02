@@ -62,7 +62,7 @@ export class RegionPolygonModelVertices extends RegionVertices {
     for ( const poly of this.region.document.polygons ) {
       vo.vertices.push(...Polygon3dVertices.calculateVertices(poly, elev));
     }
-    vo.dropNormalsAndUVs({ keepNormals: opts.hasNormals, keepUVs: opts.hasUVs, out: vo });
+    vo.dropNormalsAndUVs({ keepNormals: opts.addNormals, keepUVs: opts.addUVs, out: vo });
     vo.condense(vo);
     return vo;
   }
@@ -134,7 +134,7 @@ export class RegionPolygonRampVertices extends RegionPolygonModelVertices {
       }
       vo.vertices.push(...out);
     }
-    vo.dropNormalsAndUVs({ keepNormals: opts.hasNormals, keepUVs: opts.hasUVs, out: vo });
+    vo.dropNormalsAndUVs({ keepNormals: opts.addNormals, keepUVs: opts.addUVs, out: vo });
     return vo;
   }
 }

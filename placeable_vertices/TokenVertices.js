@@ -129,7 +129,7 @@ export class ConstrainedTokenModelVertices extends TokenInstancedVertices {
     const { topZ, bottomZ, constrainedTokenBorder } = this.token;
     const vo = new VertexObject();
     vo.vertices = Polygon3dVertices.calculateVertices(constrainedTokenBorder.toPolygon(), { topZ, bottomZ });
-    vo.dropNormalsAndUVs({ keepNormals: opts.hasNormals, keepUVs: opts.hasUVs, out: vo });
+    vo.dropNormalsAndUVs({ keepNormals: opts.addNormals, keepUVs: opts.addUVs, out: vo });
     vo.condense(vo);
     return vo;
   }
@@ -152,7 +152,7 @@ export class LitTokenModelVertices extends TokenInstancedVertices {
     const border = litTokenBorder || this.placeable.constrainedTokenBorder;
     const vo = new VertexObject();
     vo.vertices = Polygon3dVertices.calculateVertices(border.toPolygon(), { topZ, bottomZ });
-    vo.dropNormalsAndUVs({ keepNormals: opts.hasNormals, keepUVs: opts.hasUVs, out: vo });
+    vo.dropNormalsAndUVs({ keepNormals: opts.addNormals, keepUVs: opts.addUVs, out: vo });
     vo.condense(vo);
     return vo;
   }
@@ -175,7 +175,7 @@ export class BrightLitTokenModelVertices extends TokenInstancedVertices {
     const border = litTokenBorder || this.placeable.constrainedTokenBorder;
     const vo = new VertexObject();
     vo.vertices = Polygon3dVertices.calculateVertices(border.toPolygon(), { topZ, bottomZ });
-    vo.dropNormalsAndUVs({ keepNormals: opts.hasNormals, keepUVs: opts.hasUVs, out: vo });
+    vo.dropNormalsAndUVs({ keepNormals: opts.addNormals, keepUVs: opts.addUVs, out: vo });
     vo.condense(vo);
     return vo;
   }
