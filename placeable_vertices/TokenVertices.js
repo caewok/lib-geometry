@@ -12,6 +12,8 @@ import { GEOMETRY_LIB_ID } from "../const.js";
 
 export class TokenInstancedVertices extends AbstractInstancedVertices {
 
+  static SPACER = 2; // Shrink token shapes slightly to avoid wall overlaps.
+
   static type = "Token";
 
   static shapeForToken(token) {
@@ -128,7 +130,10 @@ export class ConstrainedTokenModelVertices extends TokenInstancedVertices {
     // Get vertices for the constrained token polygon.
     const { topZ, bottomZ, constrainedTokenBorder } = this.token;
     const vo = new VertexObject();
-    vo.vertices = Polygon3dVertices.calculateVertices(constrainedTokenBorder.toPolygon(), { topZ, bottomZ });
+
+    let poly = constrainedTokenBorder.toPolygon();
+    poly.pad(-this.constructor.SPACER);
+    vo.vertices = Polygon3dVertices.calculateVertices(poly, { topZ: topZ - 2, bottomZ: bottomZ + 2 });
     vo.dropNormalsAndUVs({ keepNormals: opts.addNormals, keepUVs: opts.addUVs, out: vo });
     vo.condense(vo);
     return vo;
@@ -151,7 +156,10 @@ export class LitTokenModelVertices extends TokenInstancedVertices {
     const { litTokenBorder, topZ, bottomZ } = this.token;
     const border = litTokenBorder || this.placeable.constrainedTokenBorder;
     const vo = new VertexObject();
-    vo.vertices = Polygon3dVertices.calculateVertices(border.toPolygon(), { topZ, bottomZ });
+
+    let poly = border.toPolygon();
+    poly.pad(-this.constructor.SPACER);
+    vo.vertices = Polygon3dVertices.calculateVertices(poly, { topZ: topZ - 2, bottomZ: bottomZ + 2 });
     vo.dropNormalsAndUVs({ keepNormals: opts.addNormals, keepUVs: opts.addUVs, out: vo });
     vo.condense(vo);
     return vo;
@@ -174,7 +182,10 @@ export class BrightLitTokenModelVertices extends TokenInstancedVertices {
     const { litTokenBorder, topZ, bottomZ } = this.token;
     const border = litTokenBorder || this.placeable.constrainedTokenBorder;
     const vo = new VertexObject();
-    vo.vertices = Polygon3dVertices.calculateVertices(border.toPolygon(), { topZ, bottomZ });
+
+    let poly = border.toPolygon();
+    poly.pad(-this.constructor.SPACER);
+    vo.vertices = Polygon3dVertices.calculateVertices(poly, { topZ: topZ - 2, bottomZ: bottomZ + 2 });
     vo.dropNormalsAndUVs({ keepNormals: opts.addNormals, keepUVs: opts.addUVs, out: vo });
     vo.condense(vo);
     return vo;
