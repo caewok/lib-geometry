@@ -996,21 +996,14 @@ Ex: 6 points, 6 outer edges.
 
     // Copy the center and two points of the polygon to the array.
     // Triangles should match poly orientation (typically ccw). If poly is ccw, triangles will be ccw.
-    centroid = [centroid.x, centroid.y];
-    const ln = poly.points.length;
-    let a = poly.points.slice(ln - 2, ln); // i, i + 2 for the very last point; cycle through to beginning.
-    for ( let i = 0, j = 0; i < ln; i += 2 ) {
-      // Only increment i once; next triangle shares one point (and center) with this one.
-      out.set(centroid, j);
-      j += 2;
-
-      out.set(a, j);
-      j += 2;
-
-      const b = poly.points.slice(i, i + 2);
-      out.set(b, j);
-      j += 2;
-      a = b;
+    let j = 0;
+    for ( const edge of poly.iterateEdges() ) {
+      out[j++] = centroid.x;
+      out[j++] = centroid.y;
+      out[j++] = edge.a.x;
+      out[j++] = edge.a.y;
+      out[j++] = edge.b.x;
+      out[j++] = edge.b.y;
     }
     return out;
   }
@@ -1177,7 +1170,7 @@ Ex: 6 points, 6 outer edges.
 
     // If the polygon is CCW, the edges will be A-->B to form CCW sides facing outward.
     // If the polygon is CW, the sides will face inward.
-    isHole ??= poly.isHole ?? poly.isClockwise;
+    isHole ??= poly.isHole ?? false;
     const orientFn = isHole ^ !poly.isClockwise ? "iterateEdges" : "reverseIterateEdges";
     let j = 0;
     for ( const { a, b } of poly[orientFn]() ) {

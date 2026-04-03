@@ -432,26 +432,26 @@ export function testTokenVertices({ tokens, type = "all" } = {}) {
       const vToken = new LitTokenModelVertices(token);
       const vo = vToken.calculateModel();
       const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
-        for ( const tri of tris ) {
-          if ( tri.orient3d(ctr) > 0  ) console.error(`Token ${token.name} (${token.id}) lit triangle facing wrong direction`);
-        }
+      for ( const tri of tris ) {
+        if ( tri.orient3d(ctr) > 0  ) console.error(`Token ${token.name} (${token.id}) lit triangle facing wrong direction`);
+      }
     }
 
     if ( type === "all" || type === "constrained" ) {
       const vToken = new ConstrainedTokenModelVertices(token);
       const vo = vToken.calculateModel();
       const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
-        for ( const tri of tris ) {
-          if ( tri.orient3d(ctr) > 0  ) console.error(`Token ${token.name} (${token.id}) constrained triangle facing wrong direction`);
-        }
+      for ( const tri of tris ) {
+        if ( tri.orient3d(ctr) > 0  ) console.error(`Token ${token.name} (${token.id}) constrained triangle facing wrong direction`);
+      }
     }
 
     if ( type === "all" || type === "normal" ) {
       const vo = TokenInstancedVertices.calculateModelForPlaceable(token);
       const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
-        for ( const tri of tris ) {
-          if ( tri.orient3d(ctr) > 0  ) console.error(`Token ${token.name} (${token.id}) normal triangle facing wrong direction`);
-        }
+      for ( const tri of tris ) {
+        if ( tri.orient3d(ctr) > 0  ) console.error(`Token ${token.name} (${token.id}) normal triangle facing wrong direction`);
+      }
     }
   }
 }
