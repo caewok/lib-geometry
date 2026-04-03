@@ -43,7 +43,7 @@ const PATCHES = {
   "PIXI.RoundedRectangle": PATCHES_RoundedRectangle,
 
   // PixelCache
-  "Tile": PATCHES_Tile,
+  "foundry.canvas.placeables.Tile": PATCHES_Tile,
 
   // Elevation patches.
   "foundry.canvas.sources.BaseEffectSource": PATCHES_ELEVATION.PointSource,
