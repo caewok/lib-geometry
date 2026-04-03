@@ -627,13 +627,14 @@ function _envelopsCircle(circle) {
 
 /**
  * Use Clipper to pad (offset) polygon by delta. Pads in place for consistency with PIXI.Rectangle#pad.
- * @param {number} delta           Padding amount
+ * @param {number} padding         Padding amount
  * @param {object} [options]       Options that affect the padding calculation.
  * @param {number} [miterLimit]    Value of at least 2 used to avoid sharp points.
  * @param {number} [scalingFactor] How to scale the coordinates when translating to/from integers.
+ * @param {number} [miterType]     Type of joint to use: jtRound, jtSquare, or jtMiter
  * @returns {PIXI.Polygon} This polygon, for convenience.
  */
-function pad(delta, { miterLimit = 2, scalingFactor = 100 } = {}) {
+function pad(padding, { miterLimit = 2, scalingFactor = 100, miterType = "jtMiter" } = {}) {
   if ( miterLimit < 2) {
     console.warn("miterLimit for PIXI.Polygon.prototype.offset must be ≥ 2.");
     miterLimit = 2;
@@ -641,9 +642,9 @@ function pad(delta, { miterLimit = 2, scalingFactor = 100 } = {}) {
 
   const solution = new ClipperLib.Paths();
   const c = new ClipperLib.ClipperOffset(miterLimit);
-  c.AddPath(this.toClipperPoints({scalingFactor}), ClipperLib.JoinType.jtMiter, ClipperLib.EndType.etClosedPolygon);
-  c.Execute(solution, delta);
-  const poly = PIXI.Polygon.fromClipperPoints(solution.length ? solution[0] : [], {scalingFactor});
+  c.AddPath(this.toClipperPoints({ scalingFactor }), ClipperLib.JoinType[miterType], ClipperLib.EndType.etClosedPolygon);
+  c.Execute(solution, padding * scalingFactor);
+  const poly = PIXI.Polygon.fromClipperPoints(solution.length ? solution[0] : [], { scalingFactor });
   this.points = poly.points;
   return this;
 }

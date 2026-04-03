@@ -132,8 +132,9 @@ export class ConstrainedTokenModelVertices extends TokenInstancedVertices {
     const vo = new VertexObject();
 
     let poly = constrainedTokenBorder.toPolygon();
-    poly.pad(-this.constructor.SPACER);
-    vo.vertices = Polygon3dVertices.calculateVertices(poly, { topZ: topZ - 2, bottomZ: bottomZ + 2 });
+    const spacer = this.constructor.SPACER;
+    poly.pad(-spacer, { miterType: "jtSquare" });
+    vo.vertices = Polygon3dVertices.calculateVertices(poly, { topZ: topZ - spacer, bottomZ: bottomZ + spacer });
     vo.dropNormalsAndUVs({ keepNormals: opts.addNormals, keepUVs: opts.addUVs, out: vo });
     vo.condense(vo);
     return vo;
@@ -158,8 +159,9 @@ export class LitTokenModelVertices extends TokenInstancedVertices {
     const vo = new VertexObject();
 
     let poly = border.toPolygon();
-    poly.pad(-this.constructor.SPACER);
-    vo.vertices = Polygon3dVertices.calculateVertices(poly, { topZ: topZ - 2, bottomZ: bottomZ + 2 });
+    const spacer = this.constructor.SPACER;
+    poly.pad(-spacer, { miterType: "jtSquare" });
+    vo.vertices = Polygon3dVertices.calculateVertices(poly, { topZ: topZ - spacer, bottomZ: bottomZ + spacer });
     vo.dropNormalsAndUVs({ keepNormals: opts.addNormals, keepUVs: opts.addUVs, out: vo });
     vo.condense(vo);
     return vo;
@@ -184,8 +186,9 @@ export class BrightLitTokenModelVertices extends TokenInstancedVertices {
     const vo = new VertexObject();
 
     let poly = border.toPolygon();
-    poly.pad(-this.constructor.SPACER);
-    vo.vertices = Polygon3dVertices.calculateVertices(poly, { topZ: topZ - 2, bottomZ: bottomZ + 2 });
+    const spacer = this.constructor.SPACER;
+    poly.pad(-spacer, { miterType: "jtSquare" });
+    vo.vertices = Polygon3dVertices.calculateVertices(poly, { topZ: topZ - spacer, bottomZ: bottomZ + spacer });
     vo.dropNormalsAndUVs({ keepNormals: opts.addNormals, keepUVs: opts.addUVs, out: vo });
     vo.condense(vo);
     return vo;
