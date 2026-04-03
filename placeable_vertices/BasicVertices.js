@@ -991,7 +991,7 @@ Ex: 6 points, 6 outer edges.
     if ( !(poly instanceof PIXI.Polygon) ) console.error("calculateVertices|Polygon is not a PIXI.Polygon", poly);
     centroid = sp.centroid ?? poly.center;
 
-    const numElems = this.topLength(poly);
+    const numElems = Math.floor(poly.points.length * 0.5 * 6);
     const out = new Float32Array(numElems);
 
     // Copy the center and two points of the polygon to the array.
