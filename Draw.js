@@ -193,7 +193,7 @@ export class Draw {
    * @param {Point[]} points    Array of {x, y} objects.
    * @param {object} [drawingOptions]     Options to pass to the drawing method.
    */
-  connectPoints(points, { close = true, ...drawingOptions } = {} ) {
+  connectPoints(points, { close = false, ...drawingOptions } = {} ) {
     const nPts = points.length;
     const ln = close ? nPts : nPts - 1;
     let prevPt = close ? points.at(-1) : points.at(0);
