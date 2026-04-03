@@ -168,7 +168,7 @@ const TokenConstrainedLitFacesMixin = superclass => class extends superclass {
     const SPACER = this.constructor.SPACER;
     const token = this.token;
     const poly = token.litTokenBorder.toPolygon();
-    buildPolygonCube(poly, token.topZ * SPACER, token.bottomZ * SPACER, this._constrainedLitFaces);
+    buildPolygonCube(poly, token.topZ - SPACER, token.bottomZ + SPACER, this._constrainedLitFaces);
     this.#wallsID = ConstrainedTokenBorder._wallsID;
     this.#lightsID = ConstrainedTokenBorder._lightsID;
   }
@@ -227,7 +227,7 @@ const TokenConstrainedBrightLitFacesMixin = superclass => class extends supercla
     const SPACER = this.constructor.SPACER;
     const token = this.token;
     const poly = token.brightLitTokenBorder.toPolygon();
-    buildPolygonCube(poly, token.topZ * SPACER, token.bottomZ * SPACER, this._constrainedBrightLitFaces);
+    buildPolygonCube(poly, token.topZ - SPACER, token.bottomZ + SPACER, this._constrainedBrightLitFaces);
     this.#wallsID = ConstrainedTokenBorder._wallsID;
     this.#lightsID = ConstrainedTokenBorder._lightsID;
   }
