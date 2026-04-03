@@ -62,7 +62,7 @@ const PLACEABLE_TRACKING_CONFIG = {
    * The percent threshold under which a tile should be considered transparent at that pixel.
    * @type {number}
    */
-  // alphaThreshold: 0.75, // Now set in tile.document.texture.alphaThreshold.
+  alphaThreshold: 0.75, // Now set in tile.document.texture.alphaThreshold.
 
   /**
    * Which clipper version to use: 1 or 2.
@@ -75,7 +75,7 @@ const PLACEABLE_TRACKING_CONFIG = {
    * Performance-intensive for custom token shapes. Used for obstructing tokens and target tokens.
    * @type {boolean}
    */
-  constrainTokens: false,
+  constrainTokens: true,
 
   /**
    * Spacing between points for the per-pixel calculator.
