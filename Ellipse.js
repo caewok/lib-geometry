@@ -3,9 +3,7 @@ PIXI,
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "./const.js";
 import { Draw } from "./Draw.js";
-import { NULL_SET } from "./util.js";
 
 /* Testing
 api = game.modules.get('tokenvisibility').api;
@@ -51,28 +49,6 @@ drawing.drawShape(bounds)
  * - rotation
  */
 export class Ellipse extends PIXI.Ellipse {
-  static classTypes = new Set([this.name]); // Alternative to instanceof
-
-  inheritsClassType(type) {
-    let proto = this;
-    let classTypes = proto.constructor.classTypes;
-    do {
-      if ( classTypes.has(type) ) return true;
-      proto = Object.getPrototypeOf(proto);
-      classTypes = proto?.constructor?.classTypes;
-
-    } while ( classTypes );
-    return false;
-  }
-
-  matchesClass(cl) {
-    return this.constructor.classTypes.equals(cl.classTypes || NULL_SET);
-  }
-
-  overlapsClass(cl) {
-    return this.constructor.classTypes.intersects(cl.classTypes || NULL_SET);
-  }
-
 
   /**
    * Default representation has the major axis horizontal (halfWidth), minor axis vertical (halfHeight)
@@ -139,9 +115,10 @@ export class Ellipse extends PIXI.Ellipse {
    * @returns {PIXI.Point}
    */
   _fromCartesianCoords(a, outPoint) {
-    outPoint ??= new PIXI.Point();
+    outPoint ??= PIXI.Point.tmp;
     a = PIXI.Point.fromObject(a);
-    a.translate(-this.x, -this.y, outPoint).rotate(-this.radians, outPoint);
+    a.subtract(this, outPoint);
+    PIXI.Point.rotate(outPoint, -this.radians, outPoint);
     return outPoint;
   }
 
@@ -152,9 +129,10 @@ export class Ellipse extends PIXI.Ellipse {
    * @returns {Point}
    */
   _toCartesianCoords(a, outPoint) {
-    outPoint ??= new PIXI.Point();
+    outPoint ??= PIXI.Point.tmp;
     a = PIXI.Point.fromObject(a);
-    a.rotate(this.radians, outPoint).translate(this.x, this.y, outPoint);
+    PIXI.Point.rotate(a, this.radians, outPoint)
+    outPoint.add(this, outPoint);
     return outPoint;
   }
 
@@ -224,14 +202,13 @@ export class Ellipse extends PIXI.Ellipse {
     // Convert to this ellipse's circle space and test circle-ellipse overlap.
     // Move to ellipse coordinates and then to circle coordinates.
     // Use the major-minor points to determine height and width of the converted ellipse.
-    const otherCtr = PIXI.Point.tmp.set(other.x, other.y);
-    const otherV = otherCtr.fromAngle(other.radians, other.width, PIXI.Point.tmp);
-    const otherCV = otherCtr.fromAngle(other.radians + Math.PI_1_2, other.height, PIXI.Point.tmp);
+    using otherCtr = PIXI.Point.tmp.set(other.x, other.y);
+    using otherV = otherCtr.fromAngle(other.radians, other.width, PIXI.Point.tmp);
+    using otherCV = otherCtr.fromAngle(other.radians + Math.PI_1_2, other.height, PIXI.Point.tmp);
 
     const c = this._toCircleCoords(this._fromCartesianCoords(otherCtr));
     const v = this._toCircleCoords(this._fromCartesianCoords(otherV));
     const cv = this._toCircleCoords(this._fromCartesianCoords(otherCV));
-    PIXI.Point.release(otherCtr, otherV, otherCV);
 
     const w = PIXI.Point.distanceBetween(c, v);
     const h = PIXI.Point.distanceBetween(c, cv);
@@ -249,14 +226,13 @@ export class Ellipse extends PIXI.Ellipse {
 
     // Align this ellipse to the axis at 0,0 and rotate to 0º.
     // I.e, move the circle and then rotate it.
-    const cirCtr = PIXI.Point.tmp;
-    circle.center.translate(-this.x, -this.y, cirCtr).rotate(-this.radians, cirCtr);
-    const out = this.constructor.quickEllipsesOverlapTest(
+    using cirCtr = PIXI.Point.tmp;
+    circle.center.add(-this.x, -this.y, cirCtr);
+    PIXI.Point.rotate(cirCtr, -this.radians, cirCtr);
+    return this.constructor.quickEllipsesOverlapTest(
       0, 0, this.majorRadius, this.minorRadius,
       cirCtr.x, cirCtr.y, circle.radius, circle.radius
     );
-    cirCtr.release();
-    return out;
   }
 
   draw(drawTool, opts = {}) {
@@ -265,5 +241,3 @@ export class Ellipse extends PIXI.Ellipse {
     drawTool.shape(shape, opts);
   }
 }
-
-GEOMETRY_CONFIG.Ellipse ??= Ellipse;

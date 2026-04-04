@@ -5,52 +5,53 @@ foundry
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { Pool } from "../Pool.js";
-import { roundDecimals as roundDecimalsNumber } from "../util.js";
+import { Pool, PoolableMixin } from "../Pool.js";
+import { roundDecimals as roundDecimalsNumber, roundNearWhole as roundNearWholeNumber } from "../util.js";
+import { mix } from "../mixwith.js";
 
 export const PATCHES = {};
 PATCHES.PIXI = {};
 
-const pool = new Pool(PIXI.Point); // Instead of static #pool, just hide it here.
+const Poolable = mix(PIXI.Point).with(PoolableMixin);
 
-function releaseStatic(...args) { args.forEach(arg => pool.release(arg)); }
+function onRelease(obj) {
+  obj.x = 0;
+  obj.y = 0;
+}
 
-function releaseObj(obj) {  pool.release(obj); }
-
-function release() { this.constructor.releaseObj(this); }
-
-function buildNObjects(n = 1) {
-  const out = Array(n);
-  for ( let i = 0; i < n; i += 1 ) out[i] = new this();
+/**
+ * Copy this point, return a new point.
+ * @param {PIXI.Point} out    The new point to copy to.
+ * @returns {PIXI.Point}
+ */
+function clone(out) {
+  out ??= this.constructor.tmp;
+  out.x = this.x;
+  out.y = this.y;
   return out;
 }
 
-function getTmp() { return pool.acquire(); }
 
 /**
- * Invert a wall key to get the coordinates.
- * Key = (MAX_TEXTURE_SIZE * x) + y, where x and y are integers.
- * @param {number} key      Integer key
- * @returns {PIXI.Point} coordinates
- */
-function pointFromKey(key, outPoint) {
-  outPoint ??= this.tmp;
-  const x = Math.floor(key * MAX_TEXTURE_SIZE_INV);
-  const y = key - (MAX_TEXTURE_SIZE * x);
-  outPoint.set(x, y);
-  return outPoint;
-}
-
-
-
-/**
- * Use roundDecimals to round the point coordinates to a certain number of decimals
+ * Use roundDecimals to round the point coordinates to a certain number of decimals, in place.
  * @param {number} places   Number of decimals places to use when rounding.
  * @returns {this}
  */
 function roundDecimals(places = 0) {
   this.x = roundDecimalsNumber(this.x, places);
   this.y = roundDecimalsNumber(this.y, places);
+  return this;
+}
+
+
+/**
+ * Round the point coordinates that are vary near a whole number, in place.
+ * @param {number} [epsilon=1e-08]
+ * @returns {this}
+ */
+function roundNearWhole(epsilon) {
+  this.x = roundNearWholeNumber(this.x, epsilon);
+  this.y = roundNearWholeNumber(this.y, epsilon);
   return this;
 }
 
@@ -78,18 +79,19 @@ function fromObject(obj) {
 function angleBetween(a, b, c, { clockwiseAngle = false } = {}) {
   // See https://mathsathome.com/angle-between-two-vectors/
   // Create new pixi points so that 2d distance works when passing 3d points.
-  const tmp0 = PIXI.Point.tmp;
-  const tmp1 = PIXI.Point.tmp;
+  using ba = a.subtract(b);
+  using bc = c.subtract(b);
 
-  const ba = a.subtract(b, tmp0);
-  const bc = c.subtract(b, tmp1);
-  const dot = ba.dot(bc);
-  const denom = ba.magnitude() * bc.magnitude();
+  // Use atan2 instead of acos for numerical stability.
+  const angle1 = Math.atan2(ba.y, ba.x);
+  const angle2 = Math.atan2(bc.y, bc.x);
+  let angle = Math.abs(angle1 - angle2);
+  if ( angle > Math.PI ) angle = (2 * Math.PI) - angle;
 
-  let angle = Math.acos(dot / denom);
+  // const dot = ba.dot(bc);
+  // const denom = ba.magnitude() * bc.magnitude();
+  // let angle = Math.acos(dot / denom);
   if ( clockwiseAngle && foundry.utils.orient2dFast(a, b, c) > 0 ) angle = (Math.PI * 2) - angle;
-  tmp0.release();
-  tmp1.release();
   return angle;
 }
 
@@ -123,10 +125,29 @@ function distanceSquaredBetween(a, b) {
  * @returns {number}
  */
 function key() {
-  const x = Math.round(this.x);
-  const y = Math.round(this.y);
+  return this.constructor.key(this);
+}
+
+function staticKey(pt) {
+  const x = Math.round(pt.x);
+  const y = Math.round(pt.y);
   return (x << 16) ^ y;
 }
+
+/**
+ * Invert a wall key to get the coordinates.
+ * Key = (MAX_TEXTURE_SIZE * x) + y, where x and y are positive integers.
+ * @param {number} key      Integer key
+ * @returns {PIXI.Point} coordinates
+ */
+function invertKey(key, outPoint) {
+  outPoint ??= this.tmp;
+  outPoint.x = key >> 16;
+  // const x = Math.floor(key * MAX_TEXTURE_SIZE_INV);
+  outPoint.y = key - (MAX_TEXTURE_SIZE * outPoint.x);
+  return outPoint;
+}
+
 
 /**
  * Take an array of 2d points and flatten them to an array of numbers,
@@ -324,6 +345,48 @@ function abs(outPoint) {
 }
 
 /**
+ * Get the floor of the coordinates.
+ * @param {PIXI.Point} [outPoint]    A point-like object in which to store the value.
+ *   (Will create new point if none provided.)
+ * @returns {PIXI.Point}
+ */
+function floor(outPoint) {
+  outPoint ??= this.constructor.tmp;
+  outPoint.x = Math.floor(this.x);
+  outPoint.y = Math.floor(this.y);
+  return outPoint;
+}
+
+/**
+ * Get the ceiling of the coordinates.
+ * @param {PIXI.Point} [outPoint]    A point-like object in which to store the value.
+ *   (Will create new point if none provided.)
+ * @returns {PIXI.Point}
+ */
+function ceil(outPoint) {
+  outPoint ??= this.constructor.tmp;
+  outPoint.x = Math.ceil(this.x);
+  outPoint.y = Math.ceil(this.y);
+  return outPoint;
+}
+
+/**
+ * Make all coordinates finite.
+ * @param {PIXI.Point} [outPoint]    A point-like object in which to store the value.
+ *   (Will create new point if none provided.)
+ * @returns {PIXI.Point}
+ */
+function makeFinite(outPoint) {
+  outPoint ??= this.constructor.tmp;
+  const { x, y } = this;
+  outPoint.x = isFinite(x) ? x : Number.MAX_SAFE_INTEGER * Math.sign(x);
+  outPoint.y = isFinite(y) ? y : Number.MAX_SAFE_INTEGER * Math.sign(y);
+  return outPoint;
+}
+
+
+
+/**
  * Dot product of this point with another.
  * (Sum of the products of the components)
  * @param {PIXI.Point} other
@@ -395,11 +458,9 @@ function projectToward(other, t, outPoint) {
 function towardsPoint(other, distance, outPoint) {
   outPoint ??= this.constructor.tmp;
   if ( !distance ) return outPoint.copyFrom(this);
-  const delta = other.subtract(this);
+  using delta = other.subtract(this);
   const t = distance / delta.magnitude();
-  this.add(delta.multiplyScalar(t, delta), outPoint); // Note: this might equal other or outPoint.
-  delta.release();
-  return outPoint;
+  return this.add(delta.multiplyScalar(t, delta), outPoint); // Note: this might equal other or outPoint.
 }
 
 /**
@@ -411,12 +472,10 @@ function towardsPoint(other, distance, outPoint) {
 function towardsPointSquared(other, distance2, outPoint) {
   outPoint ??= this.constructor.tmp;
   if ( !distance2 ) return outPoint.copyFrom(this);
-  const delta = other.subtract(this);
+  using delta = other.subtract(this);
   const sign = Math.sign(distance2);
   const t = sign * Math.sqrt(Math.abs(distance2) / delta.magnitudeSquared());
-  this.add(delta.multiplyScalar(t, delta), outPoint); // Note: this might equal other or outPoint.
-  delta.release();
-  return outPoint;
+  return this.add(delta.multiplyScalar(t, delta), outPoint); // Note: this might equal other or outPoint.
 }
 
 /**
@@ -441,34 +500,22 @@ function projectToAxisValue(other, value, coordinate, outPoint) {
 }
 
 /**
- * Rotate a point around a given angle
+ * Rotate a 2d point around a given angle from the origin.
+ * @param {PIXI.Point} pt   Point to rotate
  * @param {number} angle  In radians
- * @param {Point3d|PIXI.Point} [outPoint] A point-like object to store the result.
- * @returns {Point} A new point
+ * @param {PIXI.Point} [outPoint] A point-like object to store the result.
+ * @returns {PIXI.Point} The outPoint
  */
-function rotate(angle, outPoint) {
-  outPoint ??= this.constructor.tmp;
+function rotate(pt, angle, outPoint) {
+  outPoint ??= pt.constructor.tmp;
   const cAngle = Math.cos(angle);
   const sAngle = Math.sin(angle);
-  const { x, y } = this; // Avoid accidentally using the outPoint values when calculating new y.
+  const { x, y } = pt; // Avoid accidentally using the outPoint values when calculating new y.
   outPoint.x = (x * cAngle) - (y * sAngle);
   outPoint.y = (y * cAngle) + (x * sAngle);
   return outPoint;
 }
 
-/**
- * Translate a point by a given dx, dy
- * @param {number} dx
- * @param {number} dy
- * @param {Point3d|PIXI.Point} [outPoint] A point-like object to store the result.
- * @returns {Point} A new point
- */
-function translate(dx, dy, outPoint) {
-  outPoint ??= this.constructor.tmp;
-  outPoint.x = this.x + dx;
-  outPoint.y = this.y + dy;
-  return outPoint;
-}
 
 /**
  * The effective maximum texture size that Foundry VTT "ever" has to worry about.
@@ -477,24 +524,12 @@ function translate(dx, dy, outPoint) {
 const MAX_TEXTURE_SIZE = Math.pow(2, 16);
 const MAX_TEXTURE_SIZE_INV = 1 / MAX_TEXTURE_SIZE;
 
-/**
- * Sort key, arranging points from north-west to south-east
- * @returns {number}
- */
-function sortKey() {
-  const x = Math.round(this.x);
-  const y = Math.round(this.y);
-  return (MAX_TEXTURE_SIZE * x) + y;
-}
-
 // For parallel with Point3d.
 function to2d(_opts, outPoint) {
   outPoint ??= this.constructor.tmp;
   outPoint.copyFrom(this);
   return outPoint;
 }
-
-PIXI.Point.prototype.t0 = 0; // Solely for storing intersections to avoid rebuilding the class.
 
 /**
  * Iterator: x then y.
@@ -515,12 +550,12 @@ PIXI.Point.prototype[Symbol.iterator] = function() {
 
 PATCHES.PIXI.GETTERS = {
   key,
-  sortKey,
 };
 
 PATCHES.PIXI.STATIC_GETTERS = {
-  tmp: getTmp,
-};
+  pool: function() { return Pool.getPool(this); },
+  tmp: function() { return this.pool.acquire(); },
+}
 
 PATCHES.PIXI.STATIC_METHODS = {
   midPoint,
@@ -530,14 +565,22 @@ PATCHES.PIXI.STATIC_METHODS = {
   angleBetween,
   flatMapPoints,
   fromObject,
-  pointFromKey,
-  invertKey: pointFromKey,  // Alias for backward compatibility.
-  release: releaseStatic,
-  releaseObj,
-  buildNObjects,
+  invertKey,
+  key: staticKey,
+  rotate,
+
+  // Pool
+  onRelease,
+  release: Poolable.release,
+  _release: Poolable._release,
+  buildNObjects: Poolable.buildNObjects,
+
 };
 
+
+Symbol.dispose ??= Symbol("Symbol.dispose");
 PATCHES.PIXI.METHODS = {
+  clone,
   add,
   subtract,
   multiply,
@@ -547,6 +590,9 @@ PATCHES.PIXI.METHODS = {
   max,
   copyPartial,
   abs,
+  floor,
+  ceil,
+  makeFinite,
   dot,
   magnitude,
   magnitudeSquared,
@@ -556,10 +602,23 @@ PATCHES.PIXI.METHODS = {
   towardsPoint,
   towardsPointSquared,
   projectToAxisValue,
-  translate,
-  rotate,
   roundDecimals,
+  roundNearWhole,
   fromAngle,
   to2d,
-  release,
+  toString: function() { return `{x: ${this.x}, y: ${this.y}}`},
+
+  // Pool
+  release: function() { this.constructor.release(this); },
+
+  // Patching cannot handle this approach because Symbol.dispose is special and will not be listed as an Object.entries().
+  // [Symbol.dispose]: function() { this.constructor._release(this); },
 };
+
+// Alternative to patching.
+PIXI.Point.prototype[Symbol.dispose] = function() {
+  if ( !this.constructor._release ) return;
+  this.constructor._release(this);
+}
+
+

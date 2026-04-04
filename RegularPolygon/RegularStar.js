@@ -5,7 +5,6 @@ PIXI
 "use strict";
 
 import { RegularPolygon } from "./RegularPolygon.js";
-import { GEOMETRY_CONFIG } from "../const.js";
 import { NULL_SET } from "../util.js";
 
 /**
@@ -19,29 +18,6 @@ import { NULL_SET } from "../util.js";
  * See https://martiancraft.com/blog/2017/03/geometry-of-stars/
  */
 export class RegularStar extends RegularPolygon {
-
-  static classTypes = new Set([this.name], "Star"); // Alternative to instanceof
-
-  inheritsClassType(type) {
-    let proto = this;
-    let classTypes = proto.constructor.classTypes;
-    do {
-      if ( classTypes.has(type) ) return true;
-      proto = Object.getPrototypeOf(proto);
-      classTypes = proto?.constructor?.classTypes;
-
-    } while ( classTypes );
-    return false;
-  }
-
-  matchesClass(cl) {
-    return this.constructor.classTypes.equals(cl.classTypes || NULL_SET);
-  }
-
-  overlapsClass(cl) {
-    return this.constructor.classTypes.intersects(cl.classTypes || NULL_SET);
-  }
-
 
   /** @type {PIXI.Point[]} */
   _outerPoints;
@@ -108,8 +84,8 @@ export class RegularStar extends RegularPolygon {
       for ( let i = 0; i < ln; i += 2 ) {
         // Rotate the inner points by half the angle between the outer points
         // So the inner point lies halfway between two outerpoints
-        const pt = new PIXI.Point(pts[i], pts[i + 1]);
-        pt.rotate(angle, pt);
+        const pt = PIXI.Point.tmp.set(pts[i], pts[i + 1]);
+        PIXI.Point.rotate(pt, angle, pt);
         this._innerPoints.push(pt);
       }
     }
@@ -204,6 +180,3 @@ export class RegularStar extends RegularPolygon {
   }
 
 }
-
-GEOMETRY_CONFIG.RegularPolygons.RegularStar ??= RegularStar;
-

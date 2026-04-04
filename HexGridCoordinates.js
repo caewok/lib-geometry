@@ -4,10 +4,8 @@ canvas,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "./const.js";
 import { roundNearWhole } from "./util.js";
 import { GridCoordinates } from "./GridCoordinates.js";
-import { Pool } from "./Pool.js";
 
 /**
  * Cube coordinates in a hexagonal grid. q + r + s = 0.
@@ -52,15 +50,17 @@ export function HexCoordinateMixin(Base) {
     /** @type {number} */
     set q(value) {
       const pt = canvas.grid.cubeToPoint({ q: value, r: this.r });
-      this.x = roundNearWhole(pt.x);
-      this.y = roundNearWhole(pt.y);
+      this.x = pt.x;
+      this.y = pt.y;
+      this.roundNearWhole();
     }
 
     /** @type {number} */
     set r(value) {
       const pt = canvas.grid.cubeToPoint({ q: this.q, r: value });
-      this.x = roundNearWhole(pt.x);
-      this.y = roundNearWhole(pt.y);
+      this.x = pt.x;
+      this.y = pt.y;
+      this.roundNearWhole();
     }
 
     /** @type {number} */
@@ -86,10 +86,10 @@ export function HexCoordinateMixin(Base) {
      * @returns {this} For convenience.
      */
     setToHexCube(hexCube) {
-      const { x, y } = canvas.grid.cubeToPoint(hexCube);
-      this.x = roundNearWhole(x);
-      this.y = roundNearWhole(y);
-      return this;
+      const pt = canvas.grid.cubeToPoint(hexCube);
+      this.x = pt.x;
+      this.y = pt.y;
+      this.roundNearWhole();
     }
 
     /**
@@ -110,15 +110,5 @@ export function HexCoordinateMixin(Base) {
  */
 export class HexGridCoordinates extends HexCoordinateMixin(GridCoordinates) {
 
-  static classTypes = new Set([this.name]); // Alternative to instanceof
-
-  static #pool = new Pool(this);
-
-  static releaseObj(obj) { this.#pool.release(obj); }
-
-  static get tmp() { return this.#pool.acquire(); }
-
 
 }
-
-GEOMETRY_CONFIG.HexGridCoordinates ??= HexGridCoordinates;

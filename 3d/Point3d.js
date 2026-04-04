@@ -32,43 +32,26 @@ PIXI
  * @property {Point3d} bl
  * @property {Point3d} br
  */
-import { GEOMETRY_CONFIG } from "../const.js";
-import { Pool } from "../Pool.js";
-import { MatrixFlat } from "../MatrixFlat.js";
-import { NULL_SET, gridUnitsToPixels, roundDecimals } from "../util.js";
+import { PoolableMixin } from "../Pool.js";
+import { mix } from "../mixwith.js";
+import { Matrix } from "../Matrix.js";
+import { gridUnitsToPixels, roundDecimals, roundNearWhole } from "../util.js";
 
 /**
  * 3-D version of PIXI.Point
  * See https://pixijs.download/dev/docs/packages_math_src_Point.ts.html
  */
-export class Point3d extends PIXI.Point {
+// export class Point3d extends PIXI.Point { // Cannot extend PIXI.Point b/c on load, not yet patched with Poolable.
+export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
   toJSON() { return { ...this }; }
 
-  static classTypes = new Set([this.name]); // Alternative to instanceof
-
-  inheritsClassType(type) {
-    let proto = this;
-    let classTypes = proto.constructor.classTypes;
-    do {
-      if ( classTypes.has(type) ) return true;
-      proto = Object.getPrototypeOf(proto);
-      classTypes = proto?.constructor?.classTypes;
-
-    } while ( classTypes );
-    return false;
+  static [Symbol.hasInstance](instance) {
+    return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
   }
 
-  matchesClass(cl) {
-    return this.constructor.classTypes.equals(cl.classTypes || NULL_SET);
-  }
-
-  overlapsClass(cl) {
-    return this.constructor.classTypes.intersects(cl.classTypes || NULL_SET);
-  }
+  static get _geoLibType() { return this.name; }
 
   z = 0;
-
-  t0 = 0; // Solely for storing intersection distances.
 
   /**
    * @param {number} [x=0] - position of the point on the x axis
@@ -80,22 +63,10 @@ export class Point3d extends PIXI.Point {
     this.z = z;
   }
 
-  static #pool = new Pool(this);
-
-  static releaseObj(obj) { this.#pool.release(obj); }
-
-  static release(...args) { args.forEach(arg => arg.release()); }
-
-  static buildNObjects(n = 1) {
-    const out = Array(n);
-    for ( let i = 0; i < n; i += 1 ) out[i] = new this();
-    return out;
+  static onRelease(obj) {
+    obj.z = 0;
+    PIXI.Point.onRelease(obj);
   }
-
-   // No need to clear the object, as no cache used.
-  release() { this.constructor.releaseObj(this); }
-
-  static get tmp() { return this.#pool.acquire(); }
 
   /**
    * Iterator: x then y.
@@ -124,36 +95,6 @@ export class Point3d extends PIXI.Point {
     const pt = super.fromObject(obj);
     pt.z = obj.z ?? obj.elevationZ ?? (gridUnitsToPixels(obj.elevation) || 0); // gridUnitsToPixels(undefined) = NaN. Use || b/c NaN || 0 returns 0.
     return pt;
-  }
-
-  /**
-   * Check if 3d points are oriented clockwise.
-   * ChatGPT
-   * This function calculates the cross product of the two edge vectors of the triangle
-   * formed by the three points using the subtract and cross functions. It then checks
-   * if the z component of the cross product is greater than zero, which indicates that
-   * the points are oriented clockwise. If the z component is less than or equal to zero,
-   * the points are oriented counter-clockwise.
-   *
-   * Note that this function assumes that the points are given in a right-handed coordinate system,
-   * where the positive z-axis points out of the screen. If the points are given in a
-   * left-handed coordinate system, the function should be modified to check if the z
-   * component of the cross product is less than zero.
-   * @param {Point3d} a
-   * @param {Point3d} b
-   * @param {Point3d} c
-   * @returns {number} The z-component of the cross. Comparable to foundry.utils.orient2d
-   *   0: colinear
-   *   positive: CCW (right-handed system, incl. Foundry)
-   *   negative: CW (right-handed system, incl. Foundry)
-   */
-  static orient(a, b, c) {
-    // Calculate cross product components directly without creating temporary vectors
-    const bax = b.x - a.x;
-    const bay = b.y - a.y;
-    const cbx = c.x - b.x;
-    const cby = c.y - b.y;
-    return (bax * cby) - (bay * cbx);
   }
 
   /**
@@ -323,13 +264,13 @@ export class Point3d extends PIXI.Point {
 
     // Rotate points to match tile rotation.
     if ( rotation ) {
-      const rotZ = MatrixFlat.rotationZ(Math.toRadians(rotation));
+      const rotZ = Matrix.rotationZ(Math.toRadians(rotation));
       pts.forEach(pt => rotZ.multiplyPoint3d(pt, pt));
     }
 
     // Translate to canvas position.
     const center = bounds.center;
-    const trM = MatrixFlat.translation(center.x + offsetX, center.y + offsetY, elevationZ);
+    const trM = Matrix.translation(center.x + offsetX, center.y + offsetY, elevationZ);
     pts.forEach(pt => trM.multiplyPoint3d(pt, pt));
 
     return {
@@ -350,14 +291,12 @@ export class Point3d extends PIXI.Point {
    * @returns {number}  Angle, in radians
    */
   static angleBetween(a, b, c) {
-    const tmp0 = this.tmp;
-    const tmp1 = this.tmp;
+    using tmp0 = this.tmp;
+    using tmp1 = this.tmp;
     const ba = a.subtract(b, tmp0);
     const bc = c.subtract(b, tmp1);
     const dot = ba.dot(bc);
     const denom = ba.magnitude() * bc.magnitude();
-    tmp0.release();
-    tmp1.release();
     return Math.acos(dot / denom);
   }
 
@@ -366,65 +305,32 @@ export class Point3d extends PIXI.Point {
    * Ordered, so sortable.
    * @returns {BigInt}
    */
-  get key() {
-    const z = Math.round(this.z);
-    const key2d = super.key;
+  get key() { return this.constructor.key(this); }
+
+  static key(pt) {
+    const key2d = PIXI.Point.key(pt);
+    const z = Math.round(pt.z || 0);
     return (BigInt(key2d) << 32n) ^ BigInt(z);
   }
 
-//   get key() {
-//
-//     (MAX_TEXTURE_SIZE2 * z) + (MAX_TEXTURE_SIZE * x) + y;
-//
-//   }
-//
-//   function key(pt) {
-//     const z = Math.round(pt.z)
-//     const key2d = pt.to2d().key
-//     return (BigInt(MAX_TEXTURE_SIZE2) * BigInt(pt.z)) + BigInt(key2d);
-//   }
-//   key = key(new Point3d(1, 2, 3))
-//
-//   function invertKey(pt) {
-//     const z = key / BigInt(MAX_TEXTURE_SIZE * MAX_TEXTURE_SIZE)
-//     const x = key - (BigInt(MAX_TEXTURE_SIZE * MAX_TEXTURE_SIZE) * z);
-//     const y = key - (BigInt(MAX_TEXTURE_SIZE * MAX_TEXTURE_SIZE) * z) - (BigInt(MAX_TEXTURE_SIZE) * x);
-//     return { x, y, z }
-//   }
-//   invertKey(key)
-//
-//   const MAX_TEXTURE_SIZE = Math.pow(2, 16);
-//   const MAX_TEXTURE_SIZE2 = MAX_TEXTURE_SIZE * MAX_TEXTURE_SIZE
-// const MAX_TEXTURE_SIZE_INV = 1 / MAX_TEXTURE_SIZE;
-// const MAX_TEXTURE_SIZE_INV2 = 1 / (MAX_TEXTURE_SIZE * MAX_TEXTURE_SIZE)
-//
-//
-//
-//   function _invertKey(key) {
-//   const z = Math.floor(key * MAX_TEXTURE_SIZE_INV2)
-//   const x = Math.floor(key - (MAX_TEXTURE_SIZE * MAX_TEXTURE_SIZE * z));
-//   const y = key - (MAX_TEXTURE_SIZE * MAX_TEXTURE_SIZE * z) - (MAX_TEXTURE_SIZE * x);
-//   return { x, y };
-// }
-//
-//   function _invertKey(key) {
-//     key ^
-//     key2d = a >> 32n;
-//
-//
-//     const x = Math.floor(key * MAX_TEXTURE_SIZE_INV);
-//     const y = key - (MAX_TEXTURE_SIZE * x);
-//     return { x, y };
-//   }
-
   /**
-   * Sort key. If z values are equal, will arrange points from north-west to south-east along z plane.
-   * @returns {number}
+   * Convert a 3d BitInt key back to {x, y, z}
+   * Requires positive integers.
+   * @param {BigInt} key3d
+   * @returns {Point3d}
    */
-  get sortKey() {
-    return (MAX_TEXTURE_SIZE2 * Math.round(this.z))
-      + (MAX_TEXTURE_SIZE * Math.round(this.x))
-      + Math.round(this.y);
+  static invertKey(key3d, outPoint) {
+    outPoint ??= this.tmp;
+
+    // Extract the lower 32 bits for Z
+    // Using the & mask ensures we only get the bits shifted into the lower area.
+    outPoint.z = Number(key3d & 0xFFFFFFFFn);
+
+    // Extract the upper 32 bits for the 2D key
+    const k2d = Number(key3d >> 32n);
+
+    // Use existing 2d logic.
+    return super.invertKey(k2d, outPoint);
   }
 
   /**
@@ -459,11 +365,14 @@ export class Point3d extends PIXI.Point {
   }
 
   /**
-   * Creates a clone of this point
-   * @returns A clone of this point
+   * Copy this point, return a new point.
+   * @param {PIXI.Point} out    The new point to copy to.
+   * @returns {PIXI.Point}
    */
-  clone() {
-    return this.constructor.tmp.set(this.x, this.y, this.z);
+  clone(out) {
+    out = super.clone(out);
+    out.z = this.z;
+    return out;
   }
 
   /**
@@ -529,6 +438,17 @@ export class Point3d extends PIXI.Point {
   roundDecimals(places = 0) {
     super.roundDecimals(places);
     this.z = roundDecimals(this.z, places);
+    return this;
+  }
+
+  /**
+   * Round the point coordinates that are vary near a whole number, in place.
+   * @param {number} [epsilon=1e-08]
+   * @returns {this}
+   */
+  roundNearWhole(epsilon) {
+    super.roundNearWhole(epsilon);
+    this.z = roundNearWhole(this.z, epsilon);
     return this;
   }
 
@@ -642,14 +562,54 @@ export class Point3d extends PIXI.Point {
 
   /**
    * Get the absolute of the coordinates.
-   * @param {PIXI.Point} [outPoint]    A point-like object in which to store the value.
+   * @param {Point3d} [outPoint]    A point-like object in which to store the value.
    *   (Will create new point if none provided.)
-   * @returns {PIXI.Point}
+   * @returns {Point3d}
    */
   abs(outPoint) {
     outPoint ??= this.constructor.tmp;
     super.abs(outPoint);
     outPoint.z = Math.abs(this.z);
+    return outPoint;
+  }
+
+  /**
+   * Get the floor of the coordinates.
+   * @param {Point3d} [outPoint]    A point-like object in which to store the value.
+   *   (Will create new point if none provided.)
+   * @returns {Point3d}
+   */
+  floor(outPoint) {
+    outPoint ??= this.constructor.tmp;
+    super.abs(outPoint);
+    outPoint.z = Math.floor(this.z);
+    return outPoint;
+  }
+
+  /**
+   * Get the ceil of the coordinates.
+   * @param {Point3d} [outPoint]    A point-like object in which to store the value.
+   *   (Will create new point if none provided.)
+   * @returns {Point3d}
+   */
+  ceil(outPoint) {
+    outPoint ??= this.constructor.tmp;
+    super.abs(outPoint);
+    outPoint.z = Math.ceil(this.z);
+    return outPoint;
+  }
+
+  /**
+   * Make all values finite.
+   * @param {Point3d} [outPoint]    A point-like object in which to store the value.
+   *   (Will create new point if none provided.)
+   * @returns {Point3d}
+   */
+  makeFinite(outPoint) {
+    outPoint ??= this.constructor.tmp;
+    super.makeFinite(outPoint);
+    const z = this.z;
+    outPoint.z = isFinite(z) ? z : Number.MAX_SAFE_INTEGER * Math.sign(z);
     return outPoint;
   }
 
@@ -698,10 +658,8 @@ export class Point3d extends PIXI.Point {
    * @returns {boolean}
    */
   equalXY(other) {
-    const pt2d = PIXI.Point.tmp.set(this.x, this.y);
-    const out = pt2d.equals(other);
-    pt2d.release();
-    return out;
+    using pt2d = PIXI.Point.tmp.set(this.x, this.y);
+    return pt2d.equals(other);
   }
 
   /**
@@ -711,10 +669,8 @@ export class Point3d extends PIXI.Point {
    * @returns {boolean}
    */
   almostEqualXY(other, epsilon) {
-    const pt2d = PIXI.Point.tmp.set(this.x, this.y);
-    const out = pt2d.almostEqual(other, epsilon);
-    pt2d.release();
-    return out;
+    using pt2d = PIXI.Point.tmp.set(this.x, this.y);
+    return pt2d.almostEqual(other, epsilon);
   }
 
   /**
@@ -749,13 +705,6 @@ export class Point3d extends PIXI.Point {
 }
 
 /**
- * The effective maximum texture size that Foundry VTT "ever" has to worry about.
- * @type {number}
- */
-const MAX_TEXTURE_SIZE = Math.pow(2, 16);
-const MAX_TEXTURE_SIZE2 = Math.pow(MAX_TEXTURE_SIZE, 2);
-
-/**
  * Count the number of positive integer digits.
  * Will return 0 for negative numbers.
  * Will truncate any decimals.
@@ -772,4 +721,3 @@ Point3d.prototype.toString = function() { return `{x: ${this.x}, y: ${this.y}, z
 Point3d.ZERO = new Point3d(0, 0, 0);
 Object.freeze(Point3d.ZERO);
 
-GEOMETRY_CONFIG.threeD.Point3d ??= Point3d;

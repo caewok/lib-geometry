@@ -5,8 +5,6 @@ canvas,
 "use strict";
 
 import { elevationForUnit, unitElevation, roundNearWhole, pixelsToGridUnits, gridUnitsToPixels } from "../util.js";
-import { GEOMETRY_CONFIG } from "../const.js";
-import { Pool } from "../Pool.js";
 import { Point3d } from "./Point3d.js";
 
 // ----- NOTE: 3d versions of Foundry typedefs ----- //
@@ -25,14 +23,6 @@ import { Point3d } from "./Point3d.js";
  * treat objects with {i,j} parameters differently.
  */
 export class ElevatedPoint extends Point3d {
-
-  static classTypes = new Set([this.name, "RegionMovementWaypoint3d"]); // Alternative to instanceof
-
-  static #pool = new Pool(this);
-
-  static releaseObj(obj) { this.#pool.release(obj); }
-
-  static get tmp() { return this.#pool.acquire(); }
 
   /** @type {number<grid units>} */
   get elevation() { return pixelsToGridUnits(this.z); }
@@ -104,7 +94,3 @@ export class ElevatedPoint extends Point3d {
     return outPoint;
   }
 }
-
-GEOMETRY_CONFIG.threeD.ElevatedPoint ??= ElevatedPoint;
-GEOMETRY_CONFIG.threeD.RegionMovementWaypoint3d ??= ElevatedPoint; // For backwards compatibility
-

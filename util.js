@@ -1,70 +1,23 @@
 /* globals
-CONFIG,
 canvas,
+CONFIG,
 foundry,
 Drawing,
 PIXI
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "./const.js";
-import { extractPixels } from "./extract-pixels.js";
+import { GEOMETRY_LIB_ID } from "./const.js";
+import { Point3d } from "./3d/Point3d.js";
 
-// Functions that would go in foundry.utils if that object were extensible
-export function registerFoundryUtilsMethods() {
-  GEOMETRY_CONFIG.registered ??= new Set();
-  if ( GEOMETRY_CONFIG.registered.has("utils") ) return;
-
-  GEOMETRY_CONFIG.utils = {
-    orient3dFast,
-    quadraticIntersection,
-    lineCircleIntersection,
-    lineSegment3dPlaneIntersects,
-    lineSegmentCrosses,
-    gridUnitsToPixels,
-    pixelsToGridUnits,
-    perpendicularPoint,
-    centeredPolygonFromDrawing,
-    shortestRouteBetween3dLines,
-    isOnSegment,
-    categorizePointsInOutConvexPolygon,
-    bresenhamLine,
-    bresenhamLineIterator,
-    bresenhamLine3d,
-    bresenhamLine3dIterator,
-    bresenhamLine4d,
-    bresenhamLine3d_old,
-    bresenhamHexLine,
-    bresenhamHexLine3d,
-    trimLineSegmentToPixelRectangle,
-    doSegmentsOverlap,
-    pointsAreCollinear,
-    findOverlappingPoints,
-    IX_TYPES,
-    segmentCollision,
-    endpointIntersection,
-    segmentIntersection,
-    segmentOverlap,
-    roundDecimals,
-    cutaway,
-    extractPixels,
-    almostLessThan,
-    almostGreaterThan,
-    almostBetween,
-    instanceOrTypeOf,
-  };
-
-
-  // Simple extensions
-  Math.minMax = function(...args) {
-    return args.reduce((acc, curr) => {
-      acc.min = Math.min(acc.min, curr);
-      acc.max = Math.max(acc.max, curr);
-      return acc;
-    }, { min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY});
-  };
-  CONFIG.GeometryLib.registered.add("utils");
-}
+// Simple extensions
+Math.minMax = function(...args) {
+  return args.reduce((acc, curr) => {
+    acc.min = Math.min(acc.min, curr);
+    acc.max = Math.max(acc.max, curr);
+    return acc;
+  }, { min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY});
+};
 
 /**
  * Define a null set class and null set which always contains 0 elements.
@@ -75,8 +28,39 @@ class NullSet extends Set {
    console.error(`GeometryLib|Attempted to add ${value} to a NullSet.`, value);
    return this;
   }
+
+  intersection() { return this; } // Intersection with null set is always null.
 }
 export const NULL_SET = new NullSet();
+
+/**
+ * Efficiently combine multiple typed arrays.
+ * @param {TypedArray[]} args
+ * @returns {TypedArray}
+ */
+export function combineTypedArrays(arrs) {
+  const len = arrs.reduce((acc, curr) => acc + curr.length, 0);
+  const out = new arrs[0].constructor(len);
+  let idx = 0;
+  for ( let i = 0, n = arrs.length; i < n; i += 1 ) {
+    out.set(arrs[i], idx);
+    idx += arrs[i].length;
+  }
+  return out;
+}
+
+/**
+ * Sets a typed array to the values of another, in place if possible.
+ * If the source length differs from the destination, a new destination is created.
+ * @param {TypedArray} dst
+ * @param {TypedArray} src
+ * @returns {TypedArray} dst, possibly new
+ */
+export function setTypedArray(dst, src) {
+  if ( src.length !== dst.length ) dst = new dst.constructor(src);
+  else dst.set(src);
+  return dst;
+}
 
 /**
  * Round numbers that are close to 0 or 1.
@@ -102,6 +86,17 @@ export function isEven(n) { return  ~n & 1; }
  * @returns {boolean}
  */
 export function isOdd(n) { return n & 1; }
+
+/**
+ * Clamp number between low and high values.
+ * @param {number} n
+ * @param {number} [min=-∞]
+ * @param {number} [max=∞]
+ * @returns {number}
+ */
+export function clamp(n, min = Number.NEGATIVE_INFINITY, max = Number.POSITIVE_INFINITY) {
+  return Math.min(Math.max(n, min), max);
+}
 
 /**
  * Calculate the unit elevation for a given set of coordinates.
@@ -138,7 +133,7 @@ export function elevationForUnit(k) { return roundNearWhole(k * canvas.scene.dim
  *  - y: Elevation in pixel units
  */
 function to2dCutaway(currPt, start, end, outPoint) {
-  outPoint ??= new PIXI.Point();
+  outPoint ??= PIXI.Point.tmp;
   const distCS = PIXI.Point.distanceSquaredBetween(currPt, start);
 
   const pt = outPoint.set(distCS, currPt.z);
@@ -170,14 +165,12 @@ dist(end, currPt) < dist(start, currPt) && dist(currPt, start) > dist(start, end
  * @returns {ElevatedPoint}
  */
 function from2dCutaway(cutawayPt, start, end, outPoint) {
-  outPoint ??= GEOMETRY_CONFIG.threeD.ElevatedPoint.tmp;
+  outPoint ??= CONFIG[GEOMETRY_LIB_ID].lib.threeD.ElevatedPoint.tmp;
   // b/c outPoint is 3d, makes sure to temporarily store the 2d values.
-  const start2d = start.to2d();
-  const end2d = end.to2d();
+  using start2d = start.to2d();
+  using end2d = end.to2d();
   start2d.towardsPointSquared(end2d, cutawayPt.x, outPoint);
   outPoint.z = cutawayPt.y;
-  start2d.release();
-  end2d.release();
   return outPoint;
 }
 
@@ -265,12 +258,12 @@ export function categorizePointsInOutConvexPolygon(poly, points, epsilon = 1e-08
       if ( !ptIsCW ) continue;
 
       const pt = points[i];
-      if ( isOnSegment(edge.A, edge.B, pt, epsilon) ) {
+      if ( isOnSegment(edge.a, edge.b, pt, epsilon) ) {
         ptIsCW = false;
         out.on.push(pt);
         found += 1;
       } else {
-        let oPt = foundry.utils.orient2dFast(edge.A, edge.B, pt);
+        let oPt = foundry.utils.orient2dFast(edge.a, edge.b, pt);
         if  ( oPt.almostEqual(0, epsilon) ) oPt = 0;
         ptIsCW &&= oPt < 0;
         if ( !ptIsCW ) {
@@ -279,7 +272,6 @@ export function categorizePointsInOutConvexPolygon(poly, points, epsilon = 1e-08
         }
       }
     }
-    edge.A.release();
     if ( found === nPts ) return out;
   }
 
@@ -384,11 +376,11 @@ Math.PI_1_2 = Math.PI * 0.5;
 export function centeredPolygonFromDrawing(drawing) {
   switch ( drawing.document.shape.type ) {
     case Drawing.SHAPE_TYPES.RECTANGLE:
-      return GEOMETRY_CONFIG.threeD.CenteredRectangle.fromDrawing(drawing);
+      return CONFIG[GEOMETRY_LIB_ID].lib.threeD.CenteredRectangle.fromDrawing(drawing);
     case Drawing.SHAPE_TYPES.ELLIPSE:
-      return GEOMETRY_CONFIG.threeD.Ellipse.fromDrawing(drawing);
+      return CONFIG[GEOMETRY_LIB_ID].lib.threeD.Ellipse.fromDrawing(drawing);
     case Drawing.SHAPE_TYPES.POLYGON:
-      return GEOMETRY_CONFIG.threeD.CenteredPolygon.fromDrawing(drawing);
+      return CONFIG[GEOMETRY_LIB_ID].lib.threeD.CenteredPolygon.fromDrawing(drawing);
     case Drawing.SHAPE_TYPES.CIRCLE: {
       const width = drawing.document.shape.width;
       return PIXI.Circle(drawing.document.x + width * 0.5, drawing.document.y + width * 0.5, width);
@@ -660,92 +652,45 @@ export function roundFastPositive(n) { return (n + 0.5) << 0; }
  * @returns {number[]}
  */
 export function bresenhamLine(x1, y1, x2, y2) {
-  x1 = Math.round(x1);
-  y1 = Math.round(y1);
-  x2 = Math.round(x2);
-  y2 = Math.round(y2);
+  // Round for integer conversion.
+  let x = Math.round(x1);
+  let y = Math.round(y1);
+  const targetX = Math.round(x2);
+  const targetY = Math.round(y2);
 
-  // Calculate differences
-  const dx = x2 - x1;
-  const dy = y2 - y1;
+  // Calculate deltas.
+  const dx = Math.abs(targetX - x);
+  const dy = -Math.abs(targetY - y);
+  const sx = x < targetX ? 1 : -1;
+  const sy = y < targetY ? 1 : -1;
 
-  // Determine the maximum absolute difference
-  const n = Math.max(Math.abs(dx), Math.abs(dy));
+  // Initialize the error at dx - dy, which balances out as we step in either direction.
+  let err = dx + dy;
 
-  // Calculate increments.
-  const incX = dx / n;
-  const incY = dy / n;
+  // Driving axis determines the number of points
+  const numPoints = Math.max(dx, -dy) + 1;
+  const n = numPoints * 2;
+  const points = new Int32Array(n);
 
-  // Initialize the result array with the starting point
-  const points = Array((n * 2) + 2);
-  points[0] = x1;
-  points[1] = y1;
+  // Step toward the target.
+  let i = 0;
+  while ( i < n ) {
+    points[i++] = x;
+    points[i++] = y;
 
-  // Iterate through the line
-  for ( let i = 2, ln = points.length; i < ln; i += 2 ) {
-    // Calculate the next point
-    x1 += incX;
-    y1 += incY;
-
-    // Add the adjusted point to the result array
-    points[i] = Math.round(x1);
-    points[i + 1] = Math.round(y1);
+    const e2 = 2 * err;
+    if ( e2 >= dy ) {
+      err += dy;
+      x += sx;
+    }
+    if ( e2 <= dx ) {
+      err += dx;
+      y += sy;
+    }
   }
   return points;
 }
 
-/**
- * Bresenham's line algorithm
- * Returns an array of coordinates.
- * @param {number} x1   First coordinate x value
- * @param {number} y1   First coordinate y value
- * @param {number} z1   First coordinate z value
- * @param {number} x2   Second coordinate x value
- * @param {number} y2   Second coordinate y value
- * @param {number} z2   Second coordinate z value
- * @returns {number[]}
- */
-export function bresenhamLine3d_old(x1, y1, z1, x2, y2, z2) {
-  x1 = Math.round(x1);
-  y1 = Math.round(y1);
-  z1 = Math.round(z1);
-  x2 = Math.round(x2);
-  y2 = Math.round(y2);
-  z2 = Math.round(z2);
-
-  // Calculate differences
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const dz = z2 - z1;
-
-  // Determine the maximum absolute difference
-  const n = Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz));
-
-  // Calculate increments.
-  const incX = dx / n;
-  const incY = dy / n;
-  const incZ = dz / n;
-
-  // Initialize the result array with the starting point
-  const points = Array((n * 3) + 3);
-  points[0] = x1;
-  points[1] = y1;
-  points[2] = z1;
-
-  // Iterate through the line
-  for ( let i = 3, ln = points.length; i < ln; i += 3 ) {
-    // Calculate the next point
-    x1 += incX;
-    y1 += incY;
-    z1 += incZ;
-
-    // Add the adjusted point to the result array
-    points[i] = Math.round(x1);
-    points[i + 1] = Math.round(y1);
-    points[i + 2] = Math.round(z1);
-  }
-  return points;
-}
 
 /**
  * Bresenham's line algorithm for 3D grid coordinates.
@@ -836,38 +781,40 @@ export function bresenhamLine3d(x1, y1, z1, x2, y2, z2) {
  * @returns {Iterator<PIXI.Point>}
  */
 export function* bresenhamLineIterator(a, b) {
-  yield new PIXI.Point(a.x, a.y);
+  // Round for integer conversion.
+  a = a.clone().roundDecimals();
+  b = b.clone().roundDecimals();
 
-  let x1 = Math.round(a.x);
-  let y1 = Math.round(a.y);
-  let x2 = Math.round(b.x);
-  let y2 = Math.round(b.y);
+  // Calculate deltas.
+  const d = b.subtract(a);
+  d.abs(d);
+  d.y *= -1;
+  const s = PIXI.Point.tmp.set(
+    a.x < b.x ? 1 : -1,
+    a.y < b.y ? 1 : -1,
+  );
 
-  // Calculate differences
-  const dx = x2 - x1;
-  const dy = y2 - y1;
+  // Initialize the error at dx - dy, which balances out as we step in either direction.
+  let err = d.x + d.y;
 
-  // Determine the maximum absolute difference
-  const n = Math.max(Math.abs(dx), Math.abs(dy));
+  // Driving axis determines the number of points
+  const numPoints = Math.max(d.x, -d.y) + 1;
 
-  // Calculate increments.
-  const incX = dx / n;
-  const incY = dy / n;
+  // Step toward the target.
+  for ( let i = 0; i < numPoints; i += 1 ) {
+    yield a.clone();
 
-  // Initialize the result array with the starting point
-  const points = Array((n * 2) + 2);
-  points[0] = x1;
-  points[1] = y1;
-
-  // Iterate through the line
-  for ( let i = 2, ln = (n * 2) + 2; i < ln; i += 2 ) {
-    // Calculate the next point
-    x1 += incX;
-    y1 += incY;
-
-    // Return the point.
-    yield new PIXI.Point(Math.round(x1), Math.round(y1));
+    const e2 = 2 * err;
+    if ( e2 >= d.y ) {
+      err += d.y;
+      a.x += s.x;
+    }
+    if ( e2 <= d.x ) {
+      err += d.x;
+      a.y += s.y;
+    }
   }
+  PIXI.Point.release(a, b, d, s);
 }
 
 
@@ -881,7 +828,7 @@ export function* bresenhamLineIterator(a, b) {
  * @testing
  */
 export function* bresenhamLine3dIterator(a, b) {
-  yield new PIXI.Point(a.x, a.y);
+  yield PIXI.Point.tmp.set(a.x, a.y);
 
   let x1 = Math.round(a.x);
   let y1 = Math.round(a.y);
@@ -921,7 +868,7 @@ export function* bresenhamLine3dIterator(a, b) {
       z1 += incZ;
 
       // Return the point.
-      yield new GEOMETRY_CONFIG.threeD.Point3d(Math.round(x1), Math.round(y1), Math.round(z1));
+      yield Point3d.tmp.set(Math.round(x1), Math.round(y1), Math.round(z1));
     }
   } else {
     // Iterate through the line
@@ -932,7 +879,7 @@ export function* bresenhamLine3dIterator(a, b) {
       z1 += incZ;
 
       // Return the point.
-      yield new GEOMETRY_CONFIG.threeD.Point3d(Math.round(x1), Math.round(y1), Math.round(z1));
+      yield Point3d.tmp.set(Math.round(x1), Math.round(y1), Math.round(z1));
     }
   }
 }
@@ -1234,14 +1181,10 @@ export function pointsAreCollinear(a, b, c, epsilon = 1e-06) {
 
   // Collinear 3d points form a degenerate triangle with zero area.
   // Test the cross products.
-  const ab = b.subtract(a);
-  const bc = c.subtract(b);
-  const cross = ab.cross(bc);
-  const out = cross.almostEqual(0, epsilon);
-  ab.release();
-  bc.release();
-  cross.release();
-  return out;
+  using ab = b.subtract(a);
+  using bc = c.subtract(b);
+  using cross = ab.cross(bc);
+  return cross.almostEqual(0, epsilon);
 }
 
 /**
@@ -1265,12 +1208,12 @@ export function findOverlappingPoints(a, b, c, d) {
   const cdx = Math.minMax(c.x, d.x);
   const cdy = Math.minMax(c.y, d.y);
 
-  const p0 = new PIXI.Point(
+  const p0 = PIXI.Point.tmp.set(
     Math.max(abx.min, cdx.min),
     Math.max(aby.min, cdy.min)
   );
 
-  const p1 = new PIXI.Point(
+  const p1 = PIXI.Point.tmp.set(
     Math.min(abx.max, cdx.max),
     Math.min(aby.max, cdy.max)
   );
@@ -1413,20 +1356,6 @@ export function segmentOverlap(a, b, c, d) {
   return res;
 }
 
-/**
- * Is an object an instance of a class or a class type.
- * First check for "classTypes". If not present, fall back on instanceof.
- * @param {object} obj1
- * @param {object} obj2
- * @return {boolean} True if the two objects share a class / parent class.
- */
-export function instanceOrTypeOf(obj1, cl) {
-  const types1 = obj1.constructor.classTypes;
-  const types2 = cl.classTypes;
-  if ( types1 && types2 ) return types2.some(type => obj1.inheritsClassType(type));
-  return obj1 instanceof cl;
-}
-
 export function almostLessThan(a, b, epsilon = 1e-06) { return a < b || a.almostEqual(b, epsilon); }
 
 export function almostGreaterThan(a, b, epsilon = 1e-06) { return a > b || a.almostEqual(b, epsilon); }
@@ -1444,3 +1373,41 @@ export const cutaway = {
   convertFromElevation: convertFromElevationCutaway
 };
 
+/**
+ * Retrieve an embedded property from an object using a string.
+ * @param {object} obj
+ * @param {string} str
+ * @returns {object}
+ */
+export function getObjectProperty(obj, str) {
+  return str
+    .replace(/\[([^\[\]]*)\]/g, ".$1.") // eslint-disable-line no-useless-escape
+    .split(".")
+    .filter(t => t !== "")
+    .reduce((prev, cur) => prev && prev[cur], obj);
+}
+
+/**
+ * Get unique array values and sort low-to-high.
+ * @param {TypedArray} arr
+ * @returns {number[]}
+ */
+export function sortedUnique(arr) {
+  const s = new Set(arr);
+  const out = [...s];
+  out.sort((a, b) => a - b);
+  return out;
+}
+
+/**
+ * Histogram using map
+ * @param {TypedArray} arr
+ * @returns {Map<number, number>} Number and total count for each
+ */
+export function histogram(arr) {
+  const s = new Set(arr);
+  const m = new Map();
+  for ( const n of s ) m.set(n, 0);
+  for ( const n of arr ) m.set(n, m.get(n) + 1);
+  return m;
+}

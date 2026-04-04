@@ -3,10 +3,9 @@
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "../const.js";
 import { GridCoordinates3d } from "./GridCoordinates3d.js";
 import { HexCoordinateMixin } from "../HexGridCoordinates.js";
-import { Pool } from "../Pool.js";
+import { pixelsToGridUnits } from "../util.js";
 
 /**
  * Cube coordinates in a hexagonal grid. q + r + s = 0.
@@ -29,14 +28,6 @@ import { Pool } from "../Pool.js";
  * Links z to the elevation property.
  */
 export class HexGridCoordinates3d extends HexCoordinateMixin(GridCoordinates3d) {
-
-  static classTypes = new Set([this.name]); // Alternative to instanceof
-
-  static #pool = new Pool(this);
-
-  static releaseObj(obj) { this.#pool.release(obj); }
-
-  static get tmp() { return this.#pool.acquire(); }
 
   /**
    * Create this point from hex coordinates plus optional elevation.
@@ -68,7 +59,7 @@ export class HexGridCoordinates3d extends HexCoordinateMixin(GridCoordinates3d) 
   setToHexCube(hexCube, elevation) {
     super.setToHexCube(hexCube);
     if ( typeof elevation === "undefined" ) {
-      if ( typeof hexCube.z !== "undefined" ) elevation = GEOMETRY_CONFIG.utils.pixelsToGridUnits(hexCube.z);
+      if ( typeof hexCube.z !== "undefined" ) elevation = pixelsToGridUnits(hexCube.z);
       else if ( typeof hexCube.k !== "undefined" ) elevation = this.constructor.elevationForUnit(hexCube.k);
       else elevation = 0;
     }
@@ -84,8 +75,5 @@ export class HexGridCoordinates3d extends HexCoordinateMixin(GridCoordinates3d) 
     const r = Math.round(this.r);
     return this.setToHexCube({ q, r }, this.elevation);
   }
-
-
 }
 
-GEOMETRY_CONFIG.threeD.HexGridCoordinates3d ??= HexGridCoordinates3d;

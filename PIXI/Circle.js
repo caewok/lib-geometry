@@ -34,8 +34,12 @@ function area() {
  * @param {number} dy
  * @returns {PIXI.Circle} New circle
  */
-function translate(dx, dy) {
-  return new PIXI.Circle(this.x + dx, this.y + dy, this.radius);
+function translate(dx, dy, out) {
+  out ??= new PIXI.Circle();
+  out.x = this.x + dx;
+  out.y = this.y + dy;
+  out.radius = this.radius;
+  return out;
 }
 
 /**
@@ -138,10 +142,9 @@ function _envelopsRectangle(rect) {
  */
 function _envelopsPolygon(poly) {
   // All points of the polygon must be contained in the circle.
-  const iter = poly.iteratePoints({ close: false });
-  for ( const pt of iter ) {
+  const iter = poly.iteratePoints();
+  for ( using pt of iter ) {
     if ( !this.contains(pt.x, pt.y) ) return false;
-    pt.release();
   }
   return true;
 }
@@ -264,18 +267,6 @@ function quadraticIntersection(p0, p1, center, radius, epsilon=0) {
 }
 
 /**
- * Get all intersection points on this circle for a segment A|B
- * Intersections are sorted from A to B.
- * @param {Point} a             The first endpoint on segment A|B
- * @param {Point} b             The second endpoint on segment A|B
- * @returns {Point[]}           Points where the segment A|B intersects the circle
- */
-function segmentIntersections(a, b) {
-  const ixs = lineCircleIntersection(a, b, this, this.radius);
-  return ixs.intersections;
-};
-
-/**
  * Determine the intersection between a line segment and a circle.
  * @param {Point} a                   The first vertex of the segment
  * @param {Point} b                   The second vertex of the segment
@@ -325,7 +316,7 @@ function segmentIntersectionsGeometric(a, b) {
   const intersections = [];
 
   // Vector representing the line segment
-  const delta = b.subtract(a);
+  using delta = b.subtract(a);
 
   // Squared length of the segment.
   const len2 = delta.magnitudeSquared();
@@ -335,33 +326,24 @@ function segmentIntersectionsGeometric(a, b) {
     const dist2 = PIXI.Point.distanceSquaredBetween(a, center);
 
     // Check if the point is on the circle's circumference
-    if ( Math.abs(dist2 - (radius * radius)) < 1e-6 ) {
-      delta.release();
-      return [{ x: a.x, y: a.y, t0: 0 }];
-    }
+    if ( Math.abs(dist2 - (radius * radius)) < 1e-6 ) return [{ x: a.x, y: a.y, t0: 0 }];
     return [];
   }
 
   // Find the projection of the vector (center - a) onto the line segment vector (d).
   // The parameter 't' represents how far along the infinite line the closest point is from 'a'.
-  const ca = center.subtract(a);
+  using ca = center.subtract(a);
   const t = ca.dot(delta) / len2;
 
   // This is the closest point on the infinite line to the circle's center.
-  const closestPoint = PIXI.Point.tmp;
+  using closestPoint = PIXI.Point.tmp;
   a.add(delta.multiplyScalar(t, closestPoint), closestPoint);
 
   // Calculate the squared distance from the circle center to this closest point.
   const dist2 = PIXI.Point.distanceSquaredBetween(center, closestPoint);
 
   // If this distance is greater than the radius, the line doesn't intersect the circle.
-  if (dist2 > radius * radius) {
-    ca.release();
-    delta.release();
-    closestPoint.release();
-    return [];
-  }
-
+  if (dist2 > radius * radius) return [];
 
   // The line intersects the circle. Now we find the intersection points.
   // We have a right triangle formed by:
@@ -402,9 +384,6 @@ function segmentIntersectionsGeometric(a, b) {
       });
     }
   }
-  ca.release();
-  delta.release();
-  closestPoint.release();
   return intersections;
 }
 
@@ -431,8 +410,8 @@ PATCHES.PIXI.METHODS = {
   translate,
   scaledArea,
   lineSegmentIntersects,
+  lineCircleIntersection,
   segmentIntersectionsGeometric,
-  segmentIntersections,
   pointsLattice,
 
   // Equality

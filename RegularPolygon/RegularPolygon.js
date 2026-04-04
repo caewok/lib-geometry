@@ -6,7 +6,6 @@ WeilerAthertonClipper
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "../const.js";
 import { NULL_SET } from "../util.js";
 
 /* Define a set of Regular Polygon shapes
@@ -20,29 +19,6 @@ Each can be intersected quickly using WA
 */
 
 export class RegularPolygon extends PIXI.Polygon {
-
-  static classTypes = new Set([this.name], "Polygon", "Regular"); // Alternative to instanceof
-
-  inheritsClassType(type) {
-    let proto = this;
-    let classTypes = proto.constructor.classTypes;
-    do {
-      if ( classTypes.has(type) ) return true;
-      proto = Object.getPrototypeOf(proto);
-      classTypes = proto?.constructor?.classTypes;
-
-    } while ( classTypes );
-    return false;
-  }
-
-  matchesClass(cl) {
-    return this.constructor.classTypes.equals(cl.classTypes || NULL_SET);
-  }
-
-  overlapsClass(cl) {
-    return this.constructor.classTypes.intersects(cl.classTypes || NULL_SET);
-  }
-
 
   /**
    * Vertices when the polygon is centered on 0,0.
@@ -223,8 +199,9 @@ export class RegularPolygon extends PIXI.Polygon {
    */
   fromCartesianCoords(a, outPoint) {
     const { x, y } = this.origin;
-    outPoint ??= new PIXI.Point;
-    a.translate(-x, -y, outPoint).rotate(-this.radians, outPoint);
+    outPoint ??= PIXI.Point.tmp;
+    a.add(-x, -y, outPoint);
+    PIXI.Point.rotate(outPoint, -this.radians, outPoint);
     return outPoint;
   }
 
@@ -236,8 +213,9 @@ export class RegularPolygon extends PIXI.Polygon {
    */
   toCartesianCoords(a, outPoint) {
     const { x, y } = this.origin;
-    outPoint ??= new PIXI.Point;
-    a.rotate(this.radians, outPoint).translate(x, y, outPoint);
+    outPoint ??= PIXI.Point.tmp;
+    PIXI.Point.rotate(a, this.radians, outPoint);
+    outPoint.add(x, y, outPoint);
     return outPoint;
   }
 
@@ -248,7 +226,7 @@ export class RegularPolygon extends PIXI.Polygon {
    * @returns {boolean} True if point {x,y} is contained within the shape.
    */
   contains(x, y) {
-    const pt = this.fromCartesianCoords(new PIXI.Point(x, y));
+    const pt = this.fromCartesianCoords(PIXI.Point.tmp.set(x, y));
 
     // Test the outer and inner circles
     if ( !this.outerCircle.contains(pt.x, pt.y) ) return false;
@@ -468,5 +446,3 @@ export class RegularPolygon extends PIXI.Polygon {
   }
 
 }
-
-GEOMETRY_CONFIG.RegularPolygons.RegularPolygon ??= RegularPolygon;

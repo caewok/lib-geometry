@@ -80,7 +80,7 @@ export class GraphVertex {
    * @returns {boolean}
    */
   hasNeighbor(vertex) {
-    return Boolean(this.#edges.find(edge => edge.A === vertex || edge.B === vertex));
+    return Boolean(this.#edges.find(edge => edge.a === vertex || edge.b === vertex));
   }
 
   /**
@@ -89,7 +89,7 @@ export class GraphVertex {
    * @returns {GraphEdge|undefined}
    */
   findEdge(vertex) {
-    return this.#edges.find(edge => edge.A === vertex || edge.B === vertex);
+    return this.#edges.find(edge => edge.a === vertex || edge.b === vertex);
   }
 
   /** @type {*} */
@@ -119,10 +119,10 @@ export class GraphVertex {
  */
 export class GraphEdge {
   /** @type {GraphVertex} */
-  A;
+  a;
 
   /** @type {GraphVertex} */
-  B;
+  b;
 
   /** @type {GraphVertex} */
   weight = 0;
@@ -132,29 +132,29 @@ export class GraphEdge {
    * @param {GraphVertex} B       Ending vertex
    * @param {number} [weight=0]   Optional weight assigned to this edge, e.g. distance.
    */
-  constructor(A, B, weight = 0) {
-    this.A = A;
-    this.B = B;
+  constructor(a, b, weight = 0) {
+    this.a = a;
+    this.b = b;
     this.weight = weight;
   }
 
   /**
    * @return {string}
    */
-  get key() { return `${this.A.toString()}_${this.B.toString()}`; }
+  get key() { return `${this.a.toString()}_${this.b.toString()}`; }
 
   /**
    * Get the other vertex of this edge
    * @param {GraphVertex}   vertex    One vertex of this edge.
    * @returns {GraphVertex}   One of the vertices of this edge. If vertex matches neither, B is returned.
    */
-  otherVertex(vertex) { return vertex.key === this.B.key ? this.A : this.B; }
+  otherVertex(vertex) { return vertex.key === this.b.key ? this.a : this.b; }
 
   /**
    * Reverse this edge
    * @returns {GraphEdge}
    */
-  reverse() { return new this.constructor(this.B, this.A, this.weight); }
+  reverse() { return new this.constructor(this.b, this.a, this.weight); }
 
   /**
    * @return {string}
@@ -239,13 +239,13 @@ export class Graph {
     this.edges.set(key, edge);
 
     // Ensure the vertices are linked and stored in the vertices map.
-    edge.A = this.addVertex(edge.A);
-    edge.B = this.addVertex(edge.B);
+    edge.a = this.addVertex(edge.a);
+    edge.b = this.addVertex(edge.b);
 
     // Add edge to the vertices.
     // Undirected, so add to both.
-    edge.A.addEdge(edge);
-    edge.B.addEdge(edge);
+    edge.a.addEdge(edge);
+    edge.b.addEdge(edge);
 
     return edge;
   }
@@ -299,14 +299,14 @@ export class Graph {
     this.edges.delete(edge.key);
 
     // Locate vertices and delete the associated edge.
-    const A = this.getVertexByKey(edge.A.key);
-    const B = this.getVertexByKey(edge.B.key);
-    A.deleteEdge(edge);
-    B.deleteEdge(edge);
+    const a = this.getVertexByKey(edge.a.key);
+    const b = this.getVertexByKey(edge.b.key);
+    a.deleteEdge(edge);
+    b.deleteEdge(edge);
 
     // Remove the vertex if the vertex has no edges.
-    if ( !A._edgeSet.size ) this.vertices.delete(A.key);
-    if ( !B._edgeSet.size ) this.vertices.delete(B.key);
+    if ( !a._edgeSet.size ) this.vertices.delete(a.key);
+    if ( !b._edgeSet.size ) this.vertices.delete(b.key);
   }
 
   /**
@@ -314,10 +314,10 @@ export class Graph {
    * @param {GraphVertex} B
    * @return {GraphEdge|null}
    */
-  findEdge(A, B) {
-    const vertex = this.getVertexByKey(A.key);
+  findEdge(a, b) {
+    const vertex = this.getVertexByKey(a.key);
     if ( !vertex ) return null;
-    return vertex.findEdge(B);
+    return vertex.findEdge(b);
   }
 
   /**
@@ -392,8 +392,8 @@ export class Graph {
     const cycles = [];
     const rejectedEdges = this._getRejectedEdges(spanningTree);
     for ( const edge of rejectedEdges.values() ) {
-      const start = edge.A;
-      const end = edge.B;
+      const start = edge.a;
+      const end = edge.b;
       const cycle = findCycle2(spanningTree, start, end);
       if ( cycle.length > 2 ) cycles.push(cycle);
     }
@@ -417,7 +417,7 @@ export class Graph {
         const neighbor = edge.otherVertex(v);
         if ( spanningTree.get(v.key).has(neighbor.key) ) continue;
         // Add v --> neighbor edge to rejected set. But only if rejected set does not have neighbor --> v.
-        const [edgeVN, edgeNV] = edge.A.key === v.key ? [edge, edge.reverse()] : [edge.reverse(), edge];
+        const [edgeVN, edgeNV] = edge.a.key === v.key ? [edge, edge.reverse()] : [edge.reverse(), edge];
         if ( !rejectedEdges.has(edgeNV.key) ) rejectedEdges.set(edgeVN.key, edgeVN); // This is a critical flip.
       }
     }
@@ -457,14 +457,14 @@ export class Graph {
 
     // Loop until all nodes are explored
     for ( const edge of edgeArr ) {
-      const keyA = edge.A.key;
-      const keyB = edge.B.key;
+      const keyA = edge.a.key;
+      const keyB = edge.b.key;
       if ( !uf.connected(keyA, keyB) ) {
         // If not all vertices of the graph in MST, mapA or mapB may be undefined.
         const mapA = MST.get(keyA);
         const mapB = MST.get(keyB);
-        if ( mapA ) mapA.set(keyB, edge.B);
-        if ( mapB ) mapB.set(keyA, edge.A);
+        if ( mapA ) mapA.set(keyB, edge.b);
+        if ( mapB ) mapB.set(keyA, edge.a);
         uf.union(keyA, keyB);
       }
     }

@@ -4,9 +4,8 @@ PIXI,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "../const.js";
 import { Point3d } from "./Point3d.js";
-import { Pool } from "../Pool.js";
+
 
 export class BaryTriangleData {
 
@@ -54,16 +53,10 @@ export class BaryTriangleData {
   }
 }
 
+
 export class BarycentricPoint extends Point3d {
 
-  static classTypes = new Set([this.name]); // Alternative to instanceof
-
-  static #pool = new Pool(this);
-
-  static releaseObj(obj) { this.#pool.release(obj); }
-
-  static get tmp() { return this.#pool.acquire(); }
-
+  static BaryTriangleData;
 
   get u() { return this.x; }
 
@@ -109,10 +102,8 @@ export class BarycentricPoint extends Point3d {
    * @returns {number}
    */
   interpolateNumber(a, b, c) {
-    const pt = Point3d.tmp.set(a, b, c);
-    const out = this.dot(pt);
-    pt.release();
-    return out;
+    using pt = Point3d.tmp.set(a, b, c);
+    return this.dot(pt);
   }
 
   /**
@@ -135,6 +126,3 @@ export class BarycentricPoint extends Point3d {
     return this.interpolatePoint(a, b, c, outPoint);
   }
 }
-
-GEOMETRY_CONFIG.threeD.BarycentricPoint = BarycentricPoint;
-GEOMETRY_CONFIG.threeD.BaryTriangleData = BaryTriangleData;

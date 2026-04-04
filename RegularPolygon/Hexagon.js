@@ -15,28 +15,6 @@ import { NULL_SET } from "../util.js";
  * @param {Number}  height    Distance from top to bottom, through center.
  */
 export class Hexagon extends RegularPolygon {
-  static classTypes = new Set([this.name]); // Alternative to instanceof
-
-  inheritsClassType(type) {
-    let proto = this;
-    let classTypes = proto.constructor.classTypes;
-    do {
-      if ( classTypes.has(type) ) return true;
-      proto = Object.getPrototypeOf(proto);
-      classTypes = proto?.constructor?.classTypes;
-
-    } while ( classTypes );
-    return false;
-  }
-
-  matchesClass(cl) {
-    return this.constructor.classTypes.equals(cl.classTypes || NULL_SET);
-  }
-
-  overlapsClass(cl) {
-    return this.constructor.classTypes.intersects(cl.classTypes || NULL_SET);
-  }
-
 
   constructor(origin, radius = 0, { rotation = 0, width = 0, height = 0 } = {}) {
     if ( !(radius || width || height) ) console.error("Hexagon requires radius, width, or height.");
@@ -124,12 +102,12 @@ export class Hexagon extends RegularPolygon {
 
     // Points at W and E
     return [
-      new PIXI.Point(radius, 0),
-      new PIXI.Point(r1_2, apothem),
-      new PIXI.Point(-r1_2, apothem),
-      new PIXI.Point(-radius, 0),
-      new PIXI.Point(-r1_2, -apothem),
-      new PIXI.Point(r1_2, -apothem)
+      PIXI.Point.tmp.set(radius, 0),
+      PIXI.Point.tmp.set(r1_2, apothem),
+      PIXI.Point.tmp.set(-r1_2, apothem),
+      PIXI.Point.tmp.set(-radius, 0),
+      PIXI.Point.tmp.set(-r1_2, -apothem),
+      PIXI.Point.tmp.set(r1_2, -apothem)
     ];
   }
 

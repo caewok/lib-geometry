@@ -3,9 +3,8 @@ PIXI
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "../const.js";
 import { Point3d } from "./Point3d.js";
-import { MatrixFlat } from "../MatrixFlat.js";
+import { Matrix } from "../Matrix.js";
 import { pointsAreCollinear } from "../util.js";
 
 const originPt3d = new Point3d();
@@ -14,12 +13,28 @@ Object.freeze(originPt3d);
 // Class to represent a plane
 export class Plane {
 
+  static [Symbol.hasInstance](instance) {
+    return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
+  }
+
+  static get _geoLibType() { return this.name; }
+
   /** @type {Point3d} */
   #normal = new Point3d(0, 0, 1);
 
   get normal() { return this.#normal; }
 
-  set normal(value) { this.#normal.copyFrom(value).normalize(this.normal); }
+  set normal(value) {
+    this.#normal.copyFrom(value).normalize(this.normal);
+    if ( Number.isNaN(this.#normal.x) || Number.isNaN(this.#normal.x) || Number.isNaN(this.#normal.x) ) throw Error("Plane#normal is undefined.");
+  }
+
+  /**
+   * Plane constant (d or w): -(N • pt).
+   * ax + by + cz + d = 0, where Normal = {a, b, c} and {x, y, z} is a point on the plane.
+   * @type {number}
+   */
+  get constant() { return -this.normal.dot(this.point); }
 
   /** @type {Point3d} */
   point = new Point3d();
@@ -35,6 +50,29 @@ export class Plane {
   }
 
   /**
+   * Copy this Plane to a new object
+   * @param {Plane} [out]     Plane object to copy to
+   * @returns {Plane}
+   */
+  clone(out) {
+    out ??= new Plane();
+    out.point.copyFrom(this.point);
+    out.normal.copyFrom(this.normal); // Should already be normalized.
+    return out;
+  }
+
+  /**
+   * Set this plane to another. Opposite of clone.
+   * @param {Plane} other
+   * @returns {this}
+   */
+  copyFrom(other) {
+    this.point.copyFrom(other.point);
+    this.normal.copyFrom(other.normal); // Should already be normalized.
+    return this;
+  }
+
+  /**
    * Normalize the plane.
    * See https://web.archive.org/web/20120531231005/http://crazyjoke.free.fr/doc/3D/plane%20extraction.pdf
    */
@@ -46,11 +84,16 @@ export class Plane {
 
   static normalFromPoints(a, b, c, outPoint) {
     outPoint ??= Point3d.tmp;
-    const vAB = b.subtract(a);
-    const vAC = c.subtract(a);
-    vAC.cross(vAB, outPoint); // So the orientation matches.
-    Point3d.release(vAB, vAC);
-    return outPoint;
+
+    // In JavaScript (and math, really), ∞ - ∞ is NaN.
+    // For our purposes, we can assume these would go to 0.
+    // To catch this possibility, make a, b, c finite before subtracting.
+    using aTmp = a.makeFinite();
+    using bTmp = b.makeFinite();
+    using cTmp = c.makeFinite();
+    using vAB = bTmp.subtract(aTmp);
+    using vAC = cTmp.subtract(aTmp);
+    return vAC.cross(vAB, outPoint); // Ordered so the orientation matches.
   }
 
   /**
@@ -63,17 +106,19 @@ export class Plane {
    * @param {Point3d} c
    * @returns {Plane}
    */
-  static fromPoints(a, b, c) {
+  static fromPoints(a, b, c, out) {
     a = a.clone();
     b = b.clone();
     c = c.clone();
     const N = this.normalFromPoints(a, b, c);
-    const plane = new Plane(a, N);
-    plane._threePoints = {a, b, c};
-    return plane;
+    out ??= new Plane();
+    out.point.copyFrom(a);
+    out.normal = N;
+    out._threePoints = {a, b, c};
+    return out;
   }
 
-  static fromMultiplePoints(pts) {
+  static fromMultiplePoints(pts, out) {
     const iter = Iterator.from(pts);
     const a = iter.next().value;
 
@@ -97,8 +142,7 @@ export class Plane {
       console.error("Insufficient number of points to calculate plane.", pts);
       return new this();
     }
-
-    return this.fromPoints(a, b, c);
+    return this.fromPoints(a, b, c, out);
   }
 
 
@@ -111,15 +155,15 @@ export class Plane {
     const pts = Point3d.fromWall(wall, { finite: true }); // Need finite so Normal can be calculated
 
     // To keep the points simple, use different Z values
-    const A = pts.A.top;
-    const B = pts.A.bottom;
-    const C = pts.B.bottom;
+    const a = pts.a.top;
+    const b = pts.a.bottom;
+    const c = pts.b.bottom;
 
-    B.z = (A.z + B.z) * 0.5;
-    A.z = B.z + 1;
-    C.z = B.z;
+    b.z = (a.z + b.z) * 0.5;
+    a.z = b.z + 1;
+    c.z = b.z;
 
-    return Plane.fromPoints(pts.A.top, pts.A.bottom, pts.B.bottom);
+    return Plane.fromPoints(pts.a.top, pts.a.bottom, pts.b.bottom);
   }
 
   /**
@@ -136,15 +180,12 @@ export class Plane {
   }
 
   static angleBetweenSegments(a, b, c, d) {
-    const V1 = b.subtract(a);
-    const V2 = d.subtract(c);
+    using V1 = b.subtract(a);
+    using V2 = d.subtract(c);
     const magV1 = V1.magnitude();
     const magV2 = V2.magnitude();
     const mag = magV1 * magV2;
-    const out = mag ? Math.acos(V1.dot(V2) / mag) : 0;
-    V1.release();
-    V2.release();
-    return out;
+    return mag ? Math.acos(V1.dot(V2) / mag) : 0;
   }
 
   /**
@@ -238,10 +279,8 @@ export class Plane {
    */
   distanceToPoint(a) {
     const { normal, point } = this;
-    const delta = a.subtract(point);
-    const out = normal.dot(delta);
-    delta.release();
-    return out;
+    using delta = a.subtract(point);
+    return normal.dot(delta);
   }
 
   /**
@@ -285,27 +324,22 @@ export class Plane {
    * Point nearly on the plane will return very small values.
    */
   whichSide(p) {
-    const V = p.subtract(this.point);
-    const out = this.normal.dot(V);
-    V.release();
-    return out;
+    using V = p.subtract(this.point);
+    return this.normal.dot(V);
   }
 
   isPointOnPlane(p) {
     // https://math.stackexchange.com/questions/684141/check-if-a-point-is-on-a-plane-minimize-the-use-of-multiplications-and-divisio
     const vs = this.axisVectors;
-    const a = this.point;
-    const b = this.point.add(vs.v);
-    const c = this.point.add(vs.u);
-
-    const m = new MatrixFlat([
+    using a = this.point;
+    using b = this.point.add(vs.v);
+    using c = this.point.add(vs.u);
+    using m = Matrix.fromRowMajorArray([
       a.x, b.x, c.x, p.x,
       a.y, b.y, c.y, p.y,
       a.z, b.z, c.z, p.z,
       1,   1,   1,   1,
     ], 4, 4);
-    b.release();
-    c.release();
     return m.determinant().almostEqual(0);
   }
 
@@ -318,7 +352,7 @@ export class Plane {
     // https://math.stackexchange.com/questions/64430/find-extra-arbitrary-two-points-for-a-plane-given-the-normal-and-a-point-that-l
     // Find the minimum index
     const n = this.normal;
-    const w = Point3d.tmp;
+    using w = Point3d.tmp;
     n.x === 0 ? w.set(1, 0, 0)
       : n.y === 0 ? w.set(0, 1, 0)
         : n.z === 0 ? w.set(0, 0, 1)
@@ -330,7 +364,6 @@ export class Plane {
     const v = Point3d.tmp;
     w.cross(n, u).normalize(u);
     n.cross(u, v).normalize(v);
-    w.release();
     return { v: u, u: v }; // Swap so the x-axis is first.
   }
 
@@ -343,7 +376,7 @@ export class Plane {
     const denom = this.denom2d;
     const { numU, numV } = (this.numeratorFn2d).call(this, pt);
 
-    return new PIXI.Point(numU / denom, numV / denom);
+    return PIXI.Point.tmp.set(numU / denom, numV / denom);
   }
 
   /**
@@ -373,46 +406,26 @@ export class Plane {
     const { normal: N, point: P } = this;
     const vs = this.axisVectors;
 
-    const u = P.add(vs.u);
-    const v = P.subtract(vs.v);
-    const A = P;
-    const n = P.add(N);
-
-    // Three points
-    /* Original version, for testing
-    A = terrainWallPoints.A.top
-    B = terrainWallPoints.A.bottom
-    C = terrainWallPoints.B.bottom
-
-    AB = B.subtract(A);
-    AC = C.subtract(A);
-    N = AB.cross(AC);
-    U = AB.normalize()
-    uN = N.normalize();
-    V = U.cross(uN);
-    u = A.add(U);
-    v = A.add(V);
-    n = A.add(uN);
-    */
+    using u = P.add(vs.u);
+    using v = P.subtract(vs.v);
+    using n = P.add(N);
 
     // Adjust for row-major matrix and left-hand coordinate system
-
-    const S = new MatrixFlat([
-      A.x, A.y, A.z, 1,
+    using S = Matrix.fromRowMajorArray([
+      P.x, P.y, P.z, 1,
       u.x, u.y, u.z, 1,
       v.x, v.y, v.z, 1,
       n.x, n.y, n.z, 1
     ], 4, 4);
 
-    const D = new MatrixFlat([
+    using D = Matrix.fromRowMajorArray([
       0, 0, 0, 1,
       1, 0, 0, 1,
       0, 1, 0, 1,
       0, 0, 1, 1
     ], 4, 4);
-    Point3d.release(u, v, n);
 
-    const Sinv = S.invert();
+    using Sinv = S.invert();
     return Sinv.multiply4x4(D);
   }
 
@@ -463,12 +476,10 @@ export class Plane {
     // Test if line and plane are parallel and do not intersect.
     if ( dot.almostEqual(0) ) return null;
 
-    const w = l0.subtract(P);
+    using w = l0.subtract(P);
     const fac = -N.dot(w) / dot;
-    const u = l.multiplyScalar(fac);
+    using u = l.multiplyScalar(fac);
     const out = l0.add(u);
-    w.release();
-    u.release();
     out.t0 = fac;
     return out;
   }
@@ -482,10 +493,8 @@ export class Plane {
   lineSegmentIntersection(p0, p1) {
     if ( !this.lineSegmentIntersects(p0, p1) ) return null;
 
-    const delta = p1.subtract(p0);
-    const ix = this.lineIntersection(p0, delta);
-    delta.release();
-    return ix;
+    using delta = p1.subtract(p0);
+    return this.lineIntersection(p0, delta);
 
     /* Or
     v0 = p0.subtract(this.point)
@@ -538,22 +547,19 @@ export class Plane {
     const N2 = other.normal;
 
     // Cross product of the two normals is the direction of the line.
-    const direction = N1.cross(N2);
+    using direction = N1.cross(N2);
 
     // Parallel planes have a cross product with zero magnitude
-    if ( !direction.magnitudeSquared() ) {
-      direction.release();
-      return null;
-    }
+    if ( !direction.magnitudeSquared() ) return null;
 
     // Find shared point on the line of intersection between the two planes.
     // Project the origin (0,0,0) and the normal of the second plane onto the first plane (plane1).
     // This defines a line within plane1.
-    const projectedOrigin = this.projectPointOnPlane(originPt3d);
-    const projectedN2 = this.projectPointOnPlane(other.normal);
+    using projectedOrigin = this.projectPointOnPlane(originPt3d);
+    using projectedN2 = this.projectPointOnPlane(other.normal);
 
     // The direction vector of the line in plane1.
-    const lineDirection = projectedN2.subtract(projectedOrigin);
+    using lineDirection = projectedN2.subtract(projectedOrigin);
 
     // Now we find the intersection of this line with the second plane (plane2).
     // A line is defined by L(t) = startPoint + t * direction
@@ -574,13 +580,11 @@ export class Plane {
       return null; // Planes are parallel and distinct.
     }
     */
-    const delta = projectedOrigin.subtract(other.point);
+    using delta = projectedOrigin.subtract(other.point);
     const numerator = other.normal.dot(delta);
     const t = -numerator / denominator;
     const ix = Point3d.tmp;
     projectedOrigin.add(lineDirection.multiplyScalar(t, ix), ix);
-    Point3d.release(projectedOrigin, projectedN2, lineDirection, delta);
-
     return { point: ix, direction };
   }
 
@@ -591,12 +595,10 @@ export class Plane {
    */
   projectPointOnPlane(pt, outPoint) {
     outPoint ??= Point3d.tmp;
-    const v = pt.subtract(this.point);
+    using v = pt.subtract(this.point);
     const dist = v.dot(this.normal);
-    const vScaled = this.normal.multiplyScalar(dist);
-    pt.subtract(vScaled, outPoint);
-    Point3d.release(v, vScaled);
-    return outPoint;
+    using vScaled = this.normal.multiplyScalar(dist);
+    return pt.subtract(vScaled, outPoint);
   }
 }
 
@@ -645,5 +647,3 @@ function numerator2dv3(pt) {
     numV: ((pt.z - point.z) * u.y) - ((pt.y - point.y) * u.z)
   };
 }
-
-GEOMETRY_CONFIG.threeD.Plane = Plane;

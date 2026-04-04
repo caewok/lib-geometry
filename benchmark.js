@@ -3,7 +3,6 @@ foundry
 */
 
 "use strict";
-import { GEOMETRY_CONFIG } from "./const.js";
 
 /**
  * For a given numeric array, calculate one or more quantiles.
@@ -204,15 +203,3 @@ export async function benchmarkLoop(iterations, thisArg, fn, ...args) {
   Object.defineProperty(f, "name", {value: `${thisArg.name || thisArg.constructor.name}.${fn}`, configurable: true});
   await foundry.utils.benchmark(f, iterations, ...args);
 }
-
-GEOMETRY_CONFIG.bench ??= {
-  benchmarkLoop,
-  benchmarkLoopFn,
-  QBenchmarkLoop,
-  QBenchmarkLoopFn,
-  QBenchmarkLoopWithSetupFn,
-  QBenchmarkLoopFnWithSleep,
-  QBenchmarkLoopWithSetupFnWithSleep,
-  sleep,
-  quantile
-};

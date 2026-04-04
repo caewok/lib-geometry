@@ -3,7 +3,7 @@ PIXI,
 */
 "use strict";
 
-import { MatrixFlat as Matrix } from "../MatrixFlat.js";
+import { Matrix } from "../Matrix.js";
 import { CutawayPolygon } from "../CutawayPolygon.js";
 
 export const PATCHES = {};
@@ -47,16 +47,13 @@ function almostEqual(other, epsilon = 1e-08) {
 
 /**
  * Iterate over the rectangles's {x, y} points in order.
- * @param {object} [options]
- * @param {boolean} [options.close]   If close, include the first point again.
  * @returns {x, y} PIXI.Point
  */
-function* iteratePoints({close = true} = {}) {
+function* iteratePoints() {
   yield PIXI.Point.tmp.set(this.x, this.y);
   yield PIXI.Point.tmp.set(this.x + this.width, this.y);
   yield PIXI.Point.tmp.set(this.x + this.width, this.y + this.height);
   yield PIXI.Point.tmp.set(this.x, this.y + this.height);
-  if ( close ) yield PIXI.Point.tmp.set(this.x, this.y); // A again.
 }
 
 /**
@@ -68,16 +65,16 @@ function* iteratePoints({close = true} = {}) {
  * Edges link, such that edge0.B === edge.1.A.
  */
 function* iterateEdges({close = true} = {}) {
-  const A = PIXI.Point.tmp.set(this.x, this.y);
-  const B = PIXI.Point.tmp.set(this.x + this.width, this.y);
-  yield { A, B };
+  const a = PIXI.Point.tmp.set(this.x, this.y);
+  const b = PIXI.Point.tmp.set(this.x + this.width, this.y);
+  yield { a, b };
 
-  const C = PIXI.Point.tmp.set(this.x + this.width, this.y + this.height);
-  yield { A: B, B: C };
+  const c = PIXI.Point.tmp.set(this.x + this.width, this.y + this.height);
+  yield { a: b, b: c };
 
-  const D = PIXI.Point.tmp.set(this.x, this.y + this.height);
-  yield { A: C, B: D };
-  if ( close ) yield { A: D, B: A };
+  const d = PIXI.Point.tmp.set(this.x, this.y + this.height);
+  yield { a: c, b: d };
+  if ( close ) yield { a: d, b: a };
 }
 
 /**
@@ -86,9 +83,9 @@ function* iterateEdges({close = true} = {}) {
  * @returns {boolean}
  */
 function overlaps(shape) {
+  if ( shape instanceof PIXI.Rectangle ) { return this._overlapsRectangle(shape); }
   if ( shape instanceof PIXI.Polygon ) { return this._overlapsPolygon(shape); }
   if ( shape instanceof PIXI.Circle ) { return this._overlapsCircle(shape); }
-  if ( shape instanceof PIXI.Rectangle ) { return this._overlapsRectangle(shape); }
   if ( shape instanceof PIXI.Ellipse ) return shape._overlapsRectangle(this);
   if ( shape.toPolygon) return this._overlapsPolygon(shape.toPolygon());
   console.warn("overlaps|shape not recognized.", shape);
@@ -139,17 +136,12 @@ function _overlapsPolygon(poly) {
     || poly.contains(this.left, this.bottom)
     || poly.contains(this.right, this.bottom)) return true;
 
-  const pts = poly.iteratePoints({ close: true });
-  let a = pts.next().value;
-  if ( !a ) { a.release(); return false; }
-  if ( this.contains(a.x, a.y) ) { a.release(); return true; }
-
-  for ( const b of pts ) {
-    if ( this.lineSegmentIntersects(a, b) || this.contains(b.x, b.y) ) return true;
-    a.release();
-    a = b;
+  for ( const edge of poly.iterateEdges() ) {
+    const { a, b } = edge;
+    if ( this.contains(a.x, a.y)
+      || this.contains(b.x, b.y)
+      || this.lineSegmentIntersects(a, b) ) return true;
   }
-  a.release();
   return false;
 }
 
@@ -160,13 +152,13 @@ function _overlapsPolygon(poly) {
  */
 function _overlapsRectangle(rect) {
   // https://www.geeksforgeeks.org/find-two-rectangles-overlap
-  // One rectangle is completely above the other
-  if ( this.top > rect.bottom || rect.top > this.bottom ) return false;
+  return !(
+    // One rectangle is completely above the other
+    this.top > rect.bottom || rect.top > this.bottom ||
 
-  // One rectangle is completely to the left of the other
-  if ( this.left > rect.right || rect.left > this.right ) return false;
-
-  return true;
+    // One rectangle is completely to the left of the other
+    this.left > rect.right || rect.left > this.right
+  );
 }
 
 /**
@@ -207,22 +199,11 @@ function _envelopsCircle(circle) {
  */
 function _envelopsPolygon(poly) {
   // All points of the polygon must be contained in the circle.
-  const iter = poly.iteratePoints({ close: false });
-  for ( const pt of iter ) {
+  const iter = poly.iteratePoints();
+  for ( using pt of iter ) {
     if ( !this.contains(pt.x, pt.y) ) return false;
-    pt.release();
   }
   return true;
-}
-
-/**
- * Move this rectangle by given x,y delta.
- * @param {number} dx
- * @param {number} dy
- * @returns {PIXI.Rectangle} New rectangle.
- */
-function translate(dx, dy) {
-  return new PIXI.Rectangle(this.x + dx, this.y + dy, this.width, this.height);
 }
 
 /**
@@ -464,7 +445,7 @@ function rotateAroundCenter(rotation = 0) {
   const tMat = Matrix.translation(-center.x, -center.y);
   const rMat = Matrix.rotationZ(Math.toRadians(rotation));
   const M = tMat.multiply3x3(rMat).multiply3x3(tMat.invert);
-  const pts = [...this.iteratePoints({ close: true })];
+  const pts = [...this.iteratePoints()];
   const tPts = pts.map(pt => M.multiplyPoint2d(pt, pt));
   const out = new PIXI.Polygon(...tPts);
   PIXI.Point.release(...tPts);
@@ -497,11 +478,59 @@ function pointsLattice({ spacing = 1, startAtEdge = false } = {}) {
   const endX = startAtEdge ? right : right - spacing;
   const endY = startAtEdge ? bottom : bottom - spacing;
   for ( let x = startX; x <= endX; x += spacing ) {
-    for ( let y = startY; y <= endY; y += spacing ) pts.push(new PIXI.Point(x, y))
+    for ( let y = startY; y <= endY; y += spacing ) pts.push(PIXI.Point.tmp.set(x, y))
   }
   return pts;
 }
 
+/**
+ * Translate, shifting this rectangle in the x and y direction.
+ * @param {Number} dx  Movement in the x direction.
+ * @param {Number} dy  Movement in the y direction.
+ * @return {PIXI.Polygon} New PIXI.Polygon
+ */
+function translate(dx, dy, out) {
+  out ??= this.clone();
+  out.x += dx;
+  out.y += dy;
+  return out;
+}
+
+/**
+ * Scale, resizing this rectangle in the x and y axis.
+ * In most cases, you want to center the rectangle at 0,0 first.
+ * Note that this scales but does not translate x,y, meaning the rectangle grows from its top left corner.
+ * @param {Number} dx  Change along the x axis
+ * @param {Number} dy  Change along the x axis
+ * @return {PIXI.Polygon} New PIXI.Polygon
+ */
+function scale(scaleX, scaleY, out) {
+  out ??= this.clone();
+  out.width *= scaleX;
+  out.height *= scaleY;
+  return out;
+}
+
+/**
+ * Center this rectangle at 0,0, apply a scale, and then translate back.
+ * @param {Number} dx  Change along the x axis
+ * @param {Number} dy  Change along the x axis
+ * @return {PIXI.Polygon} New PIXI.Polygon
+ */
+function centerScale(scaleX = 1, scaleY = 1, out) {
+  // For rectangle, we can simplify this by scaling width and height and then moving
+  // by half of the difference between old and new width/height.
+  // Keep in mind that out may equal this.
+  out ??= this.clone();
+
+  const oldW = this.width;
+  const oldH = this.height;
+  out.width *= scaleX;
+  out.height *= scaleY;
+  out.x -= (out.width - oldW) * 0.5;
+  out.y -= (out.height - oldH) * 0.5;
+  return out;
+}
 
 PATCHES.PIXI.STATIC_METHODS = { gridRectangles };
 
@@ -519,7 +548,6 @@ PATCHES.PIXI.METHODS = {
   // Other methods
   union,
   difference,
-  translate,
   viewablePoints,
   pointsLattice,
 
@@ -538,6 +566,11 @@ PATCHES.PIXI.METHODS = {
   // Used by Elevation Ruler and Terrain Mapper
   cutaway,
   rotateAroundCenter,
+
+  // Transforms
+  scale,
+  translate,
+  centerScale,
 
   // Helper methods
   scaledArea

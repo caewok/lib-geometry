@@ -1,22 +1,20 @@
 /* globals
-PIXI,
 canvas,
+CONST,
+PIXI,
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "./const.js";
 import { Draw } from "./Draw.js";
-import { NULL_SET } from "./util.js";
 
 
 // See https://www.npmjs.com/package/clipper2-js
 import * as Clipper2 from "./clipper2_esm2020/clipper2-js.mjs";
 
 const { Path64, Paths64, Point64 } = Clipper2;
-GEOMETRY_CONFIG.clipperVersion = 1;
 
 /* Example from https://github.com/IRobot1/clipper2-ts
-Clipper2Paths = CONFIG.GeometryLib.Clipper2Paths
+Clipper2Paths = CONFIG.GeometryLib.CONFIG.Clipper2Paths
 Clipper2 = Clipper2Paths.Clipper2
 
 a = [ 100, 50, 10, 79, 65, 2, 65, 98, 10, 21 ]
@@ -53,28 +51,11 @@ subj3.combine()
 export class Clipper2Paths {
   // ----- NOTE: Class inheritance ----- //
 
-  static classTypes = new Set([this.name, "Clipper"]); // Alternative to instanceof
-
-  inheritsClassType(type) {
-    let proto = this;
-    let classTypes = proto.constructor.classTypes;
-    do {
-      if ( classTypes.has(type) ) return true;
-      proto = Object.getPrototypeOf(proto);
-      classTypes = proto?.constructor?.classTypes;
-
-    } while ( classTypes );
-    return false;
+  static [Symbol.hasInstance](instance) {
+    return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
   }
 
-  matchesClass(cl) {
-    return this.constructor.classTypes.equals(cl.classTypes || NULL_SET);
-  }
-
-  overlapsClass(cl) {
-    return this.constructor.classTypes.intersects(cl.classTypes || NULL_SET);
-  }
-
+  static get _geoLibType() { return this.name; }
 
   // ----- NOTE: Object properties ----- //
 
@@ -83,7 +64,7 @@ export class Clipper2Paths {
   // Empty constructor.
 
   /** @type {number} */
-  #scalingFactor = 1;
+  #scalingFactor = CONST.CLIPPER_SCALING_FACTOR;
 
   get scalingFactor() { return this.#scalingFactor; }
 
@@ -125,7 +106,7 @@ export class Clipper2Paths {
    * @param {number[]} arr
    * @returns {Clipper2Paths}
    */
-  static fromArray(arr, scalingFactor = 1) {
+  static fromArray(arr, scalingFactor = CONST.CLIPPER_SCALING_FACTOR) {
     const out = new this();
     out.scalingFactor = scalingFactor;
     out.addPathArray(arr);
@@ -138,7 +119,7 @@ export class Clipper2Paths {
    * @param {number} [scalingFactor=1]
    * @returns {Clipper2Paths}
    */
-  static fromPoint2d(pts, scalingFactor = 1) {
+  static fromPoint2d(pts, scalingFactor = CONST.CLIPPER_SCALING_FACTOR) {
     const out = new this();
     out.scalingFactor = scalingFactor;
     out.addPathPoints(pts);
@@ -151,7 +132,7 @@ export class Clipper2Paths {
    * @param {number} [scalingFactor=1]
    * @returns {Clipper2Paths}
    */
-  static fromClipper1Points(pts, scalingFactor = 1) {
+  static fromClipper1Points(pts, scalingFactor = CONST.CLIPPER_SCALING_FACTOR) {
     const out = new this();
     out.scalingFactor = scalingFactor;
     out.addPathClipper1Points(pts);
@@ -164,7 +145,7 @@ export class Clipper2Paths {
    * @param {number} [scalingFactor=1]
    * @returns {Clipper2Paths}
    */
-  static fromPolygons(polygons, scalingFactor = 1) {
+  static fromPolygons(polygons, scalingFactor = CONST.CLIPPER_SCALING_FACTOR) {
     const out = new this();
     for ( const poly of polygons ) out.addPathArray(poly.points);
     out.scalingFactor = scalingFactor;
@@ -177,7 +158,7 @@ export class Clipper2Paths {
    * @param {number} [scalingFactor=1]
    * @returns {Clipper2Paths}
    */
-  static fromPolygon(polygon, scalingFactor = 1) {
+  static fromPolygon(polygon, scalingFactor = CONST.CLIPPER_SCALING_FACTOR) {
     const out = new this();
     out.addPathArray(polygon.points);
     out.scalingFactor = scalingFactor;
@@ -210,12 +191,12 @@ export class Clipper2Paths {
 
   // ----- NOTE: Static conversion helpers ----- //
 
-  static pathToPoints(path, scalingFactor = 1) {
+  static pathToPoints(path, scalingFactor = CONST.CLIPPER_SCALING_FACTOR) {
     const invScale = 1 / scalingFactor;
     return path.map(pt64 => PIXI.Point.tmp.set(pt64.x * invScale, pt64.y * invScale));
   }
 
-  static pointsToPath(pts, scalingFactor = 1) {
+  static pointsToPath(pts, scalingFactor = CONST.CLIPPER_SCALING_FACTOR) {
     const nPts = pts.length;
     const path = new Path64(nPts)
     for ( let i = 0; i < nPts; i += 1 ) path[i] = new Point64(pts[i], scalingFactor);
@@ -593,4 +574,3 @@ export class Clipper2Paths {
   }
 }
 
-GEOMETRY_CONFIG.Clipper2Paths ??= Clipper2Paths;

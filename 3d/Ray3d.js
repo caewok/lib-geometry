@@ -7,7 +7,6 @@ PIXI,
 "use strict";
 
 import { Point3d } from "./Point3d.js";
-import { instanceOrTypeOf } from "../util.js";
 
 
 /**
@@ -18,8 +17,8 @@ import { instanceOrTypeOf } from "../util.js";
  */
 export class Ray3d extends foundry.canvas.geometry.Ray {
   constructor(A, B) {
-    if ( !instanceOrTypeOf(A, Point3d) ) A = new Point3d(A.x, A.y, A.z);
-    if ( !instanceOrTypeOf(B, Point3d) ) B = new Point3d(B.x, B.y, B.z);
+    if ( !(A instanceof Point3d) ) A = Point3d.tmp.set(A.x, A.y, A.z);
+    if ( !(B instanceof Point3d) ) B = Point3d.tmp.set(B.x, B.y, B.z);
 
     super(A, B);
 
@@ -67,10 +66,8 @@ export class Ray3d extends foundry.canvas.geometry.Ray {
    * @returns {Point3d}   Coordinates of the projected distance
    */
   project(t) {
-    const pt = super.project(t);
-    const out = Point3d.tmp.set(pt.x, pt.y, this.A.z + (t * this.dz));
-    pt.release();
-    return out;
+    using pt = super.project(t);
+    return Point3d.tmp.set(pt.x, pt.y, this.A.z + (t * this.dz));
   }
 
   /*

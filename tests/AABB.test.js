@@ -5,7 +5,7 @@ PIXI
 "use strict";
 
 import { AABB2d } from "../AABB.js";
-import { AABB3d } from '../AABB.js';
+import { AABB3d } from '../3d/AABB3d.js';
 import { Point3d } from "../3d/Point3d.js";
 import { Polygon3d, Circle3d } from '../3d/Polygon3d.js';
 import { Plane } from '../3d/Plane.js';
