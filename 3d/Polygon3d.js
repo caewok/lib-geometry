@@ -363,6 +363,7 @@ export class Polygon3d {
       poly = new PIXI.Polygon(this.points.map(pt3d => { return { x: pt3d[x], y: pt3d[y] } }));
     }
     if ( !this.isHole ^ poly.isPositive ) poly.reverseOrientation();
+    poly.isHole = this.isHole;
     return poly;
   }
 
@@ -1532,6 +1533,27 @@ export class Triangle3d extends Polygon3d {
   // ----- NOTE: Conversions to ----- //
 
   /**
+   * Convert an array of triangles to a single Float32 array of vertices
+   * @param {object} [opts]
+   * @param {boolean} [opts.useNormal=false]      Add triangle normal to each vertex?
+   * @param {Float32Array[]} [opts.outArr]        Array large enough to hold the triangles
+   * @param {number} [opts.outIdx=0]              Copy triangle vertices to array starting here
+   * @returns {Float32Array[]}
+   */
+  static trianglesToVertices(tris, { addNormals = false, outArr, outIdx = 0 } = {}) {
+    const { NUM_POSITION_COORDS, NUM_NORMAL_COORDS, NUM_POINTS } = this;
+    const stride = NUM_POSITION_COORDS + (addNormals * NUM_NORMAL_COORDS);
+    outArr ||= new Float32Array(stride * NUM_POINTS * tris.length);
+    const opts = { addNormals, outArr, outIdx };
+    const adder = stride * NUM_POINTS;
+    tris.forEach(tri => {
+      tri.toVertices(opts);
+      opts.outIdx += adder;
+    });
+    return outArr;
+  }
+
+  /**
    * Triangulate and convert to vertices.
    * @param {object} [opts]
    * @param {boolean} [opts.addNormal]        If true, add the normal to this polygon, facing CCW.
@@ -1558,26 +1580,6 @@ export class Triangle3d extends Polygon3d {
   static NUM_NORMAL_COORDS = 3;
 
   static NUM_POINTS = 3;
-
-  /**
-   * Convert an array of triangles to a single Float32 array of vertices
-   * @param {object} [opts]
-   * @param {boolean} [opts.useNormal=false]      Add triangle normal to each vertex?
-   * @param {Float32Array[]} [opts.outArr]        Array large enough to hold the triangles
-   * @param {number} [opts.outIdx=0]              Copy triangle vertices to array starting here
-   */
-  static trianglesToVertices(tris, { addNormals = false, outArr, outIdx = 0 } = {}) {
-    const { NUM_POSITION_COORDS, NUM_NORMAL_COORDS, NUM_POINTS } = this;
-    const stride = NUM_POSITION_COORDS + (addNormals * NUM_NORMAL_COORDS);
-    outArr ??= new Float32Array(stride * NUM_POINTS * tris.length);
-    const opts = { addNormals, outArr, outIdx };
-    const adder = stride * NUM_POINTS;
-    tris.forEach(tri => {
-      tri.toVertices(opts);
-      opts.outIdx += adder;
-    });
-    return outArr;
-  }
 
   // ----- NOTE: Intersection ----- //
 
