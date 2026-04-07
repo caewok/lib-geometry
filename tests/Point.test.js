@@ -1,13 +1,14 @@
 /* globals
-Hooks,
 PIXI,
 */
 "use strict";
 
+import { MODULE_ID } from "../../const.js";
 
-Hooks.on("quenchReady", (quench) => {
+export function registerTests(quench) {
+
   quench.registerBatch(
-    "libGeometry.PIXIPointExtensions",
+    `${MODULE_ID}.libGeometry.PIXIPointExtensions`,
 
   (context) => {
       const { describe, it, expect } = context;
@@ -245,4 +246,4 @@ describe("PIXI.Point Basic Extensions", () => {
   });
 
 }, { displayName: "PIXI.Point Extensions" });
-});
+}

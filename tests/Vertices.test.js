@@ -1,15 +1,16 @@
 /* globals
 CONFIG,
-Hooks,
 */
 "use strict";
 
 import { BasicVertices } from "../placeable_vertices/BasicVertices.js";
 import { MatrixFloat32 } from "../Matrix.js";
+import { MODULE_ID } from "../../const.js";
 
-Hooks.on("quenchReady", (quench) => {
+export function registerTests(quench) {
+
   quench.registerBatch(
-    "libGeometry.Vertices",
+    `${MODULE_ID}.libGeometry.Vertices`,
 
   (context) => {
       const { describe, it, assert } = context;
@@ -296,4 +297,4 @@ describe("BasicVertices.transformVertexPositions", () => {
 { displayName: "libGeometry: Vertices" },
 );
 
-});
+}

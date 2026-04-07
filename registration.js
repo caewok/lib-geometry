@@ -11,15 +11,6 @@ import { GEOMETRY_LIB_ID, VERSION } from "./const.js";
 import { mergeConfigs } from "./config.js";
 import { registerGeometryLibPatches } from "./patching.js";
 
-// Import tests
-import "./tests/AABB.test.js";
-import "./tests/PixelCache.test.js";
-import "./tests/Point.test.js";
-import "./tests/Point3d.test.js";
-import "./tests/GeometryTracking.test.js";
-import "./tests/Polygon.test.js";
-import "./tests/Vertices.test.js";
-
 // Execute immediately on load to identify modules using lib geometry.
 (() => {
   CONFIG[GEOMETRY_LIB_ID] ??= {};
@@ -49,4 +40,20 @@ Hooks.on("init", function() {
 function registerGeometryLibClasses() {
   CONFIG[GEOMETRY_LIB_ID].lib = lib;
   registerGeometryLibPatches();
+
+  /**
+   * If quench is present, register tests.
+   * Only register for the controlling module, not every module.
+   * NOTE: This assumes the geometry library is found at /MODULE_ID/scripts/geometry.
+   */
+  Hooks.on("quenchReady", async (quench) => {
+    try {
+      const { registerTests } = await import(`/modules/${MODULE_ID}/scripts/geometry/tests/index.js`);
+      registerTests(quench);
+    } catch(err) {
+      console.error("Failed to load Quench tests:", err);
+    }
+  });
 }
+
+
