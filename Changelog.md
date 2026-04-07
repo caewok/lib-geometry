@@ -1,7 +1,13 @@
+## 0.5.1
+Use an index to accumulate the unit tests and dynamically load only when Quench is present.
+Fix typo in PixelCache.test.js.
+
 ## 0.5.0
 Remove Elevated Vision implicit dependency in elevation code; use only Wall Height.
 Remove unused setting methods for elevation (rely again on Wall Height).
-
+Move ATV geometry and vertices calculations here.
+Add unit tests for AABB, PixelCache, PIXI.Point, Point3d, Polygon, Vertices.
+Refactor PixelCache and base on AABB2d.
 
 ## 0.4.8
 
