@@ -1,3 +1,6 @@
+## 0.5.2
+Add checks for whether token.actor is defined.
+
 ## 0.5.1
 Use an index to accumulate the unit tests and dynamically load only when Quench is present.
 Fix typo in PixelCache.test.js.
