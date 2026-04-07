@@ -1,16 +1,17 @@
 /* globals
 canvas,
-Hooks,
 PIXI,
 */
 "use strict";
 
 import { LocalCoordinateCache, PixelCache, TrimmedPixelCache, TilePixelCache } from "../PixelCache.js";
 import { MatrixFloat32 } from "../Matrix.js";
+import { MODULE_ID } from "../../const.js";
 
-Hooks.on("quenchReady", (quench) => {
+export function registerTests(quench) {
+
   quench.registerBatch(
-    "libGeometry.LocalCoordinateCache",
+    `${MODULE_ID}.libGeometry.LocalCoordinateCache`,
 
   (context) => {
       const { describe, it, expect, beforeEach } = context;
@@ -308,7 +309,7 @@ describe("LocalCoordinateCache - Advanced Transformations", () => {
 
   );
 
-  quench.registerBatch("pixel-cache.tests", (context) => {
+  quench.registerBatch(`${MODULE_ID}.libGeometry.pixel-cache`, context => {
    const { describe, it, expect, before } = context;
 
 
@@ -454,7 +455,7 @@ describe("Aggregators", () => {
 /**
  * Quench Unit Tests for TrimmedPixelCache
  */
-quench.registerBatch("trimmed-pixel-cache.tests", (context) => {
+quench.registerBatch(`${MODULE_ID}.libGeometry.trimmed-pixel-cache`, (context) => {
   const { describe, it, expect, before } = context;
   const EPSILON = 1e-6;
 
@@ -634,7 +635,7 @@ describe("Memory & Safety", () => {
 /**
  * NOTE: Quench Unit Tests for TilePixelCache
  */
-quench.registerBatch("tile-pixel-cache.tests", (context) => {
+quench.registerBatch(`${MODULE_ID}.libGeometry.tile-pixel-cache`, (context) => {
   const { describe, it, expect, before } = context;
   const EPSILON = 1e-6;
 
@@ -707,7 +708,7 @@ quench.registerBatch("tile-pixel-cache.tests", (context) => {
 
         // Manually tweak document scale.
         const tex = testTile.document.texture;
-        const originalScaleX = tex.scaleX;
+        // Unused: const originalScaleX = tex.scaleX;
         tex.scaleX *= 2;
         cache.updateTransforms();
 
@@ -751,4 +752,4 @@ quench.registerBatch("tile-pixel-cache.tests", (context) => {
     });
   });
 }, { displayName: "TilePixelCache Integration" });
-});
+}

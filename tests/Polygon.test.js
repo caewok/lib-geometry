@@ -1,13 +1,14 @@
 /* globals
-Hooks,
 PIXI,
 */
 "use strict";
 
+import { MODULE_ID } from "../../const.js";
 
-Hooks.on("quenchReady", (quench) => {
+export function registerTests(quench) {
+
   quench.registerBatch(
-    "libGeometry.PIXIPolygonExtensions",
+    `${MODULE_ID}.libGeometry.PIXIPolygonExtensions`,
 
   (context) => {
       const { describe, it, expect, before } = context;
@@ -281,4 +282,4 @@ describe("PIXI.Polygon Extensions", () => {
 });
 }, { displayName: "PIXI Polygon Extension Tests" });
 
-});
+}

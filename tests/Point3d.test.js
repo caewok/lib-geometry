@@ -1,15 +1,15 @@
 /* globals
-Hooks,
 PIXI,
 */
 "use strict";
 
 import { Point3d } from "../3d/Point3d.js";
+import { MODULE_ID } from "../../const.js";
 
+export function registerTests(quench) {
 
-Hooks.on("quenchReady", (quench) => {
   quench.registerBatch(
-    "libGeometry.PIXIPointExtensions",
+    `${MODULE_ID}.libGeometry.Point3d`,
 
   (context) => {
       const { describe, it, expect } = context;
@@ -147,4 +147,4 @@ Hooks.on("quenchReady", (quench) => {
     });
   });
   }, { displayName: "Point3d" });
-});
+}

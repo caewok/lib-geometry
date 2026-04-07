@@ -1,18 +1,19 @@
 /* globals
-Hooks,
-PIXI
+PIXI,
 */
 "use strict";
 
+import { MODULE_ID } from "../../const.js";
 import { GEOMETRY_LIB_ID, GEOMETRY_ID } from "../const.js";
 import { WallGeometryTracker } from "../placeable_tracking/WallGeometryTracker.js";
 import { TokenGeometryTracker } from "../placeable_tracking/TokenGeometryTracker.js";
 import { TileGeometryTracker } from "../placeable_tracking/TileGeometryTracker.js";
 import { RegionGeometryTracker } from "../placeable_tracking/RegionGeometryTracker.js";
 
-Hooks.on("quenchReady", (quench) => {
+export function registerTests(quench) {
+
   quench.registerBatch(
-    "libGeometry.GeometryTracking",
+    `${MODULE_ID}.libGeometry.GeometryTracking`,
 
   (context) => {
       const { describe, it, expect, before } = context;
@@ -98,6 +99,6 @@ describe("Regions", () => {
 { displayName: "libGeometry: Geometry tracking" },
 );
 
-});
+}
 
 
