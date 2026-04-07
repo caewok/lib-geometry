@@ -192,7 +192,7 @@ function tokenIsDead(token) {
 
   // Generic.
   const deadStatus = CONFIG.statusEffects.find(status => status.id === "dead");
-  if ( deadStatus && token.actor.statuses.has(deadStatus.id) ) return true;
+  if ( deadStatus && token.actor && token.actor.statuses.has(deadStatus.id) ) return true;
 
   const tokenHPAttribute = "system.attributes.hp.value";
   const hp = getObjectProperty(token.actor, tokenHPAttribute);

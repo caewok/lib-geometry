@@ -272,7 +272,7 @@ export class ObstacleOcclusionTest {
 
     // Exclude certain token statuses.
     blockingCfg.excludedStatuses ??= NULL_SET;
-    if ( token.actor?.statuses
+    if ( token.actor
       && token.actor.statuses.intersects(blockingCfg.excludedStatuses) ) return false;
 
     // Tests for dead tokens.
