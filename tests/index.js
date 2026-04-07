@@ -2,8 +2,6 @@
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 
-import { GEOMETRY_LIB_ID } from "../const.js";
-
 // Import tests
 import { registerTests as registerAABBTests } from "./AABB.test.js";
 import { registerTests as registerPixelCacheTests } from "./PixelCache.test.js";
