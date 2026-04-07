@@ -81,7 +81,10 @@ class Point2dTyped {
 
   static #pool = new Pool(this);
 
-  static _releaseObj(obj) { this.#pool._release(obj); }
+  static _releaseObj(obj) {
+    obj.t0 = null;
+    this.#pool._release(obj);
+  }
 
   static release(...args) { args.forEach(arg => this.#pool.release(arg)); }
 
@@ -191,7 +194,10 @@ class Point3dTyped extends Point2dTyped {
 
   static #pool = new Pool(this);
 
-  static _releaseObj(obj) { this.#pool._release(obj); }
+  static _releaseObj(obj) {
+    obj.t0 = null;
+    this.#pool._release(obj);
+  }
 
   static release(...args) { args.forEach(arg => this.#pool.release(arg)); }
 
@@ -311,7 +317,10 @@ class HPoint2d {
 
   release() { this.constructor._releaseObj(this); }
 
-  static _releaseObj(obj) { this.#pool._release(obj); }
+  static _releaseObj(obj) {
+    obj.t0 = null;
+    this.#pool._release(obj);
+  }
 
   static release(...args) { args.forEach(arg => this.#pool.release(arg)); }
 
@@ -891,7 +900,10 @@ class HLine2d extends HPoint2d {
 
   static #pool = new Pool(this);
 
-  static _releaseObj(obj) { this.#pool._release(obj); }
+  static _releaseObj(obj) {
+    obj.t0 = null;
+    this.#pool._release(obj);
+  }
 
   static release(...args) { args.forEach(arg => this.#pool.release(arg)); }
 
@@ -1059,7 +1071,10 @@ class HPoint3d extends HPoint2d {
 
   static #pool = new Pool(this);
 
-  static _releaseObj(obj) { this.#pool._release(obj); }
+  static _releaseObj(obj) {
+    obj.t0 = null;
+    this.#pool._release(obj);
+  }
 
   static release(...args) { args.forEach(arg => this.#pool.release(arg)); }
 
@@ -1206,7 +1221,10 @@ class HPlane extends HPoint3d {
 
   static #pool = new Pool(this);
 
-  static _releaseObj(obj) { this.#pool._release(obj); }
+  static _releaseObj(obj) {
+    obj.t0 = null;
+    this.#pool._release(obj);
+  }
 
   static release(...args) { args.forEach(arg => this.#pool.release(arg)); }
 

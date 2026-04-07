@@ -1,9 +1,9 @@
 /* globals
+foundry,
 PIXI,
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "./const.js";
 import { Point3d } from "./3d/Point3d.js";
 import { Draw } from "./Draw.js";
 import { almostLessThan, almostGreaterThan, almostBetween } from "./util.js";
@@ -18,24 +18,61 @@ Object.freeze(axes.y);
 Object.freeze(axes.z);
 
 
-/* Axis-aligned bounding box
-  Represent a bounding box as a minimum and maximum point in 2d or 3d.
-*/
+/**
+ * Axis-aligned bounding box
+ * Represent a bounding box as a minimum and maximum point in 2d or 3d.
+ * The maximum row/column/z are considered inclusive. I.e., the range is [min, max], not [min, max).
+ */
+Symbol.dispose ??= Symbol("Symbol.dispose");
+
 export class AABB2d {
+
+  static [Symbol.hasInstance](instance) {
+    return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
+  }
+
+  static get _geoLibType() { return this.name; }
+
   static POINT_CLASS = PIXI.Point;
 
   static axes = ["x", "y"];
 
   /** @type {PIXI.Point} */
-  min = new this.constructor.POINT_CLASS(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY);
+  // min = new this.constructor.POINT_CLASS(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY);
+  min = this.constructor.POINT_CLASS.tmp;
 
   /** @type {PIXI.Point} */
-  max = new this.constructor.POINT_CLASS(Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY);
+  // max = new this.constructor.POINT_CLASS(Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY);
+  max = this.constructor.POINT_CLASS.tmp;
+
+  // Getters to mirror expected data in PIXI.Rectangle. Mostly for Quadtree.
+
+  /** @type {PIXI.Point} */
+  get x() { return this.min.x; }
+
+  get y() { return this.min.y; }
+
+  get width() { return this.max.x - this.min.x; }
+
+  get height() { return this.max.y - this.min.y; }
+
+  constructor() { this._clear(); }
+
+  _clear() {
+    const { min, max } = this;
+    for ( const axis of this.constructor.axes ) {
+      min[axis] = Number.POSITIVE_INFINITY;
+      max[axis] = Number.NEGATIVE_INFINITY;
+    }
+    return this;
+  }
 
   release() {
     this.min.release();
     this.max.release();
   }
+
+  [Symbol.dispose]() { this.release(); }
 
   /**
    * The width (delta) along each axis.
@@ -70,7 +107,8 @@ export class AABB2d {
    * @returns {AABB2d}
    */
   static union(bounds, out) {
-    out ??= new this();
+    if ( out ) out._clear();
+    else out = new this();
     const { min, max } = out;
     for ( const axis of this.axes ) {
       const boundsMin = bounds.map(b => b.min[axis]);
@@ -87,7 +125,8 @@ export class AABB2d {
    * @returns {AABB2d}
    */
   static fromPoints(pts = [], out) {
-    out ??= new this();
+    if ( out ) out._clear();
+    else out = new this();
     const { min, max } = out;
     for ( const pt of pts ) {
       for ( const axis of this.axes ) {
@@ -139,7 +178,7 @@ export class AABB2d {
    */
   static fromPolygon(poly, out) {
     // Iterating the points will determine the min/max values.
-    return this.fromPoints(poly.iteratePoints({ close: false }), out);
+    return this.fromPoints(poly.iteratePoints(), out);
   }
 
   /**
@@ -148,11 +187,11 @@ export class AABB2d {
    */
   static fromShape(shape, out) {
     out ??= new this();
-    if ( shape instanceof PIXI.Rectangle ) this.fromRectangle(shape, out);
-    else if ( shape instanceof PIXI.Polygon ) this.fromPolygon(shape, out);
-    else if ( shape instanceof PIXI.Circle ) this.fromCircle(shape, out);
-    else if ( shape instanceof PIXI.Ellipse ) this.fromEllipse(shape, out);
-    else if ( shape.toPolygon ) this.fromPolygon(shape.toPolygon(), out);
+    if ( shape instanceof PIXI.Rectangle ) AABB2d.fromRectangle(shape, out);
+    else if ( shape instanceof PIXI.Polygon ) AABB2d.fromPolygon(shape, out);
+    else if ( shape instanceof PIXI.Circle ) AABB2d.fromCircle(shape, out);
+    else if ( shape instanceof PIXI.Ellipse ) AABB2d.fromEllipse(shape, out);
+    else if ( shape.toPolygon ) AABB2d.fromPolygon(shape.toPolygon(), out);
     else throw Error("AABB2d.fromShape|Shape not recognized", shape);
     return out;
   }
@@ -162,13 +201,14 @@ export class AABB2d {
    * @returns {AABB2d}
    */
   static fromTile(tile, out) {
-    return this.fromRectangle(tile.bounds, out);
+    return AABB2d.fromRectangle(tile.bounds, out);
   }
 
-  static fromTileAlpha(tile, alphaThreshold = 0, out) {
+  static fromTileAlpha(tile, alphaThreshold, out) {
+    alphaThreshold ??= tile.document.texture.alphaThreshold || 0;
     if ( !(alphaThreshold && tile.texture && tile.evPixelCache) ) return this.fromTile(tile, out);
     const bbox = tile.evPixelCache.getThresholdCanvasBoundingBox(alphaThreshold);
-    return bbox instanceof PIXI.Polygon ? this.fromPolygon(bbox, out) : this.fromRectangle(bbox, out);
+    return bbox instanceof PIXI.Polygon ? AABB2d.fromPolygon(bbox, out) : AABB2d.fromRectangle(bbox, out);
   }
 
   /**
@@ -193,7 +233,7 @@ export class AABB2d {
    */
   static fromToken(token, out) {
     const border = token.tokenBorder;
-    return this.fromShape(border, out);
+    return AABB2d.fromShape(border, out);
   }
 
   /**
@@ -207,6 +247,13 @@ export class AABB2d {
     out.max.copyFrom(this.max);
     return out;
   }
+
+  /**
+   * For compatibility with PIXI objects approach.
+   * @param {number} x
+   * @param {number} y;
+   */
+  contains(x, y) { return this.containsPoint({ x, y }); }
 
   /**
    * Does this bounding box almost contain the point?
@@ -265,6 +312,29 @@ export class AABB2d {
   }
 
   /**
+   * Does this AABB overlap a PIXI.Rectangle?
+   * @param {PIXI.Rectangle} rect
+   * @returns {boolean}
+   */
+  overlapsRectangle(rect) {
+    // See overlapsAABB.
+    const xMinMax = Math.minMax(rect.left, rect.right);
+    const yMinMax = Math.minMax(rect.top, rect.bottom);
+    return !(this.max.x < xMinMax.min || xMinMax.max < this.min.x ||
+             this.max.y < yMinMax.min || yMinMax.max < this.min.y);
+  }
+
+  /**
+   * Does this AABB overlap a wall or edge?
+   * @param {Wall|Edge} edge
+   * @returns {boolean}
+   */
+  overlapsEdge(edge) {
+    if ( edge instanceof foundry.canvas.placeables.Wall ) edge = edge.edge;
+    return this.overlapsSegment(edge.a, edge.b);
+  }
+
+  /**
    * Does the segment cross the aabb bounds or is contained within?
    * @param {PIXI.Point|Point3d} a
    * @param {PIXI.Point|Point3d} b
@@ -273,7 +343,7 @@ export class AABB2d {
    */
   overlapsSegment(a, b, axes) {
     axes ??= this.constructor.axes;
-    const rayDirection = b.subtract(a);
+    using rayDirection = b.subtract(a);
     const epsilon = 1e-06;
 
     // Initialize t-interval for the infinite line's intersection with the AABB.
@@ -288,10 +358,7 @@ export class AABB2d {
       if ( Math.abs(rayDirection[axis]) < epsilon ) {
         // Segment is parallel to the slab for this axis.
         // If segment origin is outside the slab, it can never intersect.
-        if ( p0 < min || p0 > max ) {
-          rayDirection.release();
-          return false;
-        }
+        if ( p0 < min || p0 > max ) return false;
         // Otherwise, the infinite line is always within this slab. Proceed to next axis.
       }
 
@@ -308,17 +375,13 @@ export class AABB2d {
       tmax = Math.min(tmax, t2);
 
       // If the intersection interval becomes invalid, the line misses the box.
-      if ( tmin > tmax ) {
-        rayDirection.release();
-        return false;
-      }
+      if ( tmin > tmax ) return false;
     }
 
     // After checking all axes, [tmin, tmax] is the interval where the infinite
     // line intersects the AABB. The final step is to check if this interval
     // overlaps with the segment's own interval, which is [0, 1].
     // Two intervals [a, b] and [c, d] overlap if a <= d and b >= c.
-    rayDirection.release();
     return almostGreaterThan(1.0, tmin) && almostLessThan(0.0, tmax);
     // return tmin <= 1.0 && tmax >= 0.0;
   }
@@ -343,12 +406,12 @@ export class AABB2d {
     return dmin <= sphere.radiusSquared;
   }
 
-  toPIXIRectangle(out) {
+  toRectangle(out) {
     out ??= new PIXI.Rectangle();
-    out.x = this.min.x;
-    out.y = this.min.y;
-    out.width = this.min.y, this.max.x - this.min.x;
-    out.height = this.max.y - this.min.y;
+    out.x = this.x;
+    out.y = this.y;
+    out.width = this.width;
+    out.height = this.height;
     return out;
   }
 
@@ -371,22 +434,16 @@ export class AABB2d {
   projectOntoAxis(axis) {
     // Use "extents" optimization for speed.
     // Get center and extents (half-width).
-    const center = this.getCenter();
-    const extents = this.getExtents();
+    using center = this.getCenter();
+    using extents = this.getExtents();
 
     // Project the center.
     const centerProj = center.dot(axis);
 
     // Project the radius (sum of absolute dot products of extents).
     // This works because the AABB axes are (1,0,0), (0,1,0), (0,0,1).
-    const absAxis = axis.abs();
+    using absAxis = axis.abs();
     const radius = extents.dot(absAxis);
-
-    // Release unused vars.
-    center.release();
-    extents.release();
-    absAxis.release();
-
     return { min: centerProj - radius, max: centerProj + radius };
   }
 
@@ -398,384 +455,5 @@ export class AABB2d {
   }
 }
 
-export class AABB3d extends AABB2d {
-
-  static POINT_CLASS = Point3d;
-
-  static axes = ["x", "y", "z"];
-
-  /** @type {Point3d} */
-  min = new this.constructor.POINT_CLASS(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY);
-
-  /** @type {Point3d} */
-  max = new this.constructor.POINT_CLASS(Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY);
-
-  /**
-   * Convert a 2d AABB to a 3d AABB, by adding min and max z.
-   * @param {AABB2d} aabb2d
-   * @param {number} [maxZ=0]
-   * @param {number} [minZ=maxZ]
-   * @returns {AABB3d}
-   */
-  static fromAABB2d(aabb2d, out, { maxZ = 0, minZ = maxZ } = {}) {
-    out ??= new this();
-    out.min.set(aabb2d.min.x, aabb2d.min.y, minZ);
-    out.max.set(aabb2d.max.z, aabb2d.max.y, maxZ);
-    return out;
-  }
-
-  /**
-   * @param {PIXI.Circle} circle            2d circle, assumed to be flat on the plane
-   * @param {number} [elevationZ=0]         Intended elevation in the z axis
-   * @returns {AABB3d}
-   */
-  static fromCircle(circle, out, { maxZ = 0, minZ = maxZ } = {}) {
-    out ??= new this();
-    super.fromCircle(circle, out);
-    out.min.z = minZ;
-    out.max.z = maxZ;
-    return out;
-  }
-
-  /**
-   * @param {PIXI.Ellipse} ellipse          2d ellipse, assumed to be flat on the plane
-   * @param {number} [elevationZ=0]         Intended elevation in the z axis
-   * @returns {AABB3d}
-   */
-  static fromEllipse(ellipse, out, { maxZ = 0, minZ = maxZ } = {}) {
-    out ??= new this();
-    super.fromEllipse(ellipse, out);
-    out.min.z = minZ;
-    out.max.z = maxZ;
-    return out;
-  }
-
-  /**
-   * @param {PIXI.Rectangle} rect           2d rectangle, assumed to be flat on the plane
-   * @param {number} [elevationZ=0]         Intended elevation in the z axis
-   * @returns {AABB3d}
-   */
-  static fromRectangle(rect, out, { maxZ = 0, minZ = maxZ } = {}) {
-    out ??= new this();
-    super.fromRectangle(rect, out);
-    out.min.z = minZ;
-    out.max.z = maxZ;
-    return out;
-  }
-
-  /**
-   * @param {PIXI.Polygon} poly             2d polygon, assumed to be flat on the plane
-   * @param {number} [elevationZ=0]         Intended elevation in the z axis
-   * @returns {AABB3d}
-   */
-  static fromPolygon(poly, out, { maxZ = 0, minZ = maxZ } = {}) {
-    out ??= new this();
-    super.fromPolygon(poly, out);
-    out.min.z = minZ;
-    out.max.z = maxZ;
-    return out;
-  }
-
-  static fromShape(shape, out, { maxZ = 0, minZ = maxZ } = {}) {
-    out ??= new this();
-    super.fromShape(shape, out);
-    out.min.z = minZ;
-    out.max.z = maxZ;
-    return out;
-  }
-
-  /**
-   * @param {Tile} tile
-   * @returns {AABB3d}
-   */
-  static fromTile(tile, out) {
-    out = super.fromTile(tile, out);
-    const elevZ = tile.elevationZ;
-    out.max.z = elevZ;
-    out.min.z = elevZ;
-    return out;
-  }
-
-  /**
-   * @param {Tile} tile
-   * @returns {AABB3d}
-   */
-  static fromTileAlpha(tile, alphaThreshold, out) {
-    out = super.fromTileAlpha(tile, alphaThreshold, out);
-    const elevZ = tile.elevationZ;
-    out.max.z = elevZ;
-    out.min.z = elevZ;
-    return out;
-  }
-
-  /**
-   * @param {Edge} edge
-   * @returns {AABB3d}
-   */
-  static fromWall(wall, out) {
-    const { topZ, bottomZ } = wall;
-    out = super.fromWall(wall, out);
-    out.min.z = bottomZ
-    out.max.z = topZ;
-    return out;
-  }
-
-  /**
-   * @param {Edge} edge
-   * @returns {AABB3d}
-   */
-  static fromEdge(edge, out) {
-    out = super.fromEdge(edge, out);
-    const { a, b } = edge.elevationLibGeometry;
-    out.min.z = Math.min(a.bottom ?? Number.NEGATIVE_INFINITY, b.bottom ?? Number.NEGATIVE_INFINITY);
-    out.max.z = Math.max(a.top ?? Number.POSITIVE_INFINITY, b.top ?? Number.POSITIVE_INFINITY);
-    return out;
-  }
-
-  /**
-   * @param {Token} token
-   * @returns {AABB3d}
-   */
-  static fromToken(token, out) {
-    out = super.fromToken(token, out);
-    out.min.z = token.bottomZ;
-    out.max.z = token.topZ;
-    return out;
-  }
-
-  /**
-   * @param {Sphere} sphere
-   * @returns {AABB3d}
-   */
-  static fromSphere(sphere, out) {
-    out ??= new this();
-    const { center, radius } = sphere;
-    out.min.set(center.x - radius, center.y - radius, center.z - radius);
-    out.max.set(center.x + radius, center.y + radius, center.z + radius);
-    return out;
-  }
-
-
-
-  /**
-   * @param {Polygon3d} poly3d
-   * @returns {AABB3d}
-   */
-  static fromPolygon3d(poly3d, out) {
-    if ( poly3d.overlapsClass("Circle3d") ) return this.fromCircle3d(poly3d, out);
-    return this.fromPoints(poly3d.points, out);
-  }
-
-  /**
-   * @param {Circle3d} circle3d
-   * @returns {AABB3d}
-   */
-  static fromCircle3d(circle3d, out) {
-    out ??= new this();
-
-    // Project the radius onto each axis: sqrt(1 - normal[axis]**2)
-    // Normal must be normalized.
-    const rX = Math.sqrt(1 - (circle3d.plane.normal.x ** 2));
-    const rY = Math.sqrt(1 - (circle3d.plane.normal.y ** 2));
-    const rZ = Math.sqrt(1 - (circle3d.plane.normal.z ** 2));
-
-    const { center, radius } = circle3d;
-    out.min.set(
-      center.x - (radius * rX),
-      center.y - (radius * rY),
-      center.z - (radius * rZ),
-    );
-    out.max.set(
-      center.x + (radius * rX),
-      center.y + (radius * rY),
-      center.z + (radius * rZ),
-    );
-    return out;
-  }
-
-  static fromCircle3d_2(circle3d, out) {
-    out ??= new this();
-
-    // See https://stackoverflow.com/questions/2592011/bounding-boxes-for-circle-and-arcs-in-3d
-    const angle = (A , B) => {
-      const dot = A.dot(B);
-      return dot <= -1.0 ? Math.PI
-        : dot >= 1.0 ? 0.0
-        : Math.acos(dot);
-    }
-    const N = circle3d.plane.normal;
-    const ax = angle(N, axes.x);
-    const ay = angle(N, axes.y);
-    const az = angle(N, axes.z);
-    const R = Point3d.tmp.set(Math.sin(ax), Math.sin(ay), Math.sin(az)) * circle3d.radius;
-    const { x, y, z } = this.center;
-    out.min.set(x - R.x, y - R.y, z - R.z);
-    out.max.set(x + R.x, y + R.y, z + R.z);
-    R.release();
-    return out;
-  }
-
-  /**
-   * Test if a convex planar shape overlaps the bounds.
-   * @param {Polygon3d} poly3d
-   * @return {boolean}
-   */
-  overlapsConvexPolygon3d(poly3d) {
-    if ( poly3d.overlapsClass("Circle3d") ) return this.overlapsCircle3d(poly3d);
-
-    // Early exit if polygon is empty
-    if ( !poly3d.points || poly3d.points.length === 0 ) return false;
-
-    // Check if any point is inside the AABB for early exit
-    for ( const point of poly3d.iteratePoints({ close: false }) ) {
-      if ( this.containsPoint(point) ) return true;
-    }
-
-    // Test 1: AABB axes. (Polygon bounding box.)
-    if ( !poly3d.aabb.overlapsAABB(this) ) return false;
-
-    // Test 2: Polygon normal.
-    if ( checkGap(this, poly3d, poly3d.plane.normal) ) return false;
-
-    // Test 3: Edge cross products.
-    // Test axis = Cross(PolygonEdge, BoxAxis) for all combinations.
-    // BoxAxes are X(1,0,0), Y(0,1,0), Z(0,0,1).
-    const axis = Point3d.tmp;
-    const edgeDir = Point3d.tmp;
-    for ( const edge of poly3d.iterateEdges() ) {
-      edge.B.subtract(edge.A, edgeDir);
-
-      // Cross with X axis (1, 0, 0) -> result is (0, edge.z, -edge.y)
-      if ( checkGap(this, poly3d, axis.set(0, -edgeDir.z, edgeDir.y)) ) return false;
-
-      // Cross with Y axis (0, 1, 0) -> result is (-edge.z, 0, edge.x)
-      if ( checkGap(this, poly3d, axis.set(edgeDir.z, 0, -edgeDir.x)) ) return false;
-
-      // Cross with Z axis (0, 0, 1) -> result is (edge.y, -edge.x, 0)
-      if ( checkGap(this, poly3d, axis.set(-edgeDir.y, edgeDir.x, 0)) ) return false;
-    }
-    axis.release();
-    edgeDir.release();
-
-    // If no separating axis found, they overlap.
-    return true;
-  }
-
-  // Helper method to project both shapes onto an axis and check for overlap
-  overlapsOnAxis(poly3d, axis) {
-    let minA = Number.POSITIVE_INFINITY;
-    let maxA = Number.NEGATIVE_INFINITY;
-    let minB = Number.POSITIVE_INFINITY;
-    let maxB = Number.NEGATIVE_INFINITY;
-
-    // Project AABB onto the axis
-    // Implementation depends on how you want to handle the AABB projection
-    // This is a simplified version
-    const aabbVertices = this.iterateVertices();
-    for (const v of aabbVertices) {
-        const proj = v.dot(axis);
-        minA = Math.min(minA, proj);
-        maxA = Math.max(maxA, proj);
-    }
-
-    // Project polygon onto the axis
-    for (const point of poly3d.points) {
-        const proj = point.dot(axis);
-        minB = Math.min(minB, proj);
-        maxB = Math.max(maxB, proj);
-    }
-
-    // Check for overlap
-    return !(maxA < minB || maxB < minA);
-  }
-
-  overlapsCircle3d(circle3d) {
-    const { min, max } = this;
-    const { center, radiusSquared, plane } = circle3d;
-
-    // Early exit if center is inside AABB
-    if ( this.containsPoint(center) ) return true;
-
-    // Find the point on the AABB closest to the circle's center.
-    const closestPoint = Point3d.tmp.set(
-      Math.max(min.x, Math.min(center.x, max.x)),
-      Math.max(min.y, Math.min(center.y, max.y)),
-      Math.max(min.z, Math.min(center.z, max.z)),
-    );
-
-    // Project this closest point onto the circle's plane.
-    const planePoint = plane.projectPointOnPlane(closestPoint);
-    const centerPoint = plane.projectPointOnPlane(center);
-
-    // Check if the projected point is inside the circle.
-    const dist2 = PIXI.Point.distanceSquaredBetween(planePoint, centerPoint);
-    Point3d.release(closestPoint, planePoint, centerPoint);
-    return almostLessThan(dist2, radiusSquared);
-  }
-
-  /**
-   * @param {Point3d} [outPoint]
-   * @returns {outPoint}
-   */
-  *iterateVertices(outPoint) {
-    outPoint ??= new this.constructor.POINT_CLASS();
-    const pts = [this.min, this.max];
-    for ( const xType of pts ) {
-      for ( const yType of pts ) {
-        for ( const zType of pts) {
-          yield outPoint.set(xType.x, yType.y, zType.z);
-        }
-      }
-    }
-  }
-
-  // ----- NOTE: Projection and Separating Axis Theorem ----- //
-
-
-
-}
-
-GEOMETRY_CONFIG.AABB2d = AABB2d;
-GEOMETRY_CONFIG.threeD.AABB3d = AABB3d;
-
-// Helper functions.
-
-/**
- * Projects a Polygon3d onto an axis and returns the [min, max] interval.
- * @param {Polygon3d|PIXI.Polygon} polygon
- * @param {Point3d|PIXI.Point} axis
- * @returns {object}
- *   - @prop {number} min
- *   - @prop {number} max
- */
-function projectPolygon(polygon, axis) {
-  let min = Infinity;
-  let max = -Infinity;
-  polygon.iteratePoints({ close: false }).forEach(pt => {
-    const val = pt.dot(axis);
-    min = Math.min(min, val);
-    max = Math.max(max, val);
-  });
-  return { min, max };
-}
-
-/**
- * Tests if two intervals overlap.
- * @param {AABB3d|AABB2d} aabb
- * @param {Polygon3d|PIXI.Polygon} polygon
- * @param {Point3d|PIXI.Point} axis
- * @returns {boolean} True if there is a gap (separating axis).
- */
-function checkGap(aabb, polygon, axis) {
-  // Ignore zero-length axes (can happen with parallel cross products)
-  if ( axis.dot(axis).almostEqual(0) ) return false;
-
-  const aabbInt = aabb.projectOntoAxis(axis);
-  const polyInt = projectPolygon(polygon, axis);
-
-  // If there is a gap, return true (found a separating axis)
-  return (aabbInt.min > polyInt.max || polyInt.min > aabbInt.max);
-}
-
-
-
+// For consistency with PIXI.Rectangle
+AABB2d.prototype.overlaps = AABB2d.prototype.overlapsRectangle;

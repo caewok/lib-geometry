@@ -4,10 +4,9 @@ PIXI,
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "../const.js";
 import { Polygon3d, Circle3d } from "./Polygon3d.js";
 import { Point3d } from "./Point3d.js";
-import { MatrixFlat } from "../MatrixFlat.js";
+import { Matrix } from "../Matrix.js";
 import { almostBetween } from "../util.js";
 
 /* Sphere
@@ -54,11 +53,42 @@ export class Sphere {
     return this.aabb;
   }
 
+  clone(out) {
+    out ??= new this.constructor();
+    out.radius = this.radius;
+    out.center.copyFrom(this.center);
+    return out;
+  }
+
   contains(pt, epsilon = 1e-06) {
     return Point3d.distanceSquaredBetween(pt, this.center) < (this.radiusSquared + epsilon);
   }
 
-  toCircle2d() { return new PIXI.Circle(this.x, this.y, this.radius); }
+  /**
+   * Transform the sphere using a transform matrix.
+   * Scales according to the largest axis to avoid transforming into an ellipsoid.
+   * @param {Matrix<4x4>} M         Transformation matrix
+   * @param {Sphere} out            A sphere to store the transformed values
+   * @returns {Sphere} The modified sphere.
+   */
+  transform(M, out) {
+    out ??= new this.constructor();
+    this.clone(out);
+
+    // Translate.
+    out.center = M.multiplyPoint3d(this.center);
+
+    // Scale. Extract length of the basis vectors (rows)
+    const sx = Math.hypot(M.arr[0], M.arr[1], M.arr[2]);
+    const sy = Math.hypot(M.arr[4], M.arr[5], M.arr[6]);
+    const sz = Math.hypot(M.arr[8], M.arr[9], M.arr[10]);
+    out.radius *= Math.max(sx, sy, sz);
+
+    // Rotation is ignored.
+    return out;
+  }
+
+  toCircle2d() { return new PIXI.Circle(this.center.x, this.center.y, this.radius); }
 
   /**
    * Does a planar polygon overlap?
@@ -66,8 +96,8 @@ export class Sphere {
    * @returns {boolean}
    */
   overlapsPolygon3d(poly3d) {
-    if ( poly3d.overlapsClass("Circle3d") ) return this.overlapsCircle3d(poly3d);
-    for ( const pt of poly3d.iteratePoints({ close: false }) ) {
+    if ( poly3d instanceof Circle3d ) return this.overlapsCircle3d(poly3d);
+    for ( const pt of poly3d.iteratePoints() ) {
       const inside = this.contains(pt);
       if ( inside ) return true;
     }
@@ -83,7 +113,7 @@ export class Sphere {
 
     const sphereCircle = this.#planarCircle(circle3d.plane);
     if ( !sphereCircle ) return false;
-    if ( sphereCircle.inheritsClassType("Point3d") ) return true;
+    if ( sphereCircle instanceof Point3d ) return true;
 
     // Project onto the circle plane and test for overlap.
     const circle2d = circle3d.toPlanarCircle();
@@ -98,32 +128,21 @@ export class Sphere {
    */
   closestPointToSegment(a, b) {
     const { center } = this;
-    const closest2d = foundry.utils.closestPointToSegment(center, a, b);
+    using closest2d = foundry.utils.closestPointToSegment(center, a, b);
 
 		// Test endpoints as needed.
-		if ( closest2d.x.almostEqual(a.x) && closest2d.y.almostEqual(a.y) ) {
-			closest2d.release();
-			return a.clone();
-		}
-		if ( closest2d.x.almostEqual(b.x) && closest2d.y.almostEqual(a.y) ) {
-			closest2d.release();
-			return b.clone();
-		}
-		if ( closest2d.x.almostEqual(center.x) && closest2d.y.almostEqual(center.y) ) {
-		  closest2d.release();
-		  return center.clone();
-		}
+		if ( closest2d.x.almostEqual(a.x) && closest2d.y.almostEqual(a.y) ) return a.clone();
+		if ( closest2d.x.almostEqual(b.x) && closest2d.y.almostEqual(a.y) ) return b.clone();
+		if ( closest2d.x.almostEqual(center.x) && closest2d.y.almostEqual(center.y) ) return center.clone();
 
 		// Closest point is somewhere on the a|b line.
 		// Given x|y intersection on 3d line, find the z value. Use rate of change along each axis.
-		const delta = b.subtract(a);
+		using delta = b.subtract(a);
 		const maxAxis = Math.abs(delta.x) > Math.abs(delta.y) ? "x" : "y";
 		const t = (closest2d[maxAxis] - a[maxAxis]) / delta[maxAxis];
 
 		const closest3d = Point3d.tmp;
 		a.add(delta.multiplyScalar(t, closest3d), closest3d); // From PIXI.Point#projectToward.
-    closest2d.release();
-    delta.release();
     return closest3d;
   }
 
@@ -194,9 +213,8 @@ export class Sphere {
    * @returns {number[]}
    */
   rayIntersectionT(a, rayDirection) {
-    const b = a.add(rayDirection);
+    using b = a.add(rayDirection);
     const ixs = this.lineIntersections(a, b);
-    b.release();
     if ( !ixs.length ) return ixs;
 
 		// Determine if ix0 and ix1 are between a and b.
@@ -215,10 +233,8 @@ export class Sphere {
   lineSegmentIntersects(a, b) {
     // Closest point on the line segment must be within the sphere; test using the sphere center and radius.
     const { center, radiusSquared } = this;
-    const closest3d = this.closestPointToSegment(a, b);
-    const out = radiusSquared < Point3d.distanceSquaredBetween(center, closest3d);
-    closest3d.release();
-    return out;
+    using closest3d = this.closestPointToSegment(a, b);
+    return radiusSquared < Point3d.distanceSquaredBetween(center, closest3d);
   }
 
   /**
@@ -227,10 +243,10 @@ export class Sphere {
    * @returns {Polygon3d|Circle3d|Point3d|null}
    */
   intersectPolygon3d(poly3d) {
-    if ( poly3d.overlapsClass("Circle3d") ) return this.intersectCircle3d(poly3d);
+    if ( poly3d instanceof Circle3d ) return this.intersectCircle3d(poly3d);
     let allInside = true;
     let allOutside = true;
-    for ( const pt of poly3d.iteratePoints({ close: false }) ) {
+    for ( const pt of poly3d.iteratePoints() ) {
       const inside = this.contains(pt);
       allInside &&= inside;
       allOutside &&= inside;
@@ -390,35 +406,25 @@ export class Sphere {
    */
   static fromThreePoints(a, b, c) {
     // Check if an angle is obtuse.
-    const cb = c.subtract(a);
-    const ab = a.subtract(b);
-    if (ab.dot(cb) <= 0 ) {
-      Point3d.release(ab, cb);
-      return this.fromTwoPoints(a, c); // Angle b is obtuse.
-    }
+    using cb = c.subtract(a);
+    using ab = a.subtract(b);
+    if (ab.dot(cb) <= 0 ) return this.fromTwoPoints(a, c); // Angle b is obtuse.
 
-    const ac = a.subtract(c);
-    if ( ac.dot(cb) <= 0 ) {
-      Point3d.release(cb, ab, ac);
-      return this.fromTwoPoints(a, b); // Angle c is obtuse.
-    }
+    using ac = a.subtract(c);
+    if ( ac.dot(cb) <= 0 ) return this.fromTwoPoints(a, b); // Angle c is obtuse.
 
-    const ca = c.subtract(a);
-    const ba = b.subtract(a);
-    if ( ba.dot(ca) <= 0 ) {
-      Point3d.release(cb, ab, ac, ca, ba);
-      return this.sphereFromTwoPoints(b, c); // Angle a is obtuse or collinear.
-    }
+    using ca = c.subtract(a);
+    using ba = b.subtract(a);
+    if ( ba.dot(ca) <= 0 ) return this.sphereFromTwoPoints(b, c); // Angle a is obtuse or collinear.
 
     // If triangle is acute, the circumsphere is the minimal sphere.
-    const cross_ba_bc = ba.cross(ca);
+    using cross_ba_bc = ba.cross(ca);
     const denominator = 2 * cross_ba_bc.magnitudeSquared();
 
     // If points are collinear, denominator is 0, but this case is handled by the obtuse checks above.
     if (Math.abs(denominator) < 1e-9) {
       // Fallback for safety, although should not be reached.
       console.error("fromThreePoints|Collinear points found", { a, b, c });
-      Point3d.release(cb, ab, ac, ca, ba, cross_ba_bc);
 
       // Find the two points that are furthest apart.
       const distAB = Point3d.distanceSquaredBetween(a, b);
@@ -430,15 +436,14 @@ export class Sphere {
       return this.sphereFromTwoPoints(b, c);
     }
 
-    const term1 = Point3d.tmp;
-    const term2 = Point3d.tmp;
+    using term1 = Point3d.tmp;
+    using term2 = Point3d.tmp;
     cross_ba_bc.cross(ba, term1).multiplyScalar(ca.magnitudeSquared(), term1);
     ca.cross(cross_ba_bc, term2).multiplyScalar(ba.magnitudeSquared(), term2);
 
     const out = new this();
     out.radiusSquared = Point3d.distanceSquaredBetween(this.center, a);
     term1.add(term2, out.center).multiplyScalar(1/denominator, out.center).add(a, out.center);
-    Point3d.release(cb, ab, ac, ca, ba, cross_ba_bc, term1, term2);
     return out;
   }
 
@@ -455,40 +460,33 @@ export class Sphere {
     // This involves solving a system of linear equations derived from the
     // equation of a sphere: (x-x0)^2 + (y-y0)^2 + (z-z0)^2 = r^2
     // The determinant of a matrix formed by the points' coordinates gives the center.
-    const A = new MatrixFlat([
+    using A = Matrix.fromRowMajorArray([
       a.x, a.y, a.z, 1,
       b.x, b.y, b.z, 1,
       c.x, c.y, c.z, 1,
       d.x, d.y, d.z, 1,
     ], 4, 4);
+    const detA = A.determinant();
 
     const aSq = a.magnitudeSquared();
     const bSq = b.magnitudeSquared();
     const cSq = c.magnitudeSquared();
     const dSq = d.magnitudeSquared();
 
-    const Dx = (new MatrixFlat([
+    using D = Matrix.fromRowMajorArray([
       aSq, a.y, a.z, 1,
       bSq, b.y, b.z, 1,
       cSq, c.y, c.z, 1,
       dSq, d.y, d.z, 1,
-    ])).determinant();
+    ]);
+    const Dx = D.determinant();
 
-    const Dy = (new MatrixFlat([
-      aSq, a.x, a.z, 1,
-      bSq, b.x, b.z, 1,
-      cSq, c.x, c.z, 1,
-      dSq, d.x, d.z, 1,
-    ])).determinant();
+    D.setRow(1, [a.x, b.x, c.x, d.x]);
+    const Dy = D.determinant();
 
-    const Dz = (new MatrixFlat([
-      aSq, a.x, a.y, 1,
-      bSq, b.x, b.y, 1,
-      cSq, c.x, c.y, 1,
-      dSq, d.x, d.y, 1,
-    ])).determinant();
+    D.setRow(2, [a.y, b.y, c.y, d.y]);
+    const Dz = D.determinant();
 
-    const detA = A.determinant();
     // Points are coplanar.
     // More robust, optimal solution would test all 2-point and 3-point subsets.
     if ( Math.abs(detA) < 1e-09 ) return this.sphereFromThreePoints(a, b, c);
@@ -752,10 +750,9 @@ export class Sphere {
       // Then extend a line from the center through that midpoint at radius length to locate new surface point.
       const a = pointsMap.get(aLabel);
       const b = pointsMap.get(bLabel);
-      const mid = b.subtract(a);
+      using mid = b.subtract(a);
       const newPt = center.towardsPointSquared(mid, radius2);
       pointsMap.set(midLabel, newPt);
-      mid.release();
       return midLabel;
     }
 
@@ -783,5 +780,3 @@ export class Sphere {
     return [...pointsMap.values()]
   }
 }
-
-GEOMETRY_CONFIG.threeD.Sphere = Sphere;

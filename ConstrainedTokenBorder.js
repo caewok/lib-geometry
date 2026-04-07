@@ -7,6 +7,7 @@ PIXI
 "use strict";
 
 import { ClipperPaths } from "./ClipperPaths.js";
+import { Clipper2Paths } from "./Clipper2Paths.js";
 
 export const PATCHES = {};
 PATCHES.CONSTRAINED_TOKEN_BORDER = {};
@@ -57,6 +58,7 @@ export class ConstrainedTokenBorder extends foundry.canvas.geometry.ClockwiseSwe
     // console.log(`Updating constrained border shape for ${this._token.name}`, this.points);
     this.#wallsID = ConstrainedTokenBorder._wallsID;
     this.#updateTokenMovementProperties();
+    this.#dirtyConstrainedShape = !canvas.ready; // Avoid caching values until edges loaded.
   }
 
   _updateLitShape() {
@@ -67,7 +69,7 @@ export class ConstrainedTokenBorder extends foundry.canvas.geometry.ClockwiseSwe
 
   _updateSoundShape() {
     this.#soundShape = this.constructor.constructSoundTokenShape(this._token);
-    // console.log(`Updating sound border shape for ${this._token.name}`, [...this.#soundShape.iteratePoints({closed: false})]);
+    // console.log(`Updating sound border shape for ${this._token.name}`, [...this.#soundShape.iteratePoints()]);
     this.#soundsID = ConstrainedTokenBorder._soundsID;
   }
 
@@ -77,11 +79,8 @@ export class ConstrainedTokenBorder extends foundry.canvas.geometry.ClockwiseSwe
    * @returns {PIXI.Polygon|PIXI.Rectangle}
    */
   constrainedBorder() {
-    if ( this.#dirtyConstrainedShape ) {
-      this._updateConstrainedShape();
-      this.#dirtyConstrainedShape = !canvas.ready; // Avoid caching values until edges loaded.
-    }
-    if ( !this._unrestricted && this.points.length >= 3 ) return new PIXI.Polygon(this.points);
+    if ( this.#dirtyConstrainedShape ) this._updateConstrainedShape();
+    if ( !this.#unrestricted && this.points.length >= 3 ) return new PIXI.Polygon(this.points);
     return this._token.tokenBorder;
   }
 
@@ -153,7 +152,7 @@ export class ConstrainedTokenBorder extends foundry.canvas.geometry.ClockwiseSwe
     y: null,
     elevation: null,
     width: null,
-    height: null
+    height: null,
   }
 
   /** @type {Token} */
@@ -178,7 +177,12 @@ export class ConstrainedTokenBorder extends foundry.canvas.geometry.ClockwiseSwe
    * If true, no walls constrain token.
    * @type {boolean}
    */
-  _unrestricted = true;
+  #unrestricted = null;
+
+  get unrestricted() {
+    if ( this.#dirtyConstrainedShape ) this._updateConstrainedShape();
+    return this.#unrestricted;
+  }
 
   /** @type {boolean} */
   #dirtyConstrainedShape = true;
@@ -218,7 +222,7 @@ export class ConstrainedTokenBorder extends foundry.canvas.geometry.ClockwiseSwe
     // Clockwise sweep refuses to compute outside the scene border.
     const { x, y } = this._token.center;
     if ( !canvas.dimensions.sceneRect.contains(x, y) ) {
-      this._unrestricted = true;
+      this.#unrestricted = true;
       return;
     }
     super.compute();
@@ -233,17 +237,15 @@ export class ConstrainedTokenBorder extends foundry.canvas.geometry.ClockwiseSwe
       this._identifyVertices();
       this._executeSweep();
       this._constrainBoundaryShapes();
-      this._unrestricted = false;
-    } else {
-      this._unrestricted = true;
-    }
+      this.#unrestricted = false;
+    } else this.#unrestricted = true;
 
     this.vertices.clear();
     this.edges.clear();
     this.rays.length = 0;
 
     // If we screwed up, fall back on unrestricted.
-    if ( this.points.length < 6 ) this._unrestricted = true;
+    if ( this.points.length < 6 ) this.#unrestricted = true;
   }
 
   /**
@@ -275,22 +277,17 @@ export class ConstrainedTokenBorder extends foundry.canvas.geometry.ClockwiseSwe
   #edgeIsCollinearToBoundary(edge) {
     const boundary = this.config.boundaryShapes[0]; // Always a single shape b/c set in initialize.
     if ( boundary instanceof PIXI.Rectangle ) {
-      const delta = PIXI.Point.tmp;
+      using delta = PIXI.Point.tmp;
       edge.b.subtract(edge.a, delta);
-      if ( !delta.x && (edge.a.x.almostEqual(boundary.left) || edge.a.x.almostEqual(boundary.right)) ) {
-        delta.release();
-        return true;
-      }
-      if ( !delta.y && (edge.a.y.almostEqual(boundary.top) || edge.a.y.almostEqual(boundary.bottom)) ) {
-        delta.release();
-        return true;
-      }
-      delta.release();
+      if ( !delta.x && (edge.a.x.almostEqual(boundary.left)
+        || edge.a.x.almostEqual(boundary.right)) ) return true;
+      if ( !delta.y && (edge.a.y.almostEqual(boundary.top)
+        || edge.a.y.almostEqual(boundary.bottom)) ) return true;
     } else if ( boundary instanceof PIXI.Polygon ) {
       const orient2d = foundry.utils.orient2dFast;
       for ( const boundaryEdge of boundary.iterateEdges() ) {
         // Works b/c the boundary polygon is simple.
-        if ( orient2d(boundaryEdge.A, boundaryEdge.B, edge.a, edge.b).almostEqual(0) ) return true;
+        if ( orient2d(boundaryEdge.a, boundaryEdge.b, edge.a, edge.b).almostEqual(0) ) return true;
       }
     }
     return false;
@@ -316,8 +313,7 @@ export class ConstrainedTokenBorder extends foundry.canvas.geometry.ClockwiseSwe
   /** @override */
   contains(x, y) {
     const inBounds = this._token.bounds.contains(x, y);
-    if ( this._unrestricted || !inBounds ) return inBounds;
-
+    if ( this.#unrestricted || !inBounds ) return inBounds;
     return PIXI.Polygon.prototype.contains.call(this, x, y);
   }
 
@@ -393,7 +389,7 @@ export class ConstrainedTokenBorder extends foundry.canvas.geometry.ClockwiseSwe
    * @returns {PIXI.Polygon|undefined}
    */
   static clipperShapeToPolygon(shape) {
-    if ( !(shape.constructor.classTypes && shape.inheritsClassType("Clipper")) ) return shape; // ClipperPaths and Clipper2Paths share "Clipper" type.
+    if ( !(shape instanceof ClipperPaths || shape instanceof Clipper2Paths ) ) return shape;
 
     // Multiple polygons present. Ignore holes. Return remaining polygon or
     // construct one from convex hull of remaining polygons.
@@ -403,7 +399,7 @@ export class ConstrainedTokenBorder extends foundry.canvas.geometry.ClockwiseSwe
 
     // Construct convex hull.
     const pts = [];
-    for ( const poly of polys ) pts.push(...poly.iteratePoints({ close: false }));
+    for ( const poly of polys ) pts.push(...poly.iteratePoints());
     return PIXI.Polygon.convexHull(pts);
   }
 

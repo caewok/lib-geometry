@@ -1,18 +1,19 @@
 /* globals
-Hooks,
-PIXI
+PIXI,
 */
 "use strict";
 
 import { AABB2d } from "../AABB.js";
-import { AABB3d } from '../AABB.js';
+import { AABB3d } from '../3d/AABB3d.js';
 import { Point3d } from "../3d/Point3d.js";
 import { Polygon3d, Circle3d } from '../3d/Polygon3d.js';
 import { Plane } from '../3d/Plane.js';
+import { MODULE_ID } from "../../const.js";
 
-Hooks.on("quenchReady", (quench) => {
+export function registerTests(quench) {
+
   quench.registerBatch(
-    "libGeometry.AABB",
+    `${MODULE_ID}.libGeometry.AABB`,
 
   (context) => {
       const { describe, it, expect } = context;
@@ -335,4 +336,4 @@ describe('AABB3d.overlapsCircle3d', () => {
 { displayName: "libGeometry: Axis-aligned Bounding Box (AABB)" },
 );
 
-});
+}

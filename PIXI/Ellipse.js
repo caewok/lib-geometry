@@ -25,6 +25,21 @@ function center() { return new PIXI.Point(this.x, this.y); }
 function area() { return Math.PI * this.width * this.height; }
 
 /**
+ * Move this ellipse by given x,y delta
+ * @param {number} dx
+ * @param {number} dy
+ * @returns {PIXI.Circle} New circle
+ */
+function translate(dx, dy, out) {
+  out ??= new PIXI.Ellipse();
+  out.x = this.x + dx;
+  out.y = this.y + dy;
+  out.width = this.width;
+  out.height = this.height;
+  return out;
+}
+
+/**
  * Area that matches clipper measurements, so it can be compared with Clipper Polygon versions.
  * Used to match what Clipper would measure as area, by scaling the points.
  * @param {object} [options]
@@ -42,29 +57,25 @@ function scaledArea({scalingFactor = 1} = {}) {
  * @returns {PIXI.Point}
  */
 function _fromCartesianCoords(a, outPoint) {
-  outPoint ??= new PIXI.Point();
-  a = PIXI.Point.fromObject(a);
-
-  a.translate(-this.x, -this.y, outPoint);
+  outPoint ??= PIXI.Point.tmp;
+  a.subtract(this, outPoint); // This has x,y properties, so can subtract.
   return outPoint;
 }
 
 /**
  * Shift to cartesian coordinates from the shape space.
- * @param {Point} a
+ * @param {PIXI.Point} a
  * @param {PIXI.Point} [outPoint] A point-like object to store the result.
  * @returns {Point}
  */
 function _toCartesianCoords(a, outPoint) {
-  outPoint ??= new PIXI.Point();
-  a = PIXI.Point.fromObject(a);
-
-  a.translate(this.x, this.y, outPoint);
+  outPoint ??= PIXI.Point.tmp;
+  a.add(this, outPoint); // This has x,y properties, so can add.
   return outPoint;
 }
 
 function _toCircleCoords(a, outPoint) {
-  outPoint ??= new PIXI.Point();
+  outPoint ??= PIXI.Point.tmp;
   const ratio = this.height / this.width;
 
   outPoint.x = a.x * ratio;
@@ -73,7 +84,7 @@ function _toCircleCoords(a, outPoint) {
 }
 
 function _fromCircleCoords(a, outPoint) {
-  outPoint ??= new PIXI.Point();
+  outPoint ??= PIXI.Point.tmp;
   const ratio = this.width / this.height;
   outPoint.x = a.x * ratio;
   outPoint.y = a.y;
@@ -127,17 +138,15 @@ function toPolygon({ density } = {}) {
   const cirPts = cirPoly.points;
   const ln = cirPts.length;
   const pts = Array(ln);
+  using cirPt = PIXI.Point.tmp;
+  using ePt = PIXI.Point.tmp;
   for ( let i = 0; i < ln; i += 2 ) {
-    const cirPt = new PIXI.Point(cirPts[i], cirPts[i + 1]);
-    const ePt = new PIXI.Point();
-
+    cirPt.set(cirPts[i], cirPts[i + 1]);
     this._fromCircleCoords(cirPt, ePt);
     this._toCartesianCoords(ePt, ePt);
-
     pts[i] = ePt.x;
     pts[i+1] = ePt.y;
   }
-
   cirPoly.points = pts;
   return cirPoly;
 }
@@ -266,7 +275,7 @@ function _overlapsPolygon(other) {
   const cir = this._toCircle();
 
   // Move polygon to ellipse coordinates.
-  const pts = [...other.iteratePoints({ close: false })].map(pt => this._toCircleCoords(pt));
+  const pts = [...other.iteratePoints()].map(pt => this._toCircleCoords(pt));
   const poly = new PIXI.Polygon(pts);
   return poly._overlapsCircle(cir);
 }
@@ -373,7 +382,7 @@ function almostEqual(other, epsilon = 1e-08) {
 function pointAtAngle(radians) {
   const x = this.x + (this.width * Math.cos(radians));
   const y = this.y + (this.height * Math.sin(radians));
-  return new PIXI.Point(x, y);
+  return PIXI.Point.tmp.set(x, y);
 }
 
 /**
@@ -432,6 +441,7 @@ PATCHES.PIXI.METHODS = {
   pointAtAngle,
   angleAtPoint,
   scaledArea,
+  translate,
 };
 
 PATCHES.PIXI.STATIC_METHODS = {

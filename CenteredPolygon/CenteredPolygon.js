@@ -3,9 +3,7 @@ PIXI
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "../const.js";
 import "./CenteredPolygonBase.js";
-import { NULL_SET } from "../util.js";
 import { CenteredPolygonBase } from "./CenteredPolygonBase.js";
 
 /* Testing
@@ -61,29 +59,6 @@ drawing.drawShape(bounds)
  */
 export class CenteredPolygon extends CenteredPolygonBase {
 
-  static classTypes = new Set([this.name]); // Alternative to instanceof
-
-  inheritsClassType(type) {
-    let proto = this;
-    let classTypes = proto.constructor.classTypes;
-    do {
-      if ( classTypes.has(type) ) return true;
-      proto = Object.getPrototypeOf(proto);
-      classTypes = proto?.constructor?.classTypes;
-
-    } while ( classTypes );
-    return false;
-  }
-
-  matchesClass(cl) {
-    return this.constructor.classTypes.equals(cl.classTypes || NULL_SET);
-  }
-
-  overlapsClass(cl) {
-    return this.constructor.classTypes.intersects(cl.classTypes || NULL_SET);
-  }
-
-
   /**
    * @param {Point} origin    Center point of the polygon.
    * @param {number[]} pts  Points of the polygon, where 0,0 is the center
@@ -99,13 +74,24 @@ export class CenteredPolygon extends CenteredPolygonBase {
     this._fixedPoints = Array(nFP);
     for (let i = 0; i < nFP; i += 1) {
       const j = i * 2;
-      this._fixedPoints[i] = new PIXI.Point(pts[j], pts[j + 1]);
+      this._fixedPoints[i] = PIXI.Point.tmp.set(pts[j], pts[j + 1]);
     }
 
     // Close the polygon
     const lastY = pts[ln - 1];
     const lastX = pts[ln - 2];
-    if ( pts[0] !== lastX || pts[1] !== lastY ) this._fixedPoints.push(new PIXI.Point(lastX, lastY));
+    if ( pts[0] !== lastX || pts[1] !== lastY ) this._fixedPoints.push(PIXI.Point.tmp.set(lastX, lastY));
+  }
+
+  /**
+   * Construct a centered polygon from a PIXI polygon.
+   * Assumes the polygon points have not yet been rotated.
+   */
+  static fromPIXIPolygon(poly) {
+    // Recenter the polygon to center at 0, 0.
+    const polyCenter = poly.center;
+    poly = poly.translate(-polyCenter.x, -polyCenter.y);
+    return new this(polyCenter, poly.points);
   }
 
   /**
@@ -136,5 +122,3 @@ export class CenteredPolygon extends CenteredPolygonBase {
 
   }
 }
-
-GEOMETRY_CONFIG.CenteredPolygons.CenteredPolygon ??= CenteredPolygon;

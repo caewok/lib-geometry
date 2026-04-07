@@ -1,6 +1,52 @@
+## 0.5.2
+Add checks for whether token.actor is defined.
+
+## 0.5.1
+Use an index to accumulate the unit tests and dynamically load only when Quench is present.
+Fix typo in PixelCache.test.js.
+
+## 0.5.0
+Remove Elevated Vision implicit dependency in elevation code; use only Wall Height.
+Remove unused setting methods for elevation (rely again on Wall Height).
+Move ATV geometry and vertices calculations here.
+Add unit tests for AABB, PixelCache, PIXI.Point, Point3d, Polygon, Vertices.
+Refactor PixelCache and base on AABB2d.
+
 ## 0.4.8
 
+Refactor: Remove grid distance calculations and CanvasEdges wraps.
+
+This commit removes grid distance calculation functions from GridCoordinates and related 3D classes, consolidating distance measurement to the core Foundry methods. It also removes wraps around CanvasEdges functions.
+
+### Changes
+- Removed gridDistance.js, deleting functions like gridDistanceBetween, alternatingGridDistance, and getOffsetDistanceFn.
+- Removed static methods gridDistanceBetween, gridDistanceBetweenOffsets, alternatingGridDistanceFn, directPath, gridMeasurementForSegment, and getOffsetDistanceFn from GridCoordinates.js and GridCoordinates3d.js. directPath is renamed to getDirectPath (matches Foundry better).
+- Removed CanvasEdges wraps for initialize, set, delete, and clear in CanvasEdges.js. Only refresh is retained.
+- Added HexCoordinateMixin and HexGridCoordinates to HexGridCoordinates.js.
+
+### Impact
+- Distance measurements will now rely on Foundry's core methods.
+- Removes custom diagonal calculations; using Foundry's built-in methods, so may change measured paths, though likely negligibly.
+- Code relating to alternate grid distance calculations is removed.
+- Hex grid coordinate calculations are now encapsulated in the HexCoordinateMixin.
+
 ## 0.4.7
+## Features
+Added new test cases in AABB.test.js to improve test coverage
+Updated registration.js to version 0.4.7
+
+## Fixes
+Fixed potential issues in 3d/Plane.js with 2 new lines of code
+Addressed edge cases in AABB.js with significant updates (145 lines changed)
+
+## Refactoring
+Improved code organization in 3d/Polygon3d.js with 36 lines changed
+Optimized AABB.js implementation (48 lines removed, 97 lines added)
+Minor update to Tile.js with a single line change
+
+## Potential Risks
+Breaking Changes: The refactoring in AABB.js might affect dependent code
+Performance Impact: Changes in AABB.js might affect performance for large datasets
 
 ## 0.4.6
 ### Features
@@ -14,7 +60,7 @@ Fixed Pool class to prevent duplicate objects in the pool
 Updated version number to 0.4.6 in registration.js
 
 ### Refactoring
-Optimized MatrixFlat.lookAt() by removing redundant variable
+Optimized Matrix.lookAt() by removing redundant variable
 
 Improved code organization and comments
 
@@ -67,7 +113,7 @@ AABB: Modified AABB2d and AABB3d to improve segment overlap testing and containm
 
 PIXI Extensions: Added segmentIntersections to PIXI.Circle that returns t0 values. Added lineSegmentCrosses to PIXI.Polygon. Improved intersection calculations. RoundedRectangle class added.
 
-MatrixFlat: Added a subset method to extract a portion of the matrix.
+Matrix: Added a subset method to extract a portion of the matrix.
 
 CutawayPolygon: Modified CutawayPolygon to ensure clockwise point order in a y-up coordinate system. InsertTopSteps method removed.
 
@@ -141,7 +187,7 @@ Dependencies: Code using 3D geometry classes now depends on the Pool class.
 ## 0.4.0 (Formerly known as 0.3.21)
 Fix setting / getting wall elevation and simplify MODULE_KEYS structure.
 Misc. fixes.
-Fixes to MatrixFlat and added perspective code.
+Fixes to Matrix and added perspective code.
 Switch to handle v13 patches while keeping v12 compatibility.
 Added:
 • Clipper 2

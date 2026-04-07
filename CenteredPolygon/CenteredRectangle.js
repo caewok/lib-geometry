@@ -3,9 +3,7 @@ PIXI
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "../const.js";
 import { CenteredPolygonBase } from "./CenteredPolygonBase.js";
-import { NULL_SET } from "../util.js";
 
 /* Testing
 api = game.modules.get('tokenvisibility').api;
@@ -45,29 +43,6 @@ drawing.drawShape(bounds)
  */
 export class CenteredRectangle extends CenteredPolygonBase {
 
-  static classTypes = new Set([this.name], "Rectangle"); // Alternative to instanceof
-
-  inheritsClassType(type) {
-    let proto = this;
-    let classTypes = proto.constructor.classTypes;
-    do {
-      if ( classTypes.has(type) ) return true;
-      proto = Object.getPrototypeOf(proto);
-      classTypes = proto?.constructor?.classTypes;
-
-    } while ( classTypes );
-    return false;
-  }
-
-  matchesClass(cl) {
-    return this.constructor.classTypes.equals(cl.classTypes || NULL_SET);
-  }
-
-  overlapsClass(cl) {
-    return this.constructor.classTypes.intersects(cl.classTypes || NULL_SET);
-  }
-
-
   /**
    * @param {Point} origin   Center point of the rectangle. Can be left undefined if leftCorner is provided.
    * @param {number} width   Length of the sides in the X direction
@@ -82,7 +57,7 @@ export class CenteredRectangle extends CenteredPolygonBase {
       origin = PIXI.Point(0, 0);
     }
 
-    origin ??= new PIXI.Point(leftCorner.x + (width * 0.5), leftCorner.y + (height * 0.5));
+    origin ??= PIXI.Point.tmp.set(leftCorner.x + (width * 0.5), leftCorner.y + (height * 0.5));
 
     // Could use Square if already imported:
     // if ( width === height ) return new Square(origin, undefined, { rotation, width });
@@ -138,10 +113,10 @@ export class CenteredRectangle extends CenteredPolygonBase {
     const h1_2 = height * 0.5;
 
     return [
-      new PIXI.Point(-w1_2, -h1_2),
-      new PIXI.Point(w1_2, -h1_2),
-      new PIXI.Point(w1_2, h1_2),
-      new PIXI.Point(-w1_2, h1_2)
+      PIXI.Point.tmp.set(-w1_2, -h1_2),
+      PIXI.Point.tmp.set(w1_2, -h1_2),
+      PIXI.Point.tmp.set(w1_2, h1_2),
+      PIXI.Point.tmp.set(-w1_2, h1_2)
     ];
   }
 
@@ -234,5 +209,3 @@ export class CenteredRectangle extends CenteredPolygonBase {
     return super.getBounds();
   }
 }
-
-GEOMETRY_CONFIG.CenteredPolygons.CenteredRectangle ??= CenteredRectangle;

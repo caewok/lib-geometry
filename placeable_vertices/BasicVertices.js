@@ -1,0 +1,1965 @@
+/* globals
+canvas,
+CONFIG,
+CONST,
+foundry,
+PIXI,
+*/
+/* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
+"use strict";
+
+import { GEOMETRY_LIB_ID } from "../const.js";
+import { combineTypedArrays } from "../util.js";
+import { Point3d } from "../3d/Point3d.js";
+import { Sphere } from "../3d/Sphere.js";
+import { MatrixFloat32, ModelMatrix } from "../Matrix.js";
+import { Triangle3d } from "../3d/Polygon3d.js";
+import { ClipperPaths } from "../ClipperPaths.js";
+import { Clipper2Paths } from "../Clipper2Paths.js";
+import { geoDelaunay } from "./d3-geo-voronoi-bundled.js";
+
+const N = -0.5
+const S = 0.5;
+const W = -0.5;
+const E = 0.5;
+const T = 0.5;
+const B = -0.5;
+
+/*
+All these classes use static methods only.
+
+BasicVertices:
+- Assume 3 position, 3 normal, 2 uv.
+- Methods to manipulate and trim vertices and associated indices.
+
+ShapeVertices:
+- unitShape
+- Define buffers to hold different vertex configurations.
+- Define specific unit pieces of the shape.
+- Store vertices for different shape configurations in the buffers (e.g., single rect facing up versus double rect)
+  - Unit vertices can be accessed here.
+- calculateVertices method for transforming a shape to vertices.
+- transformMatrix method to take a representative shape and build its transform matrix components.
+
+*/
+
+/** Typed array compatibility with normal arrays
+
+1. Array uses slice while TypedArray uses subarray.
+2. Array has no set method.
+
+*/
+
+/**
+ * Mimics TypedArray#subarray by using slice
+ * @param {number} [begin]      Element to begin at. The offset is inclusive. The whole array will be included in the new view if this value is not specified.
+ * @param {number} [end]        Element to end at. The offset is exclusive. If not specified, all elements from the one specified by begin to the end of the array are included in the new view.
+ * @returns {Array}
+ */
+if ( !Array.prototype.subarray ) Array.prototype.subarray = Array.prototype.slice;
+
+/**
+ * Polyfill for Array.prototype.set to match TypedArray.set behavior.
+ * Overwrites elements in the array starting at the target offset.
+ * @param {Array|TypedArray} sourceArray    The array from which to copy values. All values from the source array are copied into the target array, unless the length of the source array plus the target offset exceeds the length of the target array, in which case an exception is thrown.
+ * @param {number} [targetOffset=0]         The offset into the target array at which to begin writing values from the source array. If this value is omitted, 0 is assumed (that is, the source array will overwrite values in the target array starting at index 0).
+ */
+if ( !Array.prototype.set ) Array.prototype.set = function(sourceArray, targetOffset = 0) {
+  for ( let i = 0, n = sourceArray.length; i < n; i += 1 ) this[targetOffset + i] = sourceArray[i];
+
+  // Performant alternative?
+  // Object.assign(this, { ...sourceArray, length: sourceArray.length + targetOffset });
+}
+
+export class BasicVertices {
+  /** @type {number} */
+  static NUM_VERTEX_ELEMENTS = 8; // 3 position, 3 normal, 2 uv.
+
+  static NUM_TRIANGLE_ELEMENTS = 3 * this.NUM_VERTEX_ELEMENTS;
+
+  static vertexCache = new Map();
+
+  // static getBuffer(type) { return new ArrayBuffer(); }
+
+  static _cacheType(type) { return `${this.name}_${type}`; }
+
+  static getUnitVertices(type) {
+    const cacheType = this._cacheType(type);
+    if ( this.vertexCache.has(cacheType) ) return this.vertexCache.get(cacheType);
+    const out = this._getUnitVertices(type);
+    this.vertexCache.set(cacheType, out);
+    return out;
+  }
+
+  /**
+   * Given an array of vertex information, flip orientation. I.e., ccw --> cw. Flips in place.
+   * E.g., if the bottom has vertices 0, 1, 2, switch to 2, 1, 0.
+   * @param {Float32Array} vertices
+   * @param {number} [stride=8]       The number of elements representing each vertex
+   * @returns {Float32Array} The same array, modified
+   */
+  static flipVertexArrayOrientation(vertices, stride = this.NUM_VERTEX_ELEMENTS) {
+    const v1_offset = stride;     // 8
+    const v2_offset = stride * 2; // 16
+    const v3_offset = stride * 3; // 24
+    for ( let i = 0, iMax = vertices.length; i < iMax; i += v3_offset ) {
+      // v0: k, v1: k + 8, v2: k + 16, v3: k + 24.
+      const tmp = vertices.slice(i, i + v1_offset); // Must be slice to avoid modifying in place.
+      vertices.set(vertices.subarray(i + v2_offset, i + v3_offset), i);
+      vertices.set(tmp, i + v2_offset);
+    }
+    return vertices;
+  }
+
+  /**
+   * Convert a set of vertices to a specific world position using a 4x4 matrix.
+   * It is assumed that the vertex position is first in the array: x, y, z, ...
+   * @param {Float32Array} vertices
+   * @param {MatrixFloat32} M
+   * @param {number} [stride=8]       The number of elements representing each vertex
+   * @param {}
+   * @returns {Float32Array} The vertices, modified in place
+   */
+  static transformVertexPositions(vertices, M, { stride = this.NUM_VERTEX_ELEMENTS, positionOffset = 0 } = {}) {
+    using pt = Point3d.tmp;
+    for ( let i = positionOffset, iMax = vertices.length; i < iMax; i += stride ) {
+      pt.set(vertices[i], vertices[i+1], vertices[i+2]);
+      M.multiplyPoint3d(pt, pt);
+      vertices[i] = pt.x;
+      vertices[i+1] = pt.y;
+      vertices[i+2] = pt.z;
+    }
+    return vertices;
+  }
+
+  /**
+   * Create a transform matrix for a given object.
+   * Must be defined by the child class for specific object, such as PIXI.Rectangle.
+   * Used in calculateVertices.
+   * @param {*} shape                       The shape to use, typically a PIXI shape
+   * @param {object} [opts]                 Parameters to change the elevation and pass through matrix objects
+   * @param {number} [opts.topZ=T]          Top elevation
+   * @param {number} [opts.bottomZ=B]       Bottom elevation
+   * @param {number} [opts.rotateZ=0]        Amount to rotate the resulting vertices around the z axis, in degrees
+   * @param {ModelMatrix} [opts.modelMatrix]    Where to store the results
+   * @returns {ModelMatrix}
+  */
+  // static transformMatrixFromShape(shape, { topZ = T, bottomZ = B, rotateZ = 0, modelMatrix } = {}) {}
+
+  /**
+   * Calculate the vertices for a given shape.
+   * @param {*} shape                       The shape to use, typically a PIXI shape
+   * @param {object} [opts]                 Options passed to transformMatrixFromShape
+   * @param {string} [opts.type]            The type of vertices, passed to getUnitVertices
+   * @returns {Float32Array} Vertices transformed by the model matrix
+   */
+  static calculateVerticesForShape(shape, opts = {}) {
+    // Convert unit edge to match this edge.
+    const modelMatrix = this.modelMatrixFromShape(shape, opts);
+    const vertices = new Float32Array(this.getUnitVertices(opts.type)); // Clone vertices before transform.
+    return this.transformVertexPositions(vertices, modelMatrix.model, { stride: 8 });
+  }
+
+  /**
+   * Omit a portion of each vertex element. For example, trim the 3 normal coordinates from each vertex.
+   * @param {number[]|Float32Array} arr      1D array of vertices
+   * @param {object} [opts]
+   * @param {number} [opts.startingOffset=3]    Delete from this point onward
+   * @param {number} [opts.deletionLength=5]    Delete this number of values
+   * @param {number} [opts.stride=8]            Original stride (new stride is stride - deletionLength)
+   * @param {number[]|Float32Array} outArr
+   * @returns number[]|Float32Array
+   */
+  static cutVertexData(src, { startingOffset = 3, deletionLength = 5, stride = 8, outArr } = {}) {
+    const newStride = stride - deletionLength;
+    const vLength = src.length;
+    const nVertices =  Math.floor(vLength / stride);
+    const newLength = nVertices * newStride;
+    outArr ||= new Float32Array(newLength);
+
+    // How to cut depends on starting offset.
+    let pullFn;
+
+    // cut, ...
+    if ( !startingOffset ) pullFn = (oldStartIndex, newStartIndex) =>
+      outArr.set(src.subarray(oldStartIndex + deletionLength, oldStartIndex + stride), newStartIndex);
+
+    // ..., cut
+    else if ( startingOffset === (stride - deletionLength) ) pullFn = (oldStartIndex, newStartIndex) =>
+      outArr.set(src.subarray(oldStartIndex, oldStartIndex + startingOffset), newStartIndex);
+
+    // ..., cut, ...
+    else pullFn = (oldStartIndex, newStartIndex) => {
+      const old0 = src.subarray(oldStartIndex, oldStartIndex + startingOffset);
+      const old1 = src.subarray(oldStartIndex + startingOffset + deletionLength, oldStartIndex + stride);
+      outArr.set(old0, newStartIndex);
+      outArr.set(old1, newStartIndex + old0.length);
+    }
+
+    for ( let oldI = 0, newI = 0; oldI < vLength; oldI += stride, newI += newStride ) pullFn(oldI, newI);
+    return outArr;
+  }
+
+  /**
+   * For given array of vertices, create indices and remove duplicate entries.
+   * @param {Float32Array} vertices
+   * @param {object} [opts]
+   * @param {number} [opts.stride=3]          Number of elements per vertex
+   * @param {number} [opts.precision=8]       Decimals to round to for comparison
+   * @returns {object}
+   * - @prop {Uint32Array|Uint16Array} indices
+   * - @prop {Float32Array} vertices
+   * - @prop {number} numVertices
+   * - @prop {number} stride
+   */
+  static condenseVertexData(vertices, { stride = 3, precision = 8 } = {}) {
+    // For given array of vertices, create indices and remove duplicate vertices.
+    const vLen = vertices.length;
+    const nVertices = Math.floor(vertices.length / stride);
+    const indicesClass = nVertices > 65535 ? Uint32Array : Uint16Array;
+    const indices = new indicesClass(nVertices);
+
+    // Cannot use resizable buffer with WebGL2 bufferData.
+    // Instead, construct a maximum-length array buffer and copy it over later once we know how
+    // many vertices were copied over.
+    // (Could use resizable and transfer later but little point here)
+    const maxByteLength = vertices.byteLength || (Float32Array.BYTES_PER_ELEMENT * vertices.length);
+    const buffer = new ArrayBuffer(maxByteLength);
+    const newVertices = new Float32Array(buffer, 0, vLen);
+
+    // For each vertex, determine if it has been seen before.
+    // If seen, get the original index, otherwise add this one to the tracking set.
+    // Set the index accordingly and copy over the vertex data if necessary.
+    const uniqueV = new Map();
+    precision = 10 ** precision;
+    let vIdx = 0;
+    for ( let i = 0; i < nVertices; i += 1 ) {
+      const v = i * stride;
+
+      // Faster key generation using a manual loop to avoid using subarray.
+      // Precision to handle floating point drift.
+      let key = "";
+      for ( let k = 0; k < stride; k += 1 ) key += `${Math.round(vertices[v + k] * precision)}|`;
+
+      if ( !uniqueV.has(key) ) {
+        // New unique vertex found.
+        uniqueV.set(key, uniqueV.size);
+
+        // Copy vertex data to the buffer.
+        for ( let k = 0; k < stride; k += 1 ) newVertices[vIdx++] = vertices[v + k];
+      }
+
+      // Assign index to the current vertex position.
+      indices[i] = uniqueV.get(key);
+    }
+
+    // Copy the vertices to a new buffer.
+    const byteLength = uniqueV.size * stride * Float32Array.BYTES_PER_ELEMENT;
+    const newBuffer = buffer.transferToFixedLength(byteLength);
+
+    return {
+      indices,
+      vertices: new Float32Array(newBuffer),
+      numVertices: uniqueV.size,
+      stride,
+    };
+  }
+
+  /**
+   * For given vertices and indices arrays, expand the vertices array so that the index is not required.
+   *
+   * @param {Uint16Array} indices
+   * @param {Float32Array} vertices
+   * @returns {Float32Array} Array containing one vertex for each index.
+   */
+  static expandVertexData(indices, vertices, { stride = 3, outArr } = {}) {
+    const nVertices = indices.length
+    outArr ??= new Float32Array(nVertices * stride);
+
+    for ( let i = 0, j = 0; i < nVertices; i += 1, j += stride ) {
+      const idx = indices[i] * stride;
+      outArr.set(vertices.subarray(idx, idx + stride), j)
+    }
+    return outArr;
+  }
+
+  /**
+   * For an array of vertices, calculate and add normals to each vertex.
+   * @param {Float32Array|number[]} vertices          An array of vertices to which to append normals
+   * @param {number} [stride=3]                       The stride of the vertices array
+   * @param {number} [positionOffset=0]               Where the position x,y,z data starts in the array
+   * @param {number} [normalsOffset=3]                Where to place the normals in the array
+   * @param {number|Float32Array} [outArr]            The array to use to store the result
+   *  - Length of the out array must be numVertices * (stride + 3)
+   * @returns {Float32Array} Array of vertices with normal appended to each
+   */
+  static appendNormals(vertices, { stride = 3, positionOffset = 0, normalsOffset = 3, overwrite = false, outArr } = {}) {
+    const normals = this.calculateNormals(vertices, { stride, positionOffset });
+    return this._zipInsert(vertices, normals, { stride, offset: normalsOffset, dataStride: 3, overwrite, outArr });
+  }
+
+   /**
+   * For an array of vertices, calculate and add UVs to each vertex.
+   * @param {Float32Array|number[]} vertices          An array of vertices to which to append UVs
+   * @param {number} [stride=3]                       The stride of the vertices array
+   * @param {number} [positionOffset=0]               Where the position x,y,z data starts in the array
+   * @param {number} [normalsOffset=3]                Where to place the UVs in the array
+   * @param {number|Float32Array} [outArr]            The array to use to store the result
+   *  - Length of the out array must be numVertices * (stride + 3)
+   * @returns {Float32Array} Array of vertices with UVs appended to each
+   */
+  static appendUVs(vertices, { stride = 3, positionOffset = 0, uvsOffset = 3, overwrite = false, outArr } = {}) {
+    const uvs = this.calculateUVs(vertices, { stride, positionOffset });
+    return this._zipInsert(vertices, uvs, { stride, offset: uvsOffset, dataStride: 2, overwrite, outArr });
+  }
+
+  /**
+   * Calculate an array of normals for given vertices.
+   * @param {Float32Array|number[]} vertices          An array of vertices from which to pull data
+   * @param {number} [stride=3]                       The stride of the vertices array
+   * @param {number|Float32Array} outArr              The stride of the new array or a new array
+   * @returns {Float32Array|number[]} Array of normal values
+   */
+  static calculateNormals(vertices, { stride = 3, positionOffset = 0, outArr } = {} ) {
+    const numVertices = Math.floor(vertices.length / stride);
+
+    // Each normal requires 3 components; 1 normal per vertex.
+    const normalsLength = numVertices * 3;
+    outArr ||= new vertices.constructor(normalsLength);
+    for ( let i = 0, j = 0, iMax = vertices.length; i < iMax; i += (stride * 3) ) {
+      // Calculate the triangle normal.
+      using v0 = this._getSinglePosition(vertices, i, positionOffset);
+      using v1 = this._getSinglePosition(vertices, i + stride, positionOffset);
+      using v2 = this._getSinglePosition(vertices, i + (stride * 2), positionOffset);
+      using n = this._calculateNormalForTriangle3d(v0, v1, v2);
+
+      // Set the normal for each of the three vertices.
+      for ( let k = 0; k < 3; k += 1 ) {
+        outArr[j++] = n.x;
+        outArr[j++] = n.y;
+        outArr[j++] = n.z;
+      }
+    }
+    return outArr; // Just the normals.
+  }
+
+  static _getSinglePosition(vertices, startIndex = 0, offset = 0) {
+    const pt = Point3d.tmp;
+    const xIdx = startIndex + offset;
+    pt.x = vertices[xIdx];
+    pt.y = vertices[xIdx + 1];
+    pt.z = vertices[xIdx + 2];
+    return pt;
+  }
+
+  static _calculateNormalForTriangle3d(v0, v1, v2) {
+    using dir0 = v1.subtract(v0);
+    using dir1 = v2.subtract(v0);
+    const n = dir0.cross(dir1);
+
+    // If collinear, return the n without normalizing to avoid NaN.
+    if ( n.magnitude() ) n.normalize(n);
+    return n;
+  }
+
+  /**
+   * Calculate an array of UVs for given vertices.
+   * This really only works when the vertices are flat w/r/t a 2d plane.
+   * Use the vertices' normal vector to map them to a plane.
+   * @param {Float32Array|number[]} vertices          An array of vertices from which to pull data
+   * @param {number} [stride=3]                       The stride of the vertices array
+   * @param {number|Float32Array} outArr              The stride of the new array or a new array
+   * @returns {Float32Array|number[]} Array of normal values
+   */
+  static calculateUVs(vertices, { stride = 3, positionOffset = 0, outArr } = {} ) {
+    const numVertices = Math.floor(vertices.length / stride);
+    if ( numVertices < 3 ) return outArr || new vertices.constructor();
+
+    // Determine the normal for the vertices, using the first three.
+    using v0 = this._getSinglePosition(vertices, 0, positionOffset);
+    using v1 = this._getSinglePosition(vertices, stride, positionOffset);
+    using v2 = this._getSinglePosition(vertices, stride * 2, positionOffset);
+    const n = this._calculateNormalForTriangle3d(v0, v1, v2);
+
+    // Project onto an axis.
+    const abs = n.abs();
+    const [uAxis, vAxis] = (abs.x >= abs.y && abs.x >= abs.z) ? ["y", "z"] // Facing X.
+      : (abs.y >= abs.x && abs.y >= abs.z) ? ["x", "z"] // Facing Y.
+      : ["x", "y"]; // Facing Z.
+
+    // Calculate uvs and determine min/max.
+    let uMin = Number.POSITIVE_INFINITY;
+    let uMax = Number.NEGATIVE_INFINITY;
+    let vMin = Number.POSITIVE_INFINITY;
+    let vMax = Number.NEGATIVE_INFINITY;
+
+    outArr ||= new vertices.constructor(numVertices * 2);
+    for ( let i = 0, j = 0, n = vertices.length; i < n; i += stride ) {
+      const vertex = this._getSinglePosition(vertices, i, positionOffset);
+      const u = vertex[uAxis];
+      const v = vertex[vAxis];
+
+      uMin = Math.min(uMin, u);
+      uMax = Math.max(uMax, u);
+      vMin = Math.min(vMin, v);
+      vMax = Math.max(vMax, v);
+
+      outArr[j++] = u;
+      outArr[j++] = v;
+    }
+
+    // Normalize to between 0.0 and 1.0 (texture space).
+    const uRange = (uMax - uMin) || 1;
+    const vRange = (vMax - vMin) || 1;
+    for ( let i = 0, iMax = outArr.length; i < iMax; i += 2 ) {
+      outArr[i] = (outArr[i] - uMin) / uRange;
+      outArr[i+1] = (outArr[i+1] - vMin) / vRange;
+    }
+    return outArr;
+  }
+
+  // ----- Vertex array modifications ---- //
+
+  /**
+   * For an array of vertices, copy to a new array and increase the stride of the new array.
+   * I.e., copy each vertex in turn, expanding space available for it.
+   * @param {Float32Array|number[]} vertices          An array of vertices to copy
+   * @param {number} [stride=3]                       The stride of the original vertices array
+   * @param {number} [newStride=8]                    The stride of the new array
+   * @param {Float32Array} outArr                     A new array in which to store the result
+   * @returns {Float32Array} The out array
+   */
+  static expandArrayStride(arr, { stride = 3, newStride, outArr } = {}) {
+    if ( !(newStride || outArr) ) throw Error(`expandArrayStride|Either newStride or outArr must be provided.`);
+    const vLength = arr.length;
+    const nVertices = Math.floor(vLength / stride);
+
+    // Build the new array.
+    newStride ??= Math.floor(outArr.length / nVertices);
+    outArr ??= new Float32Array(nVertices * newStride);
+    if ( newStride < stride ) throw Error("expandArrayStride|New array stride not large enough", { arr, stride, outArr });
+
+    // Copy each vertex to the new array.
+    for ( let i = 0, j = 0; i < vLength; i += stride, j += newStride ) outArr.set(arr.subarray(i, i + stride), j);
+    return outArr;
+  }
+
+  /**
+   * Straight copy an array to another.
+   * @param {Array|TypedArray} src        Array to copy from
+   * @param {Array|TypedArray} [dest]     Array to copy into; will create a new array if omitted
+   * @returns {Array|TypedArray} The destination array
+   */
+  static shallowCopyArray(src, dest) {
+    dest ??= new src.constructor(src.length);
+    if ( Array.isArray(src) ) dest.push(...src);
+    else dest.set(src, 0);
+    return dest;
+  }
+
+  /**
+   *
+
+  /**
+   * Overwrite data at each vertex (per stride) at a given offset, returning the source array.
+   * @param {Array|TypedArray} src              Source array, overwritten in place
+   * @param {Array|TypedArray} newData          Data to add at each stride; will be same for each stride
+   * @param {object} [opts]
+   * @param {number} [opts.stride=3]                  Stride of the source array
+   * @returns {Array|TypedArray} The source array.
+   */
+  static overwriteAtOffset(vertices, newData, { stride = 3, offset = 0 } = {}) {
+    if ( newData.length > (stride + offset) ) console.warn(`overwriteAtOffset|stride ${stride} + offset ${offset} < data length of ${newData.length}.`);
+
+    // Add in the data.
+    for ( let i = offset, iMax = vertices.length; i < iMax; i += stride ) vertices.set(newData, i)
+    return vertices;
+  }
+
+  /**
+   * Zip insert set number of elements from newData into specific points at array.
+   * Overwrites in place; does not expand the size of the new array.
+   * E.g., arr = [0,1,2,3,4,5], offset = 1, stride = 3
+   * newData = [a, b, c, d, e, f], numElements = 2
+   * outArr = [0,1,a,b,2,3,c,d,4,5,e,f]
+   *
+   * @param {[]|TypedArray} src
+   * @param {[]|TypedArray} newData     Data to add
+   *  - If data is not long enough, it cycles around; if too long it omits the end.
+   *  - If data is not provided, empty values (or 0 for typed arrays) will be added.
+   * @param {number} [stride]           Stride of the original array
+   * @param {number} [offset=0]         Where to start overwriting the new data relative to the array elements
+   * @param {number} [dataStride=1]     Stride of the data array
+   * @param {[]|TypedArray} outArr      Array to store the result; must be length required
+   * @returns {[]|TypedArray} The out array.
+   */
+  static zipOverwrite(src, newData, opts = {}) {
+    opts.overwrite = true;
+    return this._zipInsert(src, newData, opts);
+  }
+
+  /**
+   * Zip insert set number of elements from newData into specific points at array.
+   * E.g., arr = [0,1,2,3,4,5], offset = 1, stride = 3
+   * newData = [a, b, c, d, e, f], numElements = 2
+   * outArr = [0,1,a,b,2,3,c,d,4,5,e,f]
+   *
+   * @param {[]|TypedArray} src
+   * @param {[]|TypedArray} newData     Data to add
+   *  - If data is not long enough, it cycles around; if too long it omits the end.
+   *  - If data is not provided, empty values (or 0 for typed arrays) will be added.
+   * @param {number} [stride]           Stride of the original array
+   * @param {number} [offset=0]         Where to put the new data relative to the old array elements
+   * @param {number} [dataStride=1]     Stride of the data array
+   * @param {[]|TypedArray} outArr      Array to store the result; must be length required
+   * @returns {[]|TypedArray} The out array.
+   */
+  static zipInsert(src, newData, opts = {}) {
+    opts.overwrite = false;
+    return this._zipInsert(src, newData, opts);
+  }
+
+  static _zipInsert(src, newData, { stride, offset = 0, dataStride = 1, overwrite = false, outArr } = {}) {
+    if ( !stride ) { console.error(`zipInsert|stride must be defined.`); return src; }
+
+    // The new array length is a function of the original stride + data stride.
+    const nVertices = Math.floor(src.length / stride);
+    const requiredDataLength = dataStride * nVertices;
+    const newLength = overwrite ? src.length : src.length + requiredDataLength;
+
+    // Ensure newData is available and sufficient length.
+    newData ??= new src.constructor();
+    if ( newData.length < requiredDataLength ) newData = duplicateArray(newData, Math.ceil(requiredDataLength / newData.length));
+
+    // Create a new array if necessary.
+    if ( outArr && outArr.length !== newLength) { console.error(`zipInsert|Requires an array of length ${newLength}`); return src }
+    outArr ||= new src.constructor(newLength);
+
+    // Pull and set function depends on where the newData is going.
+    let pullFn;
+    const overwriteShift = overwrite ? dataStride : 0;
+    const newArrStride = overwrite ? stride : dataStride + stride;
+
+    // newData, ...
+    if ( !offset ) pullFn = (oldStartIndex, newStartIndex, newElem) => {
+      const oldElem = src.subarray(oldStartIndex + overwriteShift, oldStartIndex + stride);
+      outArr.set(newElem, newStartIndex);
+      outArr.set(oldElem, newStartIndex + dataStride);
+    };
+
+    // Offset is at the end of the original stride:
+    // ..., newData
+    else if ( offset === stride) pullFn = (oldStartIndex, newStartIndex, newElem) => {
+      const oldElem = src.subarray(oldStartIndex, oldStartIndex + stride - overwriteShift)
+      outArr.set(oldElem, newStartIndex);
+      outArr.set(newElem, newStartIndex + oldElem.length);
+    };
+
+    // Offset in middle of original stride:
+    // ..., newData, ...
+    else pullFn = (oldStartIndex, newStartIndex, newElem) => {
+      const oldElem0 = src.subarray(oldStartIndex, oldStartIndex + offset); // All prior to the data offset
+      const oldElem1 = src.subarray(oldStartIndex + offset + overwriteShift, oldStartIndex + stride); // All after the data offset, not including data
+      outArr.set(oldElem0, newStartIndex);
+      outArr.set(newElem, newStartIndex + offset);
+      outArr.set(oldElem1, newStartIndex + offset + dataStride);
+    };
+
+    // Step through the new array, assigning from the original and the new data in turn.
+    for ( let v = 0; v < nVertices; v += 1 ) {
+      const oldStartIndex = v * stride;
+      const newStartIndex = v * newArrStride;
+      const dataIndex = v * dataStride;
+      const newElem = newData.subarray(dataIndex, dataIndex + dataStride);
+      pullFn(oldStartIndex, newStartIndex, newElem);
+    }
+    return outArr;
+  }
+
+  static debugDraw(vertices, indices, { positionOffset = 0, stride = 8, ...opts} = {}) {
+    const triangles = Triangle3d.fromVertices(vertices, indices, { positionOffset, stride });
+    triangles.forEach(tri => tri.draw2d(opts));
+    return triangles;
+  }
+}
+
+export class HorizontalQuadVertices extends BasicVertices {
+
+  static NUM_FACE_ELEMENTS = 2 * this.NUM_TRIANGLE_ELEMENTS;
+
+  static get top() { return new Float32Array([
+      // Position     Normal      UV
+      W, N, 0,        0, 0, 1,    0, 0,
+      W, S, 0,        0, 0, 1,    0, 1,
+      E, S, 0,        0, 0, 1,    1, 1,
+
+      E, N, 0,        0, 0, 1,    1, 0,
+      W, N, 0,        0, 0, 1,    0, 0,
+      E, S, 0,        0, 0, 1,    1, 1,
+    ]);
+  }
+
+  static get bottom() { return new Float32Array([
+      // Position     Normal      UV
+      E, S, 0,        0, 0, -1,   0, 1,
+      W, S, 0,        0, 0, -1,   0, 0,
+      W, N, 0,        0, 0, -1,   1, 0,
+
+      E, S, 0,        0, 0, -1,   0, 1,
+      W, N, 0,        0, 0, -1,   1, 0,
+      E, N, 0,        0, 0, -1,   1, 1,
+    ]);
+  }
+
+  // For tiles, face the texture up, not down as normally expected.
+  static get bottomTextureUp() { return new Float32Array([
+      // Position     Normal      UV
+      E, S, 0,        0, 0, -1,   1, 1,
+      W, S, 0,        0, 0, -1,   0, 1,
+      W, N, 0,        0, 0, -1,   0, 0,
+
+      E, S, 0,        0, 0, -1,   1, 1,
+      W, N, 0,        0, 0, -1,   0, 0,
+      E, N, 0,        0, 0, -1,   1, 0,
+    ]);
+  }
+
+  static _cacheType(type = "up") { return super._cacheType(type); }
+
+  static _getUnitVertices(type = "up") {
+    switch ( type ) {
+      case "up": return this.top;
+      case "down": return this.bottom;
+      case "bottomUp": return this.bottomTextureUp;
+      case "double": return new Float32Array([...this.top, ...this.bottom]);
+      case "doubleUp": return new Float32Array([...this.top, ...this.bottomTextureUp]);
+    }
+  }
+
+  static modelMatrixFromShape(rect, { elevationZ = 0, rotateZ = 0, modelMatrix } = {}) {
+    modelMatrix ??= new ModelMatrix();
+
+    // Scale by absolute z-length (vertical height).
+    // If the topZ and bottomZ are unbalanced, translate in the z direction to reset topZ to correct elevation.
+    // (scale - topZ)
+    // e.g. elev 20, -100. zHeight = 120. Untranslated topZ would be 120/2 = 60. Move 20 - 60 = -40.
+    const radians = toRadians(rotateZ);
+    const center = rect.center;
+
+    // Build transform matrix.
+    MatrixFloat32.scale(rect.width, rect.height, 0, modelMatrix.scale);
+    MatrixFloat32.translation(center.x, center.y, elevationZ, modelMatrix.translation);
+    MatrixFloat32.rotationZ(radians, true, modelMatrix.rotation);
+    modelMatrix.needsUpdate = true;
+    return modelMatrix;
+  }
+}
+
+export class VerticalQuadVertices extends BasicVertices {
+
+  static DIRECTIONS = {
+    double: "double",
+    south: "south",
+    north: "north",
+    directional: "north",
+    left: "north",
+    right: "south",
+
+    // CONST.WALL_DIRECTIONS
+    0: "double", // NONE
+    1: "north",  // LEFT
+    2: "south",  // RIGHT
+
+    BOTH: "double",
+    LEFT: "north",
+    RIGHT: "south",
+  };
+
+  // On the y = 0 line.
+  // When a --> b is on the y line from -x to +x:
+  //   - left: light from left (north) is blocked
+  //   - right: light from right (south) is blocked
+  static get south() { return new Float32Array([
+      // Position     Normal      UV
+      E, 0, T,        0, 1, 0,    1, 0,
+      W, 0, T,        0, 1, 0,    0, 0,
+      W, 0, B,        0, 1, 0,    0, 1,
+
+      E, 0, B,        0, 1, 0,    1, 1,
+      E, 0, T,        0, 1, 0,    1, 0,
+      W, 0, B,        0, 1, 0,    0, 1,
+    ]);
+  }
+
+  static north = new Float32Array([
+    // Position     Normal      UV
+    W, 0, B,        0, -1, 0,    1, 1,
+    W, 0, T,        0, -1, 0,    1, 0,
+    E, 0, T,        0, -1, 0,    0, 0,
+
+    W, 0, B,        0, -1, 0,    1, 1,
+    E, 0, T,        0, -1, 0,    0, 0,
+    E, 0, B,        0, -1, 0,    0, 1,
+  ]);
+
+  static _cacheType(type = "double") { return super._cacheType(this.DIRECTIONS[type]); }
+
+  static _getUnitVertices(type = "double") {
+    type = this.DIRECTIONS[type];
+    switch ( type ) {
+      case "north": return this.north;
+      case "south": return this.south;
+      case "right": return this.south;
+      case "left": return this.north;
+      case "double": return new Float32Array([...this.north, ...this.south]);
+    }
+  }
+
+  static modelMatrixFromShape(segment, { topZ = T, bottomZ = B, rotateZ = 0, modelMatrix } = {}) {
+    const { a, b } = segment;
+    modelMatrix ??= new ModelMatrix();
+
+    // Scale by absolute z-length (vertical height).
+    // If the topZ and bottomZ are unbalanced, translate in the z direction to reset topZ to correct elevation.
+    // (scale - topZ)
+    // e.g. elev 20, -100. zHeight = 120. Untranslated topZ would be 120/2 = 60. Move 20 - 60 = -40.
+    const zHeight = topZ - bottomZ;
+    const z = topZ - (zHeight * 0.5);
+
+    const dy = b.y - a.y;
+    const dx = b.x - a.x;
+    const radians = Math.atan2(dy, dx) + toRadians(rotateZ);
+    const center = PIXI.Point.tmp.set(a.x + (dx / 2), a.y + (dy / 2));
+    const length = PIXI.Point.distanceBetween(a, b);
+
+    // Build transform matrix.
+    MatrixFloat32.scale(length, 1, zHeight, modelMatrix.scale);
+    MatrixFloat32.translation(center.x, center.y, z, modelMatrix.translation);
+    MatrixFloat32.rotationZ(radians, true, modelMatrix.rotation);
+    return modelMatrix;
+  }
+}
+
+export class Rectangle3dVertices extends BasicVertices {
+  static NUM_FACES = 6; // 6 faces to a cube.
+
+  static NUM_FACE_ELEMENTS = 2 * this.NUM_TRIANGLE_ELEMENTS; // 2 triangles per face.
+
+  // CCW: (W,N -> W,S -> E,S and E,N -> W,N -> E,S). Normal is {0,0,1}.
+  static get top() {
+    // Same as HorizontalQuadVertices.top but with elevation set to T.
+    return new Float32Array([
+      // Position     Normal      UV
+      W, N, T,        0, 0, 1,    0, 0,
+      W, S, T,        0, 0, 1,    0, 1,
+      E, S, T,        0, 0, 1,    1, 1,
+
+      E, N, T,        0, 0, 1,    1, 0,
+      W, N, T,        0, 0, 1,    0, 0,
+      E, S, T,        0, 0, 1,    1, 1,
+    ]);
+  }
+
+  // CCW when looking from below (normal is {0,0,-1}).
+  static get bottom() {
+    // Same as HorizontalQuadVertices.bottom but with elevation set to T.
+    return new Float32Array([
+      // Position     Normal      UV
+      E, S, B,        0, 0, -1,   0, 1,
+      W, S, B,        0, 0, -1,   0, 0,
+      W, N, B,        0, 0, -1,   1, 0,
+
+      E, S, B,        0, 0, -1,   0, 1,
+      W, N, B,        0, 0, -1,   1, 0,
+      E, N, B,        0, 0, -1,   1, 1,
+    ]);
+  }
+
+  // North facing: Normal {0,-1,0}.
+  static get north() { return new Float32Array([
+      // Position     Normal      UV
+      W, N, T,        0, -1, 0,   1, 0,
+      E, N, T,        0, -1, 0,   0, 0,
+      E, N, B,        0, -1, 0,   0, 1,
+
+      W, N, B,        0, -1, 0,   1, 1,
+      W, N, T,        0, -1, 0,   1, 0,
+      E, N, B,        0, -1, 0,   0, 1,
+    ]);
+  }
+
+  // South facing: Normal {0,1,0}.
+  static get south() { return new Float32Array([
+      // Position     Normal      UV
+      E, S, T,        0, 1, 0,   1, 0,
+      W, S, T,        0, 1, 0,   0, 0,
+      W, S, B,        0, 1, 0,   0, 1,
+
+      E, S, B,        0, 1, 0,   1, 1,
+      E, S, T,        0, 1, 0,   1, 0,
+      W, S, B,        0, 1, 0,   0, 1,
+    ]);
+  }
+
+  // East facing: Normal {1,0,0}.
+  static get east() { return new Float32Array([
+      // Position     Normal      UV
+      E, N, T,        1, 0, 0,   1, 0,
+      E, S, T,        1, 0, 0,   0, 0,
+      E, S, B,        1, 0, 0,   0, 1,
+
+      E, N, B,        1, 0, 0,   1, 1,
+      E, N, T,        1, 0, 0,   1, 0,
+      E, S, B,        1, 0, 0,   0, 1,
+    ]);
+  }
+
+  // West facing: Normal {-1,0,0}.
+  static get west() { return new Float32Array([
+      // Position     Normal      UV
+      W, S, T,        -1, 0, 0,   1, 0,
+      W, N, T,        -1, 0, 0,   0, 0,
+      W, N, B,        -1, 0, 0,   0, 1,
+
+      W, S, B,        -1, 0, 0,   1, 1,
+      W, S, T,        -1, 0, 0,   1, 0,
+      W, N, B,        -1, 0, 0,   0, 1,
+    ]);
+  }
+
+  static _cacheType(type = "all") { return super._cacheType(type); }
+
+  static _getUnitVertices(type = "all") {
+    const allCacheType = this._cacheType("all");
+    let verticesBuffer;
+    if ( this.vertexCache.has(allCacheType) ) verticesBuffer = this.vertexCache.get(allCacheType).buffer;
+    else {
+      // Set all vertices at once in a single buffer.
+     verticesBuffer = new ArrayBuffer(this.NUM_FACES * this.NUM_FACE_ELEMENTS * Float32Array.BYTES_PER_ELEMENT);
+     setFloatView(this.top, verticesBuffer, this.NUM_FACE_ELEMENTS * 0);
+     setFloatView(this.bottom, verticesBuffer, this.NUM_FACE_ELEMENTS * 1);
+     setFloatView(this.north, verticesBuffer, this.NUM_FACE_ELEMENTS * 2);
+     setFloatView(this.south, verticesBuffer, this.NUM_FACE_ELEMENTS * 3);
+     setFloatView(this.east, verticesBuffer, this.NUM_FACE_ELEMENTS * 4);
+     setFloatView(this.west, verticesBuffer, this.NUM_FACE_ELEMENTS * 5);
+     const all = new Float32Array(verticesBuffer, 0, this.NUM_FACES * this.NUM_FACE_ELEMENTS);
+     if ( type === "all" ) return all; // Will be saved in the parent.
+     this.vertexCache.set(allCacheType, all);
+    }
+    switch ( type ) {
+      // Case "all" handled above.
+      case "top": return setFloatView(this.top, verticesBuffer, this.NUM_FACE_ELEMENTS * 0);
+      case "bottom": return setFloatView(this.bottom, verticesBuffer, this.NUM_FACE_ELEMENTS * 1);
+      case "north": return setFloatView(this.north, verticesBuffer, this.NUM_FACE_ELEMENTS * 2);
+      case "south": return setFloatView(this.south, verticesBuffer, this.NUM_FACE_ELEMENTS * 3);
+      case "east": return setFloatView(this.east, verticesBuffer, this.NUM_FACE_ELEMENTS * 4);
+      case "west": return setFloatView(this.west, verticesBuffer, this.NUM_FACE_ELEMENTS * 5);
+    }
+  }
+
+  static modelMatrixFromShape(rect, { topZ = T, bottomZ = B, rotateZ = 0, modelMatrix } = {}) {
+    modelMatrix ??= new ModelMatrix();
+
+    const zHeight = topZ - bottomZ;
+    const z = bottomZ + (zHeight * 0.5);
+    const center = rect.center;
+    const radians = toRadians(rotateZ);
+
+    MatrixFloat32.scale(rect.width, rect.height, zHeight, modelMatrix.scale);
+    MatrixFloat32.translation(center.x, center.y, z, modelMatrix.translation);
+    MatrixFloat32.rotationZ(radians, true, modelMatrix.rotation);
+    return modelMatrix;
+  }
+}
+
+export class Polygon3dVertices extends BasicVertices {
+
+  static isClipper(poly) {
+    return poly instanceof ClipperPaths || poly instanceof Clipper2Paths;
+  }
+
+  static NUM_TRIANGLE_ELEMENTS = 3 * this.NUM_VERTEX_ELEMENTS;
+
+/*
+  •--•
+ /    \
+ • •  •
+ |    |
+ •----•
+
+Ex: 6 points, 6 outer edges.
+    Fan creates 6 triangles, 1 per outer edge.
+    So poly.points * 1/2 * triangle length is total length.
+*/
+
+  static topLength(poly) {
+    if ( this.isClipper(poly) ) console.error("topLength cannot take a clipper path")
+    return Math.floor(this.NUM_TRIANGLE_ELEMENTS * poly.points.length * 0.5);
+  } // For fan only. Earcut should be this or less.
+
+  static sidesLength(poly) {
+    // Each polygon or polygon hole will need corresponding rectangular sides.
+    if ( this.isClipper(poly) ) return poly.toPolygons().reduce((acc, curr) =>
+      acc + this.sidesLength(curr), 0);
+    return Math.floor(this.NUM_TRIANGLE_ELEMENTS * poly.points.length);
+  } // Number of points (x,y) * 2
+
+  /**
+   * Determine the 3d vertices for a given ClipperPaths or polygon.
+   * The polygon represents the top and bottom of the shape, using rectangular side faces.
+   * @param {PIXI.Polygon|ClipperPaths|ClipperPaths2} poly
+   * @param {object} [opts]
+   * @param {number} [opts.topZ=T]        Top elevation
+   * @param {number} [opts.bottomZ=B]     Botom elevation
+   * @param {boolean} [opts.useFan]       Force fan or force no fan
+   * @param {PIXI.Point} [opts.centroid]  The center of the polygon
+   * @returns {Float32Array} The vertices, untrimmed
+   */
+  static calculateVertices(poly, { topZ = T, bottomZ = B, useFan, centroid } = {}) {
+    // Shape could be a more complex polygon or ClipperPaths.
+    // The top/bottom face lengths may vary due to earcut. Calculate first.
+    const { top, bottom } = this.polygonTopBottomFaces(poly, { topZ, bottomZ, useFan, centroid });
+    const res = this.buildVertexBufferViews(top.length, this.sidesLength(poly));
+    res.top.set(top);
+    res.bottom.set(bottom);
+    this.polygonSideFaces(poly, { topZ, bottomZ, sides: res.sides });
+    return res.vertices;
+  }
+
+  static buildVertexBufferViews(topLength, sidesLength) {
+    const totalLength = topLength + topLength + sidesLength;
+    const buffer = new ArrayBuffer(totalLength * Float32Array.BYTES_PER_ELEMENT);
+    const vertices = new Float32Array(buffer, 0, totalLength);
+    const top = new Float32Array(buffer, 0, topLength);
+    const bottom = new Float32Array(buffer, topLength * Float32Array.BYTES_PER_ELEMENT, topLength);
+    const sides = new Float32Array(buffer, topLength * 2 * Float32Array.BYTES_PER_ELEMENT, sidesLength);
+    return { vertices, top, bottom, sides };
+  }
+
+  /**
+   * Test if an arbitrary polygon can use a fan instead of earcut to triangulate.
+   * Fan creates triangles in a fan shape where two vertices are on the edge and the third is the centroid.
+   * Works for all convex polygons and some concave polygons.
+   * @param {PIXI.Polygon} poly
+   * @returns {boolean}
+   */
+  static canUseFan(poly, centroid) {
+    if ( poly instanceof PIXI.Rectangle
+      || poly instanceof PIXI.Ellipse
+      || poly instanceof PIXI.Circle ) return true;
+
+    // Test Clipper shapes, as could be a regular polygon.
+    if ( this.isClipper(poly) ) {
+      poly = poly.simplify();
+      if ( poly instanceof PIXI.Rectangle ) return true;
+    }
+    if ( !(poly instanceof PIXI.Polygon) ) return false;
+
+    // Test that the segment between centroid and polygon point does not intersect another edge.
+    centroid ??= poly.center;
+    if ( !poly.contains(centroid.x, centroid.y) ) return false;
+    const lines = [...poly.iteratePoints()].map(b => {
+      return { a: centroid, b };
+    });
+    return !poly.linesCross(lines); // Lines cross ignores lines that only share endpoints.
+  }
+
+  static simplifyPoly(poly, centroid) {
+    // Attempt to convert various shapes to a polygon.
+    let bounds;
+    if ( this.isClipper(poly) ) poly = poly.simplify();
+    if ( poly instanceof PIXI.Rectangle
+      || poly instanceof PIXI.Ellipse
+      || poly instanceof PIXI.Circle ) {
+      bounds = poly.getBounds();
+      centroid ??= poly.center;
+      poly = poly.toPolygon();
+    }
+    return { poly, centroid, bounds };
+  }
+
+  /**
+   * Triangulate a polygon using a fan algorithm.
+   * @param {PIXI.Polygon} poly         Polygon or a shape that can be converted to one using simplifyPolygon
+   * @param {object} [opts]
+   * @param {Point3d} [opts.centroid]   Center of the polygon; otherwise will be calculated
+   * @returns {Float32Array} An array of x,y coordinates.
+   */
+  static _fanTriangulatePolygon(poly, { centroid } = {}) {
+    const sp = this.simplifyPoly(poly, centroid);
+    poly = sp.poly;
+    if ( !(poly instanceof PIXI.Polygon) ) console.error("calculateVertices|Polygon is not a PIXI.Polygon", poly);
+    centroid = sp.centroid ?? poly.center;
+
+    const numElems = Math.floor(poly.points.length * 0.5 * 6);
+    const out = new Float32Array(numElems);
+
+    // Copy the center and two points of the polygon to the array.
+    // Triangles should match poly orientation (typically ccw). If poly is ccw, triangles will be ccw.
+    let j = 0;
+    for ( const edge of poly.iterateEdges() ) {
+      out[j++] = centroid.x;
+      out[j++] = centroid.y;
+      out[j++] = edge.a.x;
+      out[j++] = edge.a.y;
+      out[j++] = edge.b.x;
+      out[j++] = edge.b.y;
+    }
+    return out;
+  }
+
+  /**
+   * Use earcut to triangulate a polygon.
+   * @param {PIXI.Polygon} poly         Polygon or a shape that can be converted to one using simplifyPolygon
+   * @param {object} [opts]
+   * @param {Point3d} [opts.centroid]   Center of the polygon; otherwise will be calculated
+   * @returns {Float32Array} An array of x,y coordinates.
+   */
+  static _earcutTriangulatePolygon(poly) {
+    let vertices2d;
+    let holes = [];
+    const sp = this.simplifyPoly(poly);
+    poly = sp.poly;
+
+    // Earcut to determine indices. Then construct the vertices.
+    if ( this.isClipper(poly) ) {
+      // Assume a more complex shape, possibly with holes. See ClipperPaths.prototype.earcut.
+      const coords = poly.toEarcutCoordinates();
+      vertices2d = coords.vertices;
+      holes = coords.holes;
+    } else {
+      if ( !(poly instanceof PIXI.Polygon) ) poly = poly.toPolygon();
+      vertices2d = poly.points;
+    }
+
+    // Earcut the polygon to determine the indices and construct empty arrays to hold top and bottom vertex information.
+    const indices = new Uint16Array(PIXI.utils.earcut(vertices2d, holes)); // Note: dimensions = 2.
+
+    // Expand the vertex array based on earcut indices.
+    return this.expandVertexData(indices, vertices2d, { stride: 2 });
+  }
+
+  /**
+   * Triangulate a polygon.
+   * @param {PIXI.Polygon} poly         Polygon or a shape that can be converted to one using simplifyPolygon
+   * @param {object} [opts]
+   * @param {Point3d} [opts.centroid]   Center of the polygon; otherwise may be calculated
+   * @param {boolean} [opts.useFan]     Force fan use; otherwise will be determined from the polygon shape
+   * @returns {Float32Array} An array of x,y coordinates.
+   */
+  static triangulatePolygon(poly, { centroid, useFan } = {}) {
+    useFan ??= this.canUseFan(poly, centroid);
+    const fnName = useFan ? "_fanTriangulatePolygon" : "_earcutTriangulatePolygon";
+    return this[fnName](poly, { centroid });
+  }
+
+  /**
+   * Return vertices for the top or bottom of the polygon.
+   * Requires that the polygon be sufficiently convex that it can be described by a fan of
+   * polygons joined at its centroid.
+   * Top will face up; bottom will face down (CCW).
+   * @param {PIXI.Polygon} poly
+   * @param {object} [opts]
+   * @returns {object}
+   * - @prop {Float32Array} vertices
+   * - @prop {Uint16Array} indices
+   */
+  static polygonTopBottomFaces(poly, { topZ = T, bottomZ = B, addNormals = true, addUVs = true, useFan, centroid } = {}) {
+    const stride = 3 + (addNormals * 3) + (addUVs * 2);
+
+    // Ensure that the top faces up and bottom faces down.
+    let top;
+    let bottom;
+    if ( poly.isClockwise ) {
+      // Poly faces down so define bottom first.
+      bottom = this.triangulatePolygon(poly, { centroid, useFan });
+      top = bottom.slice(0);
+
+      // Flip.
+      top = this.flipVertexArrayOrientation(top, 2);
+
+    } else {
+      // Poly faces up so define top first.
+      top = this.triangulatePolygon(poly, { centroid, useFan });
+      bottom = top.slice(0);
+
+      // Flip.
+      bottom = this.flipVertexArrayOrientation(bottom, 2);
+    }
+
+    // Expand top and bottom to the full vertex elements (stride).
+    top = this.expandArrayStride(top, { stride: 2, newStride: stride });
+    bottom = this.expandArrayStride(bottom, { stride: 2, newStride: stride });
+
+    // Append elevation in place.
+    this.overwriteAtOffset(top, [topZ], { stride, offset: 2 });
+    this.overwriteAtOffset(bottom, [bottomZ], { stride, offset: 2 });
+
+    // Add in Normals in place.
+    let offset = 3;
+    if ( addNormals ) {
+      this.overwriteAtOffset(top, [0, 0, 1], { stride, offset });
+      this.overwriteAtOffset(bottom, [0, 0, -1], { stride, offset });
+      offset += 3;
+    }
+
+    // Add in UVs in place.
+    if ( addUVs ) {
+      this.appendUVs(top, { stride, uvsOffset: offset, overwrite: true, outArr: top });
+      this.appendUVs(bottom, { stride, uvsOffset: offset, overwrite: true, outArr: bottom });
+    }
+
+    return { top, bottom };
+  }
+
+  /**
+   * Generate side face vertices for a polygon or ClipperPaths.
+   * @param {PIXI.Polygon|ClipperPaths} poly
+   * @param {object} [opts]
+   * @param {number} [opts.topZ=0.5]
+   * @param {number} [opts.bottomZ=-0.5]
+   * @param {Float32Array} [opts.sides]       The output view for sides
+   * @param {boolean|undefined} [opts.isHole]   If defined, sides will face inward if true, outward if false;
+   *   if not defined sids will face inward if polygon is CW
+   * @returns {Float32Array}
+   */
+  static polygonSideFaces(poly, { topZ = T, bottomZ = B, sides, isHole } = {}) {
+    sides ??= new Float32Array(this.sidesLength(poly));
+    if ( this.isClipper(poly) ) poly = poly.toPolygons();
+    if ( Array.isArray(poly) ) {
+      if ( poly.length === 1 ) {
+        poly = poly[0];
+      } else {
+        const multipleSides = poly.map(p => this.polygonSideFaces(p, { topZ, bottomZ }));
+        sides.set(combineTypedArrays(multipleSides));
+        return sides;
+      }
+    }
+
+    const vertexOffset = this.NUM_VERTEX_ELEMENTS;
+    if ( !(poly instanceof PIXI.Polygon) ) poly = poly.toPolygon();
+
+    // Some temporary points.
+    using triA = Point3d.tmp;
+    using triB = Point3d.tmp;
+    using triC = Point3d.tmp;
+    using triD = Point3d.tmp;
+    const triPts = [triA, triB, triC, triD];
+    using n = Point3d.tmp;
+    using deltaAB = Point3d.tmp;
+    using deltaAC = Point3d.tmp;
+
+    /* Looking at a side face
+    a  b     uv: 0,0    1,0
+    c  d         0,1    1,1
+
+     CCW edge A -> B, so...
+     a and c are taken from A
+     b and d are taken from B
+
+     // Indices go b, a, c, d, b, c.
+    */
+
+    // UVs match a, b, c, d
+    const uvs = [
+      { u: 0, v: 0 },
+      { u: 0, v: 1 },
+      { u: 1, v: 0 },
+      { u: 1, v: 1 },
+    ];
+
+    // If the polygon is CCW, the edges will be A-->B to form CCW sides facing outward.
+    // If the polygon is CW, the sides will face inward.
+    isHole ??= poly.isHole ?? false;
+    const orientFn = isHole ^ !poly.isClockwise ? "iterateEdges" : "reverseIterateEdges";
+    let j = 0;
+    for ( const { a, b } of poly[orientFn]() ) {
+      // Position                   Normal          UV
+      // B.x, B.y, topZ     nx, ny, nz      0, 0
+      // A.x, A.y, topZ     nx, ny, nz      0, 0
+      // A.x, A.y, bottomZ  nx, ny, nz      0, 0
+      // B.x, B.y, bottomZ  nx, ny, nz      0, 0
+      // B.x, B.y, topZ     nx, ny, nz      0, 0
+      // A.x, A.y, bottomZ  nx, ny, nz      0, 0
+
+      triA.set(a.x, a.y, topZ);
+      triB.set(b.x, b.y, topZ);
+      triC.set(a.x, a.y, bottomZ);
+      triD.set(b.x, b.y, bottomZ);
+
+      // Calculate the normal
+      triB.subtract(triA, deltaAB);
+      triC.subtract(triA, deltaAC);
+      deltaAB.cross(deltaAC, n).normalize(n);
+
+      // Define each vertex.
+      // Position     Normal          UV
+      // x, y, z      n.x, n.y, n.z   u, v
+      const vs = Array(4);
+      for ( let i = 0; i < 4; i += 1 ) {
+        const pt = triPts[i];
+        const uv = uvs[i];
+        vs[i] = [pt.x, pt.y, pt.z, n.x, n.y, n.z, uv.u, uv.v];
+      }
+
+      // Set the 6 vertices. Indices go b, a, c, d, b, c; or [1, 0, 2, 3, 1, 2]
+      sides.set(vs[1], j); j += vertexOffset;
+      sides.set(vs[0], j); j += vertexOffset;
+      sides.set(vs[2], j); j += vertexOffset;
+      sides.set(vs[3], j); j += vertexOffset;
+      sides.set(vs[1], j); j += vertexOffset;
+      sides.set(vs[2], j); j += vertexOffset;
+    }
+    return sides;
+  }
+}
+
+export class Hex3dVertices extends Polygon3dVertices {
+
+  static canUseFan(_hex) { return true; }
+
+  static _getUnitVertices(hexKey) {
+    const { shape, width, height, hexColumns } = this.hexPropertiesForKey(hexKey);
+    return this.calculateVertices(shape, { width, height, hexColumns })
+  }
+
+  /**
+   * Determine the 3d vertices for a given hex shape.
+   * The hex polygon represents the top and bottom of the shape, using rectangular side faces.
+   * @param {CONST.TOKEN_HEXAGONAL_SHAPES} hexagonalShape
+   * @param {object} [opts]
+   * @param {number} [opts.topZ=T]        Top elevation
+   * @param {number} [opts.bottomZ=B]     Botom elevation
+   * @param {boolean} [opts.useFan]       Force fan or force no fan
+   * @returns {Float32Array} The vertices, untrimmed
+   */
+  static calculateVertices(shape, { width = 1, height = 1, hexColumns, ...opts } = {}) {
+    hexColumns ??= canvas.scene.grid.columns;
+    const hexRes = getHexagonalShape(width, height, shape, hexColumns);
+    let poly;
+    if ( hexRes ) {
+      // getHexagonalShape returns {points, center, snapping}
+      // Translate to 0,0.
+      poly = new PIXI.Polygon(hexRes.points);
+      poly = poly.translate(-hexRes.center.x, -hexRes.center.y);
+      if ( poly.isClockwise ) poly.reverseOrientation();
+
+    } else poly = (new PIXI.Rectangle(-width * 0.5, -height * 0.5, width * 0.5, height * 0.5)).toPolygon(); // Fallback.
+
+    // Convert to 3d polygon vertices.
+    opts.useFan = true;
+    opts.centroid = PIXI.Point.tmp.set(0, 0); // Centered at 0, 0.
+    return super.calculateVertices(poly, opts);
+  }
+
+  /**
+   * Get the unit polygon hex shape for a token.
+   * @param {Token} token
+   * @returns {PIXI.Polygon}
+   */
+  static hexagonalUnitShapeForToken(token) {
+    const res = getHexagonalShape(token.document.width, token.document.height, token.document.shape, canvas.scene.grid.columns ?? false);
+    let poly = new PIXI.Polygon(res.points);
+    poly = poly.translate(-res.center.x, -res.center.y);
+    const bounds = poly.getBounds();
+    return poly.scale(1/bounds.width, 1/bounds.height);
+  }
+
+  static calculateVerticesForToken(token) {
+    // Center the token at 0,0,0, with unit size 1.
+    const { width, height, shape } = token.document;
+    return this.calculateVertices(shape, { width, height });
+  }
+
+  static hexKeyForToken(token) {
+    const { width, height, shape } = token.document;
+    const hexColumns = canvas.scene.grid.columns;
+    return `${shape}_${width}_${height}_${hexColumns}`;
+  }
+
+  static hexPropertiesForKey(hexKey) {
+    const values = hexKey.split("_").map(elem => Number(elem));
+    return { shape: values[0], width: values[1], height: values[2], hexColumns: values[3] }
+  }
+
+  static hexKeyForProperties({ shape = 0, width = 1, height = 1, hexColumns } = {}) {
+    hexColumns ??= canvas.scene.grid.columns;
+    return `${shape}_${width}_${height}_${hexColumns}`;
+  }
+
+  static triangulatePolygonForToken(token, { topZ, centroid, stride } = {}) {
+    const poly = this.hexagonalUnitShapeForToken(token);
+    const scaledPoly = poly
+      .scale(token.document.width, token.document.height)
+      .translate(token.center.x, token.center.y);
+    return this._fanTriangulatePolygon(scaledPoly, { topZ, centroid, stride });
+  }
+}
+
+export class Ellipse3dVertices extends Polygon3dVertices {
+  static unitEllipse = new PIXI.Ellipse(0, 0, 1, 1);
+
+  static topLength(density = this.defaultDensity) { return Math.floor(this.NUM_TRIANGLE_ELEMENTS * density); }
+
+  static sidesLength(density = this.defaultDensity) { return Math.floor(this.NUM_TRIANGLE_ELEMENTS * density * 2); }
+
+  static calculateVertices(ellipse = this.unitEllipse, { density = this.defaultDensity, topZ = T, bottomZ = B } = {}) {
+    const poly = ellipse.toPolygon({ density });
+    return Polygon3dVertices.calculateVertices(poly, { topZ, bottomZ, centroid: ellipse.center }); // Cannot use super here b/c we want to pretend it is a polygon class.
+  }
+
+  static canUseFan(_ellipse) { return true; }
+
+  static _fanTriangulatePolygon(ellipse = this.unitEllipse, opts = {}) {
+    const density = opts.density ?? this.defaultDensity;
+    const poly = ellipse.toPolygon({ density });
+    opts.center ??= ellipse.center;
+    return Polygon3dVertices.triangulatePolygon(poly, opts); // Cannot use super here b/c we want to pretend it is a polygon class.
+  }
+
+  static triangulatePolygon(ellipse, opts) { return this._fanTriangulatePolygon(ellipse, opts); }
+
+  static polygonSideFaces(ellipse, opts = {}) {
+    const density = opts.density ?? this.defaultDensity;
+    const poly = ellipse.toPolygon({ density });
+    return Polygon3dVertices.polygonSideFaces(poly, opts); // Cannot use super here b/c we want to pretend it is a polygon class.
+  }
+
+  static get defaultDensity() { return PIXI.Circle.approximateVertexDensity(canvas.grid?.size || 100); }
+
+  static defaultDensityForDimensions(w = 1, h = 1, z = 1) {
+    return PIXI.Circle.approximateVertexDensity((canvas.grid?.size || 100) * Math.max(w, h, z));
+  }
+
+  static _cacheType(type = this.defaultDensity) { return super._cacheType(type); }
+
+  static _getUnitVertices(density = this.defaultDensity) { return this.calculateVertices(undefined, { density }); }
+
+  static modelMatrixFromShape(ellipse, { topZ = T, bottomZ = B, rotateZ = 0, modelMatrix } = {}) {
+    modelMatrix ??= new ModelMatrix();
+
+    const zHeight = topZ - bottomZ;
+    const z = bottomZ + (zHeight * 0.5);
+    const { width, height } = ellipse;
+    const radians = toRadians(rotateZ ?? ellipse.rotation ?? 0);
+    const center = ellipse.center;
+
+    // Build transform matrix.
+    MatrixFloat32.scale(width, height, zHeight, modelMatrix.scale);
+    MatrixFloat32.translation(center.x, center.y, z, modelMatrix.translation);
+    MatrixFloat32.rotationZ(radians, true, modelMatrix.rotation);
+    modelMatrix.needsUpdate = true;
+    return modelMatrix;
+  }
+}
+
+export class Circle3dVertices extends Ellipse3dVertices {
+
+  static get defaultDensity() { return PIXI.Circle.approximateVertexDensity(canvas.grid?.size || 100); }
+
+  static defaultDensityForDimensions(w = 1, h = 1, z = 1) {
+    return PIXI.Circle.approximateVertexDensity((canvas.grid?.size || 100) * Math.max(w, h, z));
+  }
+
+  static unitCircle = new PIXI.Circle(0, 0, 1); // Radius of 1; scales upwards by provided radius.
+
+  static _fanTriangulatePolygon(circle = this.unitCircle, opts) {
+    return super._fanTriangulatePolygon(circle, opts);
+  }
+
+  static calculateVertices(circle = this.unitCircle, { density = this.defaultDensity, topZ = T, bottomZ = B } = {}) {
+    const poly = circle.toPolygon({ density });
+    return Polygon3dVertices.calculateVertices(poly, { topZ, bottomZ, centroid: circle.center }); // Cannot use super here b/c we want to pretend it is a polygon class.
+  }
+
+  static _cacheType(type = this.defaultDensity) { return super._cacheType(type); }
+
+  static _getUnitVertices(density = this.defaultDensity) { return this.calculateVertices(undefined, { density }); }
+
+  static modelMatrixFromShape(circle, { topZ = T, bottomZ = B, modelMatrix } = {}) {
+    modelMatrix ??= new ModelMatrix();
+
+    const zHeight = topZ - bottomZ;
+    const z = bottomZ + (zHeight * 0.5);
+    const { center, radius } = circle;
+
+    // Build transform matrix.
+    MatrixFloat32.scale(radius, radius, zHeight, modelMatrix.scale);
+    MatrixFloat32.translation(center.x, center.y, z, modelMatrix.translation);
+    MatrixFloat32.identity(4, 4, modelMatrix.rotation);
+    modelMatrix.needsUpdate = true;
+    return modelMatrix;
+  }
+}
+
+export class SphereVertices extends BasicVertices {
+
+  static get defaultDensity() { return this.defaultDensityForDimensions(); }
+
+  static defaultDensityForDimensions(w = 1, h = 1, z = 1) {
+    /*
+    Assume a 1x1 token is sufficient resolution for a decent sphere.
+    The following is approximately 87 from center to far 3d corner for a 100x100x100 token.
+    Point3d.distanceBetween(Point3d.tmp.set(0,0,0), Point3d.tmp.set(50, 50 ,50))
+    */
+    w = canvas.grid.sizeX * w * 0.5;
+    h = canvas.grid.sizeY * h * 0.5;
+    z = canvas.grid.size * z * 0.5;
+    const r = Point3d.distanceBetween(Point3d.tmp.set(0,0,0), Point3d.tmp.set(w, h, z)); // Want the radius, not the diameter.
+    return this.numberOfSphericalPointsForSpacing(r);
+  }
+
+  /**
+   * How many spherical points are necessary to achieve a given spacing for a given sphere radius?
+   * @param {number} [radius=1]
+   * @param {number} [spacing]        Defaults to the module spacing default for per-pixel calculator.
+   * @returns {number}
+   */
+  static numberOfSphericalPointsForSpacing(r = 1, l = CONFIG[GEOMETRY_LIB_ID].perPixelSpacing || 10) {
+    /*
+    Surface area of a sphere is 4πr^2.
+    With N points, divide by N to get average area per point.
+    Assuming perfectly equidistant points, consider side length of a square with average area.
+    l = sqrt(4πr^2/N) = 2r*sqrt(π/N)
+    To get N, square both sides and simplify.
+    N = (4πr^2) / l^2
+    l = 2 * r * Math.sqrt(Math.PI / N);
+    */
+    return Math.floor((4 * Math.PI * (r ** 2)) / (l ** 2)) || 1;
+  }
+
+  static calculateSphericalVertices({ density, r } = {}) {
+    // Assume a 1x1 token is sufficient resolution for a decent sphere.
+    /*
+    // The following is approximately 87. From center to far 3d corner.
+    // Point3d.distanceBetween(Point3d.tmp.set(0,0,0), Point3d.tmp.set(50, 50 ,50))
+    */
+    density ??= r ? Math.floor(this.numberOfSphericalPointsForSpacing(r)) : this.defaultDensity;
+    const sphericalPoints = Sphere.pointsLattice(density);
+
+    // Scale the points by 1/2, so instead of -1 to 1 they go from -.5 to .5.
+    sphericalPoints.forEach(pt => pt.multiplyScalar(0.5, pt));
+
+    const lonLatPoints = sphericalPoints.map(pt => cartesianToLonLat(pt));
+    const lonLatArr = lonLatPoints.map(pt => [pt.x, pt.y])
+
+    const delauney = geoDelaunay(lonLatArr);
+    const tris3d = delauney.triangles.map(triIndices => {
+      const a = sphericalPoints[triIndices[0]];
+      const b = sphericalPoints[triIndices[1]];
+      const c = sphericalPoints[triIndices[2]];
+      return Triangle3d.from3Points(a, b, c);
+    });
+
+    // Test by scaling.
+    // scaledTris3d = tris3d.map(tri => tri.scale({ x: 1000, y: 1000, z: 1000 }))
+    // scaledTris3d.forEach(tri => tri.draw2d())
+
+    Point3d.release(...sphericalPoints);
+    PIXI.Point.release(...lonLatPoints);
+    const vertices = Triangle3d.trianglesToVertices(tris3d, { addNormals: true })
+    tris3d.forEach(tri => Point3d.release(...tri.points));
+    return vertices;
+  }
+
+  static _cacheType(type = this.defaultDensity) { return super._cacheType(type); }
+
+  static _getUnitVertices(density = this.defaultDensity) {
+    const vertices = this.calculateSphericalVertices({ density })
+    const verticesNormalUVs = this.expandArrayStride(vertices, { stride: 8, newStride: 8 });
+    this.appendNormals(verticesNormalUVs, { stride: 8, positionOffset: 0, normalsOffset: 3, overwrite: true, outArr: verticesNormalUVs });
+    this.appendUVs(verticesNormalUVs, { stride: 8, positionOffset: 0, uvsOffset: 6, overwrite: true, outArr: verticesNormalUVs });
+    return verticesNormalUVs;
+  }
+
+  static modelMatrixFromShape(circle, { elevationZ = 0, modelMatrix } = {}) {
+    if ( circle instanceof Sphere ) return this._modelMatrixFromSphere(circle, { modelMatrix });
+    modelMatrix ??= new ModelMatrix();
+
+    // Build transform matrix.
+    MatrixFloat32.scale(circle.radius, circle.radius, circle.radius, modelMatrix.scale);
+    MatrixFloat32.translation(circle.x, circle.y, elevationZ, modelMatrix.translation);
+    MatrixFloat32.identity(4, 4, modelMatrix.rotation);
+    modelMatrix.needsUpdate = true;
+    return modelMatrix;
+  }
+
+  static _modelMatrixFromSphere(sphere, { modelMatrix } = {}) {
+    modelMatrix ??= new ModelMatrix();
+
+    // Build transform matrix.
+    MatrixFloat32.scale(sphere.radius, sphere.radius, sphere.radius, modelMatrix.scale);
+    MatrixFloat32.translation(sphere.x, sphere.y, sphere.z, modelMatrix.translation);
+    MatrixFloat32.identity(4, 4, modelMatrix.rotation);
+    modelMatrix.needsUpdate = true;
+    return modelMatrix;
+  }
+
+}
+
+// ----- NOTE: Helper functions ----- //
+function setFloatView(arr, buffer, offset = 0) {
+  const out = new Float32Array(buffer, offset * Float32Array.BYTES_PER_ELEMENT, arr.length);
+  out.set(arr);
+  return out;
+};
+
+/**
+ * From foundry's BaseToken.#getHexagonalShape.
+ * Get the hexagonal shape given the type, width, and height.
+ * @param {boolean} columns    Column-based instead of row-based hexagonal grid?
+ * @param {number} type        The hexagonal shape (one of {@link CONST.TOKEN_HEXAGONAL_SHAPES})
+ * @param {number} width       The width of the Token (positive)
+ * @param {number} height      The height of the Token (positive)
+ * @returns {DeepReadonly<TokenHexagonalShape>|null}    The hexagonal shape or null if there is no shape
+ *                                                      for the given combination of arguments
+ */
+const hexagonalShapes = new Map();
+
+/**
+ * Get the hexagonal shape given the type, width, and height.
+ * @param {number} width                                    The width of the Token (positive)
+ * @param {number} height                                   The height of the Token (positive)
+ * @param {TokenShapeType} shape                            The shape (one of {@link CONST.TOKEN_SHAPES})
+ * @param {boolean} columns                                 Column-based instead of row-based hexagonal grid?
+ * @returns {DeepReadonly<TokenHexagonalShapeData>|null}    The hexagonal shape or null if there is no shape
+ *                                                          for the given combination of arguments
+ */
+function getHexagonalShape(width, height, shape, columns) {
+  if ( !Number.isInteger(width * 2) || !Number.isInteger(height * 2) ) return null;
+
+  const TOKEN_SHAPES = CONST.TOKEN_SHAPES;
+
+  // TODO: can we set a max of 2^13 on width and height so that we may use an integer key?
+  const key = `${width},${height},${shape}${columns ? "C" : "R"}`;
+  let data = hexagonalShapes.get(key); // BaseToken.#hexagonalShapes.get(key);
+  if ( data ) return data;
+
+  // Hexagon symmetry
+  if ( columns ) {
+    const rowData = getHexagonalShape(height, width, shape, false); // BaseToken.#getHexagonalShape(height, width, shape, false);
+    if ( !rowData ) return null;
+
+    // Transpose the offsets/points of the shape in row orientation
+    const offsets = {even: [], odd: []};
+    for ( const {i, j} of rowData.offsets.even ) offsets.even.push({i: j, j: i});
+    for ( const {i, j} of rowData.offsets.odd ) offsets.odd.push({i: j, j: i});
+    offsets.even.sort(({i: i0, j: j0}, {i: i1, j: j1}) => (j0 - j1) || (i0 - i1));
+    offsets.odd.sort(({i: i0, j: j0}, {i: i1, j: j1}) => (j0 - j1) || (i0 - i1));
+    const points = [];
+    for ( let i = rowData.points.length; i > 0; i -= 2 ) {
+      points.push(rowData.points[i - 1], rowData.points[i - 2]);
+    }
+    data = {
+      offsets,
+      points,
+      center: {x: rowData.center.y, y: rowData.center.x},
+      anchor: {x: rowData.anchor.y, y: rowData.anchor.x}
+    };
+  }
+
+  // Small hexagon
+  else if ( (width === 0.5) && (height === 0.5) ) {
+    data = {
+      offsets: {even: [{i: 0, j: 0}], odd: [{i: 0, j: 0}]},
+      points: [0.25, 0.0, 0.5, 0.125, 0.5, 0.375, 0.25, 0.5, 0.0, 0.375, 0.0, 0.125],
+      center: {x: 0.25, y: 0.25},
+      anchor: {x: 0.25, y: 0.25}
+    };
+  }
+
+  // Normal hexagon
+  else if ( (width === 1) && (height === 1) ) {
+    data = {
+      offsets: {even: [{i: 0, j: 0}], odd: [{i: 0, j: 0}]},
+      points: [0.5, 0.0, 1.0, 0.25, 1, 0.75, 0.5, 1.0, 0.0, 0.75, 0.0, 0.25],
+      center: {x: 0.5, y: 0.5},
+      anchor: {x: 0.5, y: 0.5}
+    };
+  }
+
+  // Hexagonal ellipse or trapezoid
+  else if ( shape <= TOKEN_SHAPES.TRAPEZOID_2 ) {
+    data = createHexagonalEllipseOrTrapezoid(width, height, shape); // BaseToken.#createHexagonalEllipseOrTrapezoid(width, height, shape);
+  }
+
+  // Hexagonal rectangle
+  else if ( shape <= TOKEN_SHAPES.RECTANGLE_2 ) {
+    data = createHexagonalRectangle(width, height, shape); // BaseToken.#createHexagonalRectangle(width, height, shape);
+  }
+
+  // Cache the shape
+  if ( data ) {
+    foundry.utils.deepFreeze(data);
+    hexagonalShapes.set(key,data); // BaseToken.#hexagonalShapes.set(key, data);
+  }
+  return data;
+}
+
+/**
+ * From foundry's BaseToken.#createHexagonalEllipseOrTrapezoid
+ *
+ * Create the row-based hexagonal ellipse/trapezoid given the type, width, and height.
+ * @param {number} width                   The width of the Token (positive)
+ * @param {number} height                  The height of the Token (positive)
+ * @param {number} shape                   The shape type (must be ELLIPSE_1, ELLIPSE_1, TRAPEZOID_1, or TRAPEZOID_2)
+ * @returns {TokenHexagonalShapeData|null} The hexagonal shape or null if there is no shape for the given combination
+ *                                         of arguments
+ */
+function createHexagonalEllipseOrTrapezoid(width, height, shape) {
+  if ( !Number.isInteger(width) || !Number.isInteger(height) ) return null;
+  const TOKEN_SHAPES = CONST.TOKEN_SHAPES;
+  const points = [];
+  let top;
+  let bottom;
+  switch ( shape ) {
+    case TOKEN_SHAPES.ELLIPSE_1:
+      if ( height >= 2 * width ) return null;
+      top = Math.floor(height / 2);
+      bottom = Math.floor((height - 1) / 2);
+      break;
+    case TOKEN_SHAPES.ELLIPSE_2:
+      if ( height >= 2 * width ) return null;
+      top = Math.floor((height - 1) / 2);
+      bottom = Math.floor(height / 2);
+      break;
+    case TOKEN_SHAPES.TRAPEZOID_1:
+      if ( height > width ) return null;
+      top = height - 1;
+      bottom = 0;
+      break;
+    case TOKEN_SHAPES.TRAPEZOID_2:
+      if ( height > width ) return null;
+      top = 0;
+      bottom = height - 1;
+      break;
+  }
+  const offsets = {even: [], odd: []};
+  for ( let i = bottom; i > 0; i-- ) {
+    for ( let j = 0; j < width - i; j++ ) {
+      offsets.even.push({i: bottom - i, j: j + (((bottom & 1) + i + 1) >> 1)});
+      offsets.odd.push({i: bottom - i, j: j + (((bottom & 1) + i) >> 1)});
+    }
+  }
+  for ( let i = 0; i <= top; i++ ) {
+    for ( let j = 0; j < width - i; j++ ) {
+      offsets.even.push({i: bottom + i, j: j + (((bottom & 1) + i + 1) >> 1)});
+      offsets.odd.push({i: bottom + i, j: j + (((bottom & 1) + i) >> 1)});
+    }
+  }
+  let x = 0.5 * bottom;
+  let y = 0.25;
+  for ( let k = width - bottom; k--; ) {
+    points.push(x, y);
+    x += 0.5;
+    y -= 0.25;
+    points.push(x, y);
+    x += 0.5;
+    y += 0.25;
+  }
+  points.push(x, y);
+  for ( let k = bottom; k--; ) {
+    y += 0.5;
+    points.push(x, y);
+    x += 0.5;
+    y += 0.25;
+    points.push(x, y);
+  }
+  y += 0.5;
+  for ( let k = top; k--; ) {
+    points.push(x, y);
+    x -= 0.5;
+    y += 0.25;
+    points.push(x, y);
+    y += 0.5;
+  }
+  for ( let k = width - top; k--; ) {
+    points.push(x, y);
+    x -= 0.5;
+    y += 0.25;
+    points.push(x, y);
+    x -= 0.5;
+    y -= 0.25;
+  }
+  points.push(x, y);
+  for ( let k = top; k--; ) {
+    y -= 0.5;
+    points.push(x, y);
+    x -= 0.5;
+    y -= 0.25;
+    points.push(x, y);
+  }
+  y -= 0.5;
+  for ( let k = bottom; k--; ) {
+    points.push(x, y);
+    x += 0.5;
+    y -= 0.25;
+    points.push(x, y);
+    y -= 0.5;
+  }
+  return {
+    offsets,
+    points,
+    // We use the centroid of the polygon for ellipse and trapzoid shapes
+    center: foundry.utils.polygonCentroid(points),
+    anchor: bottom % 2 ? {x: 0.0, y: 0.5} : {x: 0.5, y: 0.5}
+  };
+}
+
+/**
+ * From foundry's BaseToken.#createHexagonalRectangle
+ *
+ * Create the row-based hexagonal rectangle given the type, width, and height.
+ * @param {number} width                      The width of the Token (positive)
+ * @param {number} height                     The height of the Token (positive)
+ * @param {TokenShapeType} shape              The shape type (must be RECTANGLE_1 or RECTANGLE_2)
+ * @returns {TokenHexagonalShapeData|null}    The hexagonal shape or null if there is no shape
+ *                                            for the given combination of arguments
+ */
+function createHexagonalRectangle(width, height, shape) {
+  if ( (width < 1) || !Number.isInteger(height) ) return null;
+  if ( (width === 1) && (height > 1) ) return null;
+  if ( !Number.isInteger(width) && (height === 1) ) return null;
+  const even = (shape === CONST.TOKEN_SHAPES.RECTANGLE_1) || (height === 1);
+  const offsets = {even: [], odd: []};
+  for ( let i = 0; i < height; i++) {
+    const j0 = even ? 0 : (i + 1) & 1;
+    const j1 = ((width + ((i & 1) * 0.5)) | 0) - (even ? (i & 1) : 0);
+    for ( let j = j0; j < j1; j++ ) {
+      offsets.even.push({i, j: j + (i & 1)});
+      offsets.odd.push({i, j});
+    }
+  }
+  let x = even ? 0.0 : 0.5;
+  let y = 0.25;
+  const points = [x, y];
+  while ( x + 1 <= width ) {
+    x += 0.5;
+    y -= 0.25;
+    points.push(x, y);
+    x += 0.5;
+    y += 0.25;
+    points.push(x, y);
+  }
+  if ( x !== width ) {
+    y += 0.5;
+    points.push(x, y);
+    x += 0.5;
+    y += 0.25;
+    points.push(x, y);
+  }
+  while ( y + 1.5 <= 0.75 * height ) {
+    y += 0.5;
+    points.push(x, y);
+    x -= 0.5;
+    y += 0.25;
+    points.push(x, y);
+    y += 0.5;
+    points.push(x, y);
+    x += 0.5;
+    y += 0.25;
+    points.push(x, y);
+  }
+  if ( y + 0.75 < 0.75 * height ) {
+    y += 0.5;
+    points.push(x, y);
+    x -= 0.5;
+    y += 0.25;
+    points.push(x, y);
+  }
+  y += 0.5;
+  points.push(x, y);
+  while ( x - 1 >= 0 ) {
+    x -= 0.5;
+    y += 0.25;
+    points.push(x, y);
+    x -= 0.5;
+    y -= 0.25;
+    points.push(x, y);
+  }
+  if ( x !== 0 ) {
+    y -= 0.5;
+    points.push(x, y);
+    x -= 0.5;
+    y -= 0.25;
+    points.push(x, y);
+  }
+  while ( y - 1.5 > 0 ) {
+    y -= 0.5;
+    points.push(x, y);
+    x += 0.5;
+    y -= 0.25;
+    points.push(x, y);
+    y -= 0.5;
+    points.push(x, y);
+    x -= 0.5;
+    y -= 0.25;
+    points.push(x, y);
+  }
+  if ( y - 0.75 > 0 ) {
+    y -= 0.5;
+    points.push(x, y);
+    x += 0.5;
+    y -= 0.25;
+    points.push(x, y);
+  }
+  return {
+    offsets,
+    points,
+    // We use center of the rectangle (and not the centroid of the polygon) for the rectangle shapes
+    center: {
+      x: width / 2,
+      y: ((0.75 * Math.floor(height)) + (0.5 * (height % 1)) + 0.25) / 2
+    },
+    anchor: even ? {x: 0.5, y: 0.5} : {x: 0.0, y: 0.5}
+  };
+}
+
+/**
+ * Convert an angle (in degrees) to radians.
+ * @param {number<degrees>} angle
+ * @returns {number<radians>}
+ */
+const pi180 = Math.PI / 180;
+function toRadians(angle) { return angle * pi180;}
+
+function duplicateArray(arr, times) {
+  if ( !arr.length ) return new arr.constructor(times);
+
+  if ( Array.isArray(arr) ) return Array(times)
+    .fill(arr)
+    .reduce((accumulator, currentArray) => accumulator.concat(currentArray), []);
+
+  // Typed array
+  const n = arr.length;
+  const out = new arr.constructor(n * times);
+  for ( let i = 0; i < times; i += 1 ) out.set(arr, i * n);
+  return out;
+}
+
+/**
+ * Converts 3D Cartesian coordinates (x, y, z) on a sphere
+ * to geographic latitude and longitude in degrees.
+ * @param {Point3d} pt
+ * @returns {PIXI.Point} Object with latitude and longitude in degrees.
+ * @returns {{lon: number, lat: number}}
+ */
+function cartesianToLonLat(pt) {
+  // Calculate the radius 'r' from the center (0,0,0) to the point (x,y,z).
+  // This ensures the function works even if the points aren't on a unit sphere (r=1).
+  const r = pt.magnitude();
+
+  // If r is 0, the point is at the origin. We'll default to (0, 0).
+  if ( r === 0 ) PIXI.Point.tmp.set(0, 0);
+
+  // --- Calculate Latitude ---
+  // Latitude (lat) is the angle from the equatorial (XY) plane.
+  // We can find it using arcsin(z / r).
+  // Math.asin() returns values in radians from -PI/2 to PI/2.
+  const latRadians = Math.asin(pt.z / r);
+
+  // --- Calculate Longitude ---
+  // Longitude (lon) is the angle in the XY-plane from the +X axis.
+  // Math.atan2(y, x) correctly calculates the angle in all four quadrants.
+  // It returns values in radians from -PI to PI.
+  const lonRadians = Math.atan2(-pt.y, pt.x);
+
+  // Convert radians to degrees
+  const lat = latRadians * (180 / Math.PI);
+  const lon = lonRadians * (180 / Math.PI);
+
+  return PIXI.Point.tmp.set(lon, lat);
+}
+
+/* Testing
+Draw = CONFIG.GeometryLib.lib.Draw;
+vertices = CONFIG.GeometryLib.lib.placeableGeometry.vertices;
+BasicVertices = vertices.BasicVertices
+
+vertices.HorizontalQuadVertices.getUnitVertices()
+vertices.HorizontalQuadVertices.getUnitVertices("down")
+
+vertices.VerticalQuadVertices.getUnitVertices()
+vertices.VerticalQuadVertices.getUnitVertices("directional")
+
+vertices.Rectangle3dVertices.getUnitVertices("south")
+vertices.Rectangle3dVertices.getUnitVertices()
+vertices.Rectangle3dVertices.getUnitVertices("top")
+
+hexKey = vertices.Hex3dVertices.hexKeyForToken(_token)
+vertices.Hex3dVertices.getUnitVertices(hexKey)
+
+vertices.Ellipse3dVertices.getUnitVertices();
+vertices.Circle3dVertices.getUnitVertices();
+vertices.SphereVertices.getUnitVertices()
+
+// Tile
+rect = new PIXI.Rectangle(100, 100, 200, 300)
+v = vertices.HorizontalQuadVertices.calculateVerticesForShape(rect, { })
+Draw.shape(rect, { color: Draw.COLORS.blue, width: 5, alpha: 0.25 })
+vertices.BasicVertices.debugDraw(v, undefined, { color: Draw.COLORS.orange, addNormals: true, addUVs: true })
+
+v = vertices.HorizontalQuadVertices.calculateVerticesForShape(rect, { rotateZ: 45 })
+vertices.BasicVertices.debugDraw(v, undefined, { color: Draw.COLORS.orange, addNormals: true, addUVs: true })
+
+// Wall
+a = new PIXI.Point(10, 20)
+b = new PIXI.Point(100, 200)
+v = vertices.VerticalQuadVertices.calculateVerticesForShape({ a, b }, { topZ: 100, bottomZ: -100 })
+Draw.segment({ a, b }, { color: Draw.COLORS.blue, width: 5, alpha: 0.25 })
+vertices.BasicVertices.debugDraw(v, undefined, { color: Draw.COLORS.orange, addNormals: true, addUVs: true })
+
+// Token
+rect = new PIXI.Rectangle(100, 100, 200, 300)
+v = vertices.Rectangle3dVertices.calculateVerticesForShape(rect, { })
+Draw.shape(rect, { color: Draw.COLORS.blue, width: 5, alpha: 0.25 })
+vertices.BasicVertices.debugDraw(v, undefined, { color: Draw.COLORS.orange, addNormals: true, addUVs: true })
+
+v = vertices.HorizontalQuadVertices.calculateVerticesForShape(rect, { rotateZ: 45 })
+vertices.BasicVertices.debugDraw(v, undefined, { color: Draw.COLORS.orange, addNormals: true, addUVs: true })
+
+
+
+
+rect = _token.getBounds();
+let { topZ, bottomZ } = _token
+
+
+// Hex Token
+
+// Circle Token
+cir = new PIXI.Circle(100, 200, 200)
+v = vertices.Circle3dVertices.calculateVerticesForShape(cir)
+Draw.shape(cir, { color: Draw.COLORS.blue, width: 5, alpha: 0.25 })
+vertices.BasicVertices.debugDraw(v, undefined, { color: Draw.COLORS.orange, addNormals: true, addUVs: true })
+
+
+
+// Ellipse Token
+ell = new PIXI.Ellipse(100, 100, 100, 200)
+v = vertices.Ellipse3dVertices.calculateVerticesForShape(ell)
+Draw.shape(ell, { color: Draw.COLORS.blue, width: 5, alpha: 0.25 })
+vertices.BasicVertices.debugDraw(v, undefined, { color: Draw.COLORS.orange, addNormals: true, addUVs: true })
+
+v = vertices.Ellipse3dVertices.calculateVerticesForShape(ell, { rotateZ: 45 })
+vertices.BasicVertices.debugDraw(v, undefined, { color: Draw.COLORS.orange, addNormals: true, addUVs: true })
+
+// Token sphere
+Point3d = CONFIG.GeometryLib.lib.threeD.Point3d
+Sphere = CONFIG.GeometryLib.lib.threeD.Sphere
+sphere = Sphere.fromCenterPoint(new Point3d(100, 200, 300), 200)
+const cir = sphere.toCircle2d()
+
+v = vertices.SphereVertices.calculateVerticesForShape(cir)
+Draw.shape(cir, { color: Draw.COLORS.blue, width: 5, alpha: 0.25 })
+vertices.BasicVertices.debugDraw(v, undefined, { color: Draw.COLORS.orange, addNormals: true, addUVs: true })
+
+// Trimming
+v = vertices.HorizontalQuadVertices.getUnitVertices("doubleUp")
+res = BasicVertices.condenseVertexData(v, { stride: 8 });
+v1 = BasicVertices.cutVertexData(v, { stride: 8, startingOffset: 3, deletionLength: 5 })
+v1 = BasicVertices.cutVertexData(v, { stride: 8, startingOffset: 6, deletionLength: 2 })
+v1 = BasicVertices.cutVertexData(v, { stride: 8, startingOffset: 3, deletionLength: 3 })
+
+*/
+

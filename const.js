@@ -1,43 +1,46 @@
 /* globals
-CONST,
 game,
 Hooks
 */
 "use strict";
 
+export const VERSION = "0.5.2";
+
+import { MODULE_ID as thisModuleId } from "../const.js";
+
+export const GEOMETRY_LIB_ID = "GeometryLib";
+
+export const GEOMETRY_ID = "geometry";
+
+export const MODULE_ID = thisModuleId;
+
+// Accessed at CONFIG.GeometryLib.
+// Add various groupings (folders).
 export const GEOMETRY_CONFIG = {};
 GEOMETRY_CONFIG.CenteredPolygons = {};
 GEOMETRY_CONFIG.Graph = {};
 GEOMETRY_CONFIG.RegularPolygons = {};
 GEOMETRY_CONFIG.threeD = {};
+GEOMETRY_CONFIG.placeableTrackers = {};
+GEOMETRY_CONFIG.placeableGeometry = {};
 
-export const MODULE_KEYS = {
-  EV: {
-    ID: "elevatedvision",
-    ACTIVE: false,
-    FLAGS: {
-      TOKEN_HEIGHT: "tokenHeight",
-      ELEVATION: "elevation",
-    }
-  },
+// Track certain modules that complement features of this module.
+export const OTHER_MODULES = {
 
-  WH: {
+  WALL_HEIGHT: {
     ID: "wall-height",
-    ACTIVE: false,
     FLAGS: {
       TOKEN_HEIGHT: "tokenHeight",
-      ELEVATION: "wall-height"
+      ELEVATION: "wall-height",
     }
   },
 
   LEVELS: {
     ID: "levels",
-    ACTIVE: false
   },
 
-  LEVELSAUTOCOVER: {
+  LEVELS_AUTOCOVER: {
     ID: "levelsautocover",
-    ACTIVE: false,
     FLAGS: {
       DUCKING: "ducking"
     }
@@ -45,11 +48,32 @@ export const MODULE_KEYS = {
 
   TERRAIN_MAPPER: {
     ID: "terrainmapper",
-    ACTIVE: false,
+    FLAGS: {
+      PLATEAU_ELEVATION: "plateauElevation",
+    },
+    API: "api",
+  },
+
+  ALTERNATIVE_TOKEN_VISIBILITY: {
+    ID: "tokenvisibility",
+  },
+
+  RIDEABLE: {
+    ID: "Rideable",
+    API: "api",
   }
 };
 
 // Hook init b/c game.modules is not initialized at start.
 Hooks.once("init", function() {
-  for ( const obj of Object.values(MODULE_KEYS) ) obj.ACTIVE = game.modules.get(obj.ID)?.active
+  for ( const [key, obj] of Object.entries(OTHER_MODULES) ) {
+    if ( !game.modules.get(obj.KEY)?.active ) delete OTHER_MODULES[key];
+  }
+});
+
+// API not necessarily available until ready hook. (Likely added at init.)
+Hooks.once("ready", function() {
+  for ( const module of Object.values(OTHER_MODULES) ) {
+    if ( module.API ) module.API = game.modules.get(module.KEY)[module.API];
+  }
 });

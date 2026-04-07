@@ -5,8 +5,8 @@ PIXI,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "./const.js";
-import { Pool } from "./Pool.js";
+import { PoolableMixin } from "./Pool.js";
+import { mix } from "./mixwith.js";
 
 // ----- NOTE: Foundry typedefs  ----- //
 
@@ -27,12 +27,7 @@ import { Pool } from "./Pool.js";
 /**
  * A 2d point that can function as Point|GridOffset2D. For just a point, use PIXI.Point.
  */
-export class GridCoordinates extends PIXI.Point {
-  static #pool = new Pool(this);
-
-  static releaseObj(obj) { this.#pool.release(obj); }
-
-  static get tmp() { return this.#pool.acquire(); }
+export class GridCoordinates extends mix(PIXI.Point).with(PoolableMixin) {
 
   /**
    * Factory function that converts a GridOffset to GridCoordinates.
@@ -96,11 +91,6 @@ export class GridCoordinates extends PIXI.Point {
   }
 
   /**
-   * @returns {GridCoordinates}
-   */
-  clone() { return new this.constructor(this.x, this.y); }
-
-  /**
    * @returns {PIXI.Point}
    */
   toPoint() { return PIXI.Point.fromObject(this); }
@@ -119,7 +109,7 @@ export class GridCoordinates extends PIXI.Point {
   /**
    * Center this point based on its current offset value.
    */
-  centerToOffset() { return this.setOffset(this); }
+  centerToGrid() { return this.setOffset(this); }
 
   /**
    * For compatibility with PIXI.Point.
@@ -134,6 +124,21 @@ export class GridCoordinates extends PIXI.Point {
    */
   offsetsEqual(other) {
     return this.i === other.i && this.j === other.j;
+  }
+
+  /**
+   * Add an offset to this point, returning a new point.
+   * Adds the offsets to the x,y coordinates, so that if it is off-grid it will remain off-grid.
+   * @param {pt} offset
+   * @param {GridCoordinates} [outPoint]
+   * @return {GridCoordinates}
+   */
+  addOffset(offset, outPoint) {
+    outPoint ??= this.constructor.tmp;
+    this.clone(outPoint);
+    outPoint.x += canvas.grid.size * (offset.i || 0);
+    outPoint.y += canvas.grid.size * (offset.j || 0);
+    return outPoint;
   }
 
   /**
@@ -192,10 +197,12 @@ export class GridCoordinates extends PIXI.Point {
     const res = this.measurePath([a, b], options);
     return res.distance;
   };
+
+  static gridCostBetween(a, b, options) {
+    const res = this.measurePath([a, b], options);
+    return res.cost;
+  }
 }
 
 // Synonyms
 GridCoordinates.getDirectPath = GridCoordinates.directPath; // Match Foundry's canvas.grid.getDirectPath.
-
-
-GEOMETRY_CONFIG.GridCoordinates ??= GridCoordinates;

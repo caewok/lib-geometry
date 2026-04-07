@@ -9,7 +9,6 @@ CONFIG
 
 "use strict";
 
-import { GEOMETRY_CONFIG } from "./const.js";
 
 // Draw class for drawing shapes; primarily for debugging
 
@@ -40,10 +39,43 @@ export class Draw {
     white: 0xFFFFFF
   };
 
+  // ----- Static color methods ----- //
+
+  /**
+   * Helper: Converts HSL values to a PIXI-friendly Hex Integer.
+   * * @param {number} h - Hue (0-360)
+   * @param {number} s - Saturation (0-100)
+   * @param {number} l - Lightness (0-100)
+   * @returns {number} - Hex integer (e.g., 0xFF0000)
+   */
+  static hslToHex(h, s, l) {
+    s /= 100;
+    l /= 100;
+
+    const k = n => (n + (h / 30)) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = n =>
+      l - (a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1))));
+
+    // Calculate RGB components (0-255)
+    const r = Math.round(255 * f(0));
+    const g = Math.round(255 * f(8));
+    const b = Math.round(255 * f(4));
+
+    // Combine bitwise into a single integer
+    return (r << 16) + (g << 8) + b;
+  }
+
+
   // ----- Static methods for backwards compatibility and ease-of-use ----- //
   static point(...args) {
     const d = new this();
     d.point(...args);
+  }
+
+  static star(...args) {
+    const d = new this();
+    d.star(...args);
   }
 
   static polygonPoints(...args) {
@@ -101,6 +133,14 @@ export class Draw {
     this.shape(new PIXI.Circle(p.x, p.y, radius), opts)
   }
 
+  star(p, { radius = 5, outerRadius, innerRadius, numTips, ...opts } = {}) {
+    opts.color ??= Draw.COLORS.yellow;
+    opts.fill ??= opts.color;
+    outerRadius ??= radius;
+    const pts = this._calculateStarPoints(p, { numTips, outerRadius, innerRadius });
+    this.shape(new PIXI.Polygon(pts), opts)
+  }
+
   /**
    * Draw the points of a polygon
    * @param {PIXI.Polygon} poly
@@ -130,13 +170,12 @@ export class Draw {
     else {
       // Move from t = 0 to t = 1.
       // Calculate the percent t for dash and gap lengths.
-      const delta = B.subtract(A);
+      using delta = B.subtract(A);
       const dist = delta.magnitude();
-      delta.release();
       const gapT = gapLength / dist;
       const dashT = dashLength / dist;
       let t = 0;
-      const current = A.clone();
+      using current = A.clone();
       while ( t < 1 ) {
         this.g.moveTo(current.x, current.y);
         t += dashT;
@@ -146,7 +185,6 @@ export class Draw {
         t += gapT;
         A.projectToward(B, t, current);
       }
-      current.release();
     }
   }
 
@@ -155,10 +193,11 @@ export class Draw {
    * @param {Point[]} points    Array of {x, y} objects.
    * @param {object} [drawingOptions]     Options to pass to the drawing method.
    */
-  connectPoints(points, drawingOptions) {
-    let prevPt = points.at(-1);
+  connectPoints(points, { close = false, ...drawingOptions } = {} ) {
     const nPts = points.length;
-    for ( let i = 0; i < nPts; i += 1 ) {
+    const ln = close ? nPts : nPts - 1;
+    let prevPt = close ? points.at(-1) : points.at(0);
+    for ( let i = close ? 0 : 1; i < ln; i += 1 ) {
       const currPt = points[i];
       this.segment({A: prevPt, B: currPt}, drawingOptions);
       prevPt = currPt;
@@ -219,6 +258,34 @@ export class Draw {
   }
 
   /**
+   * Helper to create a star to use as a point.
+   * @param {Point} center
+   * @param {number} [numTips=5]
+   * @param {number} [outerRadius=1]
+   * @param {number} [innerRadius]      Defaults to half the outer radius
+   * @returns {Point[]}
+   */
+  _calculateStarPoints(center, { numTips = 5, outerRadius = 1, innerRadius = outerRadius * 0.5 } = {}) {
+    const totalPoints = numTips * 2;
+    const vertices = Array(totalPoints);
+    const angleStep = Math.PI / numTips;
+
+    // Offset by -90 degrees (-π/2) so the first point faces straight up.
+    const startRotation = -Math.PI_1_2;
+    for ( let i = 0; i < totalPoints; i += 1 ) {
+      // Alternate between outer and inner radius.
+      const r = (i % 2 === 0) ? outerRadius : innerRadius;
+      const currAngle = startRotation + (i * angleStep);
+      vertices[i] = PIXI.Point.tmp.set(
+        center.x + Math.cos(currAngle) * r,
+        center.y + Math.sin(currAngle) * r,
+      );
+    }
+    return vertices;
+  }
+
+
+  /**
    * Clear all labels created by labelPoint.
    */
   clearLabels() {
@@ -232,6 +299,3 @@ export class Draw {
     this.g.clear();
   }
 }
-
-GEOMETRY_CONFIG.Draw ??= Draw;
-

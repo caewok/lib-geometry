@@ -3,10 +3,6 @@ PIXI,
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "../const.js";
-GEOMETRY_CONFIG.CenteredPolygons ??= {};
-import { NULL_SET } from "../util.js";
-
 /**
  * Base class to be extended by others.
  * Follows the approach of Drawing and RegularPolygon class.
@@ -15,37 +11,14 @@ import { NULL_SET } from "../util.js";
  */
 export class CenteredPolygonBase extends PIXI.Polygon {
 
-  static classTypes = new Set([this.name], "Centered", "Polygon"); // Alternative to instanceof
-
-  inheritsClassType(type) {
-    let proto = this;
-    let classTypes = proto.constructor.classTypes;
-    do {
-      if ( classTypes.has(type) ) return true;
-      proto = Object.getPrototypeOf(proto);
-      classTypes = proto?.constructor?.classTypes;
-
-    } while ( classTypes );
-    return false;
+  static [Symbol.hasInstance](instance) {
+    return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
   }
 
-  matchesClass(cl) {
-    return this.constructor.classTypes.equals(cl.classTypes || NULL_SET);
-  }
-
-  overlapsClass(cl) {
-    return this.constructor.classTypes.intersects(cl.classTypes || NULL_SET);
-  }
+  static get _geoLibType() { return this.name; }
 
   /** @type {PIXI.Point} */
   origin = new PIXI.Point();
-
-  // TODO: Make rotation and radians getters, so they can be modified.
-  /** @type {number} */
-  rotation = 0;
-
-  /** @type {number} */
-  radians = 0;
 
   /** @type {Point[]} */
   _fixedPoints;
@@ -68,8 +41,26 @@ export class CenteredPolygonBase extends PIXI.Polygon {
     super([]);
 
     this.origin.copyFrom(origin);
-    this.rotation = Math.normalizeDegrees(rotation);
-    this.radians = Math.toRadians(this.rotation);
+    if ( rotation ) this.rotation = rotation;
+  }
+
+  /** @type {number} */
+  #rotation = 0;
+
+  #radians = 0;
+
+  get rotation() { return this.#rotation; }
+
+  set rotation(value) {
+    this.#rotation = Math.normalizeDegrees(value);
+    this.#radians = Math.toRadians(this.#rotation);
+  }
+
+  get radians() { return this.#radians; }
+
+  set radians(value) {
+    this.#radians = Math.normalizeRadians(value);
+    this.#rotation = Math.toDegrees(value);
   }
 
   // Getters/setters for x and y for backwards compatibility.
@@ -159,8 +150,9 @@ export class CenteredPolygonBase extends PIXI.Polygon {
    * @returns {PIXI.Point}
    */
   fromCartesianCoords(a, outPoint) {
-    outPoint ??= new PIXI.Point;
-    a.translate(-this.x, -this.y, outPoint).rotate(-this.radians, outPoint);
+    outPoint ??= PIXI.Point.tmp;
+    a.add(-this.x, -this.y, outPoint)
+    PIXI.Point.rotate(outPoint, -this.radians, outPoint);
     return outPoint;
   }
 
@@ -171,10 +163,9 @@ export class CenteredPolygonBase extends PIXI.Polygon {
    * @returns {Point}
    */
   toCartesianCoords(a, outPoint) {
-    outPoint ??= new PIXI.Point;
-    a.rotate(this.radians, outPoint).translate(this.x, this.y, outPoint);
+    outPoint ??= PIXI.Point.tmp;
+    PIXI.Point.rotate(pt, this.radians, outPoint);
+    outPoint.add(this.x, this.y, outPoint);
     return outPoint;
   }
 }
-
-GEOMETRY_CONFIG.CenteredPolygons.CenteredPolygonBase ??= CenteredPolygonBase;

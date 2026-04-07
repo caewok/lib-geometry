@@ -3,7 +3,6 @@ PIXI,
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "./const.js";
 import { Point3d } from "./3d/Point3d.js";
 import { cutaway, gridUnitsToPixels } from "./util.js";
 import { Draw } from "./Draw.js";
@@ -219,7 +218,7 @@ export class CutawayPolygon extends PIXI.Polygon {
     opts.fill ??= Draw.COLORS.red;
     opts.fillAlpha ??= 0.3;
     const invertedPolyPoints = [];
-    const pts = this.pixiPoints({ close: false });
+    const pts = [...this.iteratePoints()];
 
     // Locate the minimum point that is above an arbitrarily low value so we don't draw excessively large polys.
     const LOWEST = gridUnitsToPixels(-100);
@@ -237,5 +236,3 @@ export class CutawayPolygon extends PIXI.Polygon {
     Draw.shape(invertedPoly, opts);
   }
 }
-
-GEOMETRY_CONFIG.CutawayPolygon = CutawayPolygon;

@@ -3,33 +3,10 @@ PIXI
 */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "../const.js";
 import { RegularPolygon } from "./RegularPolygon.js";
 import { NULL_SET } from "../util.js";
 
 export class EquilateralTriangle extends RegularPolygon {
-  static classTypes = new Set([this.name], "Triangle"); // Alternative to instanceof
-
-  inheritsClassType(type) {
-    let proto = this;
-    let classTypes = proto.constructor.classTypes;
-    do {
-      if ( classTypes.has(type) ) return true;
-      proto = Object.getPrototypeOf(proto);
-      classTypes = proto?.constructor?.classTypes;
-
-    } while ( classTypes );
-    return false;
-  }
-
-  matchesClass(cl) {
-    return this.constructor.classTypes.equals(cl.classTypes || NULL_SET);
-  }
-
-  overlapsClass(cl) {
-    return this.constructor.classTypes.intersects(cl.classTypes || NULL_SET);
-  }
-
 
   constructor(origin, radius, {rotation = 0} = {}) {
     super(origin, radius, { rotation, numSides: 3 });
@@ -69,9 +46,9 @@ export class EquilateralTriangle extends RegularPolygon {
     const sqrt3_2 = Math.SQRT3 / 2;
     const { radius, apothem } = this;
     return [
-      new PIXI.Point(radius, 0),
-      new PIXI.Point(-apothem, sqrt3_2 * radius),
-      new PIXI.Point(-apothem, -sqrt3_2 * radius)
+      PIXI.Point.tmp.set(radius, 0),
+      PIXI.Point.tmp.set(-apothem, sqrt3_2 * radius),
+      PIXI.Point.tmp.set(-apothem, -sqrt3_2 * radius)
     ];
   }
 
@@ -114,5 +91,3 @@ export class EquilateralTriangle extends RegularPolygon {
     return super.getBounds();
   }
 }
-
-GEOMETRY_CONFIG.RegularPolygons.EquilateralTriangle ??= EquilateralTriangle;
