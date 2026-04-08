@@ -1,3 +1,6 @@
+## 0.5.3
+Fix error when adding/subtracting origin in Regular Polygon.
+
 ## 0.5.2
 Add checks for whether token.actor is defined.
 
