@@ -855,7 +855,7 @@ class AbstractMatrix {
    * @param {number} angle  Angle, in radians
    * @param {Point3d} axis  Axis
    */
-  static rotationAngleAxis(angle, axis) {
+  static rotationAngleAxis(angle, axis, out) {
     axis.normalize(axis);
 
     let c = Math.cos(angle);
@@ -882,10 +882,8 @@ class AbstractMatrix {
       xz - ys, yz + xs, c + (axis.z * axis.z * cNeg), 0,
 
       0, 0, 0, 1
-    ]);
+    ], 4, 4, out);
   }
-
-
 
   // ----- NOTE: Basic math operations ----- //
 
