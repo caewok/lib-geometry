@@ -1,3 +1,8 @@
+## 0.5.4
+Add ClipperPaths unit tests.
+Add out parameter for Matrix#rotationAngleAxis.
+Improve performance of Matrix#multiply.
+
 ## 0.5.3
 Fix error when adding/subtracting origin in Regular Polygon.
 

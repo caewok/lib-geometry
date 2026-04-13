@@ -855,7 +855,7 @@ class AbstractMatrix {
    * @param {number} angle  Angle, in radians
    * @param {Point3d} axis  Axis
    */
-  static rotationAngleAxis(angle, axis) {
+  static rotationAngleAxis(angle, axis, out) {
     axis.normalize(axis);
 
     let c = Math.cos(angle);
@@ -882,10 +882,8 @@ class AbstractMatrix {
       xz - ys, yz + xs, c + (axis.z * axis.z * cNeg), 0,
 
       0, 0, 0, 1
-    ]);
+    ], 4, 4, out);
   }
-
-
 
   // ----- NOTE: Basic math operations ----- //
 
@@ -962,35 +960,32 @@ class AbstractMatrix {
    * @param {Matrix} [outMatrix]    Must have this.nrow and other.ncol; cannot be this or other.
    * @returns {Matrix}
    */
-  multiply(other, outMatrix) {
-    let A = this;
-    let B = other;
+  multiply(other, out) {
+    const rowsA = this.nrow;
+    const colsA = this.ncol;
+    const rowsB = other.nrow;
+    const colsB = other.ncol;
 
-    const rowsA = A.nrow;
-    const colsA = A.ncol;
-    const rowsB = B.nrow;
-    const colsB = B.ncol;
+    out ||= this.constructor.empty(rowsA, colsB);
 
-    outMatrix ??= this.constructor.zeroes(rowsA, colsB, outMatrix)
-
-    if ( colsA !== rowsB || outMatrix.nrow !== rowsA || outMatrix.ncol !== colsB ) {
+    if ( colsA !== rowsB || out.nrow !== rowsA || out.ncol !== colsB ) {
       console.error("Matrices cannot be multiplied.");
       return undefined;
     }
 
-    // Cannot have the outMatrix reference A or B, because the outMatrix values get modified in the loop.
-    if ( A === outMatrix ) A = A.clone();
-    if ( B === outMatrix ) B = B.clone();
-
+    // Create a flat buffer to hold results.
+    // This avoids having to zero the out matrix and avoids testing for whether to clone
+    // this or other in the event that this or other equal the out matrix.
+    const buffer = new Float32Array(rowsA * colsB);
     for ( let x = 0; x < rowsA; x += 1 ) {
       for ( let y = 0; y < colsB; y += 1 ) {
-        for ( let z = 0; z < colsA; z += 1 ) {
-          const value = outMatrix.getIndex(x, y) + (this.getIndex(x, z) * other.getIndex(z, y));
-          outMatrix.setIndex(x, y, value);
-        }
+        let sum = 0;
+        for ( let z = 0; z < colsA; z += 1 ) sum += this.getIndex(x, z) * other.getIndex(z, y);
+        buffer[this._idx(x, y)] = sum;
       }
     }
-    return outMatrix;
+    out.arr.set(buffer);
+    return out;
   }
 
   /**

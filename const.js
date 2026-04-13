@@ -4,7 +4,7 @@ Hooks
 */
 "use strict";
 
-export const VERSION = "0.5.3";
+export const VERSION = "0.5.4";
 
 import { MODULE_ID as thisModuleId } from "../const.js";
 
