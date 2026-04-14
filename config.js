@@ -57,13 +57,6 @@ const PLACEABLE_TRACKING_CONFIG = {
    */
   alphaAreaThreshold: 25, // Area in pixels, e.g. 5x5 or ~ 8 x 3
 
-
-  /**
-   * The percent threshold under which a tile should be considered transparent at that pixel.
-   * @type {number}
-   */
-  alphaThreshold: 0.75, // Now set in tile.document.texture.alphaThreshold.
-
   /**
    * Which clipper version to use: 1 or 2.
    */
