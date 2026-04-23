@@ -390,11 +390,17 @@ function makeFinite(outPoint) {
  * Dot product of this point with another.
  * (Sum of the products of the components)
  * @param {PIXI.Point} other
- * @return {number}
+ * @returns {number}
  */
 function dot(other) {
   return (this.x * other.x) + (this.y * other.y);
 }
+
+/**
+ * Dot product of this point with itself.
+ * @returns {number}
+ */
+function dot2() { return (this.x ** 2) + (this.y ** 2); }
 
 /**
  * Magnitude (length, or sometimes distance) of this point.
@@ -594,6 +600,7 @@ PATCHES.PIXI.METHODS = {
   ceil,
   makeFinite,
   dot,
+  dot2,
   magnitude,
   magnitudeSquared,
   almostEqual,
