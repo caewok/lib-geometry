@@ -271,7 +271,7 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
   /** @type {SHAPE_TYPES} */
   get shapeType() {
     const TYPES = this.constructor.SHAPE_TYPES;
-    if ( CONFIG[GEOMETRY_LIB_ID].CONFIG..useTokenEllipsoid ) return TYPES.ELLIPSOID;
+    if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.useTokenEllipsoid ) return TYPES.ELLIPSOID;
     if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.useTokenSphere ) return TYPES.SPHERICAL;
     
     const GRID = CONST.GRID_TYPES;
