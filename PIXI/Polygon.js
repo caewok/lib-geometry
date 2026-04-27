@@ -352,10 +352,15 @@ function _ixToPoint(ix) {
  *   If intersections returned, the t of each intersection is the distance along the a|b segment.
  */
 function lineIntersections(a, b, { indices = false, tangents = true } = {}) {
-  const edges = [...this.iterateEdges()];
   const ixIndices = [];
   const ixs = [];
-  edges.forEach((edge, i) => {
+  this.iterateEdges().forEach((edge, i) => {
+    // Test if the line intersects the edge segment (first half of lineSegmentIntersects test)
+    const xa = foundry.utils.orient2dFast(a, b, edge.a);  
+    const xb = foundry.utils.orient2dFast(a, b, edge.b);
+    if ( (xa * xb) > 0 ) return;
+    
+    // Determine the actual intersection.
     const ix = foundry.utils.lineLineIntersection(a, b, edge.a, edge.b);
     if ( !ix ) return;
     if ( !tangents && _isTangentIntersection(a, b, edges, ix, i) ) return;
