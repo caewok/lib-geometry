@@ -960,7 +960,7 @@ export class SDF {
 	 * @param {Point3d} b					Three dimensions (half-sizes)
 	 * @returns {number}
 	 */
-	static sdBox(p, b) {
+	static sdCube(p, b) {
 	  using q = Point3d.tmp;
 	  using zero = Point3d.tmp;
 	  p.abs(q).subtract(b, q);
