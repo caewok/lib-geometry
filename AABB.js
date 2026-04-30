@@ -99,6 +99,24 @@ export class AABB2d {
     this.min.add(out, out);
     return out;
   }
+  
+  /** 
+   * Increase or decrease this AABB.
+   * @param {object} axes
+   * - Ex: { x: 2, y: -2 }
+   * @param {AABB} out
+   * @returns {AABB}
+   */
+  pad(axes = {}, out) {
+    out ??= new this.constructor();
+    this.clone(out);
+    for ( const [axis, value] of Object.entries(axes) ) {
+      this.min[axis] -= value;
+      this.max[axis] += value;
+    }
+    return out;
+  }
+  
 
   /**
    * Union multiple bounds.
@@ -242,6 +260,7 @@ export class AABB2d {
    * @returns {AABB2d} other
    */
   clone(out) {
+    if ( out === this ) return this;
     out ??= new this.constructor();
     out.min.copyFrom(this.min);
     out.max.copyFrom(this.max);
