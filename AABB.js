@@ -189,6 +189,15 @@ export class AABB2d {
     out.max.set(rect.right, rect.bottom);
     return out;
   }
+  
+  /**
+   * @param {PIXI.RoundedRectangle} rect
+   * @returns {AABB2d}
+   */
+  static fromRoundedRectangle(rrect, out) {
+    // Ignore rounded edges.
+    return this.fromRectangle(rrect, out);
+  }
 
   /**
    * @param {PIXI.Polygon} polygon
@@ -209,6 +218,7 @@ export class AABB2d {
     else if ( shape instanceof PIXI.Polygon ) AABB2d.fromPolygon(shape, out);
     else if ( shape instanceof PIXI.Circle ) AABB2d.fromCircle(shape, out);
     else if ( shape instanceof PIXI.Ellipse ) AABB2d.fromEllipse(shape, out);
+    else if ( shape instanceof PIXI.RoundedRectangle ) AABB2d.fromRoundedRectangle(shape, out);
     else if ( shape.toPolygon ) AABB2d.fromPolygon(shape.toPolygon(), out);
     else throw Error("AABB2d.fromShape|Shape not recognized", shape);
     return out;
