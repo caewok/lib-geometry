@@ -1044,36 +1044,26 @@ export class SDF {
    * @param {AABB2d} aabb					Bounds to draw
    * @param {number} maxD					Maximum distance to measure
    */
-  static drawHeatmap2d(primitive, aabb, { step = 2, radius = 2, fillAlpha = 0.5, epsilon = 1e-08 } = {}) {
+  static drawHeatmap(primitive, aabb, { elevationZ, step = 2, epsilon = 1e-08, ...drawOpts } = {}) {
+    drawOpts.radius ??= 2;
+    drawOpts.alpha ??= 0.5;
+    drawOpts.fillAlpha ??= drawOpts.alpha;
+    
+    using pt = Number.isNumeric(elevationZ) ? Point3d.tmp.set(0, 0, elevationZ) : PIXI.Point.tmp;  
     const maxD = PIXI.Point.distanceBetween(aabb.min, aabb.max) / 2;
     const heatmap = CONFIG.GeometryLib.lib.PixelCache.createHeatMap(0, maxD);
-    const pt = PIXI.Point.tmp;
     for ( let x = aabb.min.x; x < aabb.max.x; x += step ) {
 			for ( let y = aabb.min.y; y < aabb.max.y; y += step ) {
 				pt.set(x, y)
 				const dist = primitive(pt);
-				const color = dist.almostEqual(0, epsilon) ? Draw.COLORS.white : heatmap(Math.abs(dist));
-				Draw.point(pt, { radius, color, fill: color, fillAlpha });
+				drawOpts.color = dist.almostEqual(0, epsilon) ? Draw.COLORS.white : heatmap(Math.abs(dist));
+				drawOpts.fill = drawOpts.color;
+				Draw.point(pt, drawOpts);
 			}
 		}
 	}
-	
-	static drawHeatmap3d(primitive, aabb, { elevation = 0, step = 2, radius = 2, fillAlpha = 0.5, epsilon = 1e-08 } = {}) {
-    const maxD = PIXI.Point.distanceBetween(aabb.min, aabb.max) / 2;
-    const heatmap = CONFIG.GeometryLib.lib.PixelCache.createHeatMap(0, maxD);
-    const pt = Point3d.tmp;
-    pt.z = elevation;    
-    for ( let x = aabb.min.x; x < aabb.max.x; x += step ) {
-			for ( let y = aabb.min.y; y < aabb.max.y; y += step ) {
-				pt.set(x, y)
-				const dist = primitive(pt);
-				const color = dist.almostEqual(0, epsilon) ? Draw.COLORS.white : heatmap(Math.abs(dist));
-				Draw.point(pt, { radius, color, fill: color, fillAlpha });
-			}
-		}	  
-	}
-	
-	// TODO: Move this to a constructed class that stores the placeable.
+}
+
 	
   /**
    * Signed distance for a placeable in 2d. 
