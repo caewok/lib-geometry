@@ -161,55 +161,59 @@ export class SDF {
 	 */
 	static sdEllipse(p, ab) { 
 	  const res = this._sdSquaredEllipse(p, ab);
-	  return Math.sqrt(res) * Math.sign(res); 
+	  return Math.sqrt(Math.abs(res)) * Math.sign(res); 
 	}
 	
 	static _sdSquaredEllipse(p, ab) {
 	  if ( ab.x.almostEqual(ab.y) ) return (this.sdCircle(p, ab.x) ** 2);
 	  
-	  using pTmp = PIXI.Point.fromObject(p);
+	  using pAbs = p.abs();	 	  
 	  using abTmp = PIXI.Point.fromObject(ab);
-	  pTmp.abs(pTmp);
-	  if ( pTmp.x > pTmp.y ) {
-	    [pTmp.x, pTmp.y] = [pTmp.y, pTmp.x];
+	  if ( pAbs.x > pAbs.y ) {
+	    [pAbs.x, pAbs.y] = [pAbs.y, pAbs.x];
 	    [abTmp.x, abTmp.y] = [abTmp.y, abTmp.x];
 	  }
 	  
 	  const l = (abTmp.y ** 2) - (abTmp.x ** 2);
-	  const m = (abTmp.x * pTmp.x) / l;
+	  const m = (abTmp.x * pAbs.x) / l;
+	  const n = (abTmp.y * pAbs.y) / l;
 	  const m2 = m ** 2;
-	  const n = (abTmp.y * pTmp.y) / l;
 	  const n2 = n ** 2;
 	  const c = (m2 + n2 - 1.0) / 3.0;
 	  const c3 = c ** 3;
-	  const q = c3 + (m2 * n2 * 2.0);
 	  const d = c3 + (m2 * n2);
-	  const g = m + (m2 * n2);
+	  const q = d + (m2 * n2);
+	  const g = m + (m * n2);
 	  let co;
 	  if ( d < 0.0 ) {
 	    const h = Math.acos(q / c3) / 3.0;
-	    const s = Math.cos(h);
+	    const s = Math.cos(h) + 2.0;
 	    const t = Math.sin(h) * Math.sqrt(3.0);
-	    const rx = Math.sqrt(-c * (s + t + 2.0) + m2);
-	    const ry = Math.sqrt(-c * (s - t + 2.0) + m2);
-	    co = (ry + (Math.sign(l) * rx) + (Math.abs(g) / (rx * ry)) - m) / 2.0;
+	    const rx = Math.sqrt(m2 - (c * (s + t)));
+	    const ry = Math.sqrt(m2 - (c * (s - t)));
+	    co = ry + (Math.sign(l) * rx) + (Math.abs(g) / (rx * ry));
+	    	    
 	  } else {
+	    const c2 = c ** 2;
 			const h = 2.0 * m * n * Math.sqrt(d);
-			const s = Math.sign(q + h) * Math.pow(Math.abs(q + h), 1.0 / 3.0);
-			const u = Math.sign(q - h) * Math.pow(Math.abs(q - h), 1.0 / 3.0);
-			const rx = -s - u - c * 4.0 + 2.0 * m2;
-			const ry = (s - u) * Math.sqrt(3.0);
-			const rm = Math.sqrt((rx ** 2) + (ry ** 2) );
-			co = (ry / Math.sqrt(rm - rx) + (2.0 * g/rm) - m) / 2.0;
+			const s = Math.pow(q + h, 1.0 / 3.0);
+			const t = c2 / s;
+			const rx = -(s + t) - (c * 4.0) + (2.0 * m2);
+			const ry = (s - t) * Math.sqrt(3.0);
+			const rm = Math.sqrt((rx ** 2) + (ry ** 2));
+			co = (ry / Math.sqrt(rm - rx)) + (2.0 * g / rm);						
 	  }
 	  
-	  using r = PIXI.Point.tmp.set(
-	    co,
-	    Math.sqrt(1.0 - (co ** 2)),
-	  );
-	  r.multiply(ab, r);
-	  const s = Math.sign(p.y - r.y);
-	  return r.subtract(p, r).magnitudeSquared() * s;
+	  co = (co - m) / 2.0;
+	  const si = Math.sqrt(Math.max(1.0 - (co ** 2), 0.0));
+	  
+	  // Get the closest point in the absolute (positive) quadrant.
+	  // Use abTmp here because axes may have been switched earlier.
+	  using r = PIXI.Point.tmp.set(co,si);
+	  r.multiply(abTmp, r);
+	  const s = Math.sign(pAbs.y - r.y);
+	  const len2 = r.subtract(pAbs, r).magnitudeSquared();
+	  return len2 * s;	  
 	}
 	
 	// (10 * 3) ** 2 = 900
