@@ -1064,6 +1064,21 @@ export class SDF {
 	}
 }
 
+/**
+ * An instantiated class that calculates SDFs for a given placeable object.
+ */
+export class SDFPlaceable extends SDF {
+  
+  /** @type {PlaceableObject} */
+  placeable;
+  
+  /**
+   * @param {PlaceableObject} placeable
+   */
+  constructor(placeable) {
+    super();
+    this.placeable = placeable;
+  }
 	
   /**
    * Signed distance for a placeable in 2d. 
@@ -1072,8 +1087,8 @@ export class SDF {
    * @param {...} opts					Options passed to the sdf method 
    * @returns {number}
    */
-	static sd2d(p, placeable, ...opts) {
-	  const fn = this.sdf2d(placeable, ...opts);
+	sd2d(p, ...opts) {
+	  const fn = this.sdf2d(...opts);
 	  return fn(p);
 	}
 	
@@ -1084,40 +1099,32 @@ export class SDF {
    * @param {...} opts					Options passed to the sdf method 
    * @returns {number}
    */
-	static sd3d(p, placeable, ...opts) {
-	  const fn = this.sdf3d(placeable, ...opts);
+	sd3d(p, opts) {
+	  const fn = this.sdf3d(opts);
 	  return fn(p);
 	}
 	
-	static sdf2d(_placeable, ..._opts) { throw Error("Must be defined by child class."); }
+	sdf2d(_opts) { throw Error("Must be defined by child class."); }
 	
-	static sdf3d(_placeable, ..._opts) { throw Error("Must be defined by child class."); }
+	sdf3d(_opts) { throw Error("Must be defined by child class."); }
 	
-	static aabb2d(_placeable) { throw Error("Must be defined by child class.");  }
+	get aabb2d() { throw Error("Must be defined by child class.");  }
 	
-  static draw2d(placeable, { padding = 0, ...opts } = {}) {
-    const primitive = this.sdf2d(placeable, opts);
-    const aabb = this.aabb2d(placeable);
-    aabb.min.x -= padding;
-    aabb.min.y -= padding;
-    aabb.max.x += padding;
-    aabb.max.y += padding;
-    return this.drawHeatmap2d(primitive, aabb, opts);
-  }
+  draw({ use3d, padding = 0, ...opts } = {}) {
+    // User can either force 3d or implicitly use 3d by setting elevation. 
+    use3d ??= Number.isNumeric(opts.elevationZ);
+    if ( use3d ) opts.elevationZ ??= this.placeable.elevationZ;
+    const primLabel = use3d ? "sdf2d" : "sdf3d";
   
-  static draw3d(placeable, { padding = 0, ...opts } = {}) {
-    const primitive = this.sdf3d(placeable, opts);
-    const aabb = this.aabb2d(placeable);
+    const primitive = this[primLabel](opts);
+    const aabb = this.aabb2d;
     aabb.min.x -= padding;
     aabb.min.y -= padding;
     aabb.max.x += padding;
     aabb.max.y += padding;
-    opts.elevation ??= placeable.elevationZ;
-    return this.drawHeatmap3d(primitive, aabb, opts);
+    return this.constructor.drawHeatmap(primitive, aabb, opts);
   }
 }
-
-
 
 
 // ---- NOTE: Helper functions ----- //
