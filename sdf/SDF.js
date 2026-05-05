@@ -1,4 +1,5 @@
 /* globals
+canvas,
 CONFIG,
 PIXI,
 */
@@ -120,7 +121,7 @@ export class SDF {
 	 */	 
 	static sdSegment(p, a, b) { 
 	  const res = this._sdSquaredSegment(p, a, b);
-	  return Math.sqrt(res) * Math.sign(res);   
+	  return Math.sqrt(Math.abs(res)) * Math.sign(res);   
 	} 
 	 
 	static _sdSquaredSegment(p, a, b) {
@@ -753,7 +754,7 @@ export class SDF {
    */
   static sdTriangle3d(p, tri) { 
     const res = this._sdSquaredTriangle3d(p, tri); 
-    return Math.sqrt(res) * Math.sign(res); 
+    return Math.sqrt(Math.abs(res)) * Math.sign(res); 
   } 
    
   static _sdSquaredTriangle3d(p, tri) {
@@ -805,7 +806,7 @@ export class SDF {
    */
   static sdRectangle3d(p, b) { 
     const res = this._sdSquaredRectangle3d(p, b); 
-    return Math.sqrt(res) * Math.sign(res);   
+    return Math.sqrt(Math.abs(res)) * Math.sign(res);   
   } 
    
   static _sdSquaredRectangle3d(p, b) {
@@ -831,7 +832,7 @@ export class SDF {
    */
   static sdQuad3d(p, quad) { 
     const res = this._sdSquaredQuad3d(p, quad); 
-    return Math.sqrt(res) * Math.sign(res); 
+    return Math.sqrt(Math.abs(res)) * Math.sign(res); 
   } 
    
   static _sdSquaredQuad3d(p, quad) {
@@ -883,7 +884,7 @@ export class SDF {
    */
   static sdPolygon3d(p, poly3d) { 
     const res = this._sdSquaredPolygon3d(p, poly3d); 
-    return Math.sqrt(res) * Math.sign(res); 
+    return Math.sqrt(Math.abs(res)) * Math.sign(res); 
   } 
    
   static _sdSquaredPolygon3d(p, poly3d) {
