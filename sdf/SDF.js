@@ -1035,6 +1035,213 @@ export class SDF {
 		const dz = Math.min(Math.abs(p.z), Math.abs(p.z - h));
 		return Math.abs(d2) + (dz ** 2); 
 	}
+	
+	// ----- NOTE: Intersection / RayMarch ----- //
+	
+	/** 
+	 * Find the intersection distance of a ray with an SDF scene.
+	 * @param {Point3d|PIXI.Point} rayOrigin
+	 * @param {Point3d|PIXI.Point} rayDirection
+	 * @param {function} sceneSDF									2d or 3d sdf function depending on the ray.
+	 * @param {object} [opts]
+	 * @param {number} [maxSteps=100]																	Maximum steps in the raymarch
+	 * @param {number} [maxDistance=canvas.scene.dimensions.maxR]			Maximum distance to move along the ray
+	 * @param {number} [surfaceEpsilon=0.01]													Error margin for surface test
+	 * @returns {number|null} Distance t along the ray, or null.	 
+	 */	 
+	static rayMarch(rayOrigin, rayDirection, sceneSDF, 
+	  { maxSteps = 100, 
+	    maxDistance = canvas.scene.dimensions.maxR, 
+	    surfaceEpsilon = 0.01 
+	  } = {}) {
+	  let t = 0;
+	  let i = 0;
+	  const p = rayOrigin.constructor.tmp;
+	  do {
+	    // Calculate current point along the ray: P = ro + rd * t.
+	    rayOrigin.add(rayDirection.multiplyScalar(t, p), p);
+	    
+	    // Distance to the nearest surface in the scene.
+	    const d = sceneSDF(p);
+	    
+	    // Did we hit the surface?
+	    if ( d < surfaceEpsilon ) return t;
+	    
+	    // Move forward by the distance to the nearest object.
+	    t += d;
+	    
+	    // Check if we went too far or iterations exceeded.
+	  } while ( ++i < maxSteps && t < maxDistance );
+	  return null; // No intersection found.
+	}
+	
+  /** 
+	 * Find the intersection distance of a ray with an SDF scene.
+	 * @param {Point3d|PIXI.Point} rayOrigin
+	 * @param {Point3d|PIXI.Point} rayDirection
+	 * @param {function} sceneSDFSquared				2d or 3d sdf function depending on the ray. Must return signed squared distance.
+	 * @param {object} [opts]
+	 * @param {number} [maxSteps=100]																	Maximum steps in the raymarch
+	 * @param {number} [maxDistance=canvas.scene.dimensions.maxR]			Maximum distance to move along the ray
+	 * @param {number} [surfaceEpsilon=0.01]													Error margin for surface test
+	 * @returns {number|null} Distance t along the ray, or null.	 
+	 */	 
+	static rayMarchSquared(rayOrigin, rayDirection, sceneSDFSquared, 
+	  { maxSteps = 100, 
+	    maxDistance = canvas.scene.dimensions.maxR, 
+	    surfaceEpsilon = 0.01 
+	  } = {}) {
+	  let t = 0;
+	  let i = 0;
+	  using p = rayOrigin.constructor.tmp;
+	  const surfaceEpsilonSquared = surfaceEpsilon ** 2;
+	  do {
+	    // Calculate current point along the ray: P = ro + rd * t.
+	    rayOrigin.add(rayDirection.multiplyScalar(t, p), p);
+	    
+	    // Distance to the nearest surface in the scene.
+	    const d2 = sceneSDFSquared(p);
+	    
+	    // Did we hit the surface?
+	    if ( d2 < surfaceEpsilonSquared ) return t;
+	    
+	    // Move forward by the distance to the nearest object.
+	    t += Math.sqrt(Math.abs(d2));
+	    
+	    // Continue until we went too far or iterations exceeded.
+	  } while ( ++i < maxSteps && t < maxDistance );
+	  return null; // No intersection found.
+	}	
+	
+	/** 
+	 * Find the intersection distance of a ray with an SDF scene at two points:
+	 *   - Move along the ray to the first intersection
+	 *   - Start at ray + maxDistance and move in the opposite direction to find the second intersection
+	 * @param {Point3d|PIXI.Point} rayOrigin
+	 * @param {Point3d|PIXI.Point} rayDirection
+	 * @param {function} sceneSDF									2d or 3d sdf function depending on the ray.
+	 * @param {object} [opts]
+	 * @param {number} [maxSteps=100]																	Maximum steps in the raymarch
+	 * @param {number} [maxDistance=canvas.scene.dimensions.maxR]			Maximum distance to move along the ray
+	 * @param {number} [surfaceEpsilon=0.01]													Error margin for surface test
+	 * @returns {number[]|null} Distance t along the ray, or null.	 
+	 */	 
+	static rayMarchDual(rayOrigin, rayDirection, sceneSDF, { squared = false, ...opts } = {}) {
+	  const fn = squared ? this.rayMarchSquared.bind(this) : this.rayMarch.bind(this);
+	
+	  const maxDist = opts.maxDistance ??= canvas.scene.dimensions.maxR;	
+	  const t0 = fn(rayOrigin, rayDirection, sceneSDF, opts);
+	  if ( t0 === null ) return null;
+	  
+	  // Move to the end of the ray and go the other way.
+	  using ro = rayOrigin.constructor.tmp
+	  rayOrigin.add(rayDirection.multiplyScalar(opts.maxDistance, ro), ro);
+	  
+	  // Flip direction.
+	  using rd = rayDirection.multiplyScalar(-1);
+	  
+	  // Determine the distance left to explore.
+	  // Full length minus t0.
+	  opts = {...opts, maxDistance: maxDist - t0 }; // Make a copy so opts is not modified.
+	  
+	  // Get the second intersection.
+	  let t1 = fn(ro, rd, sceneSDF, opts);
+	  if ( t1 === null || t0.almostEqual(t1) ) return [t0]; // Note: t1 should never be null, but just in case.
+	  
+	  // Invert t1 so it goes the correct direction along the ray.
+	  return [t0, maxDist - t1];
+	}
+	
+	/**
+	 * Find all intersection distances of a ray with an SDF scene.
+	 * @param {Point3d|PIXI.Point} rayOrigin
+	 * @param {Point3d|PIXI.Point} rayDirection
+	 * @param {function} sceneSDF									2d or 3d sdf function depending on the ray.
+	 * @param {object} [opts]
+	 * @param {number} [maxSteps=100]																	Maximum steps in the raymarch
+	 * @param {number} [maxDistance=canvas.scene.dimensions.maxR]			Maximum distance to move along the ray
+	 * @param {number} [surfaceEpsilon=0.01]													Error margin for surface test
+	 * @returns {number[]} Distance t along the ray for every surface hit.
+	 */
+	static findAllIntersections(rayOrigin, rayDirection, sceneSDF, 
+	  { maxSteps = 100, 
+	    maxDistance = canvas.scene.dimensions.maxR, 
+	    surfaceEpsilon = 0.01,
+	  } = {}) {
+	  let t = 0;
+	  let i = 0;
+	  const p = rayOrigin.constructor.tmp;
+	  const jumpEpsilon = 2 * surfaceEpsilon;
+	  const hits = [];
+	  do {
+	    // Calculate current point along the ray: P = ro + rd * t.
+	    rayOrigin.add(rayDirection.multiplyScalar(t, p), p);
+	    
+	    // Distance to the nearest surface in the scene.
+	    const d = Math.abs(sceneSDF(p));
+	    
+	    // Did we hit the surface?
+	    if ( d < surfaceEpsilon ) {
+	      hits.push(t);
+	      
+	      // Jump forward to avoid sticking to this surface.
+	      t += jumpEpsilon;
+	      continue;
+	    }
+	    
+	    // Move forward by the distance to the nearest object.
+	    // Use absolute so this works when inside or outside.
+	    t += d;
+	    
+	  } while ( ++i < maxSteps && t < maxDistance );
+	  return hits;
+	} 
+
+	/**
+	 * Find all intersection distances of a ray with an SDF scene.
+	 * @param {Point3d|PIXI.Point} rayOrigin
+	 * @param {Point3d|PIXI.Point} rayDirection
+	 * @param {function} sceneSDF									2d or 3d sdf function depending on the ray.
+	 * @param {object} [opts]
+	 * @param {number} [maxSteps=100]																	Maximum steps in the raymarch
+	 * @param {number} [maxDistance=canvas.scene.dimensions.maxR]			Maximum distance to move along the ray
+	 * @param {number} [surfaceEpsilon=0.01]													Error margin for surface test
+	 * @returns {number[]} Distance t along the ray for every surface hit.
+	 */
+	static findAllIntersectionsSquared(rayOrigin, rayDirection, sceneSDFSquared, 
+	  { maxSteps = 100, 
+	    maxDistance = canvas.scene.dimensions.maxR, 
+	    surfaceEpsilon = 0.01,
+	  } = {}) {
+	  let t = 0;
+	  let i = 0;
+	  const p = rayOrigin.constructor.tmp;
+	  const jumpEpsilon = 2 * surfaceEpsilon;
+	  surfaceEpsilon = surfaceEpsilon ** 2;
+	  const hits = [];
+	  do {
+	    // Calculate current point along the ray: P = ro + rd * t.
+	    rayOrigin.add(rayDirection.multiplyScalar(t, p), p);
+	    
+	    // Distance to the nearest surface in the scene.
+	    const d2 = Math.abs(sceneSDFSquared(p));
+	    
+	    // Did we hit the surface?
+	    if ( d2 < surfaceEpsilon ) {
+	      hits.push(t);
+	      
+	      // Jump forward to avoid sticking to this surface.
+	      t += jumpEpsilon;
+	      continue;
+	    }
+	    
+	    // Move forward by the distance to the nearest object.
+	    // Use absolute so this works when inside or outside.
+	    t += Math.sqrt(d2);
+	    
+	  } while ( ++i < maxSteps && t < maxDistance );
+	  return hits;
+	}   	
 
   // ----- NOTE: Debug ----- 
   
