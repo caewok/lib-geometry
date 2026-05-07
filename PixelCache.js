@@ -1327,35 +1327,54 @@ export class PixelCache extends LocalCoordinateCache {
    * @returns {PIXI.Polygon} Polygon based on local coordinates.
    */
   #calculateLocalBoundingPolygon(threshold = 0.75) {
+    // Use Moore Neighborhood with Jacob's stopping criteria.
+    // https://www.imageprocessingplace.com/downloads_V3/root_downloads/tutorials/contour_tracing_Abeer_George_Ghuneim/moore.html
+    const alphaAABB = this.getThresholdLocalAABB(threshold);
     threshold = threshold * this.maximumPixelValue;
 
-    // Build each row in local space.
-    // Move from top to bottom on left side.
-    // Then move bottom to top on right side.
-    // Brute force.
-    const { left, right, top, bottom } = this;
+    // Start with the bounding box.
+    const { min, max } = alphaAABB;
     const poly = new PIXI.Polygon();
-    for ( let y = top; y <= bottom; y += 1 ) {
-      // Scan each row from right to left.
-      for ( let x = right; x >= left; x -=  1 ) {
-        const a = this._pixelAtLocal(x, y);
-        if ( a > threshold ) {
-          poly.points.push(x, y);
-          break;
-        }
+        
+    // Scan left and then down until we hit a solid pixel.
+    using startPixel = PIXI.Point.tmp.set(min.x, min.y);
+    outerLoop: for ( startPixel.x = min.x; startPixel.x < max.x; startPixel.x += 1 ) {
+      for ( startPixel.y = min.y; startPixel.y < max.y; startPixel.y += 1 ) {
+        const a = this._pixelAtLocal(startPixel.x, startPixel.y);
+        if ( a >= threshold ) break outerLoop;
       }
     }
-
-    for ( let y = bottom; y >= top; y -= 1 ) {
-      // Scan each row from left to right.
-      for ( let x = left; x <= right; x +=  1 ) {
-        const a = this._pixelAtLocal(x, y);
-        if ( a > threshold ) {
-          poly.addPoint({x, y}); // Use addPoint to avoid repeats.
-          break;
-        }
+    if ( startPixel.x === max.x && startPixel.y === max.y ) return poly; // No pixels found.
+    
+    // Set initial pixel and starting entry.
+    using startEntry = PIXI.Point.tmp.set(-1, 0);
+    poly.points.push(startPixel.x, startPixel.y);
+    using currPixel = startPixel.clone();
+    let currEntry = startEntry.clone();
+    using testPixel = PIXI.Point.tmp;
+    
+    // Loop until we get back to the beginning pixel.
+    // Jacob's stopping: start pixel from the same entry point.   
+    const MAX_ITERS = this.width * this.height;
+    let iter = -1; 
+    do {
+      iter += 1;
+      // Test each neighboring pixel around the current, moving clockwise.
+      const iterFn = this.iterateClockwiseNeighborDirections(currEntry);
+      for ( currEntry of iterFn ) {
+        // Get the pixel value for this neighbor.
+        currPixel.add(currEntry, testPixel)
+        const a = this._pixelAtLocal(testPixel.x, testPixel.y);
+        if ( a >= threshold ) { 
+          poly.points.push(testPixel.x, testPixel.y);
+          
+          // Backtrack.
+          testPixel.clone(currPixel);          
+        } // Otherwise advance to the next clockwise pixel
       }
-    }
+    } while ( !(currPixel.equals(startPixel) && currEntry.equals(startEntry) && iter < MAX_ITERS) );
+    
+    if ( iter >= MAX_ITERS ) console.error("calculateLocalBoundingPolygon hit max iterations.");
     return poly;
   }
 
@@ -1419,6 +1438,33 @@ export class PixelCache extends LocalCoordinateCache {
   localNeighbors(currIdx, trimBorder = true) {
     return this.localNeighborIndices(currIdx, trimBorder).map(idx => this.pixels[idx]);
   }
+  
+	/**
+	 * For Moore Neighbor tracing.
+	 * Iteration function that moves clockwise around a point.
+	 * Starts with a desired direction.
+	 * @param {PIXI.Point} [endDir]			*Last* direction to test; defaults to starting from TL
+	 * @yields {PIXI.Point} A direction vector
+	 */
+	*iterateClockwiseNeighborDirections(endDir = PIXI.Point.tmp) {
+		const indices = [      
+			[-1, -1],
+			[ 0, -1],
+			[ 1, -1],
+			[ 1,  0],
+			[ 1,  1],
+			[ 0,  1],
+			[-1,  1],
+			[-1,  0], 
+		];
+		
+		// Use the preferred order.
+		const endArr = [endDir.x, endDir.y];
+		const startIdx = indices.findIndex(elem => elem.equals(endArr)) + 1; // +1 to move this to last.
+		const prefix = indices.splice(0, startIdx);
+		indices.push(...prefix);
+		for ( const idx of indices ) yield PIXI.Point.tmp.set(idx[0], idx[1]);
+	}
 
   // ----- NOTE: Pixel Setting ----- //
 
@@ -2865,3 +2911,5 @@ export class PixelMarker extends Marker {
  */
 const POW10_8 = Math.pow(10, 8);
 function fastFixed(x) { return Math.round(x * POW10_8) / POW10_8; }
+
+
