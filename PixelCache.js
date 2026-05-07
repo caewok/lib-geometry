@@ -2596,14 +2596,33 @@ export class TrimmedPixelCache extends PixelCache {
    * Override the base indexing logic to account for the buffer offset.
    */
   _indexAtLocal(x, y) {
-    // Is the coordinate within the trimmed area?
-    if ( !this.#bufferBounds.contains(x, y) ) return -1;
-
-    // Map the coordinate to the buffer space.
-    const bx = ~~x - this.#bufferBounds.min.x;
-    const by = ~~y - this.#bufferBounds.min.y;
-    const bWidth = this.#bufferBounds.max.x - this.#bufferBounds.min.x;
-    return (by * bWidth) + bx;
+    // Use floor to determine in which "pixel bucket" the coordinate lies.
+    x = ~~x;
+    y = ~~y;
+     
+    // Check against trimmed bounds, not full frame.
+    // Could use bufferBounds.contains but this is faster. 
+    const { min, max } = this.#bufferBounds;
+    if ( x < min.x || x > max.x || y < min.y || y > max.y ) return -1;
+    
+    // Return the index, accounting for the trimmed bounds.
+    const width = (max.x - min.x) + 1;
+    return ((y - min.y) * width) + (x - min.x);  
+  }
+  
+  /**
+   * Override the base indexing logic to account for the buffer offset.
+   */
+  _localAtIndex(i, outPoint) {
+    outPoint ??= PIXI.Point.tmp;
+    const { min, max } = this.#bufferBounds;
+    const width = (max.x - min.x) + 1;
+    
+    const col = i % width;
+    const row = ~~(i / width); // Floor the row.
+    
+    // Add back the offset to get the coordinate in full local frame
+    return outPoint.set(col + min.x, row + min.y);
   }
 
   /**
