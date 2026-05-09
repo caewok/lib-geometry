@@ -1337,46 +1337,108 @@ export class PixelCache extends LocalCoordinateCache {
     const poly = new PIXI.Polygon();
         
     // Scan left and then down until we hit a solid pixel.
-    using startPixel = PIXI.Point.tmp.set(min.x, min.y);
-    outerLoop: for ( startPixel.x = min.x; startPixel.x < max.x; startPixel.x += 1 ) {
-      for ( startPixel.y = min.y; startPixel.y < max.y; startPixel.y += 1 ) {
-        const a = this._pixelAtLocal(startPixel.x, startPixel.y);
-        if ( a >= threshold ) break outerLoop;
+    using startPixel = PIXI.Point.tmp;
+    let found = false;
+    outerLoop: for ( let y = min.y; y < max.y; y += 1 ) {
+      for ( let x = min.x; x < max.x; x += 1 ) {
+        if ( this._pixelAtLocal(x, y) >= threshold ) {
+          startPixel.set(x, y);
+          found = true;
+          break outerLoop;
+        }
       }
     }
-    if ( startPixel.x === max.x && startPixel.y === max.y ) return poly; // No pixels found.
+    if ( !found ) return poly;
     
     // Set initial pixel and starting entry.
+    // Assume for TL start that we entered from the left.
     using startEntry = PIXI.Point.tmp.set(-1, 0);
-    poly.points.push(startPixel.x, startPixel.y);
     using currPixel = startPixel.clone();
-    let currEntry = startEntry.clone();
+    using currEntry = startEntry.clone();
     using testPixel = PIXI.Point.tmp;
+    using currDir = startEntry.clone();
+    using lastDir = startEntry.clone();
+    
+    // To facilitate a fast addPoint that can assume a 3-point poly, add a temporary polygon point.
+    poly.points.push(startPixel.x, startPixel.y, startPixel.x, startPixel.y);
     
     // Loop until we get back to the beginning pixel.
     // Jacob's stopping: start pixel from the same entry point.   
     const MAX_ITERS = this.width * this.height;
-    let iter = -1; 
+    let iter = 0; 
     do {
       iter += 1;
       // Test each neighboring pixel around the current, moving clockwise.
+      // iterateClockwiseNeighborDirections scans starting from the pixel after currEntry.
       const iterFn = this.iterateClockwiseNeighborDirections(currEntry);
-      for ( currEntry of iterFn ) {
-        // Get the pixel value for this neighbor.
-        currPixel.add(currEntry, testPixel)
+      
+      let foundNext = false;      
+      for ( const dir of iterFn ) {
+        currPixel.add(dir, testPixel);
         const a = this._pixelAtLocal(testPixel.x, testPixel.y);
-        if ( a >= threshold ) { 
-          poly.points.push(testPixel.x, testPixel.y);
+        
+        if ( a >= threshold ) {
+          // Found the next contour pixel.
+          addPoint(poly, testPixel);
           
-          // Backtrack.
-          testPixel.clone(currPixel);          
-        } // Otherwise advance to the next clockwise pixel
+          // Move to the new pixel.
+          currPixel.copyFrom(testPixel);
+          
+          // Backtrack
+          currEntry.copyFrom(dir).multiplyScalar(-1, currEntry);
+          currDir.copyFrom(dir);
+          
+          foundNext = true;
+          break;
+        }
+        lastDir.copyFrom(dir);
       }
-    } while ( !(currPixel.equals(startPixel) && currEntry.equals(startEntry) && iter < MAX_ITERS) );
+      
+      if ( !foundNext ) break; // Isolated pixel.
+      iter += 1;
+      
+      // Stopping criteria (Jacob's):
+      // Stop if back at start AND entered from the same direction.  
+      
+          
+    }  while ( !(currPixel.equals(startPixel) && lastDir.subtract(currDir, testPixel).equals(startEntry)) && iter < MAX_ITERS );
+    // while ( !currPixel.equals(startPixel) && iter < MAX_ITERS );
+    //
+    // while ( !(currPixel.equals(startPixel) && currEntry.equals(startEntry)) && iter < MAX_ITERS );
     
     if ( iter >= MAX_ITERS ) console.error("calculateLocalBoundingPolygon hit max iterations.");
+    
+    // Check if the start point is still duplicated and clean.
+    const polyIter = poly.iteratePoints();
+    using a = polyIter.next().value;
+    using b = polyIter.next().value;
+    if ( a.equals(b) ) {
+      poly.points.unshift();
+      poly.points.unshift();
+    }
+    
     return poly;
   }
+
+/*
+164,128
+165,128
+
+
+
+*/
+/*
+iter = poly.iteratePoints()
+pts = [];
+for ( let i = 0; i < 1000; i += 1 ) {
+  const pt = iter.next().value
+  pts.push(pt)
+  Draw.point(pt, { radius: 1 })
+}
+console.table(pts)
+*/
+
+
 
   /**
    * Calculate a canvas bounding polygon based on a specific threshold.
@@ -2913,3 +2975,25 @@ const POW10_8 = Math.pow(10, 8);
 function fastFixed(x) { return Math.round(x * POW10_8) / POW10_8; }
 
 
+
+/**
+ * Add a new polygon point if not duplicate. 
+ * Removes intermediate point if the last two points plus this one are collinear.
+ * @param {PIXI.Polygon} poly			Polygon with at least 3 points.
+ * @param {PIXI.Point} pt
+ * @returns {PIXI.Polygon}
+ */
+function addPoint(poly, pt) {
+  const iter = poly.reverseIteratePoints();
+  using b = iter.next().value;
+  if ( b.almostEqual(pt) ) return poly;
+  
+  // Note: Could compare deltas of a|b and b|c but that would only work for grids.
+  using a = iter.next().value;
+  if ( foundry.utils.orient2dFast(a, b, pt).almostEqual(0) ) {
+    poly.points.pop();
+    poly.points.pop();
+  }
+  poly.points.push(pt.x, pt.y);
+  return poly;
+}
