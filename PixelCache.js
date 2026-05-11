@@ -1,5 +1,6 @@
 /* globals
 canvas,
+CONFIG,
 foundry,
 PIXI,
 Ray,
@@ -7,11 +8,14 @@ Ray,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
+import { GEOMETRY_LIB_ID } from "./const.js";
 import { extractPixels } from "./extract-pixels.js";
 import { roundFastPositive, bresenhamLine, bresenhamLineIterator, trimLineSegmentToPixelRectangle, clamp } from "./util.js";
 import { Draw } from "./Draw.js";
 import { MatrixFloat32, ModelMatrix2dCenterInverse } from "./Matrix.js";
 import { AABB2d } from "./AABB.js";
+import * as MarchingSquares from "./marchingsquares-esm.js";
+
 
 /* Pixel Cache
   Rectangle in local pixel coordinates that contains an array of values ("pixels").
@@ -1110,6 +1114,12 @@ export class PixelCache extends LocalCoordinateCache {
 
   /** @type {Map<number,PIXI.Rectangle|PIXI.Polygon>} */
   #thresholdCanvasBoundingPolygons = new Map();
+  
+  /** @type {Map<number,ClipperPaths>} */
+  #localAlphaISOBands = new Map();
+  
+  /** @type {Map<number,ClipperPaths>} */
+  #canvasAlphaISOBands = new Map();
 
   /**
    * Construct the local rectangle based on a provided pixel array.
@@ -1160,8 +1170,7 @@ export class PixelCache extends LocalCoordinateCache {
    */
   updateTransforms() {
     super.updateTransforms();
-    this.#thresholdCanvasBoundingBoxes.clear();
-    this.#thresholdCanvasBoundingPolygons.clear();
+    this._clearCanvasThresholdBoundingBoxes();
   }
 
   /**
@@ -1172,11 +1181,14 @@ export class PixelCache extends LocalCoordinateCache {
     this.#thresholdCanvasBoundingBoxes.clear();
     this.#thresholdLocalAABB.clear();
     this.#thresholdLocalBoundingPolygons.clear();
+    this.#localAlphaISOBands.clear();
   }
 
   _clearCanvasThresholdBoundingBoxes() {
     this.#thresholdCanvasBoundingBoxes.clear();
     this.#thresholdCanvasBoundingPolygons.clear();
+    this.#thresholdLocalAABB.clear();
+    this.#canvasAlphaISOBands.clear();
   }
 
 
@@ -1187,14 +1199,14 @@ export class PixelCache extends LocalCoordinateCache {
    * @param {number} [threshold=0.75]   Values lower than this will be ignored around the edges.
    * @returns {AABB2d} Rectangle based on local coordinates.
    */
-  getThresholdLocalAABB(threshold = 0.75) {
+  getThresholdLocalAABB(alphaThreshold = 0.75) {
     const map = this.#thresholdLocalAABB;
-    if ( !map.has(threshold) ) map.set(threshold, this.#calculateLocalAABB(threshold));
-    return map.get(threshold);
+    if ( !map.has(alphaThreshold) ) map.set(alphaThreshold, this.#calculateLocalAABB(alphaThreshold));
+    return map.get(alphaThreshold);
   }
 
-  getThresholdLocalBoundingBox(threshold = 0.75) {
-    const aabb = this.getThresholdLocalAABB(threshold);
+  getThresholdLocalBoundingBox(alphaThreshold = 0.75) {
+    const aabb = this.getThresholdLocalAABB(alphaThreshold);
     if ( !isFinite(aabb.min.x) ) return new PIXI.Rectangle();
 
     return new PIXI.Rectangle(
@@ -1210,23 +1222,23 @@ export class PixelCache extends LocalCoordinateCache {
    * If you require a rectangle, use getThresholdLocalBoundingBox
    * @returns {PIXI.Rectangle|PIXI.Polygon}    Rectangle or polygon in canvas coordinates.
    */
-  getThresholdCanvasBoundingBox(threshold = 0.75) {
+  getThresholdCanvasBoundingBox(alphaThreshold = 0.75) {
     const map = this.#thresholdCanvasBoundingBoxes;
-    if ( !map.has(threshold) ) map.set(threshold, this.#calculateCanvasBoundingBox(threshold));
-    return map.get(threshold);
+    if ( !map.has(alphaThreshold) ) map.set(alphaThreshold, this.#calculateCanvasBoundingBox(alphaThreshold));
+    return map.get(alphaThreshold);
   }
 
-  _calculateCanvasBoundingBox(threshold = 0.75) {
-    if ( threshold === 1 ) return super._calculateCanvasBoundingBox();
-    return this.#calculateCanvasBoundingBox(threshold);
+  _calculateCanvasBoundingBox(alphaThreshold = 0.75) {
+    if ( alphaThreshold === 1 ) return super._calculateCanvasBoundingBox();
+    return this.#calculateCanvasBoundingBox(alphaThreshold);
   }
 
   /**
    * Calculate a canvas bounding box based on a specific threshold.
    */
-  #calculateCanvasBoundingBox(threshold=0.75) {
+  #calculateCanvasBoundingBox(alphaThreshold=0.75) {
     // Pad right and bottom to ensure full coverage for PIXI rectangle or polygon.
-    const aabb = this.getThresholdLocalAABB(threshold);
+    const aabb = this.getThresholdLocalAABB(alphaThreshold);
     const TL = this._toCanvasCoordinates(aabb.min.x, aabb.min.y);
     const TR = this._toCanvasCoordinates(aabb.max.x + 1, aabb.min.y);
     const BL = this._toCanvasCoordinates(aabb.min.x, aabb.max.y + 1);
@@ -1251,9 +1263,9 @@ export class PixelCache extends LocalCoordinateCache {
    * @param {number} [threshold=0.75]   Values lower than this will be ignored around the edges.
    * @returns {AABB2d} Rectangle based on local coordinates.
    */
-  #calculateLocalAABB(threshold=0.75) {
+  #calculateLocalAABB(alphaThreshold=0.75) {
     // (Faster or equal to the old method that used one double non-breaking loop.)
-    threshold = threshold * this.maximumPixelValue;
+    const threshold = alphaThreshold * this.maximumPixelValue;
 
     // By definition, the local frame uses 0 or positive integers. So we can use -1 as a placeholder value.
     const { left, right, top, bottom } = this;
@@ -1326,11 +1338,11 @@ export class PixelCache extends LocalCoordinateCache {
    * @param {number} [threshold=0.75]   Values lower than this will be ignored around the edges.
    * @returns {PIXI.Polygon} Polygon based on local coordinates.
    */
-  #calculateLocalBoundingPolygon(threshold = 0.75) {
+  #calculateLocalBoundingPolygon(alphaThreshold = 0.75) {
     // Use Moore Neighborhood with Jacob's stopping criteria.
     // https://www.imageprocessingplace.com/downloads_V3/root_downloads/tutorials/contour_tracing_Abeer_George_Ghuneim/moore.html
-    const alphaAABB = this.getThresholdLocalAABB(threshold);
-    threshold = threshold * this.maximumPixelValue;
+    const alphaAABB = this.getThresholdLocalAABB(alphaThreshold);
+    const threshold = alphaThreshold * this.maximumPixelValue;
 
     // Start with the bounding box.
     const { min, max } = alphaAABB;
@@ -1438,16 +1450,116 @@ for ( let i = 0; i < 1000; i += 1 ) {
 console.table(pts)
 */
 
+  /**
+   * Convert pixels to an array of polygon isobands representing
+   * alpha values at or above the threshold. E.g., alpha between 0.75 and 1.
+   * @returns {ClipperPaths} The polygon paths or, if error, the local alpha bounding box.
+   *   Coordinates returned are local to the tile pixels, between 0 and width/height of the tile pixels.
+   */
+ 
+  /**
+   * Get solid polygon areas of this cache based on a specific threshold of transparency vs solid.
+   * @returns {PIXI.Polygon[]}    Polygons in canvas coordinates
+   */
+  getCanvasAlphaISOBands(alphaThreshold = 0.75) {
+    const map = this.#canvasAlphaISOBands;
+    if ( !map.has(alphaThreshold) ) map.set(alphaThreshold, this.#calculateCanvasAlphaISOBands(alphaThreshold));
+    return map.get(alphaThreshold);
+  }
+  
+  /**
+   * Get solid polygon areas of this cache based on a specific threshold of transparency vs solid.
+   * @returns {PIXI.Polygon[]}    Polygons in canvas coordinates
+   */
+  #calculateCanvasAlphaISOBands(alphaThreshold = 0.75) {
+    const localPolys = this.getLocalAlphaISOBands(alphaThreshold);
+    return localPolys.map(localPoly => new PIXI.Polygon([...localPoly.iteratePoints()].map(pt => this._toCanvasCoordinates(pt.x, pt.y, pt))));    
+  }
 
+  /**
+   * Convert these pixels to an array of polygon isobands representing
+   * alpha values at or above the threshold. E.g., alpha between 0.75 and 1.
+   * @returns {ClipperPaths} The polygon paths or, if error, the local alpha bounding box.
+   *   Coordinates returned are local to the tile pixels, between 0 and width/height of the tile pixels.
+   */
+  _calculateLocalAlphaISOBands(alphaThreshold = 0.75) {
+    const threshold = 255 * alphaThreshold;
+    const pixels = this.pixels;
+    const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
+
+    // Convert pixels to isobands.
+    const width = this.bufferWidth;
+    const height = this.bufferHeight;
+    const rowViews = new Array(height);
+    for ( let r = 0, start = 0, rMax = height; r < rMax; r += 1, start += width ) {
+      // TODO: Use single Typed view instead of slicing?
+      rowViews[r] = Array.from(pixels.slice(start, start + width));
+    }
+
+    let bands;
+    try {
+      bands = MarchingSquares.isoBands(rowViews, threshold, 256 - threshold);
+    } catch ( err ) {
+      console.warn(err);
+      const poly = this.getThresholdLocalBoundingPolygon(alphaThreshold);
+      return ClipperPaths.fromPolygons([poly]);
+    }
+
+    /* Don't want to scale between 0 and 1 b/c using evPixelCache transform on the local coordinates.
+    // Create polygons scaled between 0 and 1, based on width and height.
+    const invWidth = 1 / width;
+    const invHeight = 1 / height;
+    const nPolys = lines.length;
+    const polys = new Array(nPolys);
+    for ( let i = 0; i < nPolys; i += 1 ) {
+      polys[i] = new PIXI.Polygon(bands[i].flatMap(pt => [pt[0] * invWidth, pt[1] * invHeight]))
+    }
+    */
+    const nPolys = bands.length;
+    const polys = new Array(nPolys);
+    for ( let i = 0; i < nPolys; i += 1 ) {
+      const poly = new PIXI.Polygon(bands[i].flatMap(pt => pt)); // TODO: Can we lose the flatMap?
+
+      // Polys from MarchingSquares are CW if hole; reverse
+      poly.reverseOrientation();
+      polys[i] = poly;
+    }
+
+    // Use Clipper to clean the polygons. Leave as clipper paths for earcut later.
+    const paths = ClipperPaths
+      .fromPolygons(polys, { scalingFactor: 100 })
+      .clean()
+      .trimByArea(CONFIG[GEOMETRY_LIB_ID].CONFIG.alphaAreaThreshold ?? 25)
+      
+    // Translate by the minimum alpha bounds.
+    const aabb = this.getThresholdLocalAABB(alphaThreshold);
+    if ( aabb.min.x || aabb.min.y ) {
+      const M = MatrixFloat32.translation(aabb.min.x, aabb.min.y);
+      return paths.transform(M);
+    } else return paths;
+  }
+
+  /**
+   * Get polygons representing solid (alpha > threshold) areas based on a specific threshold.
+   * @param {number} [threshold=0.75]   Values lower than this are treated as transparent (not solid).
+   * @returns {PIXI.Polygon[]} Polygons based on local coordinates.
+   */
+  getLocalAlphaISOBands(alphaThreshold = 0.75) {
+    const map = this.#localAlphaISOBands;
+    if ( !map.has(alphaThreshold) ) {
+      const paths = this._calculateLocalAlphaISOBands(alphaThreshold);
+      map.set(alphaThreshold, paths.toPolygons());
+    }
+    return map.get(alphaThreshold);
+  }
 
   /**
    * Calculate a canvas bounding polygon based on a specific threshold.
    */
-  #calculateCanvasBoundingPolygon(threshold=0.75) {
-    const localPoly = this.getThresholdLocalBoundingPolygon(threshold);
+  #calculateCanvasBoundingPolygon(alphaThreshold=0.75) {
+    const localPoly = this.getThresholdLocalBoundingPolygon(alphaThreshold);
     return new PIXI.Polygon([...localPoly.iteratePoints()].map(pt => this._toCanvasCoordinates(pt.x, pt.y, pt)))
   }
-
 
   /**
    * Get a local bounding box based on a specific threshold
@@ -2767,14 +2879,15 @@ export class TilePixelCache extends TrimmedPixelCache {
 
   // ----- NOTE: Tile data getters ----- //
 
-  /** @type {number} */d
+  /** @type {number} */
   get alphaThreshold() { return this.tile.document.texture.alphaThreshold || 0; }
 
   get tileRotation() { return Math.toRadians(this.tile.document.rotation); }
 
   get tileTranslation() {
     const tileD = this.tile.document;
-    return { x: tileD.x, y: tileD.y };
+    const anchor = this.tileAnchorTranslation;
+    return { x: tileD.x - anchor.x, y: tileD.y - anchor.y };
   }
 
   get tileScale() {
@@ -2788,6 +2901,15 @@ export class TilePixelCache extends TrimmedPixelCache {
       x: proportionalWidth * scaleX,
       y: proportionalHeight * scaleY,
     };
+  }
+  
+  get tileAnchorTranslation() {
+    const tileD = this.tile.document;
+    const { anchorX, anchorY } = tileD.texture;
+    return { 
+      x: anchorX * tileD.width,
+      y: anchorY * tileD.height,
+    }
   }
 
   /**
@@ -2806,9 +2928,10 @@ export class TilePixelCache extends TrimmedPixelCache {
    */
   updateTransforms() {
     // Set translation, rotation, and scale from the tile document.
+    this.modelMatrix.modelCenter = this.tileAnchorTranslation;
     this.translation = this.tileTranslation;
     this.rotationZ = this.tileRotation;
-    this.scale = this.tileScale;
+    this.scale = this.tileScale;    
     super.updateTransforms();
   }
 
