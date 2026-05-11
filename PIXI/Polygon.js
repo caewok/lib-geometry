@@ -254,6 +254,26 @@ function* reverseIteratePoints() {
 }
 
 /**
+ * Transform a polygon by a 3x3 matrix.
+ * @param {Matrix} M
+ * @param {PIXI.Polygon} out
+ * @returns {PIXI.Polygon}
+ */
+function transform(M, out) {
+  out ??= new this();
+  out.points.length = this.points.length;
+  let i = 0;
+  for ( using pt of this.iteratePoints() ) {
+    M.multiplyPoint2d(pt, pt);
+    
+    // Either overwrites this.points at that position or at a new out.
+    out.points[i++] = pt.x; 
+    out.points[i++] = pt.y;
+  }
+  return out;
+}
+
+/**
  * Test if a line or lines crosses a polygon edge
  * @param {object[]} lines    Array of lines, with A and B PIXI.Points.
  * @returns {boolean}
@@ -1195,6 +1215,7 @@ PATCHES.PIXI.METHODS = {
   canUseFanTriangulation,
 
   // Transform
+  transform,
   translate,
   scale,
   centerScale,
