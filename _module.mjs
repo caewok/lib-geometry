@@ -27,3 +27,4 @@ export * from "./RadixSort.js";
 export * from "./Graph.js";
 export * from "./ObstacleOcclusionTest.js";
 export * as utils from "./util.js";
+export * as MarchingSquares from "./marchingsquares-esm.js";
