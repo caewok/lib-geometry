@@ -10,224 +10,230 @@ import { Matrix } from "../Matrix.js";
 import { GEOMETRY_LIB_ID, GEOMETRY_ID } from "../const.js";
 import { TokenGeometry } from "../placeable_geometry/TokenGeometry.js";
 import { AABB2d } from "../AABB.js";
-import { SDF } from "./SDF.js";
+import { SDFPlaceable } from "./SDF.js";
 
-export class TokenSDF extends SDF {
+export class TokenSDF extends SDFPlaceable {
 
-  static aabb2d(token) { return AABB2d.fromToken(token); }
+  get token() { return this.placeable; }
+  
+  get aabb2d() { return AABB2d.fromToken(this.token); }
+  
+  // ---- NOTE: Token getters ----- //
+  
+  get geom() { return this.token[GEOMETRY_LIB_ID]?.[GEOMETRY_ID]; }
+  
+  get shapeType() { 
+    const TYPES = TokenGeometry.SHAPE_TYPES;
+    const geom = this.geom;
+    if ( geom ) return geom.shapeType;
+    return canvas.grid.isHexagonal ? TYPES.HEXAGONAL : TYPES.CUBE;    
+  }
+  
+  /** @type {Point3d} */
+  get center() { 
+    const { center, topZ, bottomZ } = this.token;
+    const ctr = Point3d.fromObject(center);
+    ctr.z = bottomZ + ((topZ - bottomZ) * 0.5);
+    return ctr;
+  }
+  
+  /** @type {Point3d} */
+  get dims() { 
+    const token = this.token;
+    const { topZ, bottomZ } = token;
+    const { width, height } = token.document; 
+    const w = width * canvas.grid.size;
+    const h = height * canvas.grid.size;
+    const vHeight = topZ - bottomZ;
+    return Point3d.tmp.set(w, h, vHeight);
+  }
+    
+  
+  // ---- NOTE: SDF 2d ----- //
    
   /**
    * Signed distance function for a given token
    */
-  static sdf2d(token, shapeType) {
-    if ( token.isConstrainedTokenBorder ) return this._sdfTokenPolygon(token);
+  sdf2d({ shapeType } = {}) {
+    if ( this.token.isConstrainedTokenBorder ) return this._sdfConstrainedBorder();
 
-    const geom = token[GEOMETRY_LIB_ID][GEOMETRY_ID];
-    shapeType ??= geom.shapeType;
+    shapeType ??= this.shapeType;
     const TYPES = TokenGeometry.SHAPE_TYPES;    
     switch ( shapeType ) {
       // For spherical and ellipsoid, use 2d versions.
-      case TYPES.SPHERICAL: return this._sdfTokenCircle(token);
+      case TYPES.SPHERICAL: return this._sdfCircle();
       case TYPES.ELLIPSOID: 
-      case TYPES.ELLIPSE: return this._sdfEllipse(token);
-      case TYPES.CUBE: return this._sdfRectangle(token);
-      case TYPES.HEXAGONAL: {
-        const { width, height } = token.document; 
-        const w = width * canvas.grid.size;
-        const h = height * canvas.grid.size;
-        if ( (w === 1 || w === 0.5) && (h === 1 || h === 0.5) ) {
-          // TODO: Need to rotate depending on grid.
-          // TODO: Need correct hexagon radius.
-          return this._sdfHexagon(token);
-        } else return this._sdfPolygon(token)
-      }
-    }
-  }
-
-  static _sdfTokenCircle(token) {
-    const ctr = token.center;
-    const txMat = Matrix.translation(-ctr.x, -ctr.y);
-    const txPt = PIXI.Point.tmp;
-    const { width, height } = token.document; 
-    const w = width * canvas.grid.size;
-    const h = height * canvas.grid.size;
-    const r = Math.max(w, h) * 0.5;
-    return p => {
-      txMat.multiplyPoint2d(p, txPt);
-      return this.sdCircle(txPt, r);
+      case TYPES.ELLIPSE: return this._sdfEllipse();
+      case TYPES.CUBE: return this._sdfRectangle();
+      case TYPES.HEXAGONAL: return this._sdfHexagon();
+      default: return this._sdfPolygon();
     }
   }
   
-  static _sdfTokenEllipse(token) {
-    const ctr = token.center;
-    const txMat = Matrix.translation(-ctr.x, -ctr.y);
+  _sdfConstrainedBorder() {
+    const border = this.token.constrainedTokenBorder;
+    const SHAPES = PIXI.SHAPES;
+    switch ( border.type ) {
+      case SHAPES.POLY: return this._sdfPolygon(border); // Could be constrained or a hex shape.
+      
+      // If not a polygon, then not constrained.
+      case SHAPES.RECT: return this._sdfRectangle(); 
+      case SHAPES.CIRC: return this._sdfCircle();
+      case SHAPES.ELIP: return this._sdfEllipse();
+      default: return this._sdfPolygon(border);
+    }
+  }
+    
+  _sdfCircle() {
+    const txMat = this.translationMatrix2d;
     const txPt = PIXI.Point.tmp;
-    const { width, height } = token.document; 
-    const w = width * canvas.grid.size;
-    const h = height * canvas.grid.size;
-    const ab = PIXI.Point.tmp(w * 0.5, h * 0.5);
+    using halfD = this.halfDims;
+    const r = Math.max(halfD.x, halfD.y);
     return p => {
       txMat.multiplyPoint2d(p, txPt);
-      return this.sdEllipse(txPt, ab);
+      return this.constructor.sdCircle(txPt, r);
+    }
+  }
+  
+  _sdfEllipse() {
+    const txMat = this.translationMatrix2d;
+    const txPt = PIXI.Point.tmp;
+    using halfD = this.halfDims;
+    const ab = PIXI.Point.tmp.set(halfD.x, halfD.y);
+    return p => {
+      txMat.multiplyPoint2d(p, txPt);
+      return this.constructor.sdEllipse(txPt, ab);
     };
   }
   
-  static _sdfTokenRectangle(token) {
-    const ctr = token.center;
-    const txMat = Matrix.translation(-ctr.x, -ctr.y);
+  _sdfRectangle() {
+    const txMat = this.translationMatrix2d;
     const txPt = PIXI.Point.tmp;
-    const { width, height } = token.document; 
-    const w = width * canvas.grid.size;
-    const h = height * canvas.grid.size;
-    const ab = PIXI.Point.tmp(w * 0.5, h * 0.5);
+    using halfD = this.halfDims;
+    const ab = PIXI.Point.tmp.set(halfD.x, halfD.y);
     return p => {
       txMat.multiplyPoint2d(p, txPt);
-      return this.sdRectangle(txPt, ab);
+      return this.constructor.sdRectangle(txPt, ab);
     };   
   }
   
-  static _sdfTokenHexagon(token) {
-    const ctr = token.center;
-    const txMat = Matrix.translation(-ctr.x, -ctr.y);
-    const txPt = PIXI.Point.tmp;
-    const w = token.document.width * canvas.grid.size;
-    return p => {
-      txMat.multiplyPoint2d(p, txPt);
-      return this.sdRectangle(txPt, w * 0.5);
-    };     
+  _sdfHexagon() {
+    const { width, height } = this.token.document; 
+    if ( (width === 1 || width == 0.5) && (height === 1 || height === 0.5) ) {
+			const txMat = this.translationMatrix2d;
+			const txPt = PIXI.Point.tmp;
+			
+			// In-radius (apothem) is the shorter of grid.sizeX and grid.sizeY. 
+			// Depends on whether the hexes are column- or row-based.
+			// (Obviously only works correctly on a hex grid.)
+			const apothem = Math.min(canvas.grid.sizeX, canvas.grid.sizeY) * 0.5 * width;
+			return p => {
+				txMat.multiplyPoint2d(p, txPt);
+				return this.constructor.sdHexagon(txPt, apothem);
+			};     
+    } else return this._sdfPolygon(); // Custom hex shapes.
   }
   
-  static _sdfTokenPolygon(token) {
-    const geom = token[GEOMETRY_LIB_ID][GEOMETRY_ID];
-    const points = [...geom.faces.top.toPolygon2d().iteratePoints()];
-    return p => this.sdPolygon(p, points);
+  _sdfPolygon(poly) {
+    const geom = this.geom;
+    let points;
+    poly ??= this.token.tokenBorder.toPolygon();
+    return p => this.constructor.fromSquaredDistance(this.constructor.sdSquaredPIXIPolygon(p, poly));
   }
   
   /**
-   * SDF for a 3d token. 
+   * 3d SDF for this token. 
    * Simple version for testing.
-	 * @param {Token} token
    * @param {SHAPE_TYPES} shapeType			The shape that represents the token
    * @returns {number}
    */
-  static _sdf3d(token, shapeType) {
-    const primitive = this.sdf2d(token, shapeType);
-    const h = token.topZ - token.bottomZ;
-    return p => this.opExtrusion(p, p => primitive(p.to2d()), h);
+  _sdf3d(opts) {
+    const primitive = this.sdf2d(opts);
+    using dims = this.dims;
+    const h = dims.z;
+    return p => this.constructor.opExtrusion(p, p => primitive(p.to2d()), h);
   }
+  
+  // ----- NOTE: SDF 3d ----- //
   
   /**
    * SDF for a 3d token. 
    * Same as _sdf3d, but use different variations depending on shape type.
    * More efficient for shapes like spheres.
-	 * @param {Token} token
    * @param {SHAPE_TYPES} shapeType			The shape that represents the token
    * @returns {number}
    */
-  static sdf3d(token, shapeType) {
-    if ( token.isConstrainedTokenBorder ) return this._sdfToken3d(token, shapeType);
+  sdf3d(opts = {}) {
+    if ( this.token.isConstrainedTokenBorder ) return this._sdfToken3d(opts);
     
-    const geom = token[GEOMETRY_LIB_ID][GEOMETRY_ID];
-    shapeType ??= geom.shapeType;
-    const TYPES = geom.constructor.SHAPE_TYPES;
-    
-    const { center, topZ, bottomZ } = token;
-    using ctr = Point3d.tmp.fromObject(center);
-    ctr.z = bottomZ + ((topZ - bottomZ) * 0.5);
-    const { width, height } = token.document; 
-    const w = width * canvas.grid.size;
-    const h = height * canvas.grid.size;
-    const vHeight = topZ - bottomZ;
-    const txMat = Matrix.translate(-ctr.x, -ctr.y, -ctr.z);
+    opts.shapeType ??= this.shapeType;
+    const TYPES = TokenGeometry.SHAPE_TYPES;
     const txPt = Point3d.tmp;
+    const txMat = this.translationMatrix3d;
     
-    switch ( shapeType ) {
-      case TYPES.SPHERICAL: {
-        return p => {
-          txMat.multiplyPoint3d(p, txPt);
-          return this.sdSphere(txPt, Math.max(w, h, vHeight));
-        };        
-      }
-      case TYPES.ELLIPSOID: {
-        return p => {
-          txMat.multiplyPoint3d(p, txPt);
-          return this.sdEllipsoid(txPt, Point3d.tmp.set(w, h, vHeight));
-        };
-      }
-      case TYPES.CUBE: {
-        return p => {
-          txMat.multiplyPoint3d(p, txPt);
-          return this.sdBox(txPt, Point3d.tmp.set(w, h, vHeight));
-        };
-      }
-      case TYPES.ELLIPSE: 
-      default: return p => this._sdf3d(p, token, shapeType);
+    switch ( opts.shapeType ) {
+      case TYPES.SPHERICAL: return this._sdfSphere();
+      case TYPES.ELLIPSOID: return this._sdfEllipsoid();
+      case TYPES.CUBE: return this._sdfCube();
+      case TYPES.ELLIPSE: return this._sdfEllipse3d();
+      case TYPES.HEXAGONAL: return this._sdfHexagon3d();
+      default: return p => this._sdf3d(opts)(p);
     }
   } 
   
-  static _sdfTokenSphere(token) {
-    const { center, topZ, bottomZ } = token;
-    using ctr = Point3d.tmp.fromObject(center);
-    ctr.z = bottomZ + ((topZ - bottomZ) * 0.5);
-    
-    const { width, height } = token.document; 
-    const w = width * canvas.grid.size;
-    const h = height * canvas.grid.size;
-    const vHeight = topZ - bottomZ;
-    
-    const txMat = Matrix.translate(-ctr.x, -ctr.y, -ctr.z);
+  _sdfSphere() {
     const txPt = Point3d.tmp;
-    const r = Math.max(w, h, vHeight);
+    using dims = this.halfDims;
+    const r = Math.max(dims.x, dims.y, dims.z);
+    const txMat = this.translationMatrix3d;
     return p => {
       txMat.multiplyPoint3d(p, txPt);
-      this.sdSphere(txPt, r);
+      return this.constructor.sdSphere(txPt, r);
     }
   }
   
-  static _sdfTokenEllipsoid(token) {
-    const { center, topZ, bottomZ } = token;
-    using ctr = Point3d.tmp.fromObject(center);
-    ctr.z = bottomZ + ((topZ - bottomZ) * 0.5);
-    
-    const { width, height } = token.document; 
-    const w = width * canvas.grid.size;
-    const h = height * canvas.grid.size;
-    const vHeight = topZ - bottomZ;
-    
-    const txMat = Matrix.translate(-ctr.x, -ctr.y, -ctr.z);
+  _sdfEllipsoid() {
     const txPt = Point3d.tmp;
-    const r = Point3d.tmp.set(w, h, vHeight);
+    const r = this.halfDims;
+    const txMat = this.translationMatrix3d;
     return p => {
       txMat.multiplyPoint3d(p, txPt);
-      this.sdEllipsoid(txPt, r);
+      return this.constructor.sdEllipsoid(txPt, r);
     }    
   }
   
-  static _sdfTokenCube(token) {
-    const { center, topZ, bottomZ } = token;
-    using ctr = Point3d.tmp.fromObject(center);
-    ctr.z = bottomZ + ((topZ - bottomZ) * 0.5);
-    
-    const { width, height } = token.document; 
-    const w = width * canvas.grid.size;
-    const h = height * canvas.grid.size;
-    const vHeight = topZ - bottomZ;
-    
-    const txMat = Matrix.translate(-ctr.x, -ctr.y, -ctr.z);
+  _sdfCube() {
     const txPt = Point3d.tmp;
-    const r = Point3d.tmp.set(w, h, vHeight);
+    const b = this.halfDims;
+    const txMat = this.translationMatrix3d;
     return p => {
       txMat.multiplyPoint3d(p, txPt);
-      this.sdBox(txPt, r);
+      return this.constructor.sdCube(txPt, b);
     }    
   }
   
-  static _sdfTokenEllipse3d(token) {
-    return this._sdf3d(token, TokenGeometry.SHAPE_TYPES.ELLIPSE);
+  _sdfCylinder() {
+    const primitive = this._sdfCircle();
+    using dims = this.dims;
+    const h = dims.z;
+    return p => this.constructor.opExtrusion(p, p => primitive(p.to2d()), h); 
   }
   
-  static _sdfTokenHexagon3d(token) {
-    return this._sdf3d(token, TokenGeometry.SHAPE_TYPES.HEXAGONAL);
+  _sdfCircle3d = this._sdfCylinder;
+  
+  _sdfEllipse3d() {
+    return this._sdf3d({ shapeType: TokenGeometry.SHAPE_TYPES.ELLIPSE });
+  }
+  
+  _sdfHexagon3d() {
+    return this._sdf3d({ shapeType: TokenGeometry.SHAPE_TYPES.HEXAGONAL });
+  }
+  
+  _sdfPolygon3d(poly) {
+    const primitive = this._sdfPolygon(poly);
+    using dims = this.dims;
+    const h = dims.z;
+    return p => this.constructor.opExtrusion(p, p => primitive(p.to2d()), h);
   }
 }
 
@@ -241,38 +247,68 @@ RegionSDF = CONFIG.GeometryLib.lib.sdf.RegionSDF
 TileSDF = CONFIG.GeometryLib.lib.sdf.TileSDF
 TokenSDF = CONFIG.GeometryLib.lib.sdf.TokenSDF
 
-cir1 = new PIXI.Circle(50, 50, 100)
-cir2 = new PIXI.Circle(120, 50, 80)
-Draw.shape(cir1, { color: Draw.COLORS.blue })
-Draw.shape(cir2, { color: Draw.COLORS.green })
+// Tokens
 
-txMat1 = Matrix.translation(-cir1.x, -cir1.y)
-txPt = PIXI.Point.tmp
-prim1 = p => {
-  txMat1.multiplyPoint2d(p, txPt);
-  return SDF.sdCircle(txPt, cir1.radius);
-}
-aabb1 = AABB2d.fromCircle(cir1)
-aabb1.pad({ x: 20, y: 20 });
+tSDF = new TokenSDF(_token)
+tSDF.draw({ padding: 100 })
+tSDF.draw({ padding: 100, use3d: true })
+tSDF.draw({ padding: 100, elevationZ: _token.topZ })
+tSDF.draw({ padding: 100, elevationZ: _token.topZ + 50 })
 
-SDF.drawHeatmap2d(prim1, aabb1)
-Draw.shape(cir1, { color: Draw.COLORS.black })	
+// Different shapes
+padding = 100
+aabb = tSDF.aabb2d;
+aabb.min.x -= padding;
+aabb.min.y -= padding;
+aabb.max.x += padding;
+aabb.max.y += padding;
 
-txMat2 = Matrix.translation(-cir2.x, -cir2.y)
-prim2 = p => {
-  txMat2.multiplyPoint2d(p, txPt);
-  return SDF.sdCircle(txPt, cir2.radius);
-}
-aabb2 = AABB2d.fromCircle(cir2)
-aabb2.pad({ x: 20, y: 20 });
-SDF.drawHeatmap2d(prim2, aabb2)
-Draw.shape(cir2, { color: Draw.COLORS.black })
+// 2d SDF 
+primitive = tSDF._sdfCircle()
+primitive = tSDF._sdfEllipse()
+primitive = tSDF._sdfRectangle()
+primitive = tSDF._sdfHexagon()
+primitive = tSDF._sdfPolygon()
+primitive = tSDF._sdfConstrainedBorder()
+
+TokenSDF.drawHeatmap(primitive, aabb);
+
+// 3d SDF
+primitive = tSDF._sdfSphere()
+primitive = tSDF._sdfEllipsoid()
+primitive = tSDF._sdfCube()
+primitive = tSDF._sdfEllipse3d()
+primitive = tSDF._sdfCylinder()
+primitive = tSDF._sdfCircle3d()
+primitive = tSDF._sdfHexagon3d()
+primitive = tSDF._sdfPolygon3d()
 
 
-// combined
-aabb = AABB2d.union([aabb1, aabb2])
-prim = p => SDF.union(prim1(p), prim2(p))
-SDF.drawHeatmap2d(prim, aabb)
-Draw.shape(cir1, { color: Draw.COLORS.black })
-Draw.shape(cir2, { color: Draw.COLORS.black })
+TokenSDF.drawHeatmap(primitive, aabb, { elevationZ: 0 });
+TokenSDF.drawHeatmap(primitive, aabb, { elevationZ: _token.topZ  });
+TokenSDF.drawHeatmap(primitive, aabb, { elevationZ: _token.topZ + 50 });
+
+
+// Distance from token center at elevation.
+p = tSDF.center
+primitive(p)
+
+p.z = tSDF.token.bottomZ
+primitive(p)
+
+p.z = tSDF.token.topZ
+primitive(p)
+
+p.z = tSDF.token.topZ * 2
+primitive(p)
+
+// All tokens
+canvas.tokens.placeables.forEach(token => {
+  tSDF = new TokenSDF(token)
+  tSDF.draw({ padding: 100 })
+})
+
+
+
+
 */

@@ -24,7 +24,7 @@ export function registerTests(quench) {
 	// Helper to check distance with a small epsilon for floating point errors
 	const expectClose = (val, target) => expect(val).to.be.closeTo(target, EPSILON);
 	
-  // --- Boolean Operators ---
+  // --- NOTE: Boolean Operators ---
   describe("GeometryLib | SDF Operators", function() {
     describe("union", function() {
       it("opUnion should return the minimum distance", function() {
@@ -56,7 +56,7 @@ export function registerTests(quench) {
       });
     });
 
-    // --- Operators ---
+    // --- NOTE: Operators ---
 
     describe("opExtrusion", function() {
       it("should create a 3d volume from a 2d primitive", function() {
@@ -85,7 +85,7 @@ export function registerTests(quench) {
     });
   });
   
-  // --- 2D Primitives ---  
+  // --- NOTE: 2D Primitives ---  
   describe("GeometryLib | SDF 2d Primitives", function() {
     
    describe("sdSegment", function() {
@@ -217,7 +217,7 @@ export function registerTests(quench) {
     });
   });
  
-    // --- 2D Corners ---
+    // --- NOTE: 2D Corners ---
     describe("GeometryLib | SDF 2d Corners", function() {
     
 			describe("dCornerSquaredBox", function() {
@@ -308,6 +308,127 @@ export function registerTests(quench) {
 				});
 			});
 		});
+
+  // ----- NOTE: Ray march -----
+  
+  describe("SDF.raymarch", function() {
+		const radius = 20;
+		// Primitive function for a circle centered at (50, 0)
+		const circleAt50 = (p) => {
+			const shifted = new PIXI.Point(p.x - 50, p.y);
+			return SDF.sdCircle(shifted, radius);
+		};
+
+		it("should hit a 2D circle directly in front of the ray", function() {
+			const origin = new PIXI.Point(0, 0);
+			const direction = new PIXI.Point(1, 0); // Pointing right
+			const dist = SDF.raymarch(origin, direction, circleAt50);
+			
+			// Center is at 50, radius is 20. Edge is at 50 - 20 = 30.
+			expectClose(dist, 30);
+		});
+
+		it("should return 0 (or very close) if starting on the surface", function() {
+			const origin = new PIXI.Point(30, 0);
+			const direction = new PIXI.Point(1, 0);
+			const dist = SDF.raymarch(origin, direction, circleAt50);
+			
+			expectClose(dist, 0);
+		});
+
+		it("should handle starting inside the shape", function() {
+			const origin = new PIXI.Point(50, 0); // Exactly at center
+			const direction = new PIXI.Point(1, 0);
+			const dist = SDF.raymarch(origin, direction, circleAt50);
+			
+			// Depending on implementation, raymarch inside usually returns 0 
+			// or exits immediately because distance is negative.
+			expect(dist).to.be.at.most(EPSILON);
+		});
+
+		it("should return null when the ray misses the shape", function() {
+			const origin = new PIXI.Point(0, 50); // Ray is shifted up
+			const direction = new PIXI.Point(1, 0); // Firing right, will miss circle at (50, 0)
+			const maxDist = 100;
+			const dist = SDF.raymarch(origin, direction, circleAt50, { maxDist });
+			
+			expect(dist).to.equal(null);
+		});
+	});
+	
+	// ----- NOTE: Raymarch 3d ----- 
+
+	describe("SDF.raymarch (3D)", function() {
+		const size = new Point3d(10, 10, 10); // Half-extents for a 20x20x20 cube
+		// Box centered at (0, 0, 100)
+		const boxAt100z = (p) => {
+			const shifted = new Point3d(p.x, p.y, p.z - 100);
+			return SDF.sdCube(shifted, size);
+		};
+
+		it("should hit the front face of a 3D cube", function() {
+			const origin = new Point3d(0, 0, 0);
+			const direction = new Point3d(0, 0, 1); // Pointing +Z
+			const dist = SDF.raymarch(origin, direction, boxAt100z);
+			
+			// Center at 100, half-extent 10. Front face is at 100 - 10 = 90.
+			expectClose(dist, 90);
+		});
+
+		it("should hit a 3D cube at an angle (diagonal)", function() {
+			const origin = new Point3d(-50, 0, 50);
+			// Normalize a direction pointing towards the corner
+			const direction = new Point3d(1, 0, 1).normalize(); 
+			const dist = SDF.raymarch(origin, direction, boxAt100z);
+			
+			// If moving diagonally from -50 to -10 (x) and 50 to 90 (z)
+			// The distance traveled should be roughly 40 * sqrt(2)
+			expectClose(dist, 40 * Math.sqrt(2));
+		});
+
+		it("should return null for a ray parallel to the box", function() {
+			const origin = new Point3d(50, 0, 0);
+			const direction = new Point3d(0, 0, 1); // Firing parallel to Z, offset by 50 units
+			const maxDist = 500;
+			const dist = SDF.raymarch(origin, direction, boxAt100z, { maxDist });
+			
+			expect(dist).to.equal(null);
+		});
+
+		it("should respect the maxSteps limit", function() {
+			const origin = new Point3d(0, 0, 0);
+			const direction = new Point3d(0, 0, 1);
+			// With maxSteps = 1, it should never reach the box at 90 units
+			const dist = SDF.raymarch(origin, direction, boxAt100z, { maxSteps: 1, maxDist: 1000 });
+			
+			expect(dist).to.equal(null);
+		});
+	});
+
+	describe("SDF.raymarch with Complex Primitives", function() {
+		it("should hit the intersection of two shapes", function() {
+			// Intersection of two spheres
+			// Both spheres are radius 15.
+			// One sphere centered at -10,0; other at 10, 0.
+			const scene = (p) => {
+				const d1 = SDF.sdSphere(new Point3d(p.x - 10, p.y, p.z), 15);
+				const d2 = SDF.sdSphere(new Point3d(p.x + 10, p.y, p.z), 15);
+				return SDF.intersection(d1, d2);
+			};
+
+			const origin = new Point3d(0, 0, -50);
+			const direction = new Point3d(0, 0, 1);
+			const dist = SDF.raymarch(origin, direction, scene, { surfaceEpsilon: EPSILON });
+
+			// The spheres overlap between x = -5 and x = 5. 
+			// At x=0, the sphere surface distance from center (10,0,0) with radius 15:
+			// 0^2 + y^2 + z^2 = 15^2 offset by 10 in X.
+			// sqrt(10^2 + z^2) = 15 => 100 + z^2 = 225 => z^2 = 125 => z = 11.18
+			// Distance from origin (0,0,-50) to z = -11.18 is 38.82
+			expectClose(dist, 50 - Math.sqrt(15*15 - 10*10));
+		});
+	});
+
 },
 { displayName: "libGeometry: Signed Distance Functions (SDF)" },
 );

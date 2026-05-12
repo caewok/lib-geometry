@@ -9,7 +9,10 @@ PIXI,
 
 import { Point3d } from "../3d/Point3d.js";
 import { Matrix } from "../Matrix.js";
-import { SDF } from "./SDF.js";
+import { SDFPlaceable } from "./SDF.js";
+import { AABB2d } from "../AABB.js";
+
+const TM_ID = "terrainmapper";
 
 /**
  * For regions, treat similarly to RegionGeometry; consider circles, rectangles, ellipses separately.
@@ -29,32 +32,56 @@ import { SDF } from "./SDF.js";
  * - ramp: extrusion + sideways extruded triangle
  * - steps: extrusion + sideways extruded steps
  */
-export class RegionSDF extends SDF {
+export class RegionSDF extends SDFPlaceable {
 
+  get region() { return this.placeable; }
+  
+  get shapes() { return this.region.document.shapes; }
+  
+  get aabb2d() { return AABB2d.fromRegion(this.region); }
+  
+  get isSingleShape() { return this.shapes.length === 1; }
+  
+  _translationRotationMatrix(shapeData) { 
+    using txMat = Matrix.translation(-shapeData.x, -shapeData.y);
+    using rotMat = Matrix.rotationZ(-shapeData.rotation, false);
+    return rotMat.multiply3x3(txMat);
+  }
+  
   // ----- NOTE: 2d SDFs ----- //
   
-  static sdf2d(region) {
+  /**
+   * 2d signed distance function for this region.
+   * @returns {function}
+   */
+  sdf2d() {
+    const { region, shapes } = this;
+  
     // Combine the various region primitives, using union plus subtraction to remove holes.    
     // Could union all shapes at once, but would need separate hole handling.
     // Instead, follow logic of sdPolygon3dWithHoles.
-    const shapes = region.document.shapes;
     if ( !shapes.length ) return _p => Number.POSITIVE_INFINITY;
     
     // TODO: More nuanced test for whether the walls actually restrict the current shape.
     const shapeSDFs = region.document.restriction.enabled 
-      ? shapes.map(shape => this.sdfPolygons(shape.polygons))
-        : shapes.map(shape => this.sdf2dForShape(shape));
+      ? shapes.map(shape => this.constructor.sdfPolygons(shape.polygons))
+        : shapes.map(shape => this.constructor.sdf2dForShape(shape));
         
     return p => {
       let d = shapeSDFs[0](p); // NOTE: Assumes no hole to start.
       for ( let i = 1, n = shapeSDFs.length; i < n; i += 1 ) {
         const op = shapes[i].hole ? "subtract" : "union";
-        d = this[op](d, shapeSDFs[i](p));
+        d = this.constructor[op](d, shapeSDFs[i](p));
       } 
       return d;  
     };
   }
   
+  /**
+   * 2d signed distance function for a given shape.
+   * @param {ShapeData}
+   * @returns {function}
+   */
   static sdf2dForShape(shapeData) {
     if ( shapeData.gridBased ) return this.sdfPolygons(shapeData.polygons);
   
@@ -86,7 +113,7 @@ export class RegionSDF extends SDF {
    */ 
   static _sdfRegionCircle(shapeData) {
     // Forgo garbage collection for speed of pre-allocated matrix.
-    const txMat = Matrix.translate(-shapeData.x, -shapeData.y);
+    const txMat = Matrix.translation(-shapeData.x, -shapeData.y);
     const txPt = PIXI.Point.tmp;
     const r = shapeData.radius;
     return p => {
@@ -114,7 +141,7 @@ export class RegionSDF extends SDF {
       h1_2 = shapeData.height * 0.5
     }
     
-    const txMat = Matrix.translate(-shapeData.x, -shapeData.y);
+    const txMat = Matrix.translation(-shapeData.x, -shapeData.y);
     
     if ( shapeData.rotation === 0 ) {
       // Forgo garbage collection for speed of pre-allocated matrix.
@@ -153,11 +180,9 @@ export class RegionSDF extends SDF {
     // radiusX
     // radiusY
     // rotation
-    const ab = PIXI.Point.tmp.set(shapeData.radiusX, shapeData.radiusY);
-    const txMat = Matrix.translate(-shapeData.x, -shapeData.y);
-    const rotMat = Matrix.rotationZ(-shapeData.rotation, false);
-    const M = rotMat.multiply3x3(txMat);
+    const M = this._translationRotationMatrix(shapeData);
     const txPt = PIXI.Point.tmp;
+    const ab = PIXI.Point.tmp.set(shapeData.radiusX, shapeData.radiusY);
     return p => {
       M.multiplyPoint2d(p, txPt);
       return this.sdEllipse(p, ab);
@@ -174,10 +199,7 @@ export class RegionSDF extends SDF {
     // curvature: flat, round, semicircle
     // radius
     // rotation
-    
-    const txMat = Matrix.translate(-shapeData.x, -shapeData.y);
-    const rotMat = Matrix.rotationZ(-shapeData.rotation, false);
-    const M = rotMat.multiply3x3(txMat);
+    const M = this._translationRotationMatrix(shapeData);
     const txPt = PIXI.Point.tmp;
     
     switch ( shapeData.curvature ) {
@@ -236,7 +258,7 @@ export class RegionSDF extends SDF {
     // radius
     // rotation (unused?)
     // Total width is innerWidth - radius to radius + outerWidth
-    const txMat = Matrix.translate(-shapeData.x, -shapeData.y);
+    const txMat = Matrix.translation(-shapeData.x, -shapeData.y);
     const txPt = PIXI.Point.tmp;
     const outerRadius = shapeData.radius + shapeData.outerWidth;
     const width = shapeData.outerWidth - shapeData.innerWidth;
@@ -255,9 +277,7 @@ export class RegionSDF extends SDF {
   static _sdfRegionEmanation(shapeData) {
     // base.height, base.width (e.g, 1, 2): number of grid spaces in each direction from center.
     // radius (of the corner)
-    const txMat = Matrix.translate(-shapeData.x, -shapeData.y);
-    const rotMat = Matrix.rotationZ(-shapeData.rotation, false);
-    const M = rotMat.multiply3x3(txMat);
+    const M = this._translationRotationMatrix(shapeData);
     const txPt = PIXI.Point.tmp;
     
     const b = PIXI.Point.tmp.set(
@@ -290,146 +310,199 @@ export class RegionSDF extends SDF {
   
   // ----- NOTE: 3d SDFs ----- //
   
-  static sdf3d(region) {
+  /**
+   * 3d signed distance function for this region.
+   * @returns {function}
+   */
+  sdf3d() {
     // Extrude all vertically. 
     // Add ramps and steps separately.
     // Before this, filter out non-TM plateaus if needed.
-    const gridUnitsToPixels = CONFIG.GeometryLib.lib.utils.gridUnitsToPixels;
-    
+    const region = this.region;
+    const tm = region.terrainmapper;
     
     // Extrude to either TM plateau, TM ramp/step bottom, or region elevation.
-    const tm = region.terrainmapper;
     
     // TODO: Need to center the region correctly for the height. 
     const sdf2d = tm && tm.isSteps  
-      ? tm.shapes.map(shape => this.sdf2dForShape(shape)) : this.sdf2d(region);
+      ? tm.shapes.map(shape => this.constructor.sdf2dForShape(shape)) : this.sdf2d();
     
-    if ( !tm || !tm.isElevated ) {
-      const h = tm.finiteRegionHeight;
-      return p => this.opExtrusion(p, sdf2d, h);
-    }
+    if ( !tm || !tm.isElevated ) return this._sdf3dBasicRegion(sdf2d);
     
     // Plateau
-    if ( tm.isPlateau ) {
-      const h = tm.finitePlateauHeight;
-      return p => this.opExtrusion(p, sdf2d, h);      
-    }
+    if ( tm.isPlateau ) return this._sdf3dPlateau(sdf2d);
     
     // Ramp, single plane
-    if ( !tm.rampStepSize && !tm.splitPolygons ) {
-      const h = tm.finitePlateauHeight;
-      const plane = tm.calculateSingleRampPlane();
-      
-      // Extrude a 3d shape to the top of the ramp, then cut the shape using the plane to form a ramp.
-      // Depends on plane normal pointing up.
-      return p => {
-        const shapeDist = this.opExtrusion(p, sdf2d, h);
-        const planeDist = this.sdFromPlane(p, plane);
-        return this.intersection(shapeDist, planeDist);
-      }
-    }
+    if ( !tm.rampStepSize && !tm.splitPolygons ) return this._sdf3dRamp(sdf2d);
     
     // Ramp, multi-plane
-    if ( !tm.rampStepSize && tm.splitPolygons ) {
-      const h = tm.finitePlateauHeight;
-      const planes = tm.calculateMultiPolygonRampPlanes();
-      
-      // Extrude a 3d shape for each region shape, and intersect the corresponding plane.
-      return p => {
-        const dists = sdf2d.map((sdf, idx) => {
-          const shapeDist = this.opExtrusion(p, sdf, h);
-          const planeDist = this.sdFromPlane(p, planes[idx]);
-          return this.intersection(shapeDist, planeDist);
-        });
-        return this.union(...dists);
-      }
-    }
-    
+    if ( !tm.rampStepSize && tm.splitPolygons ) return this._sdf3dMultiPlaneRamp(sdf2d);
+     
     // Steps, single plane
-    if ( tm.rampStepSize && !tm.splitPolygons ) {
-      // Extrude a 3d shape to the bottom of the stairs, then union with extruded steps.
-      // NOTE: Steps extruded depth-wise, not vertically.
-      const n = tm.numSteps;
-      const baseH = gridUnitsToPixels(tm.rampFloor) - tm.finiteRegionBottom;
-      const stepsH = gridUnitsToPixels(tm.plateauElevation - tm.rampFloor);
-      const rampPoints = tm._calculatePolygonRampPoints(region.polygons);
-      const wh = PIXI.Point.tmp.set(
-        PIXI.Point.distanceBetween(rampPoints[0], rampPoints[1]),
-        rampPoints[1].z - rampPoints[0].z,
-      );
+    if ( tm.rampStepSize && !tm.splitPolygons ) return this._sdf3dSteps(sdf2d);
       
-      // Rotate to extrude steps perpendicular to canvas.
-      const rotMat = Matrix.rotationX(Math.PI_1_2) // 90º rotation around X axis.
-      const txMat = Matrix.translation(0, 0, baseH);
-      const pTx = Point3d.tmp;
-      
-      // To determine how far the stairs have to go, can either:
-      // 1. Rotate the polygons to align with the ramp direction and then get the top/bottom bounds
-      // 2. Pick arbitrary extremely large spacing.
-      
-      // SDF is the combined 3d shape + steps.
-      return p => {
-        const baseShapeDist = this.opExtrusion(p, sdf2d, baseH);
-        
-        txMat.multiplyPoint3d(p, pTx)
-        const stepShapeDist = this.opExtrusion(pTx, sdf2d, stepsH)
-        
-        // Rotate to extrude steps perpendicular to canvas.
-        rotMat.multiplyPoint3d(pTx, pTx);
-        const sdfSteps = this.sdStairs(pTx, wh, n);
-        const stepsDist = this.opExtrusion(pTx, sdfSteps, 1e06);
-        
-        // Intersect steps with the underlying shape.
-        // Then combine with the base.
-        return this.union(
-          baseShapeDist,
-          this.intersection(stepShapeDist, stepsDist),
-        );
-      };
-    }
-    
     // Stairs, multi-plane
-    if ( tm.rampStepSize && tm.splitPolygons ) {
-      // Calculate for each polygon.
-      const n = tm.numSteps;
-      const baseH = gridUnitsToPixels(tm.rampFloor) - tm.finiteRegionBottom;
-      const stepsH = gridUnitsToPixels(tm.plateauElevation - tm.rampFloor);
-      const rampPoints = region.document.shapes.forEach(shape => tm._calculatePolygonRampPoints(shape.polygons));
-      const wh = rampPoints.forEach(rp => {
-				PIXI.Point.tmp.set(
-					PIXI.Point.distanceBetween(rp[0], rp[1]),
-					rp[1].z - rp[0].z,
-				);
+    if ( tm.rampStepSize && tm.splitPolygons ) return this._sdf3dMultiPlaneSteps(sdf2d);  
+  }
+  
+  /**
+   * Convert a 2d sdf into a 3d shape for this region.
+   * @param {SDF2d} sdf2d				The 2d region shape to use
+   * @returns {SDF3d}
+   */
+  _sdf3dBasicRegion(sdf2d) { 
+    const h = this.region[TM_ID].finiteRegionHeight;
+    return p => this.constructor.opExtrusion(p, sdf2d, h);
+  }
+  
+  /**
+   * Convert a 2d sdf into a plateau shape for this region.
+   * @param {SDF2d} sdf2d				The 2d region shape to use
+   * @returns {SDF3d}
+   */
+  _sdf3dPlateau(sdf2d) { 
+    const h = this.region[TM_ID].finitePlateauHeight;
+    return p => this.constructor.opExtrusion(p, sdf2d, h);    
+  }
+  
+  /**
+   * Convert a 2d sdf into a ramp shape for this region.
+   * @param {SDF2d} sdf2d				The 2d region shape to use
+   * @returns {SDF3d}
+   */
+  _sdf3dRamp(sdf2d) { 
+    const tm = this.region[TM_ID];
+		const h = tm.finitePlateauHeight;
+		const plane = tm.calculateSingleRampPlane();
+		
+		// Extrude a 3d shape to the top of the ramp, then cut the shape using the plane to form a ramp.
+		// Depends on plane normal pointing up.
+		return p => {
+			const shapeDist = this.constructor.opExtrusion(p, sdf2d, h);
+			const planeDist = this.constructor.sdFromPlane(p, plane);
+			return this.constructor.intersection(shapeDist, planeDist);
+		}  
+  }
+  
+  /**
+   * Convert a 2d sdf into a ramp shape for this region, where each shape has a distinct ramp.
+   * @param {SDF2d} sdf2d				The 2d region shape to use
+   * @returns {SDF3d}
+   */
+  _sdf3dMultiPlaneRamp(sdf2d) { 
+    const tm = this.region[TM_ID];
+		const h = tm.finitePlateauHeight;
+		const planes = tm.calculateMultiPolygonRampPlanes();
+		
+		// Extrude a 3d shape for each region shape, and intersect the corresponding plane.
+		return p => {
+			const dists = sdf2d.map((sdf, idx) => {
+				const shapeDist = this.constructor.opExtrusion(p, sdf, h);
+				const planeDist = this.constructor.sdFromPlane(p, planes[idx]);
+				return this.constructor.intersection(shapeDist, planeDist);
 			});
-      
-      // Rotate to extrude steps perpendicular to canvas.
-      const rotMat = Matrix.rotationX(Math.PI_1_2) // 90º rotation around X axis.
-      const txMat = Matrix.translation(0, 0, baseH);
-      const pTx = Point3d.tmp;
-      
-      return p => {
-        const dists = sdf2d.map((sdf, idx) => {
-					const baseShapeDist = this.opExtrusion(p, sdf, baseH);
-					
-					txMat.multiplyPoint3d(p, pTx)
-					const stepShapeDist = this.opExtrusion(pTx, sdf, stepsH)
-					
-					// Rotate to extrude steps perpendicular to canvas.
-					rotMat.multiplyPoint3d(pTx, pTx);
-					const sdfSteps = this.sdStairs(pTx, wh[idx], n);
-					const stepsDist = this.opExtrusion(pTx, sdfSteps, 1e06);
-					
-					// Intersect steps with the underlying shape.
-					// Then combine with the base.
-					return this.union(
-						baseShapeDist,
-						this.intersection(stepShapeDist, stepsDist),
-					);          
-        });
-        return this.union(...dists);
-      };
-    }    
-  }  
+			return this.constructor.union(...dists);
+		}    
+  }
+  
+  /**
+   * Convert a 2d sdf into a steps shape for this region.
+   * @param {SDF2d} sdf2d				The 2d region shape to use
+   * @returns {SDF3d}
+   */
+  _sdf3dSteps(sdf2d) {   
+    const tm = this.region[TM_ID];
+    
+		// Extrude a 3d shape to the bottom of the stairs, then union with extruded steps.
+		// NOTE: Steps extruded depth-wise, not vertically.
+		const n = tm.numSteps;
+		const gridUnitsToPixels = CONFIG.GeometryLib.lib.utils.gridUnitsToPixels;
+		const baseH = gridUnitsToPixels(tm.rampFloor) - tm.finiteRegionBottom;
+		const stepsH = gridUnitsToPixels(tm.plateauElevation - tm.rampFloor);
+		const rampPoints = tm._calculatePolygonRampPoints(this.region.polygons);
+		const wh = PIXI.Point.tmp.set(
+			PIXI.Point.distanceBetween(rampPoints[0], rampPoints[1]),
+			rampPoints[1].z - rampPoints[0].z,
+		);
+		
+		// Rotate to extrude steps perpendicular to canvas.
+		const rotMat = Matrix.rotationX(Math.PI_1_2) // 90º rotation around X axis.
+		const txMat = Matrix.translation(0, 0, baseH);
+		const pTx = Point3d.tmp;
+		
+		// To determine how far the stairs have to go, can either:
+		// 1. Rotate the polygons to align with the ramp direction and then get the top/bottom bounds
+		// 2. Pick arbitrary extremely large spacing.
+		
+		// SDF is the combined 3d shape + steps.
+		return p => {
+			const baseShapeDist = this.constructor.opExtrusion(p, sdf2d, baseH);
+			
+			txMat.multiplyPoint3d(p, pTx)
+			const stepShapeDist = this.constructor.opExtrusion(pTx, sdf2d, stepsH)
+			
+			// Rotate to extrude steps perpendicular to canvas.
+			rotMat.multiplyPoint3d(pTx, pTx);
+			const sdfSteps = this.constructor.sdStairs(pTx, wh, n);
+			const stepsDist = this.constructor.opExtrusion(pTx, sdfSteps, 1e06);
+			
+			// Intersect steps with the underlying shape.
+			// Then combine with the base.
+			return this.constructor.union(
+				baseShapeDist,
+				this.intersection(stepShapeDist, stepsDist),
+			);
+		};  
+  }
+  
+  /**
+   * Convert a 2d sdf into a steps shape for this region, where each shape has distinct steps.
+   * @param {SDF2d} sdf2d				The 2d region shape to use
+   * @returns {SDF3d}
+   */
+  _sdf3dMultiPlaneSteps(sdf2d) { 
+    const tm = this.region[TM_ID]; 
+     
+		// Calculate for each polygon.
+		const n = tm.numSteps;
+		const gridUnitsToPixels = CONFIG.GeometryLib.lib.utils.gridUnitsToPixels;
+		const baseH = gridUnitsToPixels(tm.rampFloor) - tm.finiteRegionBottom;
+		const stepsH = gridUnitsToPixels(tm.plateauElevation - tm.rampFloor);
+		const rampPoints = this.region.document.shapes.forEach(shape => tm._calculatePolygonRampPoints(shape.polygons));
+		const wh = rampPoints.forEach(rp => {
+			PIXI.Point.tmp.set(
+				PIXI.Point.distanceBetween(rp[0], rp[1]),
+				rp[1].z - rp[0].z,
+			);
+		});
+		
+		// Rotate to extrude steps perpendicular to canvas.
+		const rotMat = Matrix.rotationX(Math.PI_1_2) // 90º rotation around X axis.
+		const txMat = Matrix.translation(0, 0, baseH);
+		const pTx = Point3d.tmp;
+		
+		return p => {
+			const dists = sdf2d.map((sdf, idx) => {
+				const baseShapeDist = this.constructor.opExtrusion(p, sdf, baseH);
+				
+				txMat.multiplyPoint3d(p, pTx)
+				const stepShapeDist = this.constructor.opExtrusion(pTx, sdf, stepsH)
+				
+				// Rotate to extrude steps perpendicular to canvas.
+				rotMat.multiplyPoint3d(pTx, pTx);
+				const sdfSteps = this.constructor.sdStairs(pTx, wh[idx], n);
+				const stepsDist = this.constructor.opExtrusion(pTx, sdfSteps, 1e06);
+				
+				// Intersect steps with the underlying shape.
+				// Then combine with the base.
+				return this.constructor.union(
+					baseShapeDist,
+					this.constructor.intersection(stepShapeDist, stepsDist),
+				);          
+			});
+			return this.constructor.union(...dists);
+		};    
+  }
 }
 
 /* Testing
