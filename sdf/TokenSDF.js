@@ -138,7 +138,7 @@ export class TokenSDF extends SDFPlaceable {
     const geom = this.geom;
     let points;
     poly ??= this.token.tokenBorder.toPolygon();
-    return p => this.constructor.fromSquaredDistance(this.constructor.sdSquaredPIXIPolygon(p, poly));
+    return p => this.constructor.fromSquaredDistance(this.constructor.sdPIXIPolygon(p, poly));
   }
   
   /**

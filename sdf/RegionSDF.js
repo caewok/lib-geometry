@@ -42,7 +42,7 @@ export class RegionSDF extends SDFPlaceable {
   
   get isSingleShape() { return this.shapes.length === 1; }
   
-  _translationRotationMatrix(shapeData) { 
+  static _translationRotationMatrix(shapeData) { 
     using txMat = Matrix.translation(-shapeData.x, -shapeData.y);
     using rotMat = Matrix.rotationZ(-shapeData.rotation, false);
     return rotMat.multiply3x3(txMat);
@@ -63,18 +63,21 @@ export class RegionSDF extends SDFPlaceable {
     if ( !shapes.length ) return _p => Number.POSITIVE_INFINITY;
     
     // TODO: More nuanced test for whether the walls actually restrict the current shape.
-    const shapeSDFs = region.document.restriction.enabled 
-      ? shapes.map(shape => this.constructor.sdfPolygons(shape.polygons))
-        : shapes.map(shape => this.constructor.sdf2dForShape(shape));
-        
+    if ( region.document.restriction.enabled ) return this.constructor.sdfRegionPolygons(region.document.polygons);
+    
+    const shapeSDFs = shapes.map(shape => this.constructor.sdf2dForShape(shape));
     return p => {
       let d = shapeSDFs[0](p); // NOTE: Assumes no hole to start.
       for ( let i = 1, n = shapeSDFs.length; i < n; i += 1 ) {
-        const op = shapes[i].hole ? "subtract" : "union";
+        const op = shapes[i].hole ? "subtraction" : "union";
         d = this.constructor[op](d, shapeSDFs[i](p));
       } 
       return d;  
     };
+  }
+  
+  static sdfRegionPolygons(polygons) {
+    return p => this.sdPIXIPolygonsWithHoles(p, polygons);
   }
   
   /**
@@ -83,7 +86,7 @@ export class RegionSDF extends SDFPlaceable {
    * @returns {function}
    */
   static sdf2dForShape(shapeData) {
-    if ( shapeData.gridBased ) return this.sdfPolygons(shapeData.polygons);
+    if ( shapeData.gridBased ) return this.sdfRegionPolygons(shapeData.polygons);
   
     // shape.constructor.TYPES lists all shape types.
     switch ( shapeData.type ) {
@@ -92,7 +95,7 @@ export class RegionSDF extends SDFPlaceable {
       case "emanation": return this._sdfRegionEmanation(shapeData);
       case "ellipse": return this._sdfRegionEllipse(shapeData);
       case "line": return this._sdfRegionLine(shapeData);
-      case "polygon": return this.sdfPolygons(shapeData.polygons);
+      case "polygon": return this._sdfRegionPolygon(shapeData);
       case "rectangle": return this._sdfRegionRectangle(shapeData)
       case "ring": return this._sdfRegionRing(shapeData);
       
@@ -100,7 +103,7 @@ export class RegionSDF extends SDFPlaceable {
       case "token": 
       default: {
         console.warn(`Region shape type ${shapeData.type} not yet implemented. Using polygons.`);
-        return this.sdfPolygons(shapeData.polygons);
+        return p => this.sdfRegionPolygons(shapeData.polygons);
       } 
     }
   }
@@ -304,7 +307,7 @@ export class RegionSDF extends SDFPlaceable {
     const poly = new PIXI.Polygon(shapeData.points);
     return p => {
       rotMat.multiplyPoint2d(p, txPt);
-      return this.sdPolygon2d(txPt, poly);
+      return this.sdPIXIPolygon(txPt, poly);
     };
   }
   
@@ -419,7 +422,7 @@ export class RegionSDF extends SDFPlaceable {
 		const gridUnitsToPixels = CONFIG.GeometryLib.lib.utils.gridUnitsToPixels;
 		const baseH = gridUnitsToPixels(tm.rampFloor) - tm.finiteRegionBottom;
 		const stepsH = gridUnitsToPixels(tm.plateauElevation - tm.rampFloor);
-		const rampPoints = tm._calculatePolygonRampPoints(this.region.polygons);
+		const rampPoints = tm._calculatePolygonRampPoints(this.region.document.polygons);
 		const wh = PIXI.Point.tmp.set(
 			PIXI.Point.distanceBetween(rampPoints[0], rampPoints[1]),
 			rampPoints[1].z - rampPoints[0].z,

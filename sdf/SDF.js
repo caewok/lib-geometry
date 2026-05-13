@@ -21,6 +21,7 @@ Includes corner distance in 2d and edge distance in 3d.
 /**
  * All SDF functions operate at the origin, with no rotation.
  * Except sdSegment and sdOrientedRectangle.
+ * All SDF functions return distance squared.
  */
 export class SDF {
  
@@ -47,7 +48,7 @@ export class SDF {
    * @param {Point3d} p					The point to measure distance to. 
    * @param {SDF2d} primitive 	2d primitive to revolve
    * @param {number} o					Origin point for the revolution
-   * @returns {number}
+   * @returns {number} Distance squared
    */
   static opRevolution(p, primitive, o) {
     using p2d = p.to2d();
@@ -64,10 +65,10 @@ export class SDF {
    * @param {Point3d} p					The point to measure distance to.			
 	 * @param {SDF2d} primitive 	The 2d SDF function to extrude.
 	 * @param {number} h					Height of the resulting 3d SDF
-	 * @returns {number} Distance
+	 * @returns {number} Distance squared
 	 */
 	static opExtrusion(p, primitive, h) {
-		const d = primitive(p.to2d());
+		const d = Math.sqrt(primitive(p.to2d()));
 		using w = PIXI.Point.tmp.set(
 			d,
 			Math.abs(p.z) - h,
@@ -75,7 +76,7 @@ export class SDF {
 		const mm = Math.min(Math.max(w.x, w.y), 0.0);
 		using zero = PIXI.Point.tmp.set(0, 0);
 		w.max(zero, w);
-		return mm + w.magnitude();
+		return (mm + w.magnitude()) ** 2;
 	}
 	
 	/**
@@ -94,31 +95,39 @@ export class SDF {
 	 * Make a flat (parallel to XY plane) planar shape out of a 2d SDF.
 	 * Used for tiles.
 	 * @param {Point3d} p											The point to measure distance to
-	 * @param {SDFSquared} primitiveSq				The original shape function, squared
+	 * @param {SDF} primitive									The original shape function, squared
 	 * @param {number} z											Elevation from the XY plane
 	 * @returns {number} Distance squared
 	 */
-	static opSquaredXYPlanar(p, primitiveSq, z = 0) {
+	static opXYPlanar(p, primitive, z = 0) {
 	  // Because we are parallel to the XY plane, can simply project straight down.
 	  using p2d = p.to2d();
-	  const d2 = primitiveSq(p2d);
-	  const s = z ? Math.sign(z) : 1;
-	  return d2 * (z ** 2) * s;
+	  const d2 = primitive(p2d);
+	  const zDelta = p.z - z; // Difference between object XY plane and point z.
+	  
+	  // Above or below the plane.
+	  if ( zDelta ) return Math.abs(d2) * (zDelta ** 2); 
+	  
+	  // On the plane; potentially inside; return the signed 2d distance squared.
+	  return d2;	  
 	}
 		
 	/**
 	 * Make a 3d planar object out of a 2d SDF.
 	 * @param {Point3d} p											The point to measure distance to
-	 * @param {SDFSquared} primitiveSq			  The original shape function	, squared
+	 * @param {SDF} primitive			 						The original shape function
 	 * @param {Plane} plane										The plane on which to place the shape
 	 * @returns {number} Distance squared
 	 */
-	static opSquaredPlanar(p, primitiveSq, plane) {
+	static opPlanar(p, primitive, plane) {
 	  using p2d = plane.projectPointOnPlane(p);
 	  const z = plane.distanceFromPoint(p);
-	  const d2 = primitiveSq(p2d);
-	  const s = d2 ? Math.sign(d2) : 1;
-	  return d2 * (z ** 2) * s;
+	  const d2 = primitive(p2d);
+	  
+	  if ( z.almostEqual(0) ) return d2; // On the plane; potentially inside. 
+	  
+	  // Above or below the plane
+	  return Math.abs(d2) * (z ** 2);
 	}
 		
 	// ----- NOTE: Boolean operators ----- //
@@ -166,7 +175,7 @@ export class SDF {
 	 * @param {PIXI.Point} b			Endpoint of the segment, in canvas coordinates
 	 * @returns {number} Always positive or zero; no inside for a segment.
 	 */	 	 
-	static sdSquaredSegment(p, a, b) {
+	static sdSegment(p, a, b) {
 		using pa = p.subtract(a);
 		using ba = b.subtract(a);
 		const h = Math.clamp(pa.dot(ba) / ba.dot(ba), 0.0, 1.0);
@@ -180,7 +189,7 @@ export class SDF {
 	 * @param {number} r					Radius
 	 * @returns {number}
 	 */
-	static sdCircle(p, r) { return p.magnitude() - r; }
+	static sdCircle(p, r) { return (p.magnitude() - r) ** 2; }
 		
 	/**
 	 * Distance to a 2d PIXI circle.
@@ -202,8 +211,8 @@ export class SDF {
 	 *   - ab.y: radius along y-axis
 	 * @returns {number}
 	 */	
-	static sdSquaredEllipse(p, ab) {
-	  if ( ab.x.almostEqual(ab.y) ) return (this.sdCircle(p, ab.x) ** 2);
+	static sdEllipse(p, ab) {
+	  if ( ab.x.almostEqual(ab.y) ) return this.sdCircle(p, ab.x);
 	  
 	  using pAbs = p.abs();	 	  
 	  using abTmp = PIXI.Point.fromObject(ab);
@@ -263,11 +272,11 @@ export class SDF {
 	 * @param {PIXI.Ellipse} ellipse		Ellipse
 	 * @returns {number}
 	 */	 
-	static sdSquaredPIXIEllipse(p, ellipse) {
+	static sdPIXIEllipse(p, ellipse) {
 	  using txMat = Matrix.translation(-ellipse.x, -ellipse.y);
 	  using txPt = txMat.multiplyPoint2d(p);
 	  using b = PIXI.Point.tmp.set(ellipse.width, ellipse.height);
-	  return this._sdSquaredEllipse(txPt, b);
+	  return this.sdEllipse(txPt, b);
 	}
 	
 	/**
@@ -287,7 +296,7 @@ export class SDF {
 		// length(max(d, 0.0))
 		using zero = PIXI.Point.tmp.set(0, 0);
 		d.max(zero, d);
-		return d.magnitude() + mm;
+		return (d.magnitude() + mm) ** 2; 
 	}
 	
 	/**
@@ -334,7 +343,7 @@ export class SDF {
 	    r,
 	  );
 	  pNew.subtract(tmp, pNew);
-	  return pNew.magnitude() * Math.sign(pNew.y);
+	  return pNew.magnitudeSquared() * Math.sign(pNew.y);
 	}
 	
 	/** 
@@ -377,7 +386,7 @@ export class SDF {
 		const mm = Math.min(Math.max(q.x, q.y), 0.0);
 		using zero = PIXI.Point.tmp.set(0, 0);
 		q.max(zero, q);
-		return q.magnitude() + mm;
+		return (q.magnitude() + mm) ** 2;
 	} 
 	
 	/**
@@ -387,7 +396,7 @@ export class SDF {
    * @param {PIXI.Point[]} v					The polygon vertices
    * @returns {number}
    */
-  static sdSquaredPolygon(p, v) {  
+  static sdPolygon(p, v) {  
     const n = v.length;
     let d2 = Number.POSITIVE_INFINITY;
     let s = 1.0;
@@ -428,7 +437,7 @@ export class SDF {
    * @param {PIXI.Polygon} poly				The polygon
    * @returns {number}
    */
-  static sdSquaredPIXIPolygon(p, poly) { 
+  static sdPIXIPolygon(p, poly) { 
     let d2 = Number.POSITIVE_INFINITY;
     let s = 1.0;
     
@@ -468,13 +477,13 @@ export class SDF {
    * @param {PIXI.Polygon[]} polys		The polygons
    * @returns {number}
    */
-  static sdSquaredPIXIPolygonsWithHoles(p, polys) {
+  static sdPIXIPolygonsWithHoles(p, polys) {
     const iter = polys[Symbol.iterator]();
     const poly = iter.next().value;
-    let d = this.sdSquaredPIXIPolygon(p, poly);
+    let d = this.sdPIXIPolygon(p, poly);
     for ( const poly of iter ) {
       const op = poly.isPositive ? "union" : "subtraction";
-      d = this[op](d, this.sdSquaredPIXIPolygon(p, poly));      
+      d = this[op](d, this.sdPIXIPolygon(p, poly));      
     } 
     return d;
   }
@@ -484,10 +493,10 @@ export class SDF {
    * @param {PIXI.Polygon} polys
    * @returns {SDF}
    */  
-  static sdfSquaredPIXIPolygons(polys) {
-    if ( polys.length === 1 ) return p => this.sdSquaredPIXIPolygon(p, polys[0]);
-		if ( polys.some(poly => !poly.isPositive) ) return p => this.sdSquaredPIXIPolygonsWithHoles(p, polys);
-		return p => this.union(...polys.map(poly => this.sdSquaredPIXIPolygon(p, poly)));
+  static sdfPIXIPolygons(polys) {
+    if ( polys.length === 1 ) return p => this.sdPIXIPolygon(p, polys[0]);
+		if ( polys.some(poly => !poly.isPositive) ) return p => this.sdPIXIPolygonsWithHoles(p, polys);
+		return p => this.union(...polys.map(poly => this.sdPIXIPolygon(p, poly)));
   }
   
   /**
@@ -501,7 +510,7 @@ export class SDF {
    * @param {number} n  Number of steps; individual "teeth" or levels generated
    * @returns {number}
    */
-  static sdSquaredStairs(p, wh, n) {
+  static sdStairs(p, wh, n) {
     using ba = wh.multiplyScalar(n);
     using v0 = PIXI.Point.tmp.set(
       Math.clamp(p.x, 0.0, ba.x),
@@ -561,7 +570,7 @@ export class SDF {
     p.abs(q).subtract(b, q).add(rr, q);
     const c = Math.min(Math.max(q.x, q.y), 0.0);
     const l = q.max(zero, q).magnitude();
-    return c + l + r;
+    return (c + l + r) ** 2;
   }		  	
   
   /**
@@ -572,7 +581,7 @@ export class SDF {
    *  - q.y: height (altitude) of the triangle (distance from apex to the base)
    * @returns {number}
    */
-  static sdSquaredTriangleIsosceles(p, q) {
+  static sdTriangleIsosceles(p, q) {
     using pNew = PIXI.Point.fromObject(p);
     pNew.x = Math.abs(pNew.x);
     using a = PIXI.Point.tmp;
@@ -617,7 +626,7 @@ export class SDF {
       return pNew.subtract(v1, v1).magnitude();
     } 
     using v2 = PIXI.Point.tmp.set(a, b);
-    return p.dot(v2);
+    return (p.dot(v2)) ** 2;
   }
   
   /**
@@ -639,132 +648,9 @@ export class SDF {
     
     using tmp = PIXI.Point.tmp;
     const m = pNew.subtract(c.multiplyScalar(Math.clamp(pNew.dot(c), 0.0, r), tmp), tmp).magnitude(); 
-    return Math.max(l, m * Math.sign((c.y * p.x - c.x * p.y)));
+    return Math.max(l, m * Math.sign((c.y * p.x - c.x * p.y))) ** 2;
   }
    
-  // ----- NOTE: 2d Corners ----- //
-  
-  /** 
-   * Nearest corner of a 2d segment to a point.
-   * @param {PIXI.Point} p			The point to measure distance to.			
-	 * @param {PIXI.Point} a			Endpoint of the segment, in canvas coordinates
-	 * @param {PIXI.Point} b			Endpoint of the segment, in canvas coordinates
-   * @returns {number} Always positive or zero; no inside for a segment.
-   */
-  static dCornerSquaredSegment(p, a, b) { 
-    return Math.min(
-      PIXI.Point.distanceSquaredBetween(p, a),
-      PIXI.Point.distanceSquaredBetween(p, b),
-    );
-  }
-    
-  /**
-   * Nearest "corner" of a 2d circle. Because it has no corners, returns distance to the edge.
-   * @param {PIXI.Point} p			The point to measure distance to.			
-	 * @param {number} r					Radius
-	 * @returns {number}
-	 */	
-	static dCornerCircle(p, r) { return this.sdCircle(p, r); }
-	
-  /**
-   * Nearest "corner" of a 2d ellipse. Because it has no corners, returns distance to the edge.
-   * @param {PIXI.Point} p			The point to measure distance to.			
-	 * @param {PIXI.Point} ab			Semi-axes of the ellipse. If ab.x === ab.y, it will be a circle.
-	 *   - ab.x: radius along x-axis
-	 *   - ab.y: radius along y-axis
-	 * @returns {number}
-	 */	
-	static dCornerEllipse(p, ab) { return this.sdEllipse(p, ab); }
-	
-	/** 
-	 * Nearest corner of a 2d box to a point.
-	 * @param {PIXI.Point} p			The point to measure distance to.			
-	 * @param {PIXI.Point} b			Box half-extents (width/2, height/2)
-	 * @returns {number} Distance squared
-	 */
-	static dCornerSquaredBox(p, b) {
-		// TODO: Use Foundry rectangle approach to get quadrants?
-		using corner = PIXI.Point.tmp;
-		corner.x = (Math.sign(p.x) || 1) * b.x;
-		corner.y = (Math.sign(p.y) || 1) * b.y;
-		return PIXI.Point.distanceSquaredBetween(p, corner);
-	}
-	  
-	/**
-	 * Brute force by taking the minimum of the four corners, for testing.
-	 */
-	static _dSquaredNearestCornerBoxBrute(p, b) {
-		let dMin = Number.POSITIVE_INFINITY;
-		const corners = [
-		   PIXI.Point.tmp.set(-1, -1),
-		   PIXI.Point.tmp.set(-1, 1),
-		   PIXI.Point.tmp.set(1, -1),
-		   PIXI.Point.tmp.set(1, 1),
-		];
-		for ( const corner of corners) {
-			corner.multiply(b);
-			const d2 = PIXI.Point.distanceSquaredBetween(p, corner);
-			dMin = Math.min(dMin, d2);
-		}
-		corners.forEach(c => c.release());
-		return dMin;
-	}  
-	
-	/**
-	 * Nearest corner of an oriented 2d box.
-	 * (The sdf function measures distance to a 2d edge.) 
-	 * @param {PIXI.Point} p			The point to measure distance to. 			
-	 * @param {PIXI.Point} a			Endpoint of the central axis, in canvas coordinates
-	 * @param {PIXI.Point} b			Endpoint of the central, in canvas coordinates
-	 * @param {number} th					Thickness or half-width
-	 * @returns {number} 
-	 */
-	static dCornerSquaredOrientedBox(p, a, b, th) {
-		// Where does p lie along the central axis?
-		const tCentral = closestPointToSegmentT(p, a, b);
-		let majorPt = tCentral > 0.5 ? b : a;
-		
-		// Where does p lie along the minor axis?
-		using delta = b.subtract(a);
-		using normal = PIXI.Point.tmp.set(-delta.y, delta.x);
-		normal.normalize(normal).multiplyScalar(th, normal);
-		
-		using nA = majorPt.add(normal);
-		using nB = majorPt.subtract(normal);
-		const tMinor = closestPointToSegmentT(p, nA, nB);
-		const corner = tMinor > 0.5 ? nB : nA;
-		return PIXI.Point.distanceSquaredBetween(p, corner); 
-	}
-	
-	static dCornerOrientedBox(p, a, b, th) { return this.dCornerSquaredOrientedBox(p, a, b, th); }
-  
-	// Brute force version for testing.
-	static _dCornerSquaredOrientedBoxBrute(p, a, b, th) {
-		using corner = PIXI.Point.tmp
-		let dMin = Number.POSITIVE_INFINITY;
-		
-		using delta = b.subtract(a);
-		using normal = PIXI.Point.tmp.set(-delta.y, delta.x);
-		normal.normalize(normal).multiplyScalar(th, normal);
-		a.add(normal, corner);
-		let d2 = PIXI.Point.distanceSquaredBetween(p, corner);
-		dMin = Math.min(dMin, d2);
-		
-		a.subtract(normal, corner);
-		d2 = PIXI.Point.distanceSquaredBetween(p, corner);
-		dMin = Math.min(dMin, d2);
-		
-		b.add(normal, corner);
-		d2 = PIXI.Point.distanceSquaredBetween(p, corner);
-		dMin = Math.min(dMin, d2);
-		
-		b.subtract(normal, corner);
-		d2 = PIXI.Point.distanceSquaredBetween(p, corner);
-		dMin = Math.min(dMin, d2);
-		
-		return dMin;
-	}
-
   // ----- NOTE: 3d SDF ----- //
   
   /**
@@ -773,7 +659,7 @@ export class SDF {
    * @param {number} r					Radius
    * @returns {number}
    */
-  static sdSphere(p, r) { return p.magnitude() - r; }
+  static sdSphere(p, r) { return (p.magnitude() - r) ** 2; }
   
   /**
    * Distance from an ellipsoid
@@ -787,7 +673,7 @@ export class SDF {
     if ( k1 === 0 ) return Math.min(r.x, r.y, r.z); // At ellipsoid center.
     
     const k0 = p.divide(r, tmp).magnitude();
-    return k0 * (k0 - 1.0) / k1;
+    return (k0 * (k0 - 1.0) / k1) ** 2;
   }
     
 	/** 
@@ -799,7 +685,7 @@ export class SDF {
   static sdPlane(p, plane) { 
     // Alt: p.dot(plane.normal) + d (plane.constant)
     using p0 = p.subtract(plane.point);
-    return p0.dot(plane.normal);
+    return (p0.dot(plane.normal)) ** 2;
   }
   
   /**
@@ -811,7 +697,7 @@ export class SDF {
    * @param {Point3d} c					Third corner
    * @returns {number}
    */
-  static sdSquaredTriangle3d(p, tri) {
+  static sdTriangle3d(p, tri) {
     const { a, b, c } = tri;
   
     using ba = b.subtract(a);
@@ -858,7 +744,7 @@ export class SDF {
    * @param {Point3d} b					Width, height (in y), and vertical height
    * @returns {number}
    */
-  static sdSquaredRectangle3d(p, b) {
+  static sdRectangle3d(p, b) {
     // If on the plane, simply the 2d distance.
     if ( p.z.almostEqual(0) ) return this.sdRectangle(p.to2d(), b.to2d()) ** 2;
   
@@ -879,7 +765,7 @@ export class SDF {
    * @param {Quad3d} quad				The quad
    * @returns {number}
    */   
-  static sdSquaredQuad3d(p, quad) {
+  static sdQuad3d(p, quad) {
     const { a, b, c, d } = quad;
     using ba = b.subtract(a);
     using cb = c.subtract(b);
@@ -926,7 +812,7 @@ export class SDF {
    * @param {Polygon3d} poly3d			The polygon
    * @returns {number}
    */
-  static sdSquaredPolygon3d(p, poly3d) {
+  static sdPolygon3d(p, poly3d) {
     // Calculate planar distance: dot product of the vector from any vertex to P with the normal.
     // (P - v0) • n
     const plane = poly3d.plane;
@@ -1010,7 +896,7 @@ export class SDF {
 	  p.abs(q).subtract(b, q);
 	  const c = Math.min(Math.max(q.x, q.y, q.z), 0.0);
 	  const l = q.max(zero, q).magnitude();
-	  return l + c;
+	  return (l + c) ** 2;
 	}
 	
 	  
@@ -1026,55 +912,6 @@ export class SDF {
     return this.sdBox(p, b);
   }
 		
-	// ----- NOTE: 3d Edges ----- //
-	
-	/** 
-	 * Distance to a top or bottom edge of a 3d extruded SDF, where h is the height.
-	 * @param {Point3d} p												The point to measure distance to.			
-	 * @param {SDFSquared2d} primitiveSquared 					The 2d SDF function.
-	 * @param {number} h												Height of the 3d SDF
-	 * @returns {number} distance
-	 */
-	static dEdgeSquaredTopBottom(p, primitiveSquared, h) {
-		// In 2d, the distance to the edge of the top or bottom face equals the 2d SDF.
-		const d2 = primitiveSquared(p.to2d());
-		
-		// Distance from the bottom (0) or top (h) vertically.  
-		const dz = Math.min(Math.abs(p.z), Math.abs(p.z - h));
-		
-		// Is this point inside the extruded object?
-		const inside = (d2 < 0 && p.z.between(0, h)) ? -1 : 1;
-		
-		// Pythagorean to calculate the hypotenuse.
-		return (Math.abs(d2) + (dz ** 2)) * inside;
-	}
-
-	static dEdgeTopBottomEdge(p, primitive, h) { 
-		const d2 = this.dEdgeSquaredTopBottom(p, primitive, h);
-		return Math.sign(d2) * Math.sqrt(Math.abs(d2)); 
-	}
-	
-	/**
-	 * Distance to a side (vertical) edge of a 3d extruded SDF, where h is the height.
-	 * @param {Point3d} p																The point to measure distance to.			
-	 * @param {dSquaredCorner} primitiveSquaredCorner 	The 2d corner squared function.
-	 * @param {number} h																Height of the 3d SDF
-	 * @returns {number} distance
-	 */
-	static dEdgeSquaredVertical(p, primitiveSquaredCorner, h) {
-		// A vertical edge becomes a corner in 2d. 
-		const d2 = primitiveSquaredCorner(p.to2d());
-		
-		// If within the height of the object, we are done.
-		if ( p.z.between(0, h) ) return d2;
-		
-		// If above or below, use Pythagorean theorem to determine the diagonal.
-		// Distance from the bottom (0) or top (h) vertically.  
-		// Above or below, so not inside. Take the absolute value of d2.
-		const dz = Math.min(Math.abs(p.z), Math.abs(p.z - h));
-		return Math.abs(d2) + (dz ** 2); 
-	}
-	
 	// ----- NOTE: Intersection / RayMarch ----- //
 	
 	/** 
@@ -1095,43 +932,6 @@ export class SDF {
 	  } = {}) {
 	  let t = 0;
 	  let i = 0;
-	  const p = rayOrigin.constructor.tmp;
-	  do {
-	    // Calculate current point along the ray: P = ro + rd * t.
-	    rayOrigin.add(rayDirection.multiplyScalar(t, p), p);
-	    
-	    // Distance to the nearest surface in the scene.
-	    const d = sceneSDF(p);
-	    
-	    // Did we hit the surface?
-	    if ( d < surfaceEpsilon ) return t;
-	    
-	    // Move forward by the distance to the nearest object.
-	    t += d;
-	    
-	    // Check if we went too far or iterations exceeded.
-	  } while ( ++i < maxSteps && t < maxDistance );
-	  return null; // No intersection found.
-	}
-	
-  /** 
-	 * Find the intersection distance of a ray with an SDF scene.
-	 * @param {Point3d|PIXI.Point} rayOrigin
-	 * @param {Point3d|PIXI.Point} rayDirection
-	 * @param {function} sceneSDFSquared				2d or 3d sdf function depending on the ray. Must return signed squared distance.
-	 * @param {object} [opts]
-	 * @param {number} [maxSteps=100]																	Maximum steps in the raymarch
-	 * @param {number} [maxDistance=canvas.scene.dimensions.maxR]			Maximum distance to move along the ray
-	 * @param {number} [surfaceEpsilon=0.01]													Error margin for surface test
-	 * @returns {number|null} Distance t along the ray, or null.	 
-	 */	 
-	static raymarchSquared(rayOrigin, rayDirection, sceneSDFSquared, 
-	  { maxSteps = 100, 
-	    maxDistance = canvas.scene.dimensions.maxR, 
-	    surfaceEpsilon = 0.01 
-	  } = {}) {
-	  let t = 0;
-	  let i = 0;
 	  using p = rayOrigin.constructor.tmp;
 	  const surfaceEpsilonSquared = surfaceEpsilon ** 2;
 	  do {
@@ -1139,13 +939,13 @@ export class SDF {
 	    rayOrigin.add(rayDirection.multiplyScalar(t, p), p);
 	    
 	    // Distance to the nearest surface in the scene.
-	    const d2 = sceneSDFSquared(p);
+	    const d2 = Math.abs(sceneSDF(p));
 	    
 	    // Did we hit the surface?
 	    if ( d2 < surfaceEpsilonSquared ) return t;
 	    
 	    // Move forward by the distance to the nearest object.
-	    t += Math.sqrt(Math.abs(d2));
+	    t += Math.sqrt(d2);
 	    
 	    // Continue until we went too far or iterations exceeded.
 	  } while ( ++i < maxSteps && t < maxDistance );
@@ -1165,11 +965,9 @@ export class SDF {
 	 * @param {number} [surfaceEpsilon=0.01]													Error margin for surface test
 	 * @returns {number[]} Distance t along the ray, or empty array.	 
 	 */	 
-	static raymarchDual(rayOrigin, rayDirection, sceneSDF, { squared = false, ...opts } = {}) {
-	  const fn = squared ? this.raymarchSquared.bind(this) : this.raymarch.bind(this);
-	
+	static raymarchDual(rayOrigin, rayDirection, sceneSDF, opts = {}) {	
 	  const maxDist = opts.maxDistance ??= canvas.scene.dimensions.maxR;	
-	  const t0 = fn(rayOrigin, rayDirection, sceneSDF, opts);
+	  const t0 = this.raymarch(rayOrigin, rayDirection, sceneSDF, opts);
 	  if ( t0 === null ) return [];
 	  
 	  // Move to the end of the ray and go the other way.
@@ -1184,7 +982,7 @@ export class SDF {
 	  opts = {...opts, maxDistance: maxDist - t0 }; // Make a copy so opts is not modified.
 	  
 	  // Get the second intersection.
-	  let t1 = fn(ro, rd, sceneSDF, opts);
+	  let t1 = this.raymarch(ro, rd, sceneSDF, opts);
 	  if ( t1 === null || t0.almostEqual(t1) ) return [t0]; // Note: t1 should never be null, but just in case.
 	  
 	  // Invert t1 so it goes the correct direction along the ray.
@@ -1211,62 +1009,17 @@ export class SDF {
 	  let i = 0;
 	  const p = rayOrigin.constructor.tmp;
 	  const jumpEpsilon = 2 * surfaceEpsilon;
+	  const surfaceEpsilonSquared = surfaceEpsilon ** 2;
 	  const hits = [];
 	  do {
 	    // Calculate current point along the ray: P = ro + rd * t.
 	    rayOrigin.add(rayDirection.multiplyScalar(t, p), p);
 	    
 	    // Distance to the nearest surface in the scene.
-	    const d = Math.abs(sceneSDF(p));
+	    const d2 = Math.abs(sceneSDF(p));
 	    
 	    // Did we hit the surface?
-	    if ( d < surfaceEpsilon ) {
-	      hits.push(t);
-	      
-	      // Jump forward to avoid sticking to this surface.
-	      t += jumpEpsilon;
-	      continue;
-	    }
-	    
-	    // Move forward by the distance to the nearest object.
-	    // Use absolute so this works when inside or outside.
-	    t += d;
-	    
-	  } while ( ++i < maxSteps && t < maxDistance );
-	  return hits;
-	} 
-
-	/**
-	 * Find all intersection distances of a ray with an SDF scene.
-	 * @param {Point3d|PIXI.Point} rayOrigin
-	 * @param {Point3d|PIXI.Point} rayDirection
-	 * @param {function} sceneSDF									2d or 3d sdf function depending on the ray.
-	 * @param {object} [opts]
-	 * @param {number} [maxSteps=100]																	Maximum steps in the raymarch
-	 * @param {number} [maxDistance=canvas.scene.dimensions.maxR]			Maximum distance to move along the ray
-	 * @param {number} [surfaceEpsilon=0.01]													Error margin for surface test
-	 * @returns {number[]} Distance t along the ray for every surface hit.
-	 */
-	static findAllIntersectionsSquared(rayOrigin, rayDirection, sceneSDFSquared, 
-	  { maxSteps = 100, 
-	    maxDistance = canvas.scene.dimensions.maxR, 
-	    surfaceEpsilon = 0.01,
-	  } = {}) {
-	  let t = 0;
-	  let i = 0;
-	  const p = rayOrigin.constructor.tmp;
-	  const jumpEpsilon = 2 * surfaceEpsilon;
-	  surfaceEpsilon = surfaceEpsilon ** 2;
-	  const hits = [];
-	  do {
-	    // Calculate current point along the ray: P = ro + rd * t.
-	    rayOrigin.add(rayDirection.multiplyScalar(t, p), p);
-	    
-	    // Distance to the nearest surface in the scene.
-	    const d2 = Math.abs(sceneSDFSquared(p));
-	    
-	    // Did we hit the surface?
-	    if ( d2 < surfaceEpsilon ) {
+	    if ( d2 < surfaceEpsilonSquared ) {
 	      hits.push(t);
 	      
 	      // Jump forward to avoid sticking to this surface.
@@ -1301,7 +1054,7 @@ export class SDF {
     for ( let x = aabb.min.x; x < aabb.max.x; x += step ) {
 			for ( let y = aabb.min.y; y < aabb.max.y; y += step ) {
 				pt.set(x, y)
-				const dist = primitive(pt);
+				const dist = this.constructor.fromSquaredDistance(primitive(pt));
 				drawOpts.color = dist.almostEqual(0, epsilon) ? Draw.COLORS.white : heatmap(Math.abs(dist));
 				drawOpts.fill = drawOpts.color;
 				Draw.point(pt, drawOpts);
@@ -1382,6 +1135,34 @@ export class SDFPlaceable extends SDF {
   }
   
   get isSingleShape() { return true; }
+  
+  // ---- NOTE: Ray march and intersections ---- //
+  
+  raymarch2d(rayOrigin, rayDirection, opts) {
+    return this.constructor.raymarch(rayOrigin, rayDirection, this.sdf2d, opts);
+  }
+  
+  raymarch3d(rayOrigin, rayDirection, opts) {
+    return this.constructor.raymarch(rayOrigin, rayDirection, this.sdf3d, opts);
+  }
+  
+  raymarch2dDual(rayOrigin, rayDirection, opts) {
+    return this.constructor.raymarchDual(rayOrigin, rayDirection, this.sdf2d, opts);
+  }
+  
+  raymarch3dDual(rayOrigin, rayDirection, opts) {
+    return this.constructor.raymarchDual(rayOrigin, rayDirection, this.sdf3d, opts);
+  }
+  
+  findAllIntersections2d(rayOrigin, rayDirection, opts) {
+    return this.constructor.findAllIntersections(rayOrigin, rayDirection, this.sdf2d, opts);
+  }
+  
+  findAllIntersections3d(rayOrigin, rayDirection, opts) {
+    return this.constructor.findAllIntersections(rayOrigin, rayDirection, this.sdf3d, opts);
+  }
+  
+  // ---- NOTE: Debug ---- //
 	
   draw({ use3d, padding = 0, ...opts } = {}) {
     // User can either force 3d or implicitly use 3d by setting elevation. 
@@ -1410,6 +1191,7 @@ export class SDFPlaceable extends SDF {
  * @returns {number}    T-value, where 0 is a and 1 is b. Negative numbers are before a; >1 is after b.
  * @see {@link https://en.wikipedia.org/wiki/Distance_from_a_point_to_a_line#Line_defined_by_two_points}
  */
+/* 
 function closestPointToSegmentT(c, a, b) {
   using d = b.subtract(a);
   if ( d.x === 0 && d.y === 0 ) return 0;
@@ -1417,6 +1199,7 @@ function closestPointToSegmentT(c, a, b) {
   using ca = c.subtract(a);
   return ca.dot(d) / d.dot(d);  
 }
+*/
 
 /**
  * Distance squared to a segment A|B.

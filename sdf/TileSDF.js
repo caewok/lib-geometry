@@ -11,6 +11,30 @@ import { SDFPlaceable } from "./SDF.js";
 
 export class TileSDF extends SDFPlaceable {
 
+  // ----- NOTE: Config ----- //
+  
+  #alphaThreshold;
+  
+  /** 
+   * Set alpha threshold to undefined to default to the tile threshold.
+   * Set to 0 to ignore.
+   */
+  get alphaThreshold() { 
+    return typeof this.#alphaThreshold === "undefined" 
+      ? this.tile.document.texture.alphaThreshold 
+        : this.#alphaThreshold; 
+  }
+    
+  set alphaThreshold(value) { this.#alphaThreshold = value; }
+  
+  #useHoles = true;
+  
+  get useHoles() { return this.#useHoles; }
+  
+  set useHoles(value) { this.#useHoles = value; }
+  
+  // ----- NOTE: Getters ----- //
+
   /** @type {Tile} */
   get tile() { return this.placeable; }
   
@@ -27,8 +51,6 @@ export class TileSDF extends SDFPlaceable {
   }
   
   get elevationZ() { return this.tile.elevationZ; }
-  
-  get alphaThreshold() { return this.tile.document.texture.alphaThreshold; }
   
   /** @type {PIXI.Point} */
   get dims() { return PIXI.Point.tmp.set(this.tile.width, this.tile.height); }
@@ -72,7 +94,7 @@ export class TileSDF extends SDFPlaceable {
   get isSingleShape() { 
     if ( !this.alphaThreshold ) return true;
     const cache = this.tile.evPixelCache;
-    const polys2d = cache.getCanvasAlphaISOBands(alphaThreshold);
+    const polys2d = cache.getCanvasAlphaISOBands(this.alphaThreshold);
     return polys2d.length === 1;
   }
   
@@ -81,20 +103,15 @@ export class TileSDF extends SDFPlaceable {
    * Defaults to the rotated tile.
 	 * @param {PIXI.Point} p			The point to measure distance to. 	
 	 * @param {Tile} tile
-	 * @param {object} [opts]
-	 * @param {boolean} [opts.useAlphaThreshold=false] 		If true, use the polygon border that removes the 
-	 *   transparent alpha pixels at the edge of the tile border
-	 * @param {boolean} [opts.useHoles=false] 						If true, use the alpha polygons
-	 *   and cut holes for the transparent portions within the tile.
 	 * @returns {number}
    */   
-  sdf2d({ useAlphaThreshold = false, useHoles = false, alphaThreshold } = {}) {
-    alphaThreshold ??= this.alphaThreshold;
+  sdf2d() {
+    const { alphaThreshold, useHoles } = this;
     let sdfFn;
-    if ( !(useAlphaThreshold || useHoles || this.alphaThreshold) ) sdfFn = this.rotation ? "_sdfTileRotated" : "_sdfTileBasic";
+    if ( !alphaThreshold ) sdfFn = this.rotation ? "_sdfTileRotated" : "_sdfTileBasic";
     else if ( !useHoles ) sdfFn = "_sdfTileAlphaPolygonBounds";
     else sdfFn = "_sdfTileAlphaISOBands";
-    return this[sdfFn](alphaThreshold);    
+    return this[sdfFn]();    
   }
  
   /**
@@ -126,93 +143,85 @@ export class TileSDF extends SDFPlaceable {
    * SDF for a 2d tile with a square alpha threshold
 	 * @returns {function}
    */
-  _sdfTileAlphaBox(alphaThreshold) {
+  _sdfTileAlphaBox() {
     const cache = this.tile.evPixelCache;
-    alphaThreshold ??= this.alphaThreshold;      
+    const alphaThreshold = this.alphaThreshold;     
     const quad2d = cache.getThresholdCanvasBoundingBox(alphaThreshold);
     if ( quad2d.type === PIXI.SHAPES.RECT ) return p => this.constructor.sdPIXIRectangle(p, quad2d);  
-    else return p => this.constructor.fromSquaredDistance(this.constructor.sdSquaredPIXIPolygon(p, quad2d));
+    else return p => this.constructor.sdPIXIPolygon(p, quad2d);
   }
   
   /**
    * SDF for a 2d tile with a polygon alpha threshold.
 	 * @returns {function}
    */
-  _sdfTileAlphaPolygonBounds(alphaThreshold) {
+  _sdfTileAlphaPolygonBounds() {
     const cache = this.tile.evPixelCache;
-    alphaThreshold ??= this.alphaThreshold;      
+    const alphaThreshold = this.alphaThreshold; 
     const poly = cache.getThresholdCanvasBoundingPolygon(alphaThreshold);
-    return p => this.constructor.fromSquaredDistance(this.constructor.sdSquaredPIXIPolygon(p, poly));  
+    return p => this.constructor.sdPIXIPolygon(p, poly);  
   }
   
   /**
    * SDF for a 2d tile with a polygon alpha threshold, possibly with holes
 	 * @returns {function}
    */
-  _sdfTileAlphaISOBands(alphaThreshold) {
-    alphaThreshold ??= this.alphaThreshold;
+  _sdfTileAlphaISOBands() {
+    const alphaThreshold = this.alphaThreshold;
     const cache = this.tile.evPixelCache;
     const polys2d = cache.getCanvasAlphaISOBands(alphaThreshold);
-    if ( polys2d.length > 1 ) return p => this.constructor.fromSquaredDistance(this.constructor.sdSquaredPIXIPolygonsWithHoles(p, polys2d));
-    else return p => this.constructor.fromSquaredDistance(this.constructor.sdSquaredPIXIPolygon(p, polys2d[0]));
+    if ( polys2d.length > 1 ) return p => this.constructor.sdPIXIPolygonsWithHoles(p, polys2d);
+    else return p => this.constructor.sdPIXIPolygon(p, polys2d[0]);
   }
      
   /**
    * SDF for a 3d tile, treated as a 3d quad or 3d polygon.
-	 * @param {object} [opts]
-	 * @param {boolean} [opts.useAlphaThreshold=false] 		If true, use the polygon border that removes the 
-	 *   transparent alpha pixels at the edge of the tile border
-	 * @param {boolean} [opts.useHoles=false] 						If true, use the polygon alpha border
-	 *   and cut holes for the transparent portions within the tile.
 	 * @returns {function}
    */
-  sdf3d({ useAlphaThreshold = false, useHoles = false, alphaThreshold } = {}) { 
-    alphaThreshold ??= this.alphaThreshold;
+  sdf3d() { 
+    const { alphaThreshold, useHoles } = this;
     let sdfFn;
-    if ( !(useAlphaThreshold || useHoles || alphaThreshold) ) sdfFn = this.rotation ? "_sdfTile3dRotated" : "_sdfTile3dBasic";
-    else if ( !useHoles ) sdfFn = "_sdfTile3dAlpha";
-    else sdfFn = "_sdfTile3dAlphaPolygons";
-    return this[sdfFn](alphaThreshold);      
+    if ( !alphaThreshold ) sdfFn = this.rotation ? "_sdf3dTileRotated" : "_sdf3dTileBasic";
+    else if ( !useHoles ) sdfFn = "_sdf3dTileAlphaPolygonBounds";
+    else sdfFn = "_sdf3dTileAlphaISOBands";
+    return this[sdfFn]();      
   }
   
   #makeXYPlanarSDF(sdf2d) {
     const elevationZ = this.elevationZ
-    return p => {
-      const d2 = this.constructor.opSquaredXYPlanar(p, sdf2d, elevationZ);
-      return this.constructor.fromSquaredDistance(d2);
-    }
+    return p => this.constructor.opXYPlanar(p, sdf2d, elevationZ);
   }
   
   /**
    * SDF for a 3d tile without rotation.
 	 * @returns {function}
    */
-  _sdf3dBasic() { return this.#makeXYPlanarSDF(this._sdfTileBasic()); }
+  _sdf3dTileBasic() { return this.#makeXYPlanarSDF(this._sdfTileBasic()); }
   
   /**
    * SDF for a 3d tile with rotation.
 	 * @returns {function}
    */
-  _sdf3dRotated() { return this.#makeXYPlanarSDF(this._sdfTileRotated()); }
+  _sdf3dTileRotated() { return this.#makeXYPlanarSDF(this._sdfTileRotated()); }
   
   /**
    * SDF for a 3d tile with a square alpha threshold
 	 * @returns {function}
    */
-  _sdf3dTileAlphaBox(alphaThreshold) { return this.#makeXYPlanarSDF(this._sdfTileAlphaBox(alphaThreshold)); }
+  _sdf3dTileAlphaBox() { return this.#makeXYPlanarSDF(this._sdfTileAlphaBox()); }
   
   /**
    * SDF for a 3d tile with a square alpha threshold
 	 * @returns {function}
    */
-  _sdf3dTileAlphaPolygonBounds(alphaThreshold) { return this.#makeXYPlanarSDF(this._sdfTileAlphaPolygonBounds(alphaThreshold)); }
+  _sdf3dTileAlphaPolygonBounds() { return this.#makeXYPlanarSDF(this._sdfTileAlphaPolygonBounds()); }
 
   
   /**
    * SDF for a 3d tile with a polygon alpha threshold with holes
 	 * @returns {function}
    */
-  _sdf3dTileAlphaISOBands(alphaThreshold) { return this.#makeXYPlanarSDF(this._sdfTileAlphaISOBands(alphaThreshold)); }
+  _sdf3dTileAlphaISOBands() { return this.#makeXYPlanarSDF(this._sdfTileAlphaISOBands()); }
    
 }
 
