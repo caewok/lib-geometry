@@ -42,12 +42,42 @@ export class RegionSDF extends SDFPlaceable {
   
   get isSingleShape() { return this.shapes.length === 1; }
   
-  static _translationRotationMatrix(shapeData) { 
-    using txMat = Matrix.translation(-shapeData.x, -shapeData.y);
-    using rotMat = Matrix.rotationZ(-shapeData.rotation, false);
-    return rotMat.multiply3x3(txMat);
+  shapeSDFs = [];
+  
+  constructor(region) {
+    super(region);
+    this.initializeShapeSDFs();
   }
   
+  initializeShapeSDFs() {
+    this.shapeSDFs.length = 0;
+    for ( const shapeData of this.shapes ) {
+			if ( shapeData.gridBased ) return this.sdfRegionPolygons(shapeData.polygons);
+		
+			// shape.constructor.TYPES lists all shape types.
+			switch ( shapeData.type ) {
+				case "circle": this.shapeSDFs.push(new CircleShapeSDF(shapeData)); break;
+				case "ellipse": this.shapeSDFs.push(new EllipseShapeSDF(shapeData)); break;
+				
+				case "cone": return this._sdfRegionCone(shapeData);
+				case "emanation": return this._sdfRegionEmanation(shapeData);
+				
+				case "line": return this._sdfRegionLine(shapeData);
+				case "polygon": return this._sdfRegionPolygon(shapeData);
+				case "rectangle": return this._sdfRegionRectangle(shapeData)
+				case "ring": return this._sdfRegionRing(shapeData);
+				
+				case "grid": 
+				case "token": 
+				default: {
+					console.warn(`Region shape type ${shapeData.type} not yet implemented. Using polygons.`);
+					return p => this.sdfRegionPolygons(shapeData.polygons);
+				} 
+			}
+    }
+  
+  }
+    
   // ----- NOTE: 2d SDFs ----- //
   
   /**
@@ -80,236 +110,17 @@ export class RegionSDF extends SDFPlaceable {
     return p => this.sdPIXIPolygonsWithHoles(p, polygons);
   }
   
-  /**
-   * 2d signed distance function for a given shape.
-   * @param {ShapeData}
-   * @returns {function}
-   */
-  static sdf2dForShape(shapeData) {
-    if ( shapeData.gridBased ) return this.sdfRegionPolygons(shapeData.polygons);
-  
-    // shape.constructor.TYPES lists all shape types.
-    switch ( shapeData.type ) {
-      case "circle": return this._sdfRegionCircle(shapeData);
-      case "cone": return this._sdfRegionCone(shapeData);
-      case "emanation": return this._sdfRegionEmanation(shapeData);
-      case "ellipse": return this._sdfRegionEllipse(shapeData);
-      case "line": return this._sdfRegionLine(shapeData);
-      case "polygon": return this._sdfRegionPolygon(shapeData);
-      case "rectangle": return this._sdfRegionRectangle(shapeData)
-      case "ring": return this._sdfRegionRing(shapeData);
-      
-      case "grid": 
-      case "token": 
-      default: {
-        console.warn(`Region shape type ${shapeData.type} not yet implemented. Using polygons.`);
-        return p => this.sdfRegionPolygons(shapeData.polygons);
-      } 
-    }
-  }
+   
   
   
-  /**
-   * Distance function for a region circle shape.
-   * @param {CircleShapeData} shapeData			
-   * @return {SDF} A function to measure distance from a point.
-   */ 
-  static _sdfRegionCircle(shapeData) {
-    // Forgo garbage collection for speed of pre-allocated matrix.
-    const txMat = Matrix.translation(-shapeData.x, -shapeData.y);
-    const txPt = PIXI.Point.tmp;
-    const r = shapeData.radius;
-    return p => {
-       txMat.multiplyPoint3d(p, txPt);
-       return this.sdCircle(txPt, r);
-    }
-  }
-  
-  /**
-   * Distance function for a region rectangular shape.
-   * @param {RectangleShapeData} shapeData
-   * @return {SDF} A function to measure distance from a point.
-   */
-  static _sdfRegionRectangle(shapeData) {
-    // rotation
-    // width
-    // height
-    let w1_2;
-    let h1_2;
-    if ( shapeData instanceof foundry.data.LineShapeData ) {
-      w1_2 = shapeData.length * 0.5;
-      h1_2 = shapeData.width * 0.5;
-    } else {
-      w1_2 = shapeData.width * 0.5;
-      h1_2 = shapeData.height * 0.5
-    }
+
+	
     
-    const txMat = Matrix.translation(-shapeData.x, -shapeData.y);
-    
-    if ( shapeData.rotation === 0 ) {
-      // Forgo garbage collection for speed of pre-allocated matrix.
-      const txPt = PIXI.Point.tmp;
-      const b = PIXI.Point.tmp.set(w1_2, h1_2);
-      return p => {
-        txMat.multiplyPoint2d(p, txPt);
-        return this.sdRectangle(txPt, b);
-      }
-    }
-    
-    // TODO: Fix b/c rotation is around the TL corner.
-    const ctr = shapeData.center;
-    const a = PIXI.Point.tmp.set(ctr.x - w1_2, ctr.y);
-    const b = PIXI.Point.tmp.set(ctr.x + w1_2, ctr.y);
-    const rotMat = Matrix.rotationZ(-shapeData.rotation, false);
-    const M = rotMat.multiply3x3(txMat);
-    M.multiplyPoint2d(a);
-    M.multiplyPoint2d(b);
-    return p => this.sdOrientedRectangle(p, a, b, h1_2);  
-  }    
+ 
   
-	/**
-	 * Distance function for a region line shape.
-	 * @param {LineShapeData} shapeData
-	 * @return {SDF} A function to measure distance from a point.
-	 */
-	static _sdfRegionLine = this._sdfRegionRectangle;
+
   
-  /**
-   * Distance function for a region ellipse shape.
-   * @param {EllipseShapeData} shapeData
-   * @return {SDF} A function to measure distance from a point.
-   */
-  static _sdfRegionEllipse(shapeData) {
-    // radiusX
-    // radiusY
-    // rotation
-    const M = this._translationRotationMatrix(shapeData);
-    const txPt = PIXI.Point.tmp;
-    const ab = PIXI.Point.tmp.set(shapeData.radiusX, shapeData.radiusY);
-    return p => {
-      M.multiplyPoint2d(p, txPt);
-      return this.sdEllipse(p, ab);
-    }
-  }
   
-  /**
-   * Distance function for a region cone shape
-   * @param {ConeShapeData} shapeData
-   * @return {SDF} A function to measure distance from a point.
-   */
-  static _sdfRegionCone(shapeData) {
-    // angle
-    // curvature: flat, round, semicircle
-    // radius
-    // rotation
-    const M = this._translationRotationMatrix(shapeData);
-    const txPt = PIXI.Point.tmp;
-    
-    switch ( shapeData.curvature ) {
-      case "flat": {
-        const theta_1_2 = Math.toRadians(shapeData.angle) * 0.5;
-        const q = PIXI.Point.tmp.set(
-          Math.tan(theta_1_2 * shapeData.radius), // Half-width of the base
-          shapeData.radius, // Altitude
-        );
-        return p => {
-          M.multiplyPoint2d(p, txPt);
-          return this.sdTriangleIsosceles(txPt, q);
-        }
-      }
-      case "round": {
-        const theta_1_2 = Math.toRadians(shapeData.angle) * 0.5;
-        const c = PIXI.Point.tmp.set(
-          Math.sin(theta_1_2),
-          Math.cos(theta_1_2),
-        );
-        const r = shapeData.radius;
-        return p => {
-          M.multiplyPoint2d(p, txPt);
-          return this.sdPie(txPt, c, r);
-        };
-      }
-      
-      case "semicircle": {
-        // Radius is the length from the cone point through the half-circle center to the half-circle edge.
-        // Radius = h + r
-        // h = s * cos(Ø/2)
-        // Triangle's base is the diameter of the semi-circle, so r = h * tan(Ø/2)
-        // H = h + r
-        // H = h + h * tan(Ø/2) = h(1 + tan(Ø/2))
-        // h = H / (1 + tan(Ø/2))
-        const totalH = shapeData.radius;
-        const theta = Math.toRadians(shapeData.angle);
-        const h = totalH / (1 + Math.tan(theta / 2));
-        const r = totalH - h;
-        return p => {
-          M.multiplyPoint2d(p, txPt);
-          return this.sdConeSemiCircle(txPt, r, h);
-        };
-      }
-    }
-  }
-  
-  /**
-   * Distance function for a region ring shape.
-   * @param {RingShapeData} shapeData
-   * @returns {number}
-   */
-  static _sdfRegionRing(shapeData) {
-    // innerWidth
-    // outerWidth
-    // radius
-    // rotation (unused?)
-    // Total width is innerWidth - radius to radius + outerWidth
-    const txMat = Matrix.translation(-shapeData.x, -shapeData.y);
-    const txPt = PIXI.Point.tmp;
-    const outerRadius = shapeData.radius + shapeData.outerWidth;
-    const width = shapeData.outerWidth - shapeData.innerWidth;
-    return p => {
-      txMat.multiplyPoint2d(p, txPt);
-      const outerCircleFn = p => this.sdCircle(p, outerRadius);
-      return this.opOnion(txPt, outerCircleFn, width);
-    }
-  }
-  
-  /**
-   * Distance function for a region emanation shape (rounded rectangle).
-   * @param {EmanationShapeData} shapeData
-   * @returns {number}
-   */
-  static _sdfRegionEmanation(shapeData) {
-    // base.height, base.width (e.g, 1, 2): number of grid spaces in each direction from center.
-    // radius (of the corner)
-    const M = this._translationRotationMatrix(shapeData);
-    const txPt = PIXI.Point.tmp;
-    
-    const b = PIXI.Point.tmp.set(
-      shapeData.base.width * canvas.grid.size,
-      shapeData.base.height * canvas.grid.size,
-    );
-    const r = shapeData.radius;
-    return p => {
-      M.multiplyPoint2d(p, txPt);
-      return this.sdRoundedRectangle(p, b, r);
-    };
-  }
-  
-  /**
-   * Distance function for a region polygon shape.
-   * @param {PolygonShapeData} shapeData
-   * @returns {number}
-   */
-  static _sdfRegionPolygon(shapeData) {
-    // points
-    // rotation
-    const rotMat = Matrix.rotationZ(-shapeData.rotation, false);
-    const txPt = PIXI.Point.tmp;
-    const poly = new PIXI.Polygon(shapeData.points);
-    return p => {
-      rotMat.multiplyPoint2d(p, txPt);
-      return this.sdPIXIPolygon(txPt, poly);
-    };
-  }
   
   // ----- NOTE: 3d SDFs ----- //
   
@@ -507,6 +318,280 @@ export class RegionSDF extends SDFPlaceable {
 		};    
   }
 }
+
+class ShapeSDFAbstract extends SDFPlaceable {
+  
+  /** @type {RegionShapeData} */
+  get shapeData() { return this.placeable; }
+    
+  get region() { return this.shapeData.parent.object; }
+  
+  get regionDocument() { return this.shapeData.parent; }
+  
+  get index() { return this.regionDocument.shapes.findIndex(elem => elem === this.shapeData); }
+    
+  get aabb2d() { return AABB2d.fromShape(this.shapeData); }
+  
+  /** @type {PIXI.Point} */
+	get center() { return this.shapeData.center.clone(); }
+     
+  get rotation() { return Math.toRadians(this.shapeData.rotation); }
+ 
+  _translationRotationMatrix() { 
+    using center = this.center;
+    using txMat = Matrix.translation(-center.x, -center.y);
+    using rotMat = Matrix.rotationZ(-this.rotation, false);
+    return rotMat.multiply3x3(txMat);
+  }  
+     
+}
+
+class CircleShapeSDF extends ShapeSDFAbstract {
+    
+  get radius() { return this.shapeData.radius; }
+  
+  /**
+   * Distance function for a region circle shape.
+   * @return {SDF} A function to measure distance from a point.
+   */ 
+  sdf2d() {
+    // Forgo garbage collection for speed of pre-allocated matrix.
+    const shapeData = this.shapeData;
+    const txMat = this.translationMatrix2d;
+    const txPt = PIXI.Point.tmp;
+    const r = this.radius;
+    return p => {
+       txMat.multiplyPoint3d(p, txPt);
+       return this.constructor.sdCircle(txPt, r);
+    }
+  }
+}
+
+class EllipseShapeSDF extends ShapeSDFAbstract {
+    
+  get radius() {  return PIXI.Point.tmp.set(this.shapeData.radiusX, this.shapeData.radiusY); }
+  
+  /**
+   * Distance function for a region ellipse shape.
+   * @return {SDF} A function to measure distance from a point.
+   */
+  sdf2d() {
+    // Forgo garbage collection for speed of pre-allocated matrix.
+    const ab = this.radius;
+    const M = this._translationRotationMatrix();
+    const txPt = PIXI.Point.tmp;
+    return p => {
+      M.multiplyPoint2d(p, txPt);
+      return this.sdEllipse(p, ab);
+    }
+  }
+}
+
+class ConeShapeSDF extends ShapeSDFAbstract {
+    
+  get radius() { return this.shapeData.radius; }
+  
+  get angle() { return  Math.toRadians(this.shapeData.angle); }
+  
+  /**
+   * Distance function for a region cone shape
+   * @return {SDF} A function to measure distance from a point.
+   */
+  sdf2d() {
+    switch ( shapeData.curvature ) {
+      case "flat": return this._sdf2dConeFlat();
+      case "round": return this._sdf2dConeRound();
+      case "semicircle": return this._sdf2dConeSemiCircle();
+    }
+  }
+  
+  _sdf2dConeFlat() {
+    const { angle, radius } = this;
+    const M = this._translationRotationMatrix(shapeData);
+    const txPt = PIXI.Point.tmp;
+		const theta_1_2 = angle * 0.5;
+		const q = PIXI.Point.tmp.set(
+			Math.tan(theta_1_2 * radius), // Half-width of the base
+			radius, // Altitude
+		);
+		return p => {
+			M.multiplyPoint2d(p, txPt);
+			return this.sdTriangleIsosceles(txPt, q);
+		} 
+  }
+  
+  _sdf2dConeRound() {
+    const { angle, radius } = this;
+		const theta_1_2 = angle * 0.5;
+		const M = this._translationRotationMatrix();
+    const txPt = PIXI.Point.tmp;
+		const c = PIXI.Point.tmp.set(
+			Math.sin(theta_1_2),
+			Math.cos(theta_1_2),
+		);
+		return p => {
+			M.multiplyPoint2d(p, txPt);
+			return this.sdPie(txPt, c, radius);
+		};  
+  }
+  
+  _sdf2dConeSemiCircle() {
+		// Radius is the length from the cone point through the half-circle center to the half-circle edge.
+		// Radius = h + r
+		// h = s * cos(Ø/2)
+		// Triangle's base is the diameter of the semi-circle, so r = h * tan(Ø/2)
+		// H = h + r
+		// H = h + h * tan(Ø/2) = h(1 + tan(Ø/2))
+		// h = H / (1 + tan(Ø/2))
+		const { radius: totalH, angle: theta } = this;
+		const M = this._translationRotationMatrix();
+    const txPt = PIXI.Point.tmp;
+		const h = totalH / (1 + Math.tan(theta / 2));
+		const r = totalH - h;
+		return p => {
+			M.multiplyPoint2d(p, txPt);
+			return this.sdConeSemiCircle(txPt, r, h);
+		};  
+  }
+}
+
+class RectangleShapeSDF extends ShapeSDFAbstract {
+  get width() { return this.shapeData.width; }
+  
+  get height() { return this.shapeData.height; }
+  
+  sdf2d() {
+    const w1_2 = this.width * 0.5;
+    const h1_2 = this.height * 0.5
+    const txMat = this.translationMatrix();
+    
+    if ( shapeData.rotation === 0 ) {
+      // Forgo garbage collection for speed of pre-allocated matrix.
+      const txPt = PIXI.Point.tmp;
+      const b = PIXI.Point.tmp.set(w1_2, h1_2);
+      return p => {
+        txMat.multiplyPoint2d(p, txPt);
+        return this.sdRectangle(txPt, b);
+      }
+    }
+    
+    // TODO: Fix b/c rotation is around the TL corner.
+    const ctr = this.center;
+    const a = PIXI.Point.tmp.set(ctr.x - w1_2, ctr.y);
+    const b = PIXI.Point.tmp.set(ctr.x + w1_2, ctr.y);
+    const rotMat = Matrix.rotationZ(-this.rotation, false);
+    const M = rotMat.multiply3x3(txMat);
+    M.multiplyPoint2d(a);
+    M.multiplyPoint2d(b);
+    return p => this.sdOrientedRectangle(p, a, b, h1_2);      
+  }
+
+}
+
+class LineShapeSDF extends RectangleShapeSDF {
+
+  get width() { return this.shapeData.length; }
+  
+  get height() { return this.shapeData.width; }
+
+}
+
+class RingShapeSDF extends ShapeSDFAbstract {
+
+  get outerWidth() { return this.shapeData.outerWidth; }
+  
+  get innerWidth() { return this.shapeData.innerWidth; }
+  
+  /**
+   * Distance function for a region ring shape.
+   * @returns {number}
+   */
+  sdf2d() {
+    // innerWidth
+    // outerWidth
+    // radius
+    // rotation (unused?)
+    // Total width is innerWidth - radius to radius + outerWidth
+    const { outerWidth, innerWidth, radius } = this;
+    const txMat = this.translationMatrix;
+    const txPt = PIXI.Point.tmp;
+    const outerRadius = radius + outerWidth;
+    const width = outerWidth - innerWidth;
+    return p => {
+      txMat.multiplyPoint2d(p, txPt);
+      const outerCircleFn = p => this.sdCircle(p, outerRadius);
+      return this.opOnion(txPt, outerCircleFn, width);
+    }
+  }
+}
+
+// Emanation or rounded rectangle.
+class EmanationShapeSDF extends ShapeSDFAbstract {
+
+  get width() { return this.shapeData.base.width * canvas.grid.size; }
+  
+  get height() { return this.shapeData.base.height * canvas.grid.size; }
+  
+  get radius() { return this.shapeData.radius; }
+  
+  /**
+   * Distance function for a region emanation shape (rounded rectangle).
+   * @returns {number}
+   */
+  sdf2d() {
+    // base.height, base.width (e.g, 1, 2): number of grid spaces in each direction from center.
+    // radius (of the corner)
+    const M = this._translationRotationMatrix();
+    const txPt = PIXI.Point.tmp;
+    const { width, height, radius } = this;
+    const b = PIXI.Point.tmp.set(width, height);
+    const r = radius;
+    return p => {
+      M.multiplyPoint2d(p, txPt);
+      return this.sdRoundedRectangle(p, b, r);
+    };
+  }
+}
+
+class PolygonShapeSDF extends ShapeSDFAbstract {
+
+  get points() { return this.shapeData.points; }
+  
+  /**
+   * Distance function for a region polygon shape.
+   * @returns {number}
+   */
+  static sdf2d() {
+    // points
+    // rotation
+    const rotMat = Matrix.rotationZ(-this.rotation, false);
+    const txPt = PIXI.Point.tmp;
+    const poly = new PIXI.Polygon(this.points);
+    return p => {
+      rotMat.multiplyPoint2d(p, txPt);
+      return this.sdPIXIPolygon(txPt, poly);
+    };
+  }
+}
+
+/**
+ * This ignores an individual shape in favor of its polygons.
+ */
+class PolygonsShapeSDF extends ShapeSDFAbstract {
+  
+  get polygons() { return this.shapeData.polygons; }
+  
+  sdf2d() { return this.constructor.sdfPIXIPolygons(this.polygons); }
+}
+
+/**
+ * This ignores the individual shapes in favor of the region.document.polygons.
+ */
+class PolygonsRegionShapeSDF extends PolygonsShapeSDF {
+
+  get polygons() { return this.regionDocument.polygons }
+}
+
 
 /* Testing
 AABB2d = CONFIG.GeometryLib.lib.AABB2d
