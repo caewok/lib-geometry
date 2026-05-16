@@ -64,7 +64,7 @@ export class SDF {
    * Extrude a 2d primitive by a certain height to create a 3d object.
    * @param {Point3d} p					The point to measure distance to.
 	 * @param {SDF2d} primitive 	The 2d SDF function to extrude.
-	 * @param {number} h					Half height of the resulting 3d SDF (mirrored below the axis)
+	 * @param {number} h					Height of the resulting 3d SDF (mirrored below the axis)
 	 * @returns {number} Signed distance squared.
 	 */
 	static opExtrusion(p, primitive, h) {
@@ -73,7 +73,7 @@ export class SDF {
 	  const hSquared = primitive(p2d);
 
 	  // 1D vertical signed distance squared.
-	  const vSquared = this.toSquaredDistance(Math.abs(p.z) - h);
+	  const vSquared = this.toSquaredDistance(Math.abs(p.z) - (h * 0.5));
 
 	  // Inside the volume, both distances are negative.
 	  // Closest boundary is the maximum of the two negative values.

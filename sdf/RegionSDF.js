@@ -6,7 +6,6 @@ PIXI,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { Point3d } from "../3d/Point3d.js";
 import { Matrix } from "../Matrix.js";
 import { SDFPlaceable } from "./SDF.js";
 import { AABB2d } from "../AABB.js";
@@ -431,7 +430,12 @@ export class RegionSDF extends SDFPlaceable {
    */
   _sdf3dBasicRegion(sdf2d) {
     const h = this.region[TM_ID].finiteRegionHeight;
-    return p => this.constructor.opExtrusion(p, sdf2d, h * 0.5);
+    const halfHeight = h * 0.5;
+    return p => {
+      using pTx = p.clone();
+      pTx.z -= halfHeight;
+      return this.constructor.opExtrusion(pTx, sdf2d, h);
+    }
   }
 
   /**
@@ -441,7 +445,12 @@ export class RegionSDF extends SDFPlaceable {
    */
   _sdf3dPlateau(sdf2d) {
     const h = this.region[TM_ID].finitePlateauHeight;
-    return p => this.constructor.opExtrusion(p, sdf2d, h * 0.5);
+    const halfHeight = h * 0.5;
+    return p => {
+      using pTx = p.clone();
+      pTx.z -= halfHeight;
+      return this.constructor.opExtrusion(pTx, sdf2d, h);
+    }
   }
 
   /**
@@ -452,12 +461,15 @@ export class RegionSDF extends SDFPlaceable {
   _sdf3dRamp(sdf2d) {
     const tm = this.region[TM_ID];
 		const h = tm.finitePlateauHeight;
+		const halfHeight = h * 0.5;
 		const plane = tm.calculateSingleRampPlane();
 
 		// Extrude a 3d shape to the top of the ramp, then cut the shape using the plane to form a ramp.
 		// Depends on plane normal pointing up.
 		return p => {
-			const shapeDist = this.constructor.opExtrusion(p, sdf2d, h * 0.5);
+		  using pTx = p.clone();
+      pTx.z -= halfHeight;
+			const shapeDist = this.constructor.opExtrusion(pTx, sdf2d, h);
 			const planeDist = this.constructor.sdFromPlane(p, plane);
 			return this.constructor.intersection(shapeDist, planeDist);
 		}
@@ -471,12 +483,15 @@ export class RegionSDF extends SDFPlaceable {
   _sdf3dMultiPlaneRamp(sdf2d) {
     const tm = this.region[TM_ID];
 		const h = tm.finitePlateauHeight;
+		const halfHeight = h * 0.5;
 		const planes = tm.calculateMultiPolygonRampPlanes();
 
 		// Extrude a 3d shape for each region shape, and intersect the corresponding plane.
 		return p => {
 			const dists = sdf2d.map((sdf, idx) => {
-				const shapeDist = this.constructor.opExtrusion(p, sdf, h * 0.5);
+			  using pTx = p.clone();
+        pTx.z -= halfHeight;
+				const shapeDist = this.constructor.opExtrusion(pTx, sdf, h);
 				const planeDist = this.constructor.sdFromPlane(p, planes[idx]);
 				return this.constructor.intersection(shapeDist, planeDist);
 			});
@@ -499,6 +514,8 @@ export class RegionSDF extends SDFPlaceable {
 		const baseH = gridUnitsToPixels(tm.rampFloor) - tm.finiteRegionBottom;
 		const stepsH = gridUnitsToPixels(tm.plateauElevation - tm.rampFloor);
 		const rampPoints = tm._calculatePolygonRampPoints(this.region.document.polygons);
+		const halfBaseHeight = baseH * 0.5;
+		const halfStepsHeight = stepsH * 0.5;
 		const wh = PIXI.Point.tmp.set(
 			PIXI.Point.distanceBetween(rampPoints[0], rampPoints[1]),
 			rampPoints[1].z - rampPoints[0].z,
@@ -507,7 +524,6 @@ export class RegionSDF extends SDFPlaceable {
 		// Rotate to extrude steps perpendicular to canvas.
 		const rotMat = Matrix.rotationX(Math.PI_1_2) // 90¼ rotation around X axis.
 		const txMat = Matrix.translation(0, 0, baseH);
-		const pTx = Point3d.tmp;
 
 		// To determine how far the stairs have to go, can either:
 		// 1. Rotate the polygons to align with the ramp direction and then get the top/bottom bounds
@@ -515,15 +531,18 @@ export class RegionSDF extends SDFPlaceable {
 
 		// SDF is the combined 3d shape + steps.
 		return p => {
-			const baseShapeDist = this.constructor.opExtrusion(p, sdf2d, baseH * 0.5);
+      using pTx = p.clone();
+      pTx.z -= halfBaseHeight;
+			const baseShapeDist = this.constructor.opExtrusion(pTx, sdf2d, baseH);
 
-			txMat.multiplyPoint3d(p, pTx)
-			const stepShapeDist = this.constructor.opExtrusion(pTx, sdf2d, stepsH * 0.5)
+      pTx.z = p.z - halfStepsHeight;
+			txMat.multiplyPoint3d(pTx, pTx)
+			const stepShapeDist = this.constructor.opExtrusion(pTx, sdf2d, stepsH)
 
 			// Rotate to extrude steps perpendicular to canvas.
 			rotMat.multiplyPoint3d(pTx, pTx);
 			const sdfSteps = this.constructor.sdStairs(pTx, wh, n);
-			const stepsDist = this.constructor.opExtrusion(pTx, sdfSteps, 1e06 * 0.5);
+			const stepsDist = this.constructor.opExtrusion(pTx, sdfSteps, 1e06);
 
 			// Intersect steps with the underlying shape.
 			// Then combine with the base.
@@ -547,6 +566,8 @@ export class RegionSDF extends SDFPlaceable {
 		const gridUnitsToPixels = CONFIG.GeometryLib.lib.utils.gridUnitsToPixels;
 		const baseH = gridUnitsToPixels(tm.rampFloor) - tm.finiteRegionBottom;
 		const stepsH = gridUnitsToPixels(tm.plateauElevation - tm.rampFloor);
+		const halfBaseHeight = baseH * 0.5;
+		const halfStepsHeight = stepsH * 0.5;
 		const rampPoints = this.region.document.shapes.forEach(shape => tm._calculatePolygonRampPoints(shape.polygons));
 		const wh = rampPoints.forEach(rp => {
 			PIXI.Point.tmp.set(
@@ -558,19 +579,22 @@ export class RegionSDF extends SDFPlaceable {
 		// Rotate to extrude steps perpendicular to canvas.
 		const rotMat = Matrix.rotationX(Math.PI_1_2) // 90¼ rotation around X axis.
 		const txMat = Matrix.translation(0, 0, baseH);
-		const pTx = Point3d.tmp;
 
 		return p => {
-			const dists = sdf2d.map((sdf, idx) => {
-				const baseShapeDist = this.constructor.opExtrusion(p, sdf, baseH * 0.5);
+		  using pTx = p.clone();
+      pTx.z -= halfBaseHeight;
 
-				txMat.multiplyPoint3d(p, pTx)
-				const stepShapeDist = this.constructor.opExtrusion(pTx, sdf, stepsH * 0.5)
+			const dists = sdf2d.map((sdf, idx) => {
+				const baseShapeDist = this.constructor.opExtrusion(pTx, sdf, baseH);
+
+        pTx.z = p.z - halfStepsHeight;
+				txMat.multiplyPoint3d(pTx, pTx)
+				const stepShapeDist = this.constructor.opExtrusion(pTx, sdf, stepsH)
 
 				// Rotate to extrude steps perpendicular to canvas.
 				rotMat.multiplyPoint3d(pTx, pTx);
 				const sdfSteps = this.constructor.sdStairs(pTx, wh[idx], n);
-				const stepsDist = this.constructor.opExtrusion(pTx, sdfSteps, 1e06 * 0.5);
+				const stepsDist = this.constructor.opExtrusion(pTx, sdfSteps, 1e06);
 
 				// Intersect steps with the underlying shape.
 				// Then combine with the base.
