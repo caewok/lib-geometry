@@ -172,18 +172,25 @@ export class SDF {
 
   /**
    * Smooth union, transitioning between two primitives.
-   * @param {number} a			Distance of first SDF
-   * @param {number} b			Distance of second SDF
-   * @param {number} k      Size of the smooth transition in canvas coordinates.
+   * @param {number[]} distances		    Distances of SDFs
+   * @param {number} [k=1]              Size of the smooth transition in canvas coordinates.
    * @returns {number} Signed distance squared to the smoothed object.
    */
-  static smoothUnion(a, b, k) {
+  static smoothUnion(distances = [], k = 1) {
+    if ( !distances.length ) return Number.POSITIVE_INFINITY;
+
+    // Precalculate.
     k *= 4.0;
-    a = this.fromSquaredDistance(a);
-    b = this.fromSquaredDistance(b);
-    const h = Math.max(k - Math.abs(a - b), 0.0);
-    const d = Math.min(a, b) - (h * h * (0.25 / k));
-    return this.toSquaredDistance(d);
+    const smoothingFactor = 0.25 / kScaled;
+
+    // Iteratively apply to each element.
+    let res = this.fromSquaredDistance(distances[0]);
+    for ( let i = 1; i < distances.length; i += 1 ) {
+      const d = this.fromSquaredDistance(distances[i]);
+      const h = Math.max(kScaled - Math.abs(res - d), 0.0);
+      res = Math.min(res, d) - (h * h * smoothingFactor);
+    }
+    return this.toSquaredDistance(res);
   }
 
   /**
@@ -193,7 +200,7 @@ export class SDF {
    * @param {number} k      Size of the smooth transition in canvas coordinates.
    * @returns {number} Signed distance squared to the smoothed object.
    */
-  static smoothSubtraction(a, b, k) { return -this.smoothUnion(a, -b, k); }
+  static smoothSubtraction(a, b, k) { return -this.smoothUnion([a, -b], k); }
 
   /**
    * Smooth intersection.
@@ -202,7 +209,7 @@ export class SDF {
    * @param {number} k      Size of the smooth transition in canvas coordinates.
    * @returns {number} Signed distance squared to the smoothed object.
    */
-  static smoothIntersection(a, b, k) { return -this.smoothUnion(-a, -b, k); }
+  static smoothIntersection(a, b, k) { return -this.smoothUnion([-a, -b], k); }
 
   // ----- NOTE: 2d SDF ---- //
 
