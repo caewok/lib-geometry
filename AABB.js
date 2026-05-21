@@ -99,8 +99,8 @@ export class AABB2d {
     this.min.add(out, out);
     return out;
   }
-  
-  /** 
+
+  /**
    * Increase or decrease this AABB.
    * @param {object} axes
    * - Ex: { x: 2, y: -2 }
@@ -116,7 +116,7 @@ export class AABB2d {
     }
     return out;
   }
-  
+
 
   /**
    * Union multiple bounds.
@@ -136,6 +136,8 @@ export class AABB2d {
     }
     return out;
   }
+
+  // ----- NOTE: Factory methods ----- //
 
   /**
    * @param {PIXI.Point[]} pts    Points to include within the bounds
@@ -189,7 +191,7 @@ export class AABB2d {
     out.max.set(rect.right, rect.bottom);
     return out;
   }
-  
+
   /**
    * @param {PIXI.RoundedRectangle} rect
    * @returns {AABB2d}
@@ -277,6 +279,8 @@ export class AABB2d {
     return out;
   }
 
+  // ----- NOTE: Containment tests ----- //
+
   /**
    * For compatibility with PIXI objects approach.
    * @param {number} x
@@ -324,6 +328,8 @@ export class AABB2d {
       }
     }
   }
+
+  // ----- NOTE: Overlap tests ----- //
 
   /**
    * Does this AABB overlap another?
@@ -434,6 +440,56 @@ export class AABB2d {
     }
     return dmin <= sphere.radiusSquared;
   }
+
+  // ----- NOTE: Intersections ----- //
+
+  /**
+   * Calculate the first intersection point of a ray with this AABB.
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @returns {number[]} Where along the ray the intersection occurs, if any.
+   *   Returns values behind the ray as well.
+   */
+  rayIntersectionsT(rayOrigin, rayDirection, axes) {
+    // Uses modified slab method.
+    const EPSILON = 1e-06;
+    axes ??= this.constructor.axes;
+    let tMin = Number.NEGATIVE_INFINITY;
+    let tMax = Number.POSITIVE_INFINITY;
+    for ( const axis of axes ) {
+      const o = rayOrigin[axis];
+      const d = rayDirection[axis];
+      const bMin = this.min[axis];
+      const bMax = this.max[axis];
+
+      if ( Math.abs(d) < EPSILON ) {
+        // Ray is parallel to the slab's planes.
+        // If origin is outside this slab, it misses entirely.
+        if ( o < bMin || o > bMax ) return [];
+      } else {
+        // Distance to near and far planes of the current slab.
+        const invD = 1 / d;
+        let t1 = (bMin - o) * invD;
+        let t2 = (bMax - o) * invD;
+
+        // Ensure t1 is near and t2 is far.
+        if ( t1 > t2 ) [t1, t2] = [t2, t1];
+
+        // Update entry and exit distances for the entire AABB.
+        tMin = Math.max(tMin, t1);
+        tMax = Math.min(tMax, t2);
+
+        // If entry distance exceeds exit distances, ray misses.
+        if ( tMin > tMax ) return [];
+      }
+    }
+
+    // If tMin and tMax are equal, ray perfectly grazes a corner.
+    if ( tMin.almostEqual(tMax) ) return [tMin];
+    return [tMin, tMax];
+  }
+
+  // ----- NOTE: Conversions ----- //
 
   toRectangle(out) {
     out ??= new PIXI.Rectangle();
