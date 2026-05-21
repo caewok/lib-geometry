@@ -76,7 +76,7 @@ export function registerTests(quench) {
     describe("opExtrusion", function() {
       it("should create a 3d volume from a 2d primitive", function() {
         const circle2d = p => SDF.sdCircle(p, 50);
-        const h = 20; // Total height 20 (from -20 to 20 or 0 to 20 depending on implementation)
+        const h = 20; // Total height 20 (from -10 to 10).
 
         // Point inside the 2d circle and inside the vertical height
         const pInside = new Point3d(0, 0, 5);
@@ -84,7 +84,19 @@ export function registerTests(quench) {
 
         // Point above the extrusion height
         const pAbove = new Point3d(0, 0, 30);
-        expectClose(SDF.opExtrusion(pAbove, circle2d, h), 10 ** 2);
+        expectClose(SDF.opExtrusion(pAbove, circle2d, h), 20 ** 2);
+
+        // Point below the extrusion height
+        const pBelow = new Point3d(0, 0, -20);
+        expectClose(SDF.opExtrusion(pBelow, circle2d, h), 10 ** 2);
+
+        // Point at extrusion top
+        const pSurfaceAbove = new Point3d(0, 0, 10);
+        expectClose(SDF.opExtrusion(pSurfaceAbove, circle2d, h), 0);
+
+        // Point at extrusion bottom
+        const pSurfaceBelow = new Point3d(0, 0, -10);
+        expectClose(SDF.opExtrusion(pSurfaceBelow, circle2d, h), 0);
       });
     });
 
@@ -105,7 +117,7 @@ export function registerTests(quench) {
         const d1 = 10;
         const d2 = 8;
         const k = 4;
-        expect(SDF.smoothUnion(d1, d2, k)).to.be.lessThan(8);
+        expect(SDF.smoothUnion([d1, d2], k)).to.be.lessThan(8);
       });
 
       it("smoothIntersection should smoothly blend intersecting distances upward", function() {
