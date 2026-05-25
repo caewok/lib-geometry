@@ -1525,6 +1525,11 @@ export class SDFPlaceable extends SDF {
 	  return this.#sdf3d;
 	}
 
+	clearCache() {
+	  this.#sdf2d = undefined;
+	  this.#sdf3d = undefined;
+	}
+
 	_sdf2d(_opts) { throw Error("Must be defined by child class."); }
 
 	_sdf3d(_opts) { throw Error("Must be defined by child class."); }
