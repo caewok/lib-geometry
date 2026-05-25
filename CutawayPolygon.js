@@ -107,6 +107,8 @@ export class CutawayPolygon extends PIXI.Polygon {
     if ( !shape.lineSegmentIntersects(a, b, { inside: true }) ) return [];
     opts.start ??= a;
     opts.end ??= b;
+    opts.topElevationFn ??= () => 1e06;
+    opts.bottomElevationFn ??= () => -1e06;
 
     const ixs = shape.segmentIntersections(a, b);
     if ( ixs.length === 0 ) return [this.quadCutaway(a, b, opts)];
@@ -122,7 +124,8 @@ export class CutawayPolygon extends PIXI.Polygon {
         if ( bInside ) return [this.quadCutaway(a, b, opts)];
 
         // A is the end. Back up one to construct proper polygon and return.
-        const newA = a2.towardsPoint(b2, -1);
+        const newA2d = a2.towardsPoint(b2, -1);
+        const newA = Point3d.tmp.set(newA2d.x, newA2d.y, opts.topElevationFn(newA2d));
         return [this.quadCutaway(newA, a, opts)];
       }
 
