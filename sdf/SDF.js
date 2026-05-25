@@ -11,6 +11,7 @@ import { Matrix } from "../Matrix.js";
 import { Draw } from "../Draw.js";
 import { AABB2d } from "../AABB.js";
 import { AABB3d } from "../3d/AABB3d.js";
+import { clamp } from "../util.js";
 
 /*
 SDF for placeables.
@@ -300,7 +301,7 @@ export class SDF {
 	static sdSegment(p, a, b) {
 		using pa = p.subtract(a);
 		using ba = b.subtract(a);
-		const h = Math.clamp(pa.dot(ba) / ba.dot(ba), 0.0, 1.0);
+		const h = clamp(pa.dot(ba) / ba.dot(ba), 0.0, 1.0);
 		ba.multiplyScalar(h, ba);
 		return pa.subtract(ba).magnitudeSquared();
 	}
@@ -462,7 +463,7 @@ export class SDF {
 	  const c = 2.0 * Math.min(k2d.dot(pNew), 0.0);
 	  pNew.subtract(k2d.multiplyScalar(c, tmp), pNew);
 	  tmp.set(
-	    Math.clamp(pNew.x, -k.z * r, k.z * r),
+	    clamp(pNew.x, -k.z * r, k.z * r),
 	    r,
 	  );
 	  pNew.subtract(tmp, pNew);
@@ -537,7 +538,7 @@ export class SDF {
       p.subtract(v[i], w);
 
       // Avoid division by zero for coincident vertices.
-      const mult = e2 ? Math.clamp(w.dot(e) / e2, 0.0, 1.0) : 0;
+      const mult = e2 ? clamp(w.dot(e) / e2, 0.0, 1.0) : 0;
 
       // Calculate the vector from p to the closest point on the edge.
       // Formula: p - (v[i] + e * mult) => w - e * mult
@@ -577,7 +578,7 @@ export class SDF {
       p.subtract(a, w);
 
       // Avoid division by zero for coincident vertices.
-      const mult = e2 ? Math.clamp(w.dot(e) / e2, 0.0, 1.0) : 0;
+      const mult = e2 ? clamp(w.dot(e) / e2, 0.0, 1.0) : 0;
 
       // Calculate the vector from p to the closest point on the edge.
       // Formula: p - (v[i] + e * mult) => w - e * mult
@@ -636,12 +637,12 @@ export class SDF {
   static sdStairs(p, wh, n) {
     using ba = wh.multiplyScalar(n);
     using v0 = PIXI.Point.tmp.set(
-      Math.clamp(p.x, 0.0, ba.x),
+      clamp(p.x, 0.0, ba.x),
       0.0,
     );
     using v1 = PIXI.Point.tmp.set(
       ba.x,
-      Math.clamp(p.y, 0.0, ba.y),
+      clamp(p.y, 0.0, ba.y),
     );
     let d2 = Math.min(
       p.subtract(v0, v0).dot2(),
@@ -653,7 +654,7 @@ export class SDF {
     const mat0 = Matrix.fromColumnMajorArray([wh.x, -wh.y, wh.y, wh.x], 2, 2);
     using pDia = p.multiplyScalar(dia);
     using pNew = mat0.multiplyPoint2d(pDia);
-    const id = Math.clamp(Math.round(pNew.x/dia), 0.0, n - 1.0);
+    const id = clamp(Math.round(pNew.x/dia), 0.0, n - 1.0);
     pNew.x -= (id * dia);
 
     using pNewDia = pNew.multiplyScalar(dia);
@@ -667,10 +668,10 @@ export class SDF {
 
     using v2 = PIXI.Point.tmp.set(
       0.0,
-      Math.clamp(p.y, -hh, hh),
+      clamp(p.y, -hh, hh),
     );
     using v3 = PIXI.Point.tmp.set(
-      Math.clamp(p.x, 0.0, wh.x),
+      clamp(p.x, 0.0, wh.x),
       hh,
     );
     d2 = Math.min(d2, p.subtract(v2, v2).dot2(), p.subtract(v3, v3).dot2());
@@ -710,10 +711,10 @@ export class SDF {
     using a = PIXI.Point.tmp;
     using b = PIXI.Point.tmp;
 
-    const cA = Math.clamp(pNew.dot(q) / q.dot2(), 0.0, 1.0);
+    const cA = clamp(pNew.dot(q) / q.dot2(), 0.0, 1.0);
     pNew.subtract(q.multiplyScalar(cA, a), a);
 
-    const cB = Math.clamp(pNew.x / q.x, 0.0, 1.0);
+    const cB = clamp(pNew.x / q.x, 0.0, 1.0);
     using v = PIXI.Point.tmp.set(cB, 1.0);
     pNew.subtract(q.multiply(v, b), b);
 
@@ -770,7 +771,7 @@ export class SDF {
     const l = this.toSquaredDistance(pNew.magnitude() - r);
 
     using tmp = PIXI.Point.tmp;
-    const m = pNew.subtract(c.multiplyScalar(Math.clamp(pNew.dot(c), 0.0, r), tmp), tmp).magnitudeSquared();
+    const m = pNew.subtract(c.multiplyScalar(clamp(pNew.dot(c), 0.0, r), tmp), tmp).magnitudeSquared();
     return Math.max(l, m * Math.sign((c.y * pNew.x - c.x * pNew.y)));
   }
 
@@ -847,9 +848,9 @@ export class SDF {
     if ( !inside ) {
       // Point projection is outside; find distance to nearest edge.
       using tmp = Point3d.tmp;
-      const baScalar = Math.clamp(ba.dot(pa) / ba.dot2(), 0.0, 1.0);
-      const cbScalar = Math.clamp(cb.dot(pb) / cb.dot2(), 0.0, 1.0);
-      const acScalar = Math.clamp(ac.dot(pc) / ac.dot2(), 0.0, 1.0);
+      const baScalar = clamp(ba.dot(pa) / ba.dot2(), 0.0, 1.0);
+      const cbScalar = clamp(cb.dot(pb) / cb.dot2(), 0.0, 1.0);
+      const acScalar = clamp(ac.dot(pc) / ac.dot2(), 0.0, 1.0);
 
       const dotBA = ba.multiplyScalar(baScalar, tmp).subtract(pa, tmp).dot2();
       const dotCB = cb.multiplyScalar(cbScalar, tmp).subtract(pb, tmp).dot2();
@@ -919,10 +920,10 @@ export class SDF {
     === 4;
     if ( !inside ) {
       using tmp = Point3d.tmp;
-      const baScalar = Math.clamp(ba.dot(pa) / ba.dot2(), 0.0, 1.0);
-      const cbScalar = Math.clamp(cb.dot(pb) / cb.dot2(), 0.0, 1.0);
-      const dcScalar = Math.clamp(dc.dot(pc) / dc.dot2(), 0.0, 1.0);
-      const adScalar = Math.clamp(ad.dot(pd) / ad.dot2(), 0.0, 1.0);
+      const baScalar = clamp(ba.dot(pa) / ba.dot2(), 0.0, 1.0);
+      const cbScalar = clamp(cb.dot(pb) / cb.dot2(), 0.0, 1.0);
+      const dcScalar = clamp(dc.dot(pc) / dc.dot2(), 0.0, 1.0);
+      const adScalar = clamp(ad.dot(pd) / ad.dot2(), 0.0, 1.0);
 
       const dotBA = ba.multiplyScalar(baScalar, tmp).subtract(pa, tmp).dot2();
       const dotCB = cb.multiplyScalar(cbScalar, tmp).subtract(pb, tmp).dot2();

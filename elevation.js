@@ -6,7 +6,7 @@ CONFIG,
 "use strict";
 
 import { GEOMETRY_CONFIG } from "./const.js";
-import { gridUnitsToPixels } from "./util.js";
+import { gridUnitsToPixels, clamp } from "./util.js";
 import { OTHER_MODULES } from "./const.js";
 
 
@@ -140,7 +140,7 @@ function regionBottomE() {
  */
 function getTokenVerticalHeight() {
   const isProne = this.isProne;
-  const heightMult = isProne ? Math.clamp(CONFIG.GeometryLib.CONFIG.proneMultiplier, 0, 1) : 1;
+  const heightMult = isProne ? clamp(CONFIG.GeometryLib.CONFIG.proneMultiplier, 0, 1) : 1;
   return (getTokenHeight(this) * heightMult) || 1; // Force at least 1 pixel high.
 }
 
@@ -148,7 +148,7 @@ function getTokenVerticalHeight() {
  * Calculated vision height.
  */
 function getTokenVisionHeight() {
-  return Math.max(1, this.verticalHeight * Math.clamp(CONFIG.GeometryLib.CONFIG.visionHeightMultiplier, 0, 1));
+  return Math.max(1, this.verticalHeight * clamp(CONFIG.GeometryLib.CONFIG.visionHeightMultiplier, 0, 1));
 }
 
 function getTokenVisionE() { return this.bottomE + this.visionHeight; }
