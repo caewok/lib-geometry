@@ -9,8 +9,13 @@ PIXI,
 import { Matrix } from "../Matrix.js";
 import { SDFPlaceable } from "./SDF.js";
 import { AABB2d } from "../AABB.js";
+import { AABB3d } from "../3d/AABB3d.js";
 
 const TM_ID = "terrainmapper";
+
+// TODO: Inverse SDFs. See https://iquilezles.org/articles/interiordistance/.
+// Should be able to union them or subtract? them and get correct "exterior."
+// Example: Rectangle as 1 rectangle above, 1 below, and 1 per side, extruded.
 
 // ----- NOTE: ShapeData classes ----- //
 
@@ -25,7 +30,7 @@ class ShapeSDFAbstract extends SDFPlaceable {
 
   get index() { return this.regionDocument.shapes.findIndex(elem => elem === this.shapeData); }
 
-  get aabb2d() { return AABB2d.fromShape(this.shapeData); }
+  get aabb2d() { return AABB2d.fromShape(this.shapeData.polygons[0]); }
 
   /** @type {PIXI.Point} */
 	get center() {
@@ -47,11 +52,16 @@ class CircleShapeSDF extends ShapeSDFAbstract {
 
   get radius() { return this.shapeData.radius; }
 
+  get aabb2d() {
+    const { x, y, radius } = this.shapeData;
+    return AABB2d.fromCircle(new PIXI.Circle(x, y, radius));
+  }
+
   /**
    * Distance function for a region circle shape.
    * @return {SDF} A function to measure distance from a point.
    */
-  sdf2d() {
+  _sdf2d() {
     // Forgo garbage collection for speed of pre-allocated matrix.
     const txMat = this.translationMatrix2d;
     const txPt = PIXI.Point.tmp;
@@ -67,11 +77,16 @@ class EllipseShapeSDF extends ShapeSDFAbstract {
 
   get radius() {  return PIXI.Point.tmp.set(this.shapeData.radiusX, this.shapeData.radiusY); }
 
+  get aabb2d() {
+    const { x, y, radiusX, radiusY } = this.shapeData;
+    return AABB2d.fromEllipse(new PIXI.Ellipse(x, y, radiusX, radiusY));
+  }
+
   /**
    * Distance function for a region ellipse shape.
    * @return {SDF} A function to measure distance from a point.
    */
-  sdf2d() {
+  _sdf2d() {
     // Forgo garbage collection for speed of pre-allocated matrix.
     const ab = this.radius;
     const M = this._translationRotationMatrix();
@@ -95,7 +110,7 @@ class ConeShapeSDF extends ShapeSDFAbstract {
    * Distance function for a region cone shape
    * @return {SDF} A function to measure distance from a point.
    */
-  sdf2d() {
+  _sdf2d() {
     switch ( this.curvature ) {
       case "flat": return this._sdf2dConeFlat();
       case "round": return this._sdf2dConeRound();
@@ -158,7 +173,12 @@ class RectangleShapeSDF extends ShapeSDFAbstract {
 
   get height() { return this.shapeData.height; }
 
-  sdf2d() {
+  get aabb2d() {
+    const { x, y } = this.shapeData;
+    return AABB2d.fromRectangle(new PIXI.Rectangle(x, y, this.width, this.height));
+  }
+
+  _sdf2d() {
     const w1_2 = this.width * 0.5;
     const h1_2 = this.height * 0.5
     const txMat = this.translationMatrix2d;
@@ -204,7 +224,7 @@ class RingShapeSDF extends ShapeSDFAbstract {
    * Distance function for a region ring shape.
    * @returns {number}
    */
-  sdf2d() {
+  _sdf2d() {
     // innerWidth
     // outerWidth
     // radius
@@ -236,7 +256,7 @@ class EmanationShapeSDF extends ShapeSDFAbstract {
    * Distance function for a region emanation shape (rounded rectangle).
    * @returns {number}
    */
-  sdf2d() {
+  _sdf2d() {
     // base.height, base.width (e.g, 1, 2): number of grid spaces in each direction from center.
     // radius (of the corner)
     const M = this._translationRotationMatrix();
@@ -259,7 +279,7 @@ class PolygonShapeSDF extends ShapeSDFAbstract {
    * Distance function for a region polygon shape.
    * @returns {number}
    */
-  static sdf2d() {
+  _sdf2d() {
     // points
     // rotation
     const rotMat = Matrix.rotationZ(-this.rotation, false);
@@ -279,7 +299,7 @@ class PolygonsShapeSDF extends ShapeSDFAbstract {
 
   get polygons() { return this.shapeData.polygons; }
 
-  sdf2d() { return this.constructor.sdfPIXIPolygons(this.polygons); }
+  _sdf2d() { return this.constructor.sdfPIXIPolygons(this.polygons); }
 }
 
 /**
@@ -337,7 +357,26 @@ export class RegionSDF extends SDFPlaceable {
 
   get shapes() { return this.region.document.shapes; }
 
-  get aabb2d() { return AABB2d.fromRegion(this.region); }
+  get bottomElevation() {
+    const z = this.region.bottomZ;
+    return isFinite(z) ? z : 1e-06;
+  }
+
+  get topElevation() {
+    const tm = this.region[TM_ID];
+    if ( tm ) return tm.isElevated ? tm.finitePlateauHeight : tm.finiteRegionHeight;
+    const z = this.region.topZ;
+    return isFinite(z) ? z : 1e06;
+  }
+
+  get aabb2d() {
+    return AABB2d.union(this.shapeSDFs.map(sdfObj => sdfObj.aabb2d));
+  }
+
+  get aabb3d() {
+    const aabb2d = this.aabb2d;
+    return AABB3d.fromAABB2d(this.aabb2d, [this.bottomElevation, this.topElevation]);
+  }
 
   get isSingleShape() { return this.shapes.length === 1; }
 
@@ -365,7 +404,7 @@ export class RegionSDF extends SDFPlaceable {
    * 2d signed distance function for this region.
    * @returns {function}
    */
-  sdf2d() {
+  _sdf2d() {
     const { region, shapes } = this;
 
     // Combine the various region primitives, using union plus subtraction to remove holes.
@@ -394,7 +433,7 @@ export class RegionSDF extends SDFPlaceable {
    * 3d signed distance function for this region.
    * @returns {function}
    */
-  sdf3d() {
+  _sdf3d() {
     // Extrude all vertically.
     // Add ramps and steps separately.
     // Before this, filter out non-TM plateaus if needed.

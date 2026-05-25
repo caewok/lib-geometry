@@ -9,6 +9,8 @@ PIXI,
 import { Point3d } from "../3d/Point3d.js";
 import { Matrix } from "../Matrix.js";
 import { Draw } from "../Draw.js";
+import { AABB2d } from "../AABB.js";
+import { AABB3d } from "../3d/AABB3d.js";
 
 /*
 SDF for placeables.
@@ -171,27 +173,101 @@ export class SDF {
   // ----- NOTE: Smooth blending operators ----- //
 
   /**
-   * Smooth union, transitioning between two primitives.
+   * Smooth union, transitioning between primitives.
+   * True SDF only for exterior.
    * @param {number[]} distances		    Distances of SDFs
    * @param {number} [k=1]              Size of the smooth transition in canvas coordinates.
    * @returns {number} Signed distance squared to the smoothed object.
    */
-  static smoothUnion(distances = [], k = 1) {
-    if ( !distances.length ) return Number.POSITIVE_INFINITY;
+  static smoothUnion(distances = [], k = 1, fn = this._smoothUnionQuadratic) {
+    let dMin = this.fromSquaredDistance(distances[0] ?? Number.POSITIVE_INFINITY);
+    for ( let i = 1, iMax = distances.length; i < iMax; i += 1 ) {
+      dMin = fn(dMin, this.fromSquaredDistance(distances[i]), k);
+    }
+    return this.toSquaredDistance(dMin);
+  }
+
+  // Quadratic polynomial. See https://iquilezles.org/articles/smin/.
+  static _smoothUnionQuadratic(a, b, k) {
+    k *= 4.0;
+    const h = Math.max(k - Math.abs(a - b), 0.0) / k;
+    return Math.min(a, b) - (h * h * k * (1.0/4.0));
+  }
+
+  static _smoothUnionQuadratic2(a, b, k) {
+    const orig = this._smoothUnionQuadratic(a, b, k);
+    const k2 = (k ** 2) * 4.0;
+    const a2 = a ** 2;
+    const b2 = b ** 2;
+    const h = Math.max(k2 - Math.abs(a2 - b2), 0.0) / k2;
+    const out = Math.min(a2, b2) - (h * h * k2 * 0.25);
+    if ( !(orig ** 2).almostEqual(out) ) console.warn(`_smoothUnionQuadratic2|Off by ${(orig ** 2) - out}.`, { a, b, k});
+    return Math.sqrt(out);
+  }
+
+  // Circular
+  static _smoothUnionCircular(a, b, k) {
+    k *= 1.0 / (1.0 - Math.sqrt(0.5));
+    const h = Math.max(k - Math.abs(a - b), 0.0) / k;
+    return Math.min(a, b) - (k * 0.5 * (1.0 + h - Math.sqrt(1.0 - (h * (h - 2.0)))));
+  }
+
+  // Circular Geometric
+  static _smoothUnionCircularGeometric(a, b, k) {
+    k *= 1.0 / (1.0 - Math.sqrt(0.5));
+    using pt = PIXI.Point.tmp.set(Math.max(k - a, 0.0), Math.max(k - b, 0.0));
+    return Math.max(k, Math.min(a, b)) - pt.magnitude();
+  }
+
+
+
+
+  static smoothUnion2(distances = [], k = 1) {
+    const len = distances.length;
+    if ( !len ) return Number.POSITIVE_INFINITY;
+    if ( len === 1 ) return distances[0];
+
+    // Optimize to avoid square root calculation.
+    // Find absolute minimum squared distances.
+    let minIndex = 0;
+    let minD2 = distances[0];
+    for ( let i = 0; i < len; i += 1 ) {
+      if ( distances[i] < minD2 ) {
+        minD2 = distances[i];
+        minIndex = i;
+      }
+    }
+
+    // Convert only the minimum to linear space.
+    let res = this.fromSquaredDistance(minD2);
+
+    // If a distance is mathematically >= (res + k), its smoothing factor (h) is 0.
+    const limitD2 = this.toSquaredDistance(res + k);
 
     // Precalculate.
     k *= 4.0;
-    const smoothingFactor = 0.25 / kScaled;
+    const smoothingFactor = 0.25 / k;
 
     // Iteratively apply to each element.
-    let res = this.fromSquaredDistance(distances[0]);
-    for ( let i = 1; i < distances.length; i += 1 ) {
-      const d = this.fromSquaredDistance(distances[i]);
-      const h = Math.max(kScaled - Math.abs(res - d), 0.0);
+    // Apply only to influencing distances.
+    // Also should be more mathematically stable b/c it starts with the global minimum.
+    for ( let i = 0; i < distances.length; i += 1 ) {
+      if ( i === minIndex ) continue; // Already established as baseline.
+
+      // Cull objects too far away to influence the minimum.
+      const d2 = distances[i];
+      if ( d2 >= limitD2 ) continue;
+
+      // Apply smoothing min math to the close object.
+      const d = this.fromSquaredDistance(d2);
+      const h = Math.max(k - Math.abs(res - d), 0.0);
       res = Math.min(res, d) - (h * h * smoothingFactor);
     }
+
+    // Convert back to squared distance for final output.
     return this.toSquaredDistance(res);
   }
+
 
   /**
    * Smooth subtraction.
@@ -799,7 +875,7 @@ export class SDF {
     if ( hSquared <= 0 && vSquared <= 0) return Math.max(hSquared, vSquared);
 
     // If inside the 2d bounds, closest point is strictly vertical.
-    if ( hSquared <= 0 ) return zSquared;
+    if ( hSquared <= 0 ) return vSquared;
 
     // Outside or on feature bounds.
     // Isolate the external components. If axis is inside (< 0), its external contribution is 0.
@@ -995,12 +1071,13 @@ export class SDF {
 	  let t = 0;
 	  let i = 0;
 	  using p = rayOrigin.constructor.tmp;
+	  using tmp = rayOrigin.constructor.tmp;
 	  const surfaceEpsilonSquared = surfaceEpsilon ** 2;
 	  const segmentDist = rayDirection.magnitude();
 	  maxDistance /= segmentDist;
 	  do {
 	    // Calculate current point along the ray: P = ro + rd * t.
-	    rayOrigin.add(rayDirection.multiplyScalar(t, p), p);
+	    rayOrigin.add(rayDirection.multiplyScalar(t, tmp), p);
 
 	    // Distance to the nearest surface in the scene.
 	    const d2 = Math.abs(sceneSDF(p));
@@ -1015,6 +1092,102 @@ export class SDF {
 	  } while ( ++i < maxSteps && t < maxDistance );
 	  return null; // No intersection found.
 	}
+
+	/**
+	 * Same as raymarch, but adds additional checks when in the interior
+	 * to avoid fake surface hits.
+	 */
+	static raymarchInterior(rayOrigin, rayDirection, sceneSDF,
+	  { maxSteps = 100,
+	    maxDistance = canvas.scene.dimensions.maxR,
+	    surfaceEpsilon = 0.01
+	  } = {}) {
+	  let t = 0;
+	  let i = 0;
+	  using p = rayOrigin.constructor.tmp;
+	  using tmp = rayOrigin.constructor.tmp;
+	  const surfaceEpsilonSquared = surfaceEpsilon ** 2;
+	  const segmentDist = rayDirection.magnitude();
+	  maxDistance /= segmentDist;
+	  let d2 = Math.abs(sceneSDF(p));
+	  let prevInside = d2 < 0;
+	  do {
+	    // Calculate current point along the ray: P = ro + rd * t.
+	    rayOrigin.add(rayDirection.multiplyScalar(t, tmp), p);
+
+	    // Distance to the nearest surface in the scene.
+	    let d2 = Math.abs(sceneSDF(p));
+
+	    // Did we hit the surface?
+	    if ( d2 < surfaceEpsilonSquared ) {
+	      // If on the interior, check if this is a real surface.
+	      // If we were just inside, then moving further in this direction should get us to the outside.
+	      if ( prevInside && rayOrigin.add(rayDirection.multiplyScalar(t + surfaceEpsilon, tmp), p) < 0 ) d2 = 1;
+	      else return t;
+
+	      // Keep prevInside = true.
+
+	    } else prevInside = d2 < 0;
+
+	    // Move forward by the distance to the nearest object.
+	    t += Math.sqrt(d2) / segmentDist;
+
+	    // Continue until we went too far or iterations exceeded.
+	  } while ( ++i < maxSteps && t < maxDistance );
+	  return null; // No intersection found.
+	}
+
+	/**
+	 * Raymarch to the nearest obstacle and return it along with distance.
+	 * @param {Point3d|PIXI.Point} rayOrigin
+	 * @param {Point3d|PIXI.Point} rayDirection
+	 * @param {function[]} sdfs									                      SDFs to test.
+	 * @param {object} [opts]
+	 * @param {number} [maxSteps=100]																	Maximum steps in the raymarch
+	 * @param {number} [maxDistance=canvas.scene.dimensions.maxR]			Maximum distance to move along the ray
+	 * @param {number} [surfaceEpsilon=0.01]													Error margin for surface test
+	 * @returns {object}
+	 *  - @prop {number|null} t   Distance t along the ray, or null.
+	 *  - @prop {number[]} hits   Index of which sdfs were hit.
+	 */
+  static nearestObstacles(rayOrigin, rayDirection, sdfs,
+	  { maxSteps = 100,
+	    maxDistance = canvas.scene.dimensions.maxR,
+	    surfaceEpsilon = 0.01
+	  } = {}) {
+
+	  let t = 0;
+	  let i = 0;
+	  using p = rayOrigin.constructor.tmp;
+	  using tmp = rayOrigin.constructor.tmp;
+	  const surfaceEpsilonSquared = surfaceEpsilon ** 2;
+	  const segmentDist = rayDirection.magnitude();
+	  maxDistance /= segmentDist;
+	  const hits = [];
+	  const n = sdfs.length;
+
+	  do {
+	    // Calculate current point along the ray: P = ro + rd * t.
+	    rayOrigin.add(rayDirection.multiplyScalar(t, tmp), p);
+
+	    // Distance to the nearest surface in the scene.
+	    let d2 = Number.POSITIVE_INFINITY;
+	    for ( let i = 0; i < n; i += 1 ) {
+	      const obstacleD2 = Math.abs(sdfs[i](p));
+	      if ( obstacleD2 < surfaceEpsilonSquared ) hits.push(i);
+	      d2 = Math.min(obstacleD2, d2);
+	    }
+
+	    // Did we hit the surface?
+	    if ( hits.length ) return { hits, t };
+
+	    // Move forward by the distance to the nearest object.
+	    t += Math.sqrt(d2) / segmentDist;
+
+	    // Continue until we went too far or iterations exceeded.
+	  } while ( ++i < maxSteps && t < maxDistance );
+	  return { hits, t: Number.POSITIVE_INFINITY }; // No intersection found.
+  }
 
 	/**
 	 * Find the intersection distance of a ray with an SDF scene at two points:
@@ -1113,8 +1286,13 @@ export class SDF {
 	 * @param {number} [maxSteps=100]
 	 * @returns {number} The t value along the ray from the current position.
 	 */
-	static findDistanceAlongRay(sceneSDF, startPosition, direction, targetDistance = 0, epsilon = 1e-06, maxSteps = 100) {
-	  let t = 1; // Guess a single step along direction.
+	static findDistanceAlongRay(startPosition, direction, sceneSDF, {
+	  targetDistance = 0,
+	  epsilon = 1e-06,
+	  maxSteps = 100,
+	  initialGuess = 1,
+	} = {}) {
+	  let t = initialGuess; // Guess a single step along direction.
 	  let t0 = 0;
 	  let d2Prev = Math.abs(sceneSDF(startPosition));
 
@@ -1132,21 +1310,21 @@ export class SDF {
 
 	    // Distance to the nearest surface in the scene.
 	    const d2 = Math.abs(sceneSDF(p));
-	    if ( d2.between(err.min, err.max) ) break;
+	    if ( d2.between(err.min, err.max) ) return t;
 
       // Determine next test point.
       const target2 = targetDistance ** 2;
       const fCurr = d2 - target2;
       const fPrev = d2Prev - target2;
-      if ( fCurr === fPrev ) break; // Prevent division by zero.
-      const newT = t - (fCurr * ((t - t0) / (fCurr - fPrev)))
+      const newT = fCurr === fPrev ? t + 1 // Prevent division by zero.
+        : t - (fCurr * ((t - t0) / (fCurr - fPrev)))
 
       // Iterate.
       t0 = t;
       t = newT;
       d2Prev = d2;
 	  }
-    return t;
+    return null;
 	}
 
 	/**
@@ -1226,8 +1404,8 @@ export class SDF {
    */
   static drawHeatmap(primitive, aabb, { elevationZ, step = 2, epsilon = 1e-08, ...drawOpts } = {}) {
     drawOpts.radius ??= 2;
-    drawOpts.alpha ??= 0.5;
-    drawOpts.fillAlpha ??= drawOpts.alpha;
+    drawOpts.alpha = drawOpts.fillAlpha = 0.5; // Placeholder.
+    const isOdd = n => !!(n & 1);
 
     using pt = Number.isNumeric(elevationZ) ? Point3d.tmp.set(0, 0, elevationZ) : PIXI.Point.tmp;
     const maxD = PIXI.Point.distanceBetween(aabb.min, aabb.max) / 2;
@@ -1235,13 +1413,60 @@ export class SDF {
     for ( let x = aabb.min.x; x < aabb.max.x; x += step ) {
 			for ( let y = aabb.min.y; y < aabb.max.y; y += step ) {
 				pt.set(x, y)
-				const dist = this.constructor.fromSquaredDistance(primitive(pt));
+				const dist = this.fromSquaredDistance(primitive(pt));
+
+				// Draw in bands of 10.
+				drawOpts.alpha = drawOpts.fillAlpha = isOdd(Math.floor(dist / 10)) ? .9 : .2;
+
 				drawOpts.color = dist.almostEqual(0, epsilon) ? Draw.COLORS.white : heatmap(Math.abs(dist));
 				drawOpts.fill = drawOpts.color;
 				Draw.point(pt, drawOpts);
 			}
 		}
 	}
+
+  static drawHeatmapZCutout(primitive, segment, { xStep = 2, zStep = 2, maxHeatRatio = 1, epsilon = 1e-08, ...drawOpts } = {}) {
+    drawOpts.radius ??= 2;
+    drawOpts.alpha = drawOpts.fillAlpha = 0.5; // Placeholder.
+    const isOdd = n => !!(n & 1);
+
+    const segmentDist = PIXI.Point.distanceBetween(segment.a, segment.b);
+    const heatmap = CONFIG.GeometryLib.lib.PixelCache.createHeatMap(0, (segmentDist / 2) * maxHeatRatio);
+
+    using start2d = segment.a.to2d();
+    using end2d = segment.b.to2d();
+    using dir = end2d.subtract(start2d);
+    dir.normalize(dir);
+    for ( let z = segment.a.z; z < segment.b.z; z += zStep ) {
+      using testPt = Point3d.tmp.set(0, 0, z);
+      for ( let x = segment.a.x; x < segment.b.x; x += xStep ) {
+        /*
+        Back-calculate t for a given x:
+        start + dir * t = newPt
+        (newPt - start) / dir  = t
+        */
+        const t = ((x - segment.a.x) / dir.x) / segmentDist;
+
+        // Determine correct x/y from t.
+        using newPt = start2d.projectToward(end2d, t);
+        testPt.x = newPt.x;
+        testPt.y = newPt.y;
+
+        const dist = this.fromSquaredDistance(primitive(testPt));
+
+        // Draw in bands of 10.
+				drawOpts.alpha = drawOpts.fillAlpha = isOdd(Math.floor(dist / 10)) ? .9 : .2;
+
+				drawOpts.color = dist.almostEqual(0, epsilon) ? Draw.COLORS.white : heatmap(Math.abs(dist));
+				drawOpts.fill = drawOpts.color;
+
+				// Draw at t from 0 to 1, multiply by 1000 to get a decent spread across.
+				// Negate z so elevation goes up.
+				Draw.point({ x: t * 1000, y: -z }, drawOpts);
+      }
+    }
+	}
+
 }
 
 /**
@@ -1259,6 +1484,8 @@ export class SDFPlaceable extends SDF {
     super();
     this.placeable = placeable;
   }
+
+  // TODO: Cache sdf2d and sdf3d
 
   /**
    * Signed distance for a placeable in 2d.
@@ -1284,12 +1511,29 @@ export class SDFPlaceable extends SDF {
 	  return fn(p);
 	}
 
-	sdf2d(_opts) { throw Error("Must be defined by child class."); }
+	#sdf2d;
 
-	sdf3d(_opts) { throw Error("Must be defined by child class."); }
+	#sdf3d;
+
+	sdf2d(_opts) {
+	  if ( !this.#sdf2d ) this.#sdf2d = this._sdf2d(_opts);
+	  return this.#sdf2d;
+	}
+
+  sdf3d(_opts) {
+	  if ( !this.#sdf3d ) this.#sdf3d = this._sdf3d(_opts);
+	  return this.#sdf3d;
+	}
+
+	_sdf2d(_opts) { throw Error("Must be defined by child class."); }
+
+	_sdf3d(_opts) { throw Error("Must be defined by child class."); }
 
 	/** @type {AABB2d} */
-	get aabb2d() { throw Error("Must be defined by child class.");  }
+	get aabb2d() { throw Error("Must be defined by child class."); }
+
+	/** @type {AABB3d} */
+	get aabb3d() { throw Error("Must be defined by child class."); }
 
 	/** @type {Point3d} */
 	get dims() { throw Error("Must be defined by child class."); }
@@ -1319,29 +1563,7 @@ export class SDFPlaceable extends SDF {
 
   // ---- NOTE: Ray march and intersections ---- //
 
-  raymarch2d(rayOrigin, rayDirection, opts) {
-    return this.constructor.raymarch(rayOrigin, rayDirection, this.sdf2d(), opts);
-  }
 
-  raymarch3d(rayOrigin, rayDirection, opts) {
-    return this.constructor.raymarch(rayOrigin, rayDirection, this.sdf3d(), opts);
-  }
-
-  raymarch2dDual(rayOrigin, rayDirection, opts) {
-    return this.constructor.raymarchDual(rayOrigin, rayDirection, this.sdf2d(), opts);
-  }
-
-  raymarch3dDual(rayOrigin, rayDirection, opts) {
-    return this.constructor.raymarchDual(rayOrigin, rayDirection, this.sdf3d(), opts);
-  }
-
-  findAllIntersections2d(rayOrigin, rayDirection, opts) {
-    return this.constructor.findAllIntersections(rayOrigin, rayDirection, this.sdf2d(), opts);
-  }
-
-  findAllIntersections3d(rayOrigin, rayDirection, opts) {
-    return this.constructor.findAllIntersections(rayOrigin, rayDirection, this.sdf3d(), opts);
-  }
 
   /**
    * Get the 2d cutaway points, as t values, on the XY plane for the given 3d shape.
@@ -1369,24 +1591,103 @@ export class SDFPlaceable extends SDF {
     return ts.map(t => t + p.z);
   }
 
+  // TODO: Add specialized versions of the intersection for specific placeable shapes.
 
+  /**
+   * For a given ray, determine the next intersection point with an edge.
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @returns {number|null}
+   */
+  ray3dIntersectionT(rayOrigin, rayDirection, sdf) {
+    // Use AABB to guess the next intersection.
+    const aabb3d = this.aabb3d;
+    const ts = aabb3d.rayIntersectionsT(rayOrigin, rayDirection);
+    if ( ts.length && ts[0] < 0 ) ts.unshift();
+    if ( !ts.length ) return null; // Ray does not intersect the bounding box.
+    return this.findDistanceAlongRay3d(rayOrigin, rayDirection, {
+      sdf,
+      // Maximum steps would be traversing the full diagonal of the cube. Approximate here.
+      maxSteps: Math.max(aabb3d.max.x - aabb3d.min.x, aabb3d.max.y - aabb3d.min.y, aabb3d.max.z - aabb3d.min.z) * 3,
+
+      // Guess it is around the intersection point (might be exactly that!)
+	    initialGuess: ts[0],
+	  });
+  }
+
+  /**
+   * For a given ray, determine all the intersection points with an edge.
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @returns {number[]}
+   */
+  ray3dIntersectionsT(rayOrigin, rayDirection) {
+    const aabb3d = this.aabb3d;
+    return this.findAllIntersections3d(rayOrigin, rayDirection, {
+       maxSteps: Math.max(aabb3d.max.x - aabb3d.min.x, aabb3d.max.y - aabb3d.min.y, aabb3d.max.z - aabb3d.min.z) * 3,
+    });
+  }
 
   // ---- NOTE: Debug ---- //
 
-  draw({ use3d, padding = 0, ...opts } = {}) {
+  draw({ use3d, aabb, padding = 0, ...opts } = {}) {
     // User can either force 3d or implicitly use 3d by setting elevation.
     use3d ??= Number.isNumeric(opts.elevationZ);
     if ( use3d ) opts.elevationZ ??= this.placeable.elevationZ;
     const primLabel = use3d ? "sdf3d" : "sdf2d";
 
     const primitive = this[primLabel](opts);
-    const aabb = this.aabb2d;
+    aabb ??= this.aabb2d;
     aabb.min.x -= padding;
     aabb.min.y -= padding;
     aabb.max.x += padding;
     aabb.max.y += padding;
     return this.constructor.drawHeatmap(primitive, aabb, opts);
   }
+
+  drawZCutout(segment, opts = {}) {
+    const primitive = this.sdf3d(opts);
+    return this.constructor.drawHeatmapZCutout(primitive, segment, opts);
+  }
+}
+
+export class SDFCombined extends SDFPlaceable {
+
+  get SDFs() { return this.placeable; }
+
+  /** @type {AABB2d} */
+	get aabb2d() { return AABB2d.union(this.SDFs.map(sdfObj => sdfObj.aabb2d)); }
+
+	/** @type {AABB3d} */
+	get aabb3d() { return AABB3d.union(this.SDFs.map(sdfObj => sdfObj.aabb3d)); }
+
+	_sdf2d(_opts) {
+	  const sdfs = this.SDFs.map(sdfObj => sdfObj.sdf2d());
+	  return p => SDF.union(...sdfs.map(sdf => sdf(p)));
+	}
+
+	_sdf3d(_opts) {
+	  const sdfs = this.SDFs.map(sdfObj => sdfObj.sdf3d());
+	  return p => SDF.union(...sdfs.map(sdf => sdf(p)));
+	}
+}
+
+export class SDFSmoothCombined extends SDFCombined {
+
+  /** @type {number} */
+  smoothK = 1;
+
+	_sdf2d({ smoothK } = {}) {
+	  smoothK ??= this.smoothK;
+	  const sdfs = this.SDFs.map(sdfObj => sdfObj.sdf2d());
+	  return p => SDF.union(sdfs.map(sdf => sdf(p)), smoothK);
+	}
+
+	_sdf3d({ smoothK } = {}) {
+	  smoothK ??= this.smoothK;
+	  const sdfs = this.SDFs.map(sdfObj => sdfObj.sdf3d());
+	  return p => SDF.smoothUnion(sdfs.map(sdf => sdf(p)), smoothK);
+	}
 }
 
 

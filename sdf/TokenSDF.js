@@ -10,6 +10,7 @@ import { Matrix } from "../Matrix.js";
 import { GEOMETRY_LIB_ID, GEOMETRY_ID } from "../const.js";
 import { TokenGeometry } from "../placeable_geometry/TokenGeometry.js";
 import { AABB2d } from "../AABB.js";
+import { AABB3d } from "../3d/AABB3d.js";
 import { SDFPlaceable } from "./SDF.js";
 
 export class TokenSDF extends SDFPlaceable {
@@ -17,6 +18,8 @@ export class TokenSDF extends SDFPlaceable {
   get token() { return this.placeable; }
 
   get aabb2d() { return AABB2d.fromToken(this.token); }
+
+  get aabb3d() { return AABB3d.fromToken(this.token); }
 
   // ---- NOTE: Token getters ----- //
 
@@ -54,7 +57,7 @@ export class TokenSDF extends SDFPlaceable {
   /**
    * Signed distance function for a given token
    */
-  sdf2d({ shapeType } = {}) {
+  _sdf2d({ shapeType } = {}) {
     if ( this.token.isConstrainedTokenBorder ) return this._sdfConstrainedBorder();
 
     shapeType ??= this.shapeType;
@@ -147,7 +150,7 @@ export class TokenSDF extends SDFPlaceable {
    * @param {SHAPE_TYPES} shapeType			The shape that represents the token
    * @returns {number}
    */
-  _sdf3d(opts) {
+  _sdf3dSimple(opts) {
     const primitive = this.sdf2d(opts);
     using dims = this.dims;
     const h = dims.z;
@@ -163,7 +166,7 @@ export class TokenSDF extends SDFPlaceable {
    * @param {SHAPE_TYPES} shapeType			The shape that represents the token
    * @returns {number}
    */
-  sdf3d(opts = {}) {
+  _sdf3d(opts = {}) {
     if ( this.token.isConstrainedTokenBorder ) return this._sdfToken3d(opts);
 
     opts.shapeType ??= this.shapeType;
@@ -177,7 +180,7 @@ export class TokenSDF extends SDFPlaceable {
       case TYPES.CUBE: return this._sdfCube();
       case TYPES.ELLIPSE: return this._sdfEllipse3d();
       case TYPES.HEXAGONAL: return this._sdfHexagon3d();
-      default: return p => this._sdf3d(opts)(p);
+      default: return p => this._sdf3dSimple(opts)(p);
     }
   }
 
@@ -222,11 +225,11 @@ export class TokenSDF extends SDFPlaceable {
   _sdfCircle3d = this._sdfCylinder;
 
   _sdfEllipse3d() {
-    return this._sdf3d({ shapeType: TokenGeometry.SHAPE_TYPES.ELLIPSE });
+    return this._sdf3dSimple({ shapeType: TokenGeometry.SHAPE_TYPES.ELLIPSE });
   }
 
   _sdfHexagon3d() {
-    return this._sdf3d({ shapeType: TokenGeometry.SHAPE_TYPES.HEXAGONAL });
+    return this._sdf3dSimple({ shapeType: TokenGeometry.SHAPE_TYPES.HEXAGONAL });
   }
 
   _sdfPolygon3d(poly) {
