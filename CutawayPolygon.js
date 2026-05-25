@@ -4,7 +4,7 @@ PIXI,
 "use strict";
 
 import { Point3d } from "./3d/Point3d.js";
-import { cutaway, gridUnitsToPixels } from "./util.js";
+import { cutaway, gridUnitsToPixels, clamp } from "./util.js";
 import { Draw } from "./Draw.js";
 
 /**
@@ -14,10 +14,10 @@ import { Draw } from "./Draw.js";
  */
 export class CutawayPolygon extends PIXI.Polygon {
   /** @type {Point3d} */
-  start = Point3d.tmp;
+  start = new Point3d();
 
   /** @type {Point3d} */
-  end = Point3d.tmp;
+  end = new Point3d();
 
   /** @type {number} */
   get top() { return this.getBounds().bottom; } // Y values are reversed.
@@ -62,8 +62,8 @@ export class CutawayPolygon extends PIXI.Polygon {
    * @returns {PIXI.Point[]} The intersection points, marked as movingInto true/false.
    */
   intersectSegment3d(a, b) {
-    const a2d = this._to2d(a);
-    const b2d = this._to2d(b);
+    using a2d = this._to2d(a);
+    using b2d = this._to2d(b);
     const ixs = this.segmentIntersections(a2d, b2d).map(ix => {
       const out = PIXI.Point.fromObject(ix);
       out.t0 = ix.t0;
@@ -86,7 +86,7 @@ export class CutawayPolygon extends PIXI.Polygon {
    * @returns {boolean}
    */
   contains3d(a) {
-    const a2d = this._to2d(a);
+    using a2d = this._to2d(a);
     return this.contains(a2d.x, a2d.y);
   }
 
@@ -115,8 +115,8 @@ export class CutawayPolygon extends PIXI.Polygon {
     if ( ixs.length === 1 ) {
       const ix0 = Point3d.fromObject(ixs[0]);
       ix0.t0 = ixs[0].t0;
-      const a2 = a.to2d();
-      const b2 = b.to2d();
+      using a2 = a.to2d();
+      using b2 = b.to2d();
 
       // Intersects only at start point.
       if ( ix0.t0.almostEqual(0) ) {
@@ -124,8 +124,8 @@ export class CutawayPolygon extends PIXI.Polygon {
         if ( bInside ) return [this.quadCutaway(a, b, opts)];
 
         // A is the end. Back up one to construct proper polygon and return.
-        const newA2d = a2.towardsPoint(b2, -1);
-        const newA = Point3d.tmp.set(newA2d.x, newA2d.y, opts.topElevationFn(newA2d));
+        using newA2d = a2.towardsPoint(b2, -1);
+        using newA = Point3d.tmp.set(newA2d.x, newA2d.y, opts.topElevationFn(newA2d));
         return [this.quadCutaway(newA, a, opts)];
       }
 
@@ -135,7 +135,8 @@ export class CutawayPolygon extends PIXI.Polygon {
         if ( aInside ) return [this.quadCutaway(a, b, opts)];
 
         // B is at end. Move one step further from the end to construct proper polygon and return.
-        const newB = b2.towardsPoint(a2, -1);
+        using newB2d = b2.towardsPoint(a2, -1);
+        using newB = Point3d.tmp.set(newB2d.x, newB2d.y, opts.topElevationFn(newB2d));
         return [this.quadCutaway(b, newB, opts)];
       }
 
@@ -183,30 +184,33 @@ export class CutawayPolygon extends PIXI.Polygon {
     topElevationFn ??= () => 1e06;
     bottomElevationFn ??= () => -1e06;
 
-    // Retrieve the pixel elevation for the a and b points. Holes should extend very high and very low so they cut everything.
+    // Retrieve the pixel elevation for the a and b points.
+    // Holes should extend very high and very low so they cut everything.
     let topA, topB, bottomA, bottomB;
-    topA = topB = 1e06;
-    bottomA = bottomB = -1e06;
-    if ( !isHole ) {
-      if ( topElevationFn ) {
-        topA = topElevationFn(a);
-        topB = topElevationFn(b);
-      }
-      if ( bottomElevationFn ) {
-        bottomA = bottomElevationFn(a);
-        bottomB = bottomElevationFn(b);
-      }
+    if ( isHole ) {
+      topA = topB = 1e06;
+      bottomA = bottomB = -1e06;
+    } else {
+      topA = topElevationFn(a);
+      topB = topElevationFn(b);
+      bottomA = bottomElevationFn(a);
+      bottomB = bottomElevationFn(b);
     }
-    const a2d = to2d(a, start, end);
-    const b2d = to2d(b, start, end);
-    const TL = { x: a2d.x, y: topA };
-    const TR = { x: b2d.x, y: topB };
-    const BL = { x: a2d.x, y: bottomA };
-    const BR = { x: b2d.x, y: bottomB };
+
+    // Set the four corners of the 2d quad.
+    using a2d = to2d(a, start, end);
+    using b2d = to2d(b, start, end);
+    const corners = PIXI.Point.buildNObjects(4);
+    corners[0].set(a2d.x, topA); // TL
+    corners[1].set(b2d.x, topB); // TR
+    corners[2].set(b2d.x, bottomB); // BR
+    corners[3].set(a2d.x, bottomA); // BL
 
     // _isPositive is y-down clockwise. For Foundry canvas, this is CCW.
     // Returns y-up clockwise.
-    return isHole ? this.fromCutawayPoints([TL, BL, BR, TR], start, end) : this.fromCutawayPoints([TL, TR, BR, BL], start, end);
+    const out = isHole ? this.fromCutawayPoints(corners.reverse(), start, end) : this.fromCutawayPoints(corners, start, end);
+    PIXI.Point.release(...corners);
+    return out;
   }
 
   /**
@@ -228,7 +232,7 @@ export class CutawayPolygon extends PIXI.Polygon {
     const HIGHEST = gridUnitsToPixels(100);
     for ( let i = 0, n = pts.length; i < n; i += 1 ) {
       const { x, y } = pts[i];
-      const pt = { x, y: -Math.clamp(y, LOWEST, HIGHEST) } // Arbitrary cutoff for low elevations.
+      const pt = { x, y: -clamp(y, LOWEST, HIGHEST) } // Arbitrary cutoff for low elevations.
 
       // Convert to smaller values for displaying.
       convertToDistance(pt);
