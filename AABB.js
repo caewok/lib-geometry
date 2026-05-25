@@ -52,6 +52,14 @@ export class AABB2d {
 
   get y() { return this.min.y; }
 
+  /** @type {PIXI.Point} */
+  get length() {
+    const out = this.constructor.POINT_CLASS.tmp;
+    const { min, max } = this;
+    for ( const axis of this.constructor.axes ) out[axis] = max[axis] - min[axis];
+    return out;
+  }
+
   get width() { return this.max.x - this.min.x; }
 
   get height() { return this.max.y - this.min.y; }
@@ -495,8 +503,10 @@ export class AABB2d {
     out ??= new PIXI.Rectangle();
     out.x = this.x;
     out.y = this.y;
-    out.width = this.width;
-    out.height = this.height;
+
+    const length = this.length;
+    out.width = length.x;
+    out.height = length.y;
     return out;
   }
 
