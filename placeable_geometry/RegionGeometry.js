@@ -381,7 +381,7 @@ export class RegionPolygonShapeGeometry extends AbstractRegionShapeGeometry {
   get polygons() { return this.placeable.document.polygons; }
 
   calculateAABB() {
-    const { topZ, bottomZ } = this.region;
+    const { topZ, bottomZ } = RegionGeometry.regionElevation(this.region);
     const z = [topZ, bottomZ];
     const aabbs = this.polygons.map(poly => AABB3d.fromPolygon(poly, z));
     AABB3d.union(aabbs, this.aabb);
@@ -446,7 +446,7 @@ export class RegionPolygonShapeGeometry extends AbstractRegionShapeGeometry {
   }
 
   _buildPolygonFaces(poly) {
-    const { topZ, bottomZ } = this.region;
+    const { topZ, bottomZ } = RegionGeometry.regionElevation(this.region);
     const top = Polygon3d.fromPolygon(poly, topZ);
     const bottom = top.clone()
     top.setZ(topZ);
