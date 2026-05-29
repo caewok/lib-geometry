@@ -1114,10 +1114,10 @@ export class PixelCache extends LocalCoordinateCache {
 
   /** @type {Map<number,PIXI.Rectangle|PIXI.Polygon>} */
   #thresholdCanvasBoundingPolygons = new Map();
-  
+
   /** @type {Map<number,ClipperPaths>} */
   #localAlphaISOBands = new Map();
-  
+
   /** @type {Map<number,ClipperPaths>} */
   #canvasAlphaISOBands = new Map();
 
@@ -1347,7 +1347,7 @@ export class PixelCache extends LocalCoordinateCache {
     // Start with the bounding box.
     const { min, max } = alphaAABB;
     const poly = new PIXI.Polygon();
-        
+
     // Scan left and then down until we hit a solid pixel.
     using startPixel = PIXI.Point.tmp;
     let found = false;
@@ -1361,7 +1361,7 @@ export class PixelCache extends LocalCoordinateCache {
       }
     }
     if ( !found ) return poly;
-    
+
     // Set initial pixel and starting entry.
     // Assume for TL start that we entered from the left.
     using startEntry = PIXI.Point.tmp.set(-1, 0);
@@ -1370,56 +1370,56 @@ export class PixelCache extends LocalCoordinateCache {
     using testPixel = PIXI.Point.tmp;
     using currDir = startEntry.clone();
     using lastDir = startEntry.clone();
-    
+
     // To facilitate a fast addPoint that can assume a 3-point poly, add a temporary polygon point.
     poly.points.push(startPixel.x, startPixel.y, startPixel.x, startPixel.y);
-    
+
     // Loop until we get back to the beginning pixel.
-    // Jacob's stopping: start pixel from the same entry point.   
+    // Jacob's stopping: start pixel from the same entry point.
     const MAX_ITERS = this.width * this.height;
-    let iter = 0; 
+    let iter = 0;
     do {
       iter += 1;
       // Test each neighboring pixel around the current, moving clockwise.
       // iterateClockwiseNeighborDirections scans starting from the pixel after currEntry.
       const iterFn = this.iterateClockwiseNeighborDirections(currEntry);
-      
-      let foundNext = false;      
+
+      let foundNext = false;
       for ( const dir of iterFn ) {
         currPixel.add(dir, testPixel);
         const a = this._pixelAtLocal(testPixel.x, testPixel.y);
-        
+
         if ( a >= threshold ) {
           // Found the next contour pixel.
           addPoint(poly, testPixel);
-          
+
           // Move to the new pixel.
           currPixel.copyFrom(testPixel);
-          
+
           // Backtrack
           currEntry.copyFrom(dir).multiplyScalar(-1, currEntry);
           currDir.copyFrom(dir);
-          
+
           foundNext = true;
           break;
         }
         lastDir.copyFrom(dir);
       }
-      
+
       if ( !foundNext ) break; // Isolated pixel.
       iter += 1;
-      
+
       // Stopping criteria (Jacob's):
-      // Stop if back at start AND entered from the same direction.  
-      
-          
+      // Stop if back at start AND entered from the same direction.
+
+
     }  while ( !(currPixel.equals(startPixel) && lastDir.subtract(currDir, testPixel).equals(startEntry)) && iter < MAX_ITERS );
     // while ( !currPixel.equals(startPixel) && iter < MAX_ITERS );
     //
     // while ( !(currPixel.equals(startPixel) && currEntry.equals(startEntry)) && iter < MAX_ITERS );
-    
+
     if ( iter >= MAX_ITERS ) console.error("calculateLocalBoundingPolygon hit max iterations.");
-    
+
     // Check if the start point is still duplicated and clean.
     const polyIter = poly.iteratePoints();
     using a = polyIter.next().value;
@@ -1428,7 +1428,7 @@ export class PixelCache extends LocalCoordinateCache {
       poly.points.unshift();
       poly.points.unshift();
     }
-    
+
     return poly;
   }
 
@@ -1456,7 +1456,7 @@ console.table(pts)
    * @returns {ClipperPaths} The polygon paths or, if error, the local alpha bounding box.
    *   Coordinates returned are local to the tile pixels, between 0 and width/height of the tile pixels.
    */
- 
+
   /**
    * Get solid polygon areas of this cache based on a specific threshold of transparency vs solid.
    * @returns {PIXI.Polygon[]}    Polygons in canvas coordinates
@@ -1466,14 +1466,19 @@ console.table(pts)
     if ( !map.has(alphaThreshold) ) map.set(alphaThreshold, this.#calculateCanvasAlphaISOBands(alphaThreshold));
     return map.get(alphaThreshold);
   }
-  
+
   /**
    * Get solid polygon areas of this cache based on a specific threshold of transparency vs solid.
    * @returns {PIXI.Polygon[]}    Polygons in canvas coordinates
    */
   #calculateCanvasAlphaISOBands(alphaThreshold = 0.75) {
     const localPolys = this.getLocalAlphaISOBands(alphaThreshold);
-    return localPolys.map(localPoly => new PIXI.Polygon([...localPoly.iteratePoints()].map(pt => this._toCanvasCoordinates(pt.x, pt.y, pt))));    
+    return localPolys.map(localPoly => {
+      const poly = new PIXI.Polygon([...localPoly.iteratePoints()].map(pt => this._toCanvasCoordinates(pt.x, pt.y, pt)))
+      poly.isHole = localPoly.isHole;
+      if ( poly.isHole ^ !poly.isPositive ) poly.reverseOrientation(); // Unlikely; would require the canvas to be flipped vs local.
+      return poly;
+    });
   }
 
   /**
@@ -1530,7 +1535,7 @@ console.table(pts)
       .fromPolygons(polys, { scalingFactor: 100 })
       .clean()
       .trimByArea(CONFIG[GEOMETRY_LIB_ID].CONFIG.alphaAreaThreshold ?? 25)
-      
+
     // Translate by the minimum alpha bounds.
     const aabb = this.getThresholdLocalAABB(alphaThreshold);
     if ( aabb.min.x || aabb.min.y ) {
@@ -1612,7 +1617,7 @@ console.table(pts)
   localNeighbors(currIdx, trimBorder = true) {
     return this.localNeighborIndices(currIdx, trimBorder).map(idx => this.pixels[idx]);
   }
-  
+
 	/**
 	 * For Moore Neighbor tracing.
 	 * Iteration function that moves clockwise around a point.
@@ -1621,7 +1626,7 @@ console.table(pts)
 	 * @yields {PIXI.Point} A direction vector
 	 */
 	*iterateClockwiseNeighborDirections(endDir = PIXI.Point.tmp) {
-		const indices = [      
+		const indices = [
 			[-1, -1],
 			[ 0, -1],
 			[ 1, -1],
@@ -1629,9 +1634,9 @@ console.table(pts)
 			[ 1,  1],
 			[ 0,  1],
 			[-1,  1],
-			[-1,  0], 
+			[-1,  0],
 		];
-		
+
 		// Use the preferred order.
 		const endArr = [endDir.x, endDir.y];
 		const startIdx = indices.findIndex(elem => elem.equals(endArr)) + 1; // +1 to move this to last.
@@ -2819,17 +2824,17 @@ export class TrimmedPixelCache extends PixelCache {
     // Use floor to determine in which "pixel bucket" the coordinate lies.
     x = ~~x;
     y = ~~y;
-     
+
     // Check against trimmed bounds, not full frame.
-    // Could use bufferBounds.contains but this is faster. 
+    // Could use bufferBounds.contains but this is faster.
     const { min, max } = this.#bufferBounds;
     if ( x < min.x || x > max.x || y < min.y || y > max.y ) return -1;
-    
+
     // Return the index, accounting for the trimmed bounds.
     const width = (max.x - min.x) + 1;
-    return ((y - min.y) * width) + (x - min.x);  
+    return ((y - min.y) * width) + (x - min.x);
   }
-  
+
   /**
    * Override the base indexing logic to account for the buffer offset.
    */
@@ -2837,10 +2842,10 @@ export class TrimmedPixelCache extends PixelCache {
     outPoint ??= PIXI.Point.tmp;
     const { min, max } = this.#bufferBounds;
     const width = (max.x - min.x) + 1;
-    
+
     const col = i % width;
     const row = ~~(i / width); // Floor the row.
-    
+
     // Add back the offset to get the coordinate in full local frame
     return outPoint.set(col + min.x, row + min.y);
   }
@@ -2902,11 +2907,11 @@ export class TilePixelCache extends TrimmedPixelCache {
       y: proportionalHeight * scaleY,
     };
   }
-  
+
   get tileAnchorTranslation() {
     const tileD = this.tile.document;
     const { anchorX, anchorY } = tileD.texture;
-    return { 
+    return {
       x: anchorX * tileD.width,
       y: anchorY * tileD.height,
     }
@@ -2931,7 +2936,7 @@ export class TilePixelCache extends TrimmedPixelCache {
     this.modelMatrix.modelCenter = this.tileAnchorTranslation;
     this.translation = this.tileTranslation;
     this.rotationZ = this.tileRotation;
-    this.scale = this.tileScale;    
+    this.scale = this.tileScale;
     super.updateTransforms();
   }
 
@@ -3100,7 +3105,7 @@ function fastFixed(x) { return Math.round(x * POW10_8) / POW10_8; }
 
 
 /**
- * Add a new polygon point if not duplicate. 
+ * Add a new polygon point if not duplicate.
  * Removes intermediate point if the last two points plus this one are collinear.
  * @param {PIXI.Polygon} poly			Polygon with at least 3 points.
  * @param {PIXI.Point} pt
@@ -3110,7 +3115,7 @@ function addPoint(poly, pt) {
   const iter = poly.reverseIteratePoints();
   using b = iter.next().value;
   if ( b.almostEqual(pt) ) return poly;
-  
+
   // Note: Could compare deltas of a|b and b|c but that would only work for grids.
   using a = iter.next().value;
   if ( foundry.utils.orient2dFast(a, b, pt).almostEqual(0) ) {

@@ -322,7 +322,7 @@ export class Clipper2Paths {
       poly.isHole = !Clipper2.Clipper.isPositive(path);
 
       // Could use reverseSolution but not guaranteed control over that parameter.
-      if ( poly.isHole ^ poly.isClockwise ) poly.reverseOrientation();
+      if ( poly.isHole ^ !poly.isPositive  ) poly.reverseOrientation();
       return poly;
     });
   }
@@ -551,6 +551,31 @@ export class Clipper2Paths {
    * @returns {Clipper2Paths}
    */
   combine() { return this.union(Clipper2.FillRule.Positive); }
+
+  /**
+   * Pad (or shrink) a clipper object.
+   * @param {number} padding
+   * @param {object} [options]       Options that affect the padding calculation.
+   * @param {number} [miterLimit]    Value of at least 2 used to avoid sharp points.
+   * @param {number} [miterType]     Type of joint to use: jtRound, jtSquare, or jtMiter
+   * @returns {ClipperPaths} New ClipperPaths object
+   */
+  pad(padding, { miterLimit = 2, miterType = "jtMiter" } = {}) {
+    console.error("Clipper2Paths#pad not yet implemented.");
+    return this;
+    /*
+    if ( miterLimit < 2) {
+      console.warn("miterLimit for ClipperPaths#pad must be ≥ 2.");
+      miterLimit = 2;
+    }
+    const solution = new ClipperPaths()
+    const c = new ClipperLib.ClipperOffset(miterLimit);
+    c.AddPaths(this.paths, ClipperLib.JoinType[miterType], ClipperLib.EndType.etClosedPolygon);
+    c.Execute(solution.paths, padding * this.scalingFactor);
+    return solution;
+    */
+  }
+
 
 
   /**
