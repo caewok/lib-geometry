@@ -2021,8 +2021,9 @@ export class Polygons3d extends Polygon3d {
     return poly3d;
   }
 
-  static #createSingleUsingMethod(method, ...args) {
-    const out = new this(1);
+  static #createSingleUsingMethod(method, out, ...args) {
+    out ??= new this(1);
+    out.polygons.length = 1;
     out.polygons[0] = Polygon3d[method](...args);
     return out;
   }
@@ -2084,35 +2085,36 @@ export class Polygons3d extends Polygon3d {
 
   // ----- NOTE: Factory methods ----- //
 
-  static from3dPolygons(polys) {
+  static from3dPolygons(polys, out) {
     const n = polys.length;
-    const polys3d = new this(n);
+    out ??= new this(n);
+    out.polygons.length = n;
     for ( let i = 0; i < n; i += 1 ) polys3d.polygons[i] = polys[i];
     return polys3d;
   }
 
-  static from2dPoints(pts, elevation) { return this.#createSingleUsingMethod("from2dPoints", pts, elevation); }
+  static from2dPoints(pts, elevation, out) { return this.#createSingleUsingMethod("from2dPoints", out, pts, elevation); }
 
-  static from3dPoints(pts) { return this.#createSingleUsingMethod("from3dPoints", pts); }
+  static from3dPoints(pts, out) { return this.#createSingleUsingMethod("from3dPoints", out, pts); }
 
-  static fromPolygon(poly, elevation) { return this.#createSingleUsingMethod("fromPolygon", poly, elevation); }
+  static fromPolygon(poly, elevation, out) { return this.#createSingleUsingMethod("fromPolygon", out, poly, elevation); }
 
-  static fromPolygons(polys, elevation) {
-    const out = new this();
+  static fromPolygons(polys, elevation, out) {
+    out ??= new this();
     out.polygons = polys.map(poly => Polygon3d.fromPolygon(poly, elevation));
     return out;
   }
 
-  static fromClipperPaths(cpObj, elevation) {
-    const out = new this();
+  static fromClipperPaths(cpObj, elevation, out) {
+    out ??= new this();
     out.polygons = Polygon3d.fromClipperPaths(cpObj, elevation);
     return out;
   }
 
-  static fromVertices(vertices, indices) { this.#createSingleUsingMethod("fromVertices", vertices, indices); }
+  static fromVertices(vertices, indices, out) { this.#createSingleUsingMethod("fromVertices", out, vertices, indices); }
 
-  static fromPlanarPolygons(polys, plane) {
-    const out = new this();
+  static fromPlanarPolygons(polys, plane, out) {
+    out ??= new this();
     out.polygons = polys.map(poly => Polygon3d.fromPlanarPolygon(poly, plane));
     return out;
   }

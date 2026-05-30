@@ -56,7 +56,7 @@ export class AABB3d extends AABB2d {
     out ??= new this();
     z = this.getMinMaxForValues(z);
     out.min.set(aabb2d.min.x, aabb2d.min.y, z.min);
-    out.max.set(aabb2d.max.z, aabb2d.max.y, z.max);
+    out.max.set(aabb2d.max.x, aabb2d.max.y, z.max);
     return out;
   }
 
@@ -101,6 +101,18 @@ export class AABB3d extends AABB2d {
     out.max.z = z.max;
     return out;
   }
+
+  /**
+   * @param {PIXI.RoundedRectangle} rect           2d rectangle, assumed to be flat on the plane
+   * @param {number|number[]} z
+   * @param {AABB3d} [out]
+   */
+  static fromRoundedRectangle(rrect, z, out) {
+    // Ignore the rounded edges.
+    return this.fromRectangle(rrect, z, out);
+  }
+
+
 
   /**
    * @param {PIXI.Polygon} poly             2d polygon, assumed to be flat on the plane

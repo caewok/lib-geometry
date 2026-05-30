@@ -622,6 +622,12 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
   dot(other) {
     return super.dot(other) + (this.z * (other.z || 0));
   }
+  
+  /**
+   * Dot product of this point with itself
+   * @returns {number}
+   */
+  dot2() { return super.dot2() + (this.z ** 2); }
 
   /**
    * Magnitude (length, or sometimes distance) of this point.

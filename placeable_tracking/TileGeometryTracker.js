@@ -18,5 +18,7 @@ export class TileGeometryTracker extends PlaceableGeometryTracker {
     ...TileGeometry.TRACKER_TYPES.position,
     ...TileGeometry.TRACKER_TYPES.scale,
     ...TileGeometry.TRACKER_TYPES.rotation,
+    ...TileGeometry.TRACKER_TYPES.texturePosition,
+    ...TileGeometry.TRACKER_TYPES.texture,
   ]);
 }

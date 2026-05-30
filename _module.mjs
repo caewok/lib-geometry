@@ -10,6 +10,8 @@ export * as placeableVertices from "./placeable_vertices/_module.mjs";
 export * as placeableGeometry from "./placeable_geometry/_module.mjs";
 export * as placeableGeometryTracking from "./placeable_tracking/_module.mjs";
 
+export * as sdf from "./sdf/_module.mjs";
+
 export * from "./AABB.js";
 export * from "./ClipperPaths.js";
 export * from "./Clipper2Paths.js";
@@ -25,3 +27,5 @@ export * from "./RadixSort.js";
 export * from "./Graph.js";
 export * from "./ObstacleOcclusionTest.js";
 export * as utils from "./util.js";
+export * as MarchingSquares from "./marchingsquares-esm.js";
+export { PriorityQueue } from "./PriorityQueue.js";

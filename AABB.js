@@ -52,6 +52,14 @@ export class AABB2d {
 
   get y() { return this.min.y; }
 
+  /** @type {PIXI.Point} */
+  get length() {
+    const out = this.constructor.POINT_CLASS.tmp;
+    const { min, max } = this;
+    for ( const axis of this.constructor.axes ) out[axis] = max[axis] - min[axis];
+    return out;
+  }
+
   get width() { return this.max.x - this.min.x; }
 
   get height() { return this.max.y - this.min.y; }
@@ -101,6 +109,24 @@ export class AABB2d {
   }
 
   /**
+   * Increase or decrease this AABB.
+   * @param {object} axes
+   * - Ex: { x: 2, y: -2 }
+   * @param {AABB} out
+   * @returns {AABB}
+   */
+  pad(axes = {}, out) {
+    out ??= new this.constructor();
+    this.clone(out);
+    for ( const [axis, value] of Object.entries(axes) ) {
+      this.min[axis] -= value;
+      this.max[axis] += value;
+    }
+    return out;
+  }
+
+
+  /**
    * Union multiple bounds.
    * @param {AABB2d[]} bounds
    * @param {AABB2d} out
@@ -118,6 +144,8 @@ export class AABB2d {
     }
     return out;
   }
+
+  // ----- NOTE: Factory methods ----- //
 
   /**
    * @param {PIXI.Point[]} pts    Points to include within the bounds
@@ -173,6 +201,15 @@ export class AABB2d {
   }
 
   /**
+   * @param {PIXI.RoundedRectangle} rect
+   * @returns {AABB2d}
+   */
+  static fromRoundedRectangle(rrect, out) {
+    // Ignore rounded edges.
+    return this.fromRectangle(rrect, out);
+  }
+
+  /**
    * @param {PIXI.Polygon} polygon
    * @returns {AABB2d}
    */
@@ -191,6 +228,7 @@ export class AABB2d {
     else if ( shape instanceof PIXI.Polygon ) AABB2d.fromPolygon(shape, out);
     else if ( shape instanceof PIXI.Circle ) AABB2d.fromCircle(shape, out);
     else if ( shape instanceof PIXI.Ellipse ) AABB2d.fromEllipse(shape, out);
+    else if ( shape instanceof PIXI.RoundedRectangle ) AABB2d.fromRoundedRectangle(shape, out);
     else if ( shape.toPolygon ) AABB2d.fromPolygon(shape.toPolygon(), out);
     else throw Error("AABB2d.fromShape|Shape not recognized", shape);
     return out;
@@ -242,11 +280,14 @@ export class AABB2d {
    * @returns {AABB2d} other
    */
   clone(out) {
+    if ( out === this ) return this;
     out ??= new this.constructor();
     out.min.copyFrom(this.min);
     out.max.copyFrom(this.max);
     return out;
   }
+
+  // ----- NOTE: Containment tests ----- //
 
   /**
    * For compatibility with PIXI objects approach.
@@ -295,6 +336,8 @@ export class AABB2d {
       }
     }
   }
+
+  // ----- NOTE: Overlap tests ----- //
 
   /**
    * Does this AABB overlap another?
@@ -406,12 +449,64 @@ export class AABB2d {
     return dmin <= sphere.radiusSquared;
   }
 
+  // ----- NOTE: Intersections ----- //
+
+  /**
+   * Calculate the first intersection point of a ray with this AABB.
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @returns {number[]} Where along the ray the intersection occurs, if any.
+   *   Returns values behind the ray as well.
+   */
+  rayIntersectionsT(rayOrigin, rayDirection, axes) {
+    // Uses modified slab method.
+    const EPSILON = 1e-06;
+    axes ??= this.constructor.axes;
+    let tMin = Number.NEGATIVE_INFINITY;
+    let tMax = Number.POSITIVE_INFINITY;
+    for ( const axis of axes ) {
+      const o = rayOrigin[axis];
+      const d = rayDirection[axis];
+      const bMin = this.min[axis];
+      const bMax = this.max[axis];
+
+      if ( Math.abs(d) < EPSILON ) {
+        // Ray is parallel to the slab's planes.
+        // If origin is outside this slab, it misses entirely.
+        if ( o < bMin || o > bMax ) return [];
+      } else {
+        // Distance to near and far planes of the current slab.
+        const invD = 1 / d;
+        let t1 = (bMin - o) * invD;
+        let t2 = (bMax - o) * invD;
+
+        // Ensure t1 is near and t2 is far.
+        if ( t1 > t2 ) [t1, t2] = [t2, t1];
+
+        // Update entry and exit distances for the entire AABB.
+        tMin = Math.max(tMin, t1);
+        tMax = Math.min(tMax, t2);
+
+        // If entry distance exceeds exit distances, ray misses.
+        if ( tMin > tMax ) return [];
+      }
+    }
+
+    // If tMin and tMax are equal, ray perfectly grazes a corner.
+    if ( tMin.almostEqual(tMax) ) return [tMin];
+    return [tMin, tMax];
+  }
+
+  // ----- NOTE: Conversions ----- //
+
   toRectangle(out) {
     out ??= new PIXI.Rectangle();
     out.x = this.x;
     out.y = this.y;
-    out.width = this.width;
-    out.height = this.height;
+
+    const length = this.length;
+    out.width = length.x;
+    out.height = length.y;
     return out;
   }
 

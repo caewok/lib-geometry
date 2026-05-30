@@ -194,13 +194,15 @@ export class Draw {
    * @param {object} [drawingOptions]     Options to pass to the drawing method.
    */
   connectPoints(points, { close = false, ...drawingOptions } = {} ) {
-    const nPts = points.length;
-    const ln = close ? nPts : nPts - 1;
-    let prevPt = close ? points.at(-1) : points.at(0);
-    for ( let i = close ? 0 : 1; i < ln; i += 1 ) {
-      const currPt = points[i];
-      this.segment({A: prevPt, B: currPt}, drawingOptions);
-      prevPt = currPt;
+    const iter = points.values();
+    let a = iter.next().value;
+    for ( const b of iter ) {
+      this.segment({ a, b }, drawingOptions);
+      a = b;
+    }
+    if ( close ) {
+      const b = points[0];
+      this.segment({ a, b }, drawingOptions);
     }
   }
 

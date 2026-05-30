@@ -255,8 +255,37 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
     shape: new Set(TRACKER_TYPES.shape),
     properties: NULL_SET,
   };
+  
+  /** @type {enum<string:number>} */
+  static SHAPE_TYPES = {
+    CUBE: 0, 					// Square grid
+    HEXAGONAL: 1, 		// Hex grid; extruded hex in 3d; varies by token size
+    ELLIPSE: 2,				// Extruded ellipse
+    SPHERICAL: 3,     
+    ELLIPSOID: 4,
+  };
 
+  /** @type {Token} */
   get token() { return this.placeable; }
+
+  /** @type {SHAPE_TYPES} */
+  get shapeType() {
+    const TYPES = this.constructor.SHAPE_TYPES;
+    if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.useTokenEllipsoid ) return TYPES.ELLIPSOID;
+    if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.useTokenSphere ) return TYPES.SPHERICAL;
+    
+    const GRID = CONST.GRID_TYPES;
+    switch ( canvas.grid.type ) {
+      case GRID.SQUARE: return TYPES.CUBE;
+      case GRID.GRIDLESS: {
+        const shape = this.token.document.shape;
+        if ( shape === CONST.TOKEN_SHAPES.ELLIPSE_1
+          || shape === CONST.TOKEN_SHAPES.ELLIPSE_2 ) return TYPES.ELLIPSE;
+        else return TYPES.CUBE;
+      }
+      default: return TYPES.HEXAGONAL;
+    }
+  }
 
   // ----- NOTE: AABB ----- //
 
@@ -299,13 +328,15 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
     const density = PIXI.Circle.approximateVertexDensity(100);
     this.#initializePolyFaces(density);
   }
+  
+  get hexagonalUnitShape() { return Hex3dVertices.hexagonalUnitShapeForToken(this.token); }
 
   #initializeHexagonalFaces() {
     if ( !(this._prototypeFaces.top instanceof Polygon3d) ) {
       this._prototypeFaces.top = new Polygon3d();
       this._prototypeFaces.bottom = new Polygon3d();
     }
-    const poly = Hex3dVertices.hexagonalUnitShapeForToken(this.token);
+    const poly = this.hexagonalUnitShape;
 
     // Ensure the top is pointing up by passing a counter-clockwise polygon.
     if ( poly.isPositive ) poly.reverseOrientation();
@@ -356,38 +387,19 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
    * Create the initial face shapes for this token, using a 0.5 x 0.5 x 0.5 unit cube.
    */
   _initializePrototypeFaces() {
-    // Sphere treated as a single face.
-    if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.useTokenSphere ) {
-      this.#initializeSphericalTopFace();
-      return super._initializePrototypeFaces();
+    const TYPES = this.constructor.SHAPE_TYPES;
+    switch ( this.shapeType ) {
+      case TYPES.SPHERICAL: 
+      case TYPES.ELLIPSOID: // TODO: Implement.
+        this.#initializeSphericalTopFace();
+        return super._initializePrototypeFaces();
+      
+      case TYPES.CUBE: this.#initializeCubeFaces(); break;
+      case TYPES.ELLIPSE: this.#initializeEllipseFaces(); break;
+      case TYPES.HEXAGONAL: this.#initializeHexagonalFaces(); break;
+      default: this.#initializeCubeFaces();
     }
-
-    /*
-    For top and bottom, use the grid logic from Token#getShape.
-    Options available in the token config:
-    Square grid:
-      RECTANGLE_1: PIXI.Polygon.
-
-    Hex grid:
-      - All 6 options. Some may not change depending on token. Result is always PIXI.Polygon.
-
-    Gridless:
-     - ELLIPSE_1: PIXI.Circle or PIXI.Ellipse
-     - RECTANGLE_1: PIXI.Rectangle
-     */
-    const TYPES = CONST.GRID_TYPES;
-    switch ( canvas.grid.type ) {
-      case TYPES.SQUARE: this.#initializeCubeFaces(); break;
-      case TYPES.GRIDLESS: {
-        const shape = this.token.document.shape;
-        if ( shape === CONST.TOKEN_SHAPES.ELLIPSE_1
-          || shape === CONST.TOKEN_SHAPES.ELLIPSE_2 ) this.#initializeEllipseFaces();
-        else this.#initializeCubeFaces();
-        break;
-      }
-      default: this.#initializeHexagonalFaces();
-    }
-
+   
     // Confirm orientation against the origin.
     const ctr = new Point3d();
     if ( this._prototypeFaces.top.isFacing(ctr) ) console.error(`${this.constructor.name}|Prototype face for ${this.placeable.id} has wrong top orientation.`);
