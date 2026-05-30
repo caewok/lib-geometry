@@ -1,3 +1,13 @@
+## 0.6.0
+Add SDF classes. Just for experimentation thus far.
+Fixes related to Terrain Mapper cutaways.
+Add a PriorityQueue class.
+Add dot2 method for Points.
+Additional tests for 2d and 3d.
+Separate alpha threshold faces for tile geometry. (Used in terrain mapper.)
+Performance improvements to CutawayPolygon.
+Improvements to AABB class.
+
 ## 0.5.4
 Add ClipperPaths unit tests.
 Add out parameter for Matrix#rotationAngleAxis.

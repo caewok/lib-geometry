@@ -1,5 +1,6 @@
 /* globals
 canvas,
+CONFIG,
 foundry,
 PIXI,
 Ray,
@@ -7,11 +8,14 @@ Ray,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
+import { GEOMETRY_LIB_ID } from "./const.js";
 import { extractPixels } from "./extract-pixels.js";
 import { roundFastPositive, bresenhamLine, bresenhamLineIterator, trimLineSegmentToPixelRectangle, clamp } from "./util.js";
 import { Draw } from "./Draw.js";
 import { MatrixFloat32, ModelMatrix2dCenterInverse } from "./Matrix.js";
 import { AABB2d } from "./AABB.js";
+import * as MarchingSquares from "./marchingsquares-esm.js";
+
 
 /* Pixel Cache
   Rectangle in local pixel coordinates that contains an array of values ("pixels").
@@ -1111,6 +1115,12 @@ export class PixelCache extends LocalCoordinateCache {
   /** @type {Map<number,PIXI.Rectangle|PIXI.Polygon>} */
   #thresholdCanvasBoundingPolygons = new Map();
 
+  /** @type {Map<number,ClipperPaths>} */
+  #localAlphaISOBands = new Map();
+
+  /** @type {Map<number,ClipperPaths>} */
+  #canvasAlphaISOBands = new Map();
+
   /**
    * Construct the local rectangle based on a provided pixel array.
    * @param {object} [opts]
@@ -1160,8 +1170,7 @@ export class PixelCache extends LocalCoordinateCache {
    */
   updateTransforms() {
     super.updateTransforms();
-    this.#thresholdCanvasBoundingBoxes.clear();
-    this.#thresholdCanvasBoundingPolygons.clear();
+    this._clearCanvasThresholdBoundingBoxes();
   }
 
   /**
@@ -1172,11 +1181,14 @@ export class PixelCache extends LocalCoordinateCache {
     this.#thresholdCanvasBoundingBoxes.clear();
     this.#thresholdLocalAABB.clear();
     this.#thresholdLocalBoundingPolygons.clear();
+    this.#localAlphaISOBands.clear();
   }
 
   _clearCanvasThresholdBoundingBoxes() {
     this.#thresholdCanvasBoundingBoxes.clear();
     this.#thresholdCanvasBoundingPolygons.clear();
+    this.#thresholdLocalAABB.clear();
+    this.#canvasAlphaISOBands.clear();
   }
 
 
@@ -1187,14 +1199,14 @@ export class PixelCache extends LocalCoordinateCache {
    * @param {number} [threshold=0.75]   Values lower than this will be ignored around the edges.
    * @returns {AABB2d} Rectangle based on local coordinates.
    */
-  getThresholdLocalAABB(threshold = 0.75) {
+  getThresholdLocalAABB(alphaThreshold = 0.75) {
     const map = this.#thresholdLocalAABB;
-    if ( !map.has(threshold) ) map.set(threshold, this.#calculateLocalAABB(threshold));
-    return map.get(threshold);
+    if ( !map.has(alphaThreshold) ) map.set(alphaThreshold, this.#calculateLocalAABB(alphaThreshold));
+    return map.get(alphaThreshold);
   }
 
-  getThresholdLocalBoundingBox(threshold = 0.75) {
-    const aabb = this.getThresholdLocalAABB(threshold);
+  getThresholdLocalBoundingBox(alphaThreshold = 0.75) {
+    const aabb = this.getThresholdLocalAABB(alphaThreshold);
     if ( !isFinite(aabb.min.x) ) return new PIXI.Rectangle();
 
     return new PIXI.Rectangle(
@@ -1210,23 +1222,23 @@ export class PixelCache extends LocalCoordinateCache {
    * If you require a rectangle, use getThresholdLocalBoundingBox
    * @returns {PIXI.Rectangle|PIXI.Polygon}    Rectangle or polygon in canvas coordinates.
    */
-  getThresholdCanvasBoundingBox(threshold = 0.75) {
+  getThresholdCanvasBoundingBox(alphaThreshold = 0.75) {
     const map = this.#thresholdCanvasBoundingBoxes;
-    if ( !map.has(threshold) ) map.set(threshold, this.#calculateCanvasBoundingBox(threshold));
-    return map.get(threshold);
+    if ( !map.has(alphaThreshold) ) map.set(alphaThreshold, this.#calculateCanvasBoundingBox(alphaThreshold));
+    return map.get(alphaThreshold);
   }
 
-  _calculateCanvasBoundingBox(threshold = 0.75) {
-    if ( threshold === 1 ) return super._calculateCanvasBoundingBox();
-    return this.#calculateCanvasBoundingBox(threshold);
+  _calculateCanvasBoundingBox(alphaThreshold = 0.75) {
+    if ( alphaThreshold === 1 ) return super._calculateCanvasBoundingBox();
+    return this.#calculateCanvasBoundingBox(alphaThreshold);
   }
 
   /**
    * Calculate a canvas bounding box based on a specific threshold.
    */
-  #calculateCanvasBoundingBox(threshold=0.75) {
+  #calculateCanvasBoundingBox(alphaThreshold=0.75) {
     // Pad right and bottom to ensure full coverage for PIXI rectangle or polygon.
-    const aabb = this.getThresholdLocalAABB(threshold);
+    const aabb = this.getThresholdLocalAABB(alphaThreshold);
     const TL = this._toCanvasCoordinates(aabb.min.x, aabb.min.y);
     const TR = this._toCanvasCoordinates(aabb.max.x + 1, aabb.min.y);
     const BL = this._toCanvasCoordinates(aabb.min.x, aabb.max.y + 1);
@@ -1251,9 +1263,9 @@ export class PixelCache extends LocalCoordinateCache {
    * @param {number} [threshold=0.75]   Values lower than this will be ignored around the edges.
    * @returns {AABB2d} Rectangle based on local coordinates.
    */
-  #calculateLocalAABB(threshold=0.75) {
+  #calculateLocalAABB(alphaThreshold=0.75) {
     // (Faster or equal to the old method that used one double non-breaking loop.)
-    threshold = threshold * this.maximumPixelValue;
+    const threshold = alphaThreshold * this.maximumPixelValue;
 
     // By definition, the local frame uses 0 or positive integers. So we can use -1 as a placeholder value.
     const { left, right, top, bottom } = this;
@@ -1326,47 +1338,233 @@ export class PixelCache extends LocalCoordinateCache {
    * @param {number} [threshold=0.75]   Values lower than this will be ignored around the edges.
    * @returns {PIXI.Polygon} Polygon based on local coordinates.
    */
-  #calculateLocalBoundingPolygon(threshold = 0.75) {
-    threshold = threshold * this.maximumPixelValue;
+  #calculateLocalBoundingPolygon(alphaThreshold = 0.75) {
+    // Use Moore Neighborhood with Jacob's stopping criteria.
+    // https://www.imageprocessingplace.com/downloads_V3/root_downloads/tutorials/contour_tracing_Abeer_George_Ghuneim/moore.html
+    const alphaAABB = this.getThresholdLocalAABB(alphaThreshold);
+    const threshold = alphaThreshold * this.maximumPixelValue;
 
-    // Build each row in local space.
-    // Move from top to bottom on left side.
-    // Then move bottom to top on right side.
-    // Brute force.
-    const { left, right, top, bottom } = this;
+    // Start with the bounding box.
+    const { min, max } = alphaAABB;
     const poly = new PIXI.Polygon();
-    for ( let y = top; y <= bottom; y += 1 ) {
-      // Scan each row from right to left.
-      for ( let x = right; x >= left; x -=  1 ) {
-        const a = this._pixelAtLocal(x, y);
-        if ( a > threshold ) {
-          poly.points.push(x, y);
-          break;
+
+    // Scan left and then down until we hit a solid pixel.
+    using startPixel = PIXI.Point.tmp;
+    let found = false;
+    outerLoop: for ( let y = min.y; y < max.y; y += 1 ) {
+      for ( let x = min.x; x < max.x; x += 1 ) {
+        if ( this._pixelAtLocal(x, y) >= threshold ) {
+          startPixel.set(x, y);
+          found = true;
+          break outerLoop;
         }
       }
+    }
+    if ( !found ) return poly;
+
+    // Set initial pixel and starting entry.
+    // Assume for TL start that we entered from the left.
+    using startEntry = PIXI.Point.tmp.set(-1, 0);
+    using currPixel = startPixel.clone();
+    using currEntry = startEntry.clone();
+    using testPixel = PIXI.Point.tmp;
+    using currDir = startEntry.clone();
+    using lastDir = startEntry.clone();
+
+    // To facilitate a fast addPoint that can assume a 3-point poly, add a temporary polygon point.
+    poly.points.push(startPixel.x, startPixel.y, startPixel.x, startPixel.y);
+
+    // Loop until we get back to the beginning pixel.
+    // Jacob's stopping: start pixel from the same entry point.
+    const MAX_ITERS = this.width * this.height;
+    let iter = 0;
+    do {
+      iter += 1;
+      // Test each neighboring pixel around the current, moving clockwise.
+      // iterateClockwiseNeighborDirections scans starting from the pixel after currEntry.
+      const iterFn = this.iterateClockwiseNeighborDirections(currEntry);
+
+      let foundNext = false;
+      for ( const dir of iterFn ) {
+        currPixel.add(dir, testPixel);
+        const a = this._pixelAtLocal(testPixel.x, testPixel.y);
+
+        if ( a >= threshold ) {
+          // Found the next contour pixel.
+          addPoint(poly, testPixel);
+
+          // Move to the new pixel.
+          currPixel.copyFrom(testPixel);
+
+          // Backtrack
+          currEntry.copyFrom(dir).multiplyScalar(-1, currEntry);
+          currDir.copyFrom(dir);
+
+          foundNext = true;
+          break;
+        }
+        lastDir.copyFrom(dir);
+      }
+
+      if ( !foundNext ) break; // Isolated pixel.
+      iter += 1;
+
+      // Stopping criteria (Jacob's):
+      // Stop if back at start AND entered from the same direction.
+
+
+    }  while ( !(currPixel.equals(startPixel) && lastDir.subtract(currDir, testPixel).equals(startEntry)) && iter < MAX_ITERS );
+    // while ( !currPixel.equals(startPixel) && iter < MAX_ITERS );
+    //
+    // while ( !(currPixel.equals(startPixel) && currEntry.equals(startEntry)) && iter < MAX_ITERS );
+
+    if ( iter >= MAX_ITERS ) console.error("calculateLocalBoundingPolygon hit max iterations.");
+
+    // Check if the start point is still duplicated and clean.
+    const polyIter = poly.iteratePoints();
+    using a = polyIter.next().value;
+    using b = polyIter.next().value;
+    if ( a.equals(b) ) {
+      poly.points.unshift();
+      poly.points.unshift();
     }
 
-    for ( let y = bottom; y >= top; y -= 1 ) {
-      // Scan each row from left to right.
-      for ( let x = left; x <= right; x +=  1 ) {
-        const a = this._pixelAtLocal(x, y);
-        if ( a > threshold ) {
-          poly.addPoint({x, y}); // Use addPoint to avoid repeats.
-          break;
-        }
-      }
-    }
     return poly;
+  }
+
+/*
+164,128
+165,128
+
+
+
+*/
+/*
+iter = poly.iteratePoints()
+pts = [];
+for ( let i = 0; i < 1000; i += 1 ) {
+  const pt = iter.next().value
+  pts.push(pt)
+  Draw.point(pt, { radius: 1 })
+}
+console.table(pts)
+*/
+
+  /**
+   * Convert pixels to an array of polygon isobands representing
+   * alpha values at or above the threshold. E.g., alpha between 0.75 and 1.
+   * @returns {ClipperPaths} The polygon paths or, if error, the local alpha bounding box.
+   *   Coordinates returned are local to the tile pixels, between 0 and width/height of the tile pixels.
+   */
+
+  /**
+   * Get solid polygon areas of this cache based on a specific threshold of transparency vs solid.
+   * @returns {PIXI.Polygon[]}    Polygons in canvas coordinates
+   */
+  getCanvasAlphaISOBands(alphaThreshold = 0.75) {
+    const map = this.#canvasAlphaISOBands;
+    if ( !map.has(alphaThreshold) ) map.set(alphaThreshold, this.#calculateCanvasAlphaISOBands(alphaThreshold));
+    return map.get(alphaThreshold);
+  }
+
+  /**
+   * Get solid polygon areas of this cache based on a specific threshold of transparency vs solid.
+   * @returns {PIXI.Polygon[]}    Polygons in canvas coordinates
+   */
+  #calculateCanvasAlphaISOBands(alphaThreshold = 0.75) {
+    const localPolys = this.getLocalAlphaISOBands(alphaThreshold);
+    return localPolys.map(localPoly => {
+      const poly = new PIXI.Polygon([...localPoly.iteratePoints()].map(pt => this._toCanvasCoordinates(pt.x, pt.y, pt)))
+      poly.isHole = localPoly.isHole;
+      if ( poly.isHole ^ !poly.isPositive ) poly.reverseOrientation(); // Unlikely; would require the canvas to be flipped vs local.
+      return poly;
+    });
+  }
+
+  /**
+   * Convert these pixels to an array of polygon isobands representing
+   * alpha values at or above the threshold. E.g., alpha between 0.75 and 1.
+   * @returns {ClipperPaths} The polygon paths or, if error, the local alpha bounding box.
+   *   Coordinates returned are local to the tile pixels, between 0 and width/height of the tile pixels.
+   */
+  _calculateLocalAlphaISOBands(alphaThreshold = 0.75) {
+    const threshold = 255 * alphaThreshold;
+    const pixels = this.pixels;
+    const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
+
+    // Convert pixels to isobands.
+    const width = this.bufferWidth;
+    const height = this.bufferHeight;
+    const rowViews = new Array(height);
+    for ( let r = 0, start = 0, rMax = height; r < rMax; r += 1, start += width ) {
+      // TODO: Use single Typed view instead of slicing?
+      rowViews[r] = Array.from(pixels.slice(start, start + width));
+    }
+
+    let bands;
+    try {
+      bands = MarchingSquares.isoBands(rowViews, threshold, 256 - threshold);
+    } catch ( err ) {
+      console.warn(err);
+      const poly = this.getThresholdLocalBoundingPolygon(alphaThreshold);
+      return ClipperPaths.fromPolygons([poly]);
+    }
+
+    /* Don't want to scale between 0 and 1 b/c using evPixelCache transform on the local coordinates.
+    // Create polygons scaled between 0 and 1, based on width and height.
+    const invWidth = 1 / width;
+    const invHeight = 1 / height;
+    const nPolys = lines.length;
+    const polys = new Array(nPolys);
+    for ( let i = 0; i < nPolys; i += 1 ) {
+      polys[i] = new PIXI.Polygon(bands[i].flatMap(pt => [pt[0] * invWidth, pt[1] * invHeight]))
+    }
+    */
+    const nPolys = bands.length;
+    const polys = new Array(nPolys);
+    for ( let i = 0; i < nPolys; i += 1 ) {
+      const poly = new PIXI.Polygon(bands[i].flatMap(pt => pt)); // TODO: Can we lose the flatMap?
+
+      // Polys from MarchingSquares are CW if hole; reverse
+      poly.reverseOrientation();
+      polys[i] = poly;
+    }
+
+    // Use Clipper to clean the polygons. Leave as clipper paths for earcut later.
+    const paths = ClipperPaths
+      .fromPolygons(polys, { scalingFactor: 100 })
+      .clean()
+      .trimByArea(CONFIG[GEOMETRY_LIB_ID].CONFIG.alphaAreaThreshold ?? 25)
+
+    // Translate by the minimum alpha bounds.
+    const aabb = this.getThresholdLocalAABB(alphaThreshold);
+    if ( aabb.min.x || aabb.min.y ) {
+      const M = MatrixFloat32.translation(aabb.min.x, aabb.min.y);
+      return paths.transform(M);
+    } else return paths;
+  }
+
+  /**
+   * Get polygons representing solid (alpha > threshold) areas based on a specific threshold.
+   * @param {number} [threshold=0.75]   Values lower than this are treated as transparent (not solid).
+   * @returns {PIXI.Polygon[]} Polygons based on local coordinates.
+   */
+  getLocalAlphaISOBands(alphaThreshold = 0.75) {
+    const map = this.#localAlphaISOBands;
+    if ( !map.has(alphaThreshold) ) {
+      const paths = this._calculateLocalAlphaISOBands(alphaThreshold);
+      map.set(alphaThreshold, paths.toPolygons());
+    }
+    return map.get(alphaThreshold);
   }
 
   /**
    * Calculate a canvas bounding polygon based on a specific threshold.
    */
-  #calculateCanvasBoundingPolygon(threshold=0.75) {
-    const localPoly = this.getThresholdLocalBoundingPolygon(threshold);
+  #calculateCanvasBoundingPolygon(alphaThreshold=0.75) {
+    const localPoly = this.getThresholdLocalBoundingPolygon(alphaThreshold);
     return new PIXI.Polygon([...localPoly.iteratePoints()].map(pt => this._toCanvasCoordinates(pt.x, pt.y, pt)))
   }
-
 
   /**
    * Get a local bounding box based on a specific threshold
@@ -1419,6 +1617,33 @@ export class PixelCache extends LocalCoordinateCache {
   localNeighbors(currIdx, trimBorder = true) {
     return this.localNeighborIndices(currIdx, trimBorder).map(idx => this.pixels[idx]);
   }
+
+	/**
+	 * For Moore Neighbor tracing.
+	 * Iteration function that moves clockwise around a point.
+	 * Starts with a desired direction.
+	 * @param {PIXI.Point} [endDir]			*Last* direction to test; defaults to starting from TL
+	 * @yields {PIXI.Point} A direction vector
+	 */
+	*iterateClockwiseNeighborDirections(endDir = PIXI.Point.tmp) {
+		const indices = [
+			[-1, -1],
+			[ 0, -1],
+			[ 1, -1],
+			[ 1,  0],
+			[ 1,  1],
+			[ 0,  1],
+			[-1,  1],
+			[-1,  0],
+		];
+
+		// Use the preferred order.
+		const endArr = [endDir.x, endDir.y];
+		const startIdx = indices.findIndex(elem => elem.equals(endArr)) + 1; // +1 to move this to last.
+		const prefix = indices.splice(0, startIdx);
+		indices.push(...prefix);
+		for ( const idx of indices ) yield PIXI.Point.tmp.set(idx[0], idx[1]);
+	}
 
   // ----- NOTE: Pixel Setting ----- //
 
@@ -2596,14 +2821,33 @@ export class TrimmedPixelCache extends PixelCache {
    * Override the base indexing logic to account for the buffer offset.
    */
   _indexAtLocal(x, y) {
-    // Is the coordinate within the trimmed area?
-    if ( !this.#bufferBounds.contains(x, y) ) return -1;
+    // Use floor to determine in which "pixel bucket" the coordinate lies.
+    x = ~~x;
+    y = ~~y;
 
-    // Map the coordinate to the buffer space.
-    const bx = ~~x - this.#bufferBounds.min.x;
-    const by = ~~y - this.#bufferBounds.min.y;
-    const bWidth = this.#bufferBounds.max.x - this.#bufferBounds.min.x;
-    return (by * bWidth) + bx;
+    // Check against trimmed bounds, not full frame.
+    // Could use bufferBounds.contains but this is faster.
+    const { min, max } = this.#bufferBounds;
+    if ( x < min.x || x > max.x || y < min.y || y > max.y ) return -1;
+
+    // Return the index, accounting for the trimmed bounds.
+    const width = (max.x - min.x) + 1;
+    return ((y - min.y) * width) + (x - min.x);
+  }
+
+  /**
+   * Override the base indexing logic to account for the buffer offset.
+   */
+  _localAtIndex(i, outPoint) {
+    outPoint ??= PIXI.Point.tmp;
+    const { min, max } = this.#bufferBounds;
+    const width = (max.x - min.x) + 1;
+
+    const col = i % width;
+    const row = ~~(i / width); // Floor the row.
+
+    // Add back the offset to get the coordinate in full local frame
+    return outPoint.set(col + min.x, row + min.y);
   }
 
   /**
@@ -2640,14 +2884,15 @@ export class TilePixelCache extends TrimmedPixelCache {
 
   // ----- NOTE: Tile data getters ----- //
 
-  /** @type {number} */d
+  /** @type {number} */
   get alphaThreshold() { return this.tile.document.texture.alphaThreshold || 0; }
 
   get tileRotation() { return Math.toRadians(this.tile.document.rotation); }
 
   get tileTranslation() {
     const tileD = this.tile.document;
-    return { x: tileD.x, y: tileD.y };
+    const anchor = this.tileAnchorTranslation;
+    return { x: tileD.x - anchor.x, y: tileD.y - anchor.y };
   }
 
   get tileScale() {
@@ -2661,6 +2906,15 @@ export class TilePixelCache extends TrimmedPixelCache {
       x: proportionalWidth * scaleX,
       y: proportionalHeight * scaleY,
     };
+  }
+
+  get tileAnchorTranslation() {
+    const tileD = this.tile.document;
+    const { anchorX, anchorY } = tileD.texture;
+    return {
+      x: anchorX * tileD.width,
+      y: anchorY * tileD.height,
+    }
   }
 
   /**
@@ -2679,6 +2933,7 @@ export class TilePixelCache extends TrimmedPixelCache {
    */
   updateTransforms() {
     // Set translation, rotation, and scale from the tile document.
+    this.modelMatrix.modelCenter = this.tileAnchorTranslation;
     this.translation = this.tileTranslation;
     this.rotationZ = this.tileRotation;
     this.scale = this.tileScale;
@@ -2846,3 +3101,27 @@ export class PixelMarker extends Marker {
  */
 const POW10_8 = Math.pow(10, 8);
 function fastFixed(x) { return Math.round(x * POW10_8) / POW10_8; }
+
+
+
+/**
+ * Add a new polygon point if not duplicate.
+ * Removes intermediate point if the last two points plus this one are collinear.
+ * @param {PIXI.Polygon} poly			Polygon with at least 3 points.
+ * @param {PIXI.Point} pt
+ * @returns {PIXI.Polygon}
+ */
+function addPoint(poly, pt) {
+  const iter = poly.reverseIteratePoints();
+  using b = iter.next().value;
+  if ( b.almostEqual(pt) ) return poly;
+
+  // Note: Could compare deltas of a|b and b|c but that would only work for grids.
+  using a = iter.next().value;
+  if ( foundry.utils.orient2dFast(a, b, pt).almostEqual(0) ) {
+    poly.points.pop();
+    poly.points.pop();
+  }
+  poly.points.push(pt.x, pt.y);
+  return poly;
+}

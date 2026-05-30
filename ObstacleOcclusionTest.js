@@ -178,9 +178,9 @@ export class ObstacleOcclusionTest {
     this.obstacles.tokens = this.findBlockingTokens();
     this.obstacles.regions = this.findBlockingRegions();
     this.obstacles.walls = this.findBlockingWalls();
-    this.obstacles.terrainWalls = this.constructor.subsetWallsByType(this.obstacles.walls, CONST.WALL_SENSE_TYPES.LIMITED, senseType);
-    this.obstacles.proximateWalls = this.constructor.subsetWallsByType(this.obstacles.walls, CONST.WALL_SENSE_TYPES.PROXIMITY, senseType);
-    this.obstacles.reverseProximateWalls = this.constructor.subsetWallsByType(this.obstacles.walls, CONST.WALL_SENSE_TYPES.DISTANCE, senseType);
+    this.obstacles.terrainWalls = this.constructor.subsetWallsByType(this.obstacles.walls, CONST.EDGE_SENSE_TYPES.LIMITED, senseType);
+    this.obstacles.proximateWalls = this.constructor.subsetWallsByType(this.obstacles.walls, CONST.EDGE_SENSE_TYPES.PROXIMITY, senseType);
+    this.obstacles.reverseProximateWalls = this.constructor.subsetWallsByType(this.obstacles.walls, CONST.EDGE_SENSE_TYPES.DISTANCE, senseType);
   }
 
   // ----- NOTE: Filter potential obstacles ----- //
@@ -193,7 +193,7 @@ export class ObstacleOcclusionTest {
     let walls = canvas.walls.quadtree.getObjects(this.#frustum2dBounds);
 
     // Drop non-blocking walls for this sense type.
-    walls = walls.filter(wall => wall.document[this._config.senseType]); // CONST.WALL_SENSE_TYPES.NONE === 0.
+    walls = walls.filter(wall => wall.document[this._config.senseType]); // CONST.EDGE_SENSE_TYPES.NONE === 0.
 
     // Specialized exclusion tests
     if ( this.#frustum.aabb ) walls = walls.filter(wall => this.#frustum.aabb.overlapsAABB(placeableAABB(wall)));
@@ -412,11 +412,11 @@ export class ObstacleOcclusionTest {
   /**
    * Pull out terrain walls or other wall types from a set of walls.
    * @param {Set<Wall>} walls               Set of walls to divide
-   * @param {CONST.WALL_SENSE_TYPES}        What type of wall to pull out
+   * @param {CONST.EDGE_SENSE_TYPES}        What type of wall to pull out
    * @param {string} [senseType="sight"]    Restriction type to test
    * @returns {Set<Wall>}  Modifies walls set *in place* and returns terrain walls.
    */
-  static subsetWallsByType(walls, wallType = CONST.WALL_SENSE_TYPES.LIMITED, senseType = "sight") {
+  static subsetWallsByType(walls, wallType = CONST.EDGE_SENSE_TYPES.LIMITED, senseType = "sight") {
     if ( !walls.size ) return NULL_SET;
     const wallSubset = new Set();
     walls

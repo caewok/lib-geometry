@@ -1,11 +1,13 @@
 /* globals
+canvas,
 CONFIG,
 CONST,
 foundry,
+game,
 */
 "use strict";
 
-import { GEOMETRY_LIB_ID, VERSION } from "./const.js";
+import { GEOMETRY_LIB_ID, GEOMETRY_ID, VERSION } from "./const.js";
 
 // LibGeometry
 import { getObjectProperty } from "./util.js";
@@ -57,13 +59,6 @@ const PLACEABLE_TRACKING_CONFIG = {
    */
   alphaAreaThreshold: 25, // Area in pixels, e.g. 5x5 or ~ 8 x 3
 
-
-  /**
-   * The percent threshold under which a tile should be considered transparent at that pixel.
-   * @type {number}
-   */
-  alphaThreshold: 0.75, // Now set in tile.document.texture.alphaThreshold.
-
   /**
    * Which clipper version to use: 1 or 2.
    */
@@ -102,13 +97,13 @@ const PLACEABLE_TRACKING_CONFIG = {
    * Use a token sphere for the token shape. Overrides all other shape choices.
    * @type {boolean}
    */
-  useTokenSphere: false,
+  _useTokenSphere: false,
 
   /**
    * Always use the chosen token shape in the token config.
    * If false, will use the grid shape or for gridless, will use either rectangle or ellipse.
    */
-  useChosenTokenShape: false,
+  _useChosenTokenShape: false,
 
   version: VERSION,
 };
@@ -147,9 +142,7 @@ const OBSTACLE_TEST_CONFIG = {
    * @returns {boolean} True if test token is ally of subject token, from perspective of subject token.
    */
   tokenIsAlly,
-
 }
-
 
 export function mergeConfigs(maxVersion = VERSION) {
   const thisConfig = { ...ELEVATION_CONFIG, ...TILECACHE_CONFIG, ...PLACEABLE_TRACKING_CONFIG, ...OBSTACLE_TEST_CONFIG };
@@ -161,12 +154,38 @@ export function mergeConfigs(maxVersion = VERSION) {
     CONFIG[GEOMETRY_LIB_ID].CONFIG = { ...thisConfig, ...CONFIG[GEOMETRY_LIB_ID].CONFIG };
   }
 
-  // Helper to retrieve the correct ClipperPaths class.
+  // Helper to retrieve the correct ClipperPaths class and other properties.
   if ( !CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths ) {
     Object.defineProperty(CONFIG[GEOMETRY_LIB_ID].CONFIG, "ClipperPaths", {
       get: () => CONFIG[GEOMETRY_LIB_ID].CONFIG.clipperVersion === 1 ? ClipperPaths : Clipper2Paths
     });
-  }
+  
+		Object.defineProperty(CONFIG[GEOMETRY_LIB_ID].CONFIG, "useTokenSphere", {
+			get: function() { return this._useTokenSphere; },
+			set: function(value) { 
+				this._useTokenSphere = value;
+				canvas.tokens.placeables.forEach(token => {
+					const geom = token[GEOMETRY_LIB_ID]?.[GEOMETRY_ID];
+					if ( !geom ) return;
+					geom.propertiesUpdated();
+				});
+			},
+			enumerable: true,
+		});
+		
+		Object.defineProperty(CONFIG[GEOMETRY_LIB_ID].CONFIG, "useChosenTokenShape", {
+		get: function() { return this._useChosenTokenShape; },
+			set: function(value) { 
+				this._useChosenTokenShape = value;
+				canvas.tokens.placeables.forEach(token => {
+					const geom = token[GEOMETRY_LIB_ID]?.[GEOMETRY_ID];
+					if ( !geom ) return;
+					geom.propertiesUpdated();
+				});
+			},
+			enumerable: true,
+		});
+	}
 }
 
 /**

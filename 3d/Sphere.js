@@ -522,6 +522,17 @@ export class Sphere {
     return out;
   }
   */
+  
+  pointsLattice({ spacing = CONFIG[GEOMETRY_LIB_ID].CONFIG.perPixelSpacing || 10 } = {}) {
+    // Estimated number of points:
+    // Consider each point sitting inside the center of a hexagon (or circle) with a given diameter.
+    // Area covered by a single point in a dense packing is approx. Ap ~ (√3/2) * d^2
+    // Total surface area / area required per point gives us N.
+    // R = radius; d = spacing; N = count
+    // N ~ 4πR^2 /(√3/2)*d^2 ~ 8πR^2 / √3*d^2 ~ 7.255 * (R/d)^2
+    const count = 7.255 * ((this.radius/spacing) ** 2); // Increase 7.255 to increase coverage; gets wider at equator.
+    return this.constructor.pointsLattice(Math.floor(count));
+  }
 
   static pointsLattice(count, ...args) {
     // Handle small counts special.
@@ -537,6 +548,7 @@ export class Sphere {
 
   // https://extremelearning.com.au/evenly-distributing-points-on-a-sphere/
   static fibonacciLattice(count = 1000, e = 7/2, poles = true) {
+    count = Math.round(count);
     const out = new Array(count);
     const denom = count - 1 + (2 * e);
     for ( let i = 0; i < count; i += 1 ) {

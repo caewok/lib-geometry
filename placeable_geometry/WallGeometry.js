@@ -212,7 +212,7 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
    * @returns {boolean}
    */
   static isTerrain(edge, { senseType = "sight" } = {}) {
-    return edge[senseType] === CONST.WALL_SENSE_TYPES.LIMITED;
+    return edge[senseType] === CONST.EDGE_SENSE_TYPES.LIMITED;
   }
 
   /**

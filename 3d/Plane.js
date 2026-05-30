@@ -595,8 +595,14 @@ export class Plane {
    */
   projectPointOnPlane(pt, outPoint) {
     outPoint ??= Point3d.tmp;
+    
+    // Calculate vector from point on plane to the 3d point.
     using v = pt.subtract(this.point);
+    
+    // Calculate scalar projection (distance) of w onto normal using dot product.
     const dist = v.dot(this.normal);
+    
+    // Subtract the distance times the normal vector from the original point.
     using vScaled = this.normal.multiplyScalar(dist);
     return pt.subtract(vScaled, outPoint);
   }
