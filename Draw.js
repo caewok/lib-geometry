@@ -88,6 +88,11 @@ export class Draw {
     d.segment(...args);
   }
 
+  static curve(...args) {
+    const d = new this();
+    d.curve(...args);
+  }
+
   static connectPoints(...args) {
     const d = new this();
     d.connectPoints(...args);
@@ -186,6 +191,23 @@ export class Draw {
         A.projectToward(B, t, current);
       }
     }
+  }
+
+  /**
+   * Draw a Bézier curve defined by two points and two control points.
+   * @param {PIXI.Point} start
+   * @param {PIXI.Point} cp1
+   * @param {PIXI.Point} cp2
+   * @param {PIXI.Point} end
+   * @param {object} [opts]
+   * @param {Hex} [opts.color=black]        Hex code for the color to use.
+   * @param {number} [opts.width=1]         Width of the line
+   * @param {number} [opts.alpha=1]         Alpha of the line
+   */
+  curve(start, cp1, cp2, end, { color = Draw.COLORS.black, alpha = 1, width = 1 } = {}) {
+    this.g.lineStyle(width, color, alpha);
+    this.g.moveTo(start.x, start.y);
+    this.g.bezierCurveTo(cp1.x, cp1.y, cp2.x, cp2.y, end.x, end.y);
   }
 
   /**

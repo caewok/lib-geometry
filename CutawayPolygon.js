@@ -46,14 +46,14 @@ export class CutawayPolygon extends PIXI.Polygon {
    * @param {Point} {x, y}
    * @returns {ElevatedPoint}
    */
-  _from2d(pt2d) { return cutaway.from2d(pt2d, this.start, this.end); }
+  _from2d(pt2d, outPoint) { return cutaway.from2d(pt2d, this.start, this.end, outPoint); }
 
   /**
    * Convert 3d point to 2d position
    * @param {Point3d} {x, y, z}
    * @returns {PIXI.Point}
    */
-  _to2d(pt3d) { return cutaway.to2d(pt3d, this.start, this.end); }
+  _to2d(pt3d, outPoint) { return cutaway.to2d(pt3d, this.start, this.end, outPoint); }
 
   /**
    * Intersect this cutaway quad based on a 3d segment.
