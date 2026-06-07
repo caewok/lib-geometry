@@ -1,3 +1,6 @@
+## 0.6.1
+Add bezier curve to drawing class.
+
 ## 0.6.0
 Add SDF classes. Just for experimentation thus far.
 Fixes related to Terrain Mapper cutaways.
