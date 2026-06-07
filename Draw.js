@@ -36,7 +36,23 @@ export class Draw {
     lightred: 0xFFCCCB,
     gray: 0x808080,
     black: 0x000000,
-    white: 0xFFFFFF
+    white: 0xFFFFFF,
+
+    LIGHT: {
+      yellow: 0xFFFFE0,
+      orange: 0xFFD580,
+      green: 0x90EE90,
+      blue: 0xADD8E6,
+      red: 0xFFCCCB,
+    },
+
+    DARK: {
+      yellow: 0x8B8000,
+      orange: 0x964000,
+      green: 0x0B6623,
+      blue: 0x00008B,
+      red: 0x8B0000,
+    },
   };
 
   // ----- Static color methods ----- //
