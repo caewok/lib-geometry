@@ -1,5 +1,7 @@
 ## 0.6.1
 Add bezier curve to drawing class.
+Pass through outpoint for CutawayPolygon from2d and to2d.
+Add additional colors to Draw, split into LIGHT and DARK.
 
 ## 0.6.0
 Add SDF classes. Just for experimentation thus far.
