@@ -48,7 +48,7 @@ export class Draw {
 
     DARK: {
       yellow: 0x8B8000,
-      orange: 0x964000,
+      orange: 0xFF8C00,
       green: 0x0B6623,
       blue: 0x00008B,
       red: 0x8B0000,
