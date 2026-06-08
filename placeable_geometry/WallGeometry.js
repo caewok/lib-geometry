@@ -74,6 +74,11 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
 
   get edge() { return this.placeable.edge; }
 
+  initialize() {
+    if ( !this.edge ) this.wall.initializeEdge();
+    super.initialize();
+  }
+
   // ----- NOTE: Updating ----- //
 
   propertiesUpdated() {
@@ -88,7 +93,6 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
   calculateTranslationMatrix() {
     const mat = super.calculateTranslationMatrix();
     const edge = this.edge;
-    if ( !edge ) return mat;
     const pos = this.constructor.edgeCenter(edge);
     const { top, bottom } = this.constructor.edgeElevation(edge);
     const zHeight = top - bottom;
@@ -99,7 +103,6 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
   calculateRotationMatrix() {
     const mat = super.calculateRotationMatrix();
     const edge = this.edge;
-    if ( !edge ) return mat;
     const rot = this.constructor.edgeAngle(edge);
     return MatrixFloat32.rotationZ(rot, true, mat);
   }
@@ -107,7 +110,6 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
   calculateScaleMatrix() {
     const mat = super.calculateScaleMatrix();
     const edge = this.edge;
-    if ( !edge ) return mat;
     const ln = this.constructor.edgeLength(edge);
     const { top, bottom } = this.constructor.edgeElevation(edge);
     const scaleZ = top - bottom;
