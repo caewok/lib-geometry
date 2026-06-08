@@ -72,12 +72,11 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
 
   get wall() { return this.placeable; }
 
-  get edge() { return this.placeable.edge; }
-
-  initialize() {
-    if ( !this.edge ) this.wall.initializeEdge();
-    super.initialize();
+  get edge() {
+    if ( !this.placeable.edge ) this.wall.initializeEdge();
+    return this.placeable.edge;
   }
+
 
   // ----- NOTE: Updating ----- //
 
