@@ -320,9 +320,6 @@ export class Frustum {
     // If the elevations don't change, the tile cannot be an obstacle.
     if ( this.aabb.min.z === this.aabb.max.z ) return false;
 
-    // Only overhead tiles count for blocking vision
-    if ( tile.elevationE < tile.document.parent?.foregroundElevation ) return false;
-
     const geom = tile[GEOMETRY_LIB_ID][GEOMETRY_ID];
     return this.poly3dWithinFrustum(geom.faces.top || geom.faces.bottom);
   }
