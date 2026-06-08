@@ -309,7 +309,8 @@ export class Frustum {
 
   overlapsEdge(edge) {
     // TODO: Could assume vertical walls and avoid a generic convex polygon test.
-    const geom = edge.object[GEOMETRY_LIB_ID][GEOMETRY_ID];
+    const geom = edge.object[GEOMETRY_LIB_ID]?.[GEOMETRY_ID] ?? edge.object?.object[GEOMETRY_LIB_ID]?.[GEOMETRY_ID];
+    if ( !geom ) return false;
     return this.poly3dWithinFrustum(geom.faces.top || geom.faces.bottom);
   }
 
