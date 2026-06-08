@@ -94,6 +94,7 @@ export class RegionGeometry extends PlaceableGeometry {
     if ( !shapes.length ) return ST.EMPTY;
     if ( shapes.every(shape => shape.hole) ) return ST.HOLE;
     if ( shapes.length > 1 ) return ST.POLYGONS;
+    if ( shapes.some(shape => shape.gridBased) ) return ST.POLYGONS;
     switch ( shapes[0].type ) {
       case "rectangle": return ST.RECTANGLE;
       case "ellipse": return ST.ELLIPSE;
