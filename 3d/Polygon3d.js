@@ -2090,8 +2090,8 @@ export class Polygons3d extends Polygon3d {
     const n = polys.length;
     out ??= new this(n);
     out.polygons.length = n;
-    for ( let i = 0; i < n; i += 1 ) polys3d.polygons[i] = polys[i];
-    return polys3d;
+    for ( let i = 0; i < n; i += 1 ) out.polygons[i] = polys[i];
+    return out;
   }
 
   static from2dPoints(pts, elevation, out) { return this.#createSingleUsingMethod("from2dPoints", out, pts, elevation); }
