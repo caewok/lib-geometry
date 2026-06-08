@@ -90,20 +90,21 @@ export class Polygon3d {
       // Is the last point a duplicate of the first?
       if ( result[0].almostEqual(result.at(-1)) ) {
         result.pop().release();
-        break;
+        continue;
       }
 
       // Is the last point redundant? (2nd-to-last -> last -> first)
       if ( pointsAreCollinear(result.at(-2), result.at(-1), result[0]) ) {
         result.pop().release();
-        break;
+        continue;
       }
 
       // Is the first point redundant? (Last -> first -> second)
       if ( pointsAreCollinear(result.at(-1), result.at(0), result[1]) ) {
         result.shift().release(); // Remove the first point.
-        break;
+        continue;
       }
+      break;
     }
 
     // Copy over the points if necessary.
