@@ -18,6 +18,7 @@ import {
   PlaceableModelMatrixMixin,
   PlaceableFacesMixin,
   PlaceableFacePointsMixin,
+  PlaceableQuadtreeMixin,
 } from "./PlaceableGeometry.js";
 
 // LibGeometry
@@ -60,7 +61,6 @@ const TRACKER_TYPES = {
     "refreshElevation",
   ]
 };
-
 
 /**
  * @typedef {function} TokenConstrainedFacesMixin
@@ -239,7 +239,8 @@ const TokenConstrainedBrightLitFacesMixin = superclass => class extends supercla
  */
 export class TokenGeometry extends mix(PlaceableGeometry).with(
   TokenConstrainedBrightLitFacesMixin, TokenConstrainedLitFacesMixin, TokenConstrainedFacesMixin,
-  PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin, PlaceableFacePointsMixin) {
+  PlaceableAABBMixin, PlaceableQuadtreeMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin, PlaceableFacePointsMixin) {
+
   /** @type {string} */
   static PLACEABLE_NAME = "Token";
 
@@ -255,13 +256,13 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
     shape: new Set(TRACKER_TYPES.shape),
     properties: NULL_SET,
   };
-  
+
   /** @type {enum<string:number>} */
   static SHAPE_TYPES = {
     CUBE: 0, 					// Square grid
     HEXAGONAL: 1, 		// Hex grid; extruded hex in 3d; varies by token size
     ELLIPSE: 2,				// Extruded ellipse
-    SPHERICAL: 3,     
+    SPHERICAL: 3,
     ELLIPSOID: 4,
   };
 
@@ -273,7 +274,7 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
     const TYPES = this.constructor.SHAPE_TYPES;
     if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.useTokenEllipsoid ) return TYPES.ELLIPSOID;
     if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.useTokenSphere ) return TYPES.SPHERICAL;
-    
+
     const GRID = CONST.GRID_TYPES;
     switch ( canvas.grid.type ) {
       case GRID.SQUARE: return TYPES.CUBE;
@@ -328,7 +329,7 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
     const density = PIXI.Circle.approximateVertexDensity(100);
     this.#initializePolyFaces(density);
   }
-  
+
   get hexagonalUnitShape() { return Hex3dVertices.hexagonalUnitShapeForToken(this.token); }
 
   #initializeHexagonalFaces() {
@@ -389,17 +390,17 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
   _initializePrototypeFaces() {
     const TYPES = this.constructor.SHAPE_TYPES;
     switch ( this.shapeType ) {
-      case TYPES.SPHERICAL: 
+      case TYPES.SPHERICAL:
       case TYPES.ELLIPSOID: // TODO: Implement.
         this.#initializeSphericalTopFace();
         return super._initializePrototypeFaces();
-      
+
       case TYPES.CUBE: this.#initializeCubeFaces(); break;
       case TYPES.ELLIPSE: this.#initializeEllipseFaces(); break;
       case TYPES.HEXAGONAL: this.#initializeHexagonalFaces(); break;
       default: this.#initializeCubeFaces();
     }
-   
+
     // Confirm orientation against the origin.
     const ctr = new Point3d();
     if ( this._prototypeFaces.top.isFacing(ctr) ) console.error(`${this.constructor.name}|Prototype face for ${this.placeable.id} has wrong top orientation.`);

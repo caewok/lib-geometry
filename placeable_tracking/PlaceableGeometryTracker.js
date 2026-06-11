@@ -69,13 +69,19 @@ export class PlaceableGeometryTracker {
   }
 
   static registerExistingPlaceables(placeables) {
-    placeables ??= canvas[this.LAYER].placeables;
-    for ( const placeable of placeables ) this._onPlaceableDraw(placeable);
+    placeables ??= canvas.scene[this.LAYER];
+    for ( let placeable of placeables ) {
+      if ( placeable.object ) placeable = placeable.object; // If using documents, get the underling placeable.
+      this._onPlaceableDraw(placeable);
+    }
   }
 
   static deRegisterExistingPlaceables(placeables) {
-    placeables ??= canvas[this.LAYER].placeables;
-    for ( const placeable of placeables ) this._onPlaceableDestroy(placeable);
+    placeables ??= canvas.scene[this.LAYER];
+    for ( let placeable of placeables ) {
+      if ( placeable.object ) placeable = placeable.object; // If using documents, get the underling placeable.
+      this._onPlaceableDestroy(placeable);
+    }
   }
 
   static activate() {

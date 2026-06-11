@@ -10,7 +10,8 @@ import {
   PlaceableGeometry,
   PlaceableAABBMixin,
   PlaceableModelMatrixMixin,
-  PlaceableFacesMixin
+  PlaceableFacesMixin,
+  PlaceableQuadtreeMixin,
 } from "./PlaceableGeometry.js";
 
 // LibGeometry
@@ -48,8 +49,7 @@ const TRACKER_TYPES = {
   ],
 };
 
-
-export class RegionGeometry extends PlaceableGeometry {
+export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableQuadtreeMixin) {
   /** @type {string} */
   static PLACEABLE_NAME = "Region";
 

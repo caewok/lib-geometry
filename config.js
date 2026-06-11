@@ -17,20 +17,20 @@ import { Clipper2Paths } from "./Clipper2Paths.js";
 const ELEVATION_CONFIG = {
   /**
    * What status id indicates a prone token.
-   * @param {string}
+   * @type {string}
    */
   proneStatusId: "prone",
 
   /**
    * How much does the prone status decrease token height, as a percentage of total height?
    * Should be between 0 and 1.
-   * @param {number}
+   * @type {number}
    */
   proneMultiplier: 0.33,
 
   /**
    * How high is the token's vision/eye(s), as a percentage of total height?
-   * @param {number}
+   * @type {number}
    */
   visionHeightMultiplier: 1,
 };
@@ -159,10 +159,10 @@ export function mergeConfigs(maxVersion = VERSION) {
     Object.defineProperty(CONFIG[GEOMETRY_LIB_ID].CONFIG, "ClipperPaths", {
       get: () => CONFIG[GEOMETRY_LIB_ID].CONFIG.clipperVersion === 1 ? ClipperPaths : Clipper2Paths
     });
-  
+
 		Object.defineProperty(CONFIG[GEOMETRY_LIB_ID].CONFIG, "useTokenSphere", {
 			get: function() { return this._useTokenSphere; },
-			set: function(value) { 
+			set: function(value) {
 				this._useTokenSphere = value;
 				canvas.tokens.placeables.forEach(token => {
 					const geom = token[GEOMETRY_LIB_ID]?.[GEOMETRY_ID];
@@ -172,10 +172,10 @@ export function mergeConfigs(maxVersion = VERSION) {
 			},
 			enumerable: true,
 		});
-		
+
 		Object.defineProperty(CONFIG[GEOMETRY_LIB_ID].CONFIG, "useChosenTokenShape", {
 		get: function() { return this._useChosenTokenShape; },
-			set: function(value) { 
+			set: function(value) {
 				this._useChosenTokenShape = value;
 				canvas.tokens.placeables.forEach(token => {
 					const geom = token[GEOMETRY_LIB_ID]?.[GEOMETRY_ID];

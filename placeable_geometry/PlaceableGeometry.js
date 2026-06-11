@@ -1,5 +1,8 @@
 /* globals
+canvas,
 CONFIG,
+foundry,
+Hooks,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
@@ -42,6 +45,18 @@ propertiesUpdated
 */
 
 export class PlaceableGeometry {
+
+  // ----- NOTE: Static values ----- //
+
+  static get PLACEABLE_LABEL_PLURAL() { return this.PLACEABLE_NAME.toLowerCase().concat("s"); }
+
+  static hooksInitialized = false;
+
+  static registerHooks() {
+    if ( this.hooksInitialized ) return;
+    this._registerHooks();
+    this.hooksInitialized = true;
+  }
 
   // ----- NOTE: Constructor ----- //
 
@@ -140,6 +155,28 @@ export const PlaceableAABBMixin = superclass => class extends superclass {
   calculateAABB() { console.error(`${this.constructor.name} must implement calculateAABB method.`); }
 }
 
+// ----- NOTE: PlaceableQuadtreeMixin ----- //
+export const PlaceableQuadtreeMixin = superclass => class extends superclass {
+  static quadtree = new foundry.canvas.geometry.CanvasQuadtree();
+
+  static _registerHooks() {
+    Hooks.on("canvasReady", canvas => {
+      const label = this.PLACEABLE_LABEL_PLURAL;
+      canvas.scene[label].forEach(placeableD => {
+        const placeable = placeableD.object;
+        this.quadtree.insert({ t: placeable, r: placeable.bounds })
+      });
+    });
+
+    Hooks.on("canvasTearDown", () => this.quadtree.clear());
+
+    Hooks.on("drawTile", placeable => this.quadtree.insert({ t: placeable, r: placeable.bounds }));
+
+    Hooks.on("updateTile", placeable => this.quadtree.update({ t: placeable, r: placeable.bounds }));
+
+    Hooks.on("deleteTile", placeable => this.quadtree.delete(placeable));
+  }
+}
 
 // ----- NOTE: PlaceableModelMatrixMixin ----- //
 
@@ -322,6 +359,7 @@ QUADS.north = QUADS.south.clone().reverseOrientation();
 QUADS.east = QUADS.west.clone().reverseOrientation();
 */
 
+
 /**
  * @typedef {function} PlaceableFacesMixin
  *
@@ -332,6 +370,72 @@ QUADS.east = QUADS.west.clone().reverseOrientation();
  * @returns {function} A subclass of `superclass.`
  */
 export const PlaceableFacesMixin = superclass => class extends superclass {
+
+  /**
+   * Reorganize and split level intervals to cover the low to high range with no overlaps.
+   * Add gap intervals as necessary.
+   * @param {Level[]} levels
+   * @returns {object[]} The intervals
+   *  - @prop {number} bottom       Bottom elevation value
+   *  - @prop {number} top          Top elevation value
+   *  - @prop {string[]} id[]       Id of the levels encountered in this interval
+   */
+  static get segmentLevels() { return _SEGMENT_LEVELS; }
+
+  static _SEGMENT_LEVELS = [];
+
+  static _registerHooks() {
+    Hooks.on("updateLevel", function(_level, _changes, _opts, _id) {
+      this._SEGMENT_LEVELS.length = 0;
+      this._SEGMENT_LEVELS.push(...this.segmentLevels());
+    });
+  }
+
+  /**
+   * Reorganize and split level intervals to cover the low to high range with no overlaps.
+   * Add gap intervals as necessary.
+   * @param {Level[]} levels
+   * @returns {object[]} The intervals
+   *  - @prop {number} bottom       Bottom elevation value
+   *  - @prop {number} top          Top elevation value
+   *  - @prop {string[]} id[]       Id of the levels encountered in this interval
+   */
+  static segmentLevels() {
+    // Create a distinct "event" for every bottom and top point.
+    const events = new Array(canvas.scenes.levels.size * 2);
+    let i = 0;
+    for ( const level of canvas.scenes.levels ) {
+      const { bottom, top } = level.elevation;
+      events[i++] = { value: bottom, type: "start", id: level.id };
+      events[i++] = { value: top, type: "end", id: level.id };
+    }
+
+    // Sort by value, with end events after start events if equal.
+    events.sort((a, b) => {
+      return (a.value - b.value) || a.type === "start";
+    });
+
+    // Sweep through sorted events, identifying boundary changes.
+    const result = [];
+    const activeIds = new Set();
+    let currentPosition = events[0].value;
+    for ( const event of events) {
+      // If we have moved forward in space, commit the previous segment.
+      if ( event.value > currentPosition ) {
+        result.push({
+          bottom: currentPosition,
+          top: event.value,
+          ids: new Set(activeIds), // May be empty if it is a gap.
+        });
+      }
+
+      // Update active ids based on event type.
+      if ( event.type === "start" ) activeIds.add(event.id);
+      else activeIds.delete(event.id);
+    }
+    return result;
+  }
+
   /** @type {Faces} */
   _prototypeFaces = { top: null, bottom: null, sides: [] };
 
@@ -340,8 +444,9 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
 
   /**
    * Iterate over the faces.
+   * @param {object} [_opts]        Used by child classes, like WallGeometry
    */
-  *iterateFaces() {
+  *iterateFaces(_opts) {
     if ( this.faces.top ) yield this.faces.top;
     if ( this.faces.bottom ) yield this.faces.bottom;
     for ( const side of this.faces.sides ) yield side;
@@ -404,7 +509,7 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
    * @returns {number|null} The distance along the ray, as a multiple of rayDirection
    */
   rayIntersection(rayOrigin, rayDirection, opts) {
-    for ( const face of this.iterateFaces() ) {
+    for ( const face of this.iterateFaces(opts) ) {
       const t = this.constructor.rayIntersectionForFace(face, rayOrigin, rayDirection, opts);
       if ( t !== null ) return t;
     }
@@ -437,7 +542,7 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
    * Draw face, omitting an axis.
    */
   draw2d(opts) {
-    for ( const face of this.iterateFaces() ) face.draw2d(opts);
+    for ( const face of this.iterateFaces(opts) ) face.draw2d(opts);
   }
 }
 

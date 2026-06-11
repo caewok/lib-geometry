@@ -1,4 +1,5 @@
 /* globals
+canvas,
 CONST,
 PIXI,
 */
@@ -11,15 +12,15 @@ import {
   PlaceableGeometry,
   PlaceableAABBMixin,
   PlaceableModelMatrixMixin,
-  PlaceableFacesMixin
+  PlaceableFacesMixin,
+  PlaceableQuadtreeMixin,
 } from "./PlaceableGeometry.js";
 
 // LibGeometry
-import { NULL_SET } from "../util.js";
 import { AABB3d } from "../3d/AABB3d.js";
 import { MatrixFloat32 } from "../Matrix.js";
-import { Quad3d } from "../3d/Polygon3d.js";
-import { gridUnitsToPixels } from "../util.js";
+import { Quad3d, Polygons3d } from "../3d/Polygon3d.js";
+import { gridUnitsToPixels, pixelsToGridUnits, NULL_SET } from "../util.js";
 
 const TRACKER_TYPES = {
   position: [
@@ -48,12 +49,12 @@ const TRACKER_TYPES = {
   ],
 };
 
-
 /**
  * Prototype order:
  * WallGeometryTracker -> PlaceableFacesMixin -> PlaceableMatricesMixin -> PlaceableAABBMixin -> PlaceableGeometry
  */
-export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin) {
+export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin, PlaceableQuadtreeMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin) {
+
   /** @type {string} */
   static PLACEABLE_NAME = "Wall";
 
@@ -134,20 +135,133 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
     super._initializePrototypeFaces();
   }
 
+  /* Foundry v14 levels
+    In Foundry v14, walls can have 1+ assigned levels.
+    Levels have a top/bottom range. Levels can overlap partially or entirely. Levels can have gaps.
+
+    First, the wall will be defined per usual by its top and bottom elevation.
+
+    Walls will then be split by level. Gaps get their own split. Where levels overlap, each overlap
+    gets its own split. Levels for splits will be stored in the faceLevels map.
+
+    All splits are Quad3d, stored in a Polygon3d.
+
+    It is assumed that if a token is on a level where the wall is not, associated wall portions
+    will be ignored. Other wall portions remain present.
+  */
+
+  /** @type {Map<Quad3d, Set(string)>} */
+  faceLevels = new Map();
+
+  /**
+   * Iterate over the faces.
+   */
+  *iterateFaces({ ignoreLevelIds = NULL_SET } = {}) {
+    if ( !ignoreLevelIds.size || !this.faceLevels.size ) {
+      yield* super.iterateFaces();
+      return;
+    }
+
+    // For each face, trim polygons that are on the level to ignore.
+    // To avoid messing up the original, clone the Polygons3d.
+    for ( const face of super.iterateFaces() ) {
+      const polys3d = new Polygons3d(0);
+      polys3d.polygons = face.polygons.filter(poly3d => {
+        const polyLevels = this.faceLevels.get(poly3d);
+        if ( !polyLevels.size ) return true;
+        return polyLevels.difference(ignoreLevelIds).size;
+      });
+      yield polys3d;
+    }
+  }
+
   _updateFaces() {
     const M = this.modelMatrix.model;
     const hasTop = this.edge.direction === 0 || this.edge.direction === 1;    // 1: Restricts from left (from a --> b).
     const hasBottom = this.edge.direction === 0 || this.edge.direction === 2; // 2: Restricts from right (from a --> b).
+    const hasLevelSplit = this.wall.document.levels.size !== canvas.scene.levels.size;
+    this.faceLevels.clear();
 
-    if ( hasTop && this._prototypeFaces.top ) {
-      this.faces.top ??= new Quad3d();
+    const sides = [];
+    if ( hasTop ) sides.push("top");
+    else this.faces.top = null;
+
+    if ( hasBottom ) sides.push("bottom")
+    else this.faces.bottom = null;
+
+    for ( const side of sides ) {
+      if ( !this.faces[side] || !(this.faces[side] instanceof Quad3d) ) this.faces[side] = new Quad3d();
       this._prototypeFaces.top.transform(M, this.faces.top);
-    } else this.faces.top = null;
-    if ( hasBottom && this._prototypeFaces.bottom ) {
-      this.faces.bottom ??= new Quad3d();
-      this._prototypeFaces.bottom.transform(M, this.faces.bottom);
-    } else this.faces.bottom = null;
+
+      if ( hasLevelSplit ) {
+        const quads = this._splitQuadAtLevels(this.faces[side]);
+        this.faces[side] = Polygons3d.from3dPolygons(quads);
+      }
+    }
   }
+
+  /**
+   * Split quad face at levels
+   * @param {Quad3d} quad       The quad representing the full wall shape.
+   * @returns {Polygons3d}
+   */
+  _splitQuadAtLevels(quad) {
+    const aabb = quad.aabb;
+    const zMin = aabb.min.z;
+    const zMax = aabb.max.z;
+
+    // Returns segments in order.
+    const segments = structuredClone(this.constructor.segmentLevels);
+
+    // Add in top and bottom segments as needed; trim segments outside the wall bounds.
+    const elevMin = pixelsToGridUnits(zMin);
+    if ( segments[0].bottom > elevMin ) segments.unshift({ bottom: elevMin, top: segments[0].bottom, ids: NULL_SET });
+    else {
+      while ( segments.length ) {
+        const s = segments[0];
+        if ( elevMin.between(s.bottom, s.top) ) {
+          s.bottom = elevMin;
+          if ( s.bottom === s.top ) segments.shift();
+          break;
+        } else segments.shift();
+      }
+    }
+
+    const elevMax = pixelsToGridUnits(zMax);
+    if ( segments[0].top < elevMax ) segments.push({ bottom: segments[0].top, top: elevMax, ids: NULL_SET });
+    else {
+       while ( segments.length ) {
+        const s = segments.at(-1);
+        if ( elevMax.between(s.bottom, s.top) ) {
+          s.top = elevMax;
+          if ( s.bottom === s.top ) segments.pop();
+          break;
+        } else segments.pop();
+      }
+    }
+
+    // Create quads accordingly.
+    const wallLevels = this.wall.document.levels.size ? this.wall.document.levels : new Set(canvas.scene.levels.keys());
+    const quads = [];
+    for ( const segment of segments ) {
+      // Drop segments that are exclusively for a level that does not contain this wall.
+      if ( segment.ids.size && !wallLevels.intersects(segment.ids) ) continue;
+
+      const bottomZ = gridUnitsToPixels(segment.bottom);
+      const topZ = gridUnitsToPixels(segment.top);
+      const newQuad = quad.clone();
+      for ( const pt of newQuad.iteratePoints() ) {
+        // Points are iterated in place, so can modify in place.
+        if ( pt.z === zMax ) pt.z = topZ;
+        else if (pt.z === zMin ) pt.z = bottomZ;
+      }
+      quads.push(newQuad);
+      this.faceLevels.set(newQuad, new Set(segment.ids));
+    }
+
+    return quads;
+  }
+
 
   /**
    * Determine where a ray hits this object in 3d.
@@ -164,7 +278,6 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
     if ( this.wall.isOpen ) return null; // If door is open, no intersection.
     return super.rayIntersection(rayOrigin, rayDirection, opts);
   }
-
 
   // ----- NOTE: Wall characteristics ----- //
 
@@ -226,4 +339,39 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
    * @returns {boolean}
    */
   static isDirectional(edge) { return Boolean(edge.direction); }
+}
+
+
+
+
+
+/**
+ * Find gaps in a series of intervals.
+ * @param {object[]} intervals        Array of { bottom, top } numbers.
+ * @returns {object[]} New object representing intervals
+ */
+function findGaps(intervals) {
+  if ( intervals.length < 2 ) return [];
+
+  // Sort by bottom value.
+  intervals.sort((a, b) => a.bottom - b.bottom);
+
+  // Track highest point covered thus far.
+  let currentMaxTop = intervals[0].top;
+
+  // Iterate through each interval to find gaps.
+  const gaps = [];
+  for ( const interval of Object.values(intervals) ) {
+    // If next interval starts after the current top, we found a gap.
+    if ( interval.bottom > currentMaxTop ) {
+      gaps.push({
+        bottom: currentMaxTop,
+        top: interval.bottom,
+      });
+    }
+
+    // Update current max to include the current interval.
+    currentMaxTop = Math.max(currentMaxTop, interval.top);
+  }
+  return gaps;
 }

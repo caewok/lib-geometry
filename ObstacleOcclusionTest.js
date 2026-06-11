@@ -13,6 +13,19 @@ import { OTHER_MODULES, GEOMETRY_LIB_ID, GEOMETRY_ID } from "./const.js";
 import { AABB2d } from "./AABB.js";
 import { Point3d } from "./3d/Point3d.js";
 import { Draw } from "./Draw.js";
+import { WallGeometry } from "./placeable_geometry/WallGeometry.js";
+import { TokenGeometry } from "./placeable_geometry/TokenGeometry.js";
+import { TileGeometry } from "./placeable_geometry/TileGeometry.js";
+import { RegionGeometry } from "./placeable_geometry/RegionGeometry.js";
+
+/** @type {enum<PlaceableGeometry>} */
+const GEOMETRY_CLASSES = {
+  regions: RegionGeometry,
+  tokens: TokenGeometry,
+  tiles: TileGeometry,
+  walls: WallGeometry,
+};
+
 
 /**
  * An instance that, for a given configuration, tracks potential obstacles.
@@ -142,6 +155,35 @@ export class ObstacleOcclusionTest {
   }
 
   /**
+   * Level of the ray origin.
+   * Used to exclude objects that cannot be viewed from this level.
+   * @type {string}
+   */
+  levelId = "";
+
+  /**
+   * Set of level ids that can be seen from this level, including this one.
+   * @type {Set<string>}
+   */
+  get validLevels() {
+    const thisLevel = canvas.scene.levels.get(this.levelId);
+    if ( !thisLevel ) return new Set(canvas.scene.levels.keys()); // Default to all levels.
+    const s = Set(thisLevel.visibility.levels); // Clone the set so we can modify it.
+    s.add(thisLevel);
+    return s;
+  }
+
+  /**
+   * Inverse of validLevels: level ids that cannot be seen from this level.
+   * @type {Set<string>}
+   */
+  get invalidLevels() {
+    const validLevels = this.validLevels;
+    const allLevels = new Set(canvas.scene.levels.keys());
+    return allLevels.difference(validLevels);
+  }
+
+  /**
    * Update the obstacles in preparation for ray collision testing.
    * Optionally store the viewpoint (ray origin) and tokens to exclude.
    * @param {object} [opts]
@@ -149,8 +191,9 @@ export class ObstacleOcclusionTest {
    * @param {Point3d} [viewpoint]             Used for _rayIsOccluded as the starting viewpoint
    * @param {Token[]} [tokensToExclude=[]]    Exclude these tokens from collision testing
    */
-  initialize({ subjectToken, tokensToExclude, ...cfg } = {}) {
+  initialize({ subjectToken, tokensToExclude, levelId, ...cfg } = {}) {
     // Set privately and then trigger full update.
+    if ( levelId ) this.levelId = levelId;
     if ( subjectToken ) this.#subjectToken = subjectToken;
     if ( tokensToExclude ) this.#tokensToExclude = new WeakSet(tokensToExclude);
     this.config = cfg; // Even if empty, trigger this.constructObstacleTester() via config setter;
@@ -162,8 +205,9 @@ export class ObstacleOcclusionTest {
    * @param {Point3d} rayDirection    Direction of the ray
    * @returns {boolean} True if collision occurs
    */
-  rayIsOccluded(rayOrigin, rayDirection) {
-    return this.obstacleTester.call(this, rayOrigin, rayDirection);
+  rayIsOccluded(rayOrigin, rayDirection, levelId) {
+    if ( levelId ) this.levelId = levelId;
+    return this.obstacleTester.call(this, rayOrigin, rayDirection, { });
   }
 
   update() {
@@ -190,7 +234,8 @@ export class ObstacleOcclusionTest {
    */
   findBlockingWalls() {
     if ( !this._config.walls ) return NULL_SET;
-    let walls = canvas.walls.quadtree.getObjects(this.#frustum2dBounds);
+
+    let walls = WallGeometry.quadtree.getObjects(this.#frustum2dBounds);
 
     // Drop non-blocking walls for this sense type.
     walls = walls.filter(wall => wall.document[this._config.senseType]); // CONST.EDGE_SENSE_TYPES.NONE === 0.
@@ -207,7 +252,7 @@ export class ObstacleOcclusionTest {
   findBlockingTokens() {
     const tokensCfg = this._config.tokens;
     if ( !(tokensCfg.dead || tokensCfg.live) ) return NULL_SET;
-    let tokens = canvas.tokens.quadtree.getObjects(this.#frustum2dBounds, {
+    let tokens = TokenGeometry.quadtree.getObjects(this.#frustum2dBounds, {
       collisionTest: o => this.includeToken(o.t)
     });
 
@@ -235,7 +280,7 @@ export class ObstacleOcclusionTest {
    */
   findBlockingTiles() {
     if ( !this._config.tiles ) return NULL_SET;
-    let tiles = canvas.tiles.quadtree.getObjects(this.#frustum2dBounds);
+    let tiles = TileGeometry.quadtree.getObjects(this.#frustum2dBounds);
 
     // Specialized exclusion tests
     if ( this.#frustum.aabb ) tiles = tiles.filter(tile => this.#frustum.aabb.overlapsAABB(placeableAABB(tile)));
@@ -248,7 +293,7 @@ export class ObstacleOcclusionTest {
    */
   findBlockingRegions() {
     if ( !this._config.regions || !canvas.regions.placeables.length ) return NULL_SET;
-    let regions = new Set(canvas.regions.placeables); // No quadtree for regions.
+    let regions = RegionGeometry.quadtree.getObjects(this.#frustum2dBounds);
 
     // Specialized exclusion tests
     if ( this.#frustum.aabb ) regions = regions.filter(region => this.#frustum.aabb.overlapsAABB(placeableAABB(region)));
@@ -323,8 +368,8 @@ export class ObstacleOcclusionTest {
 
   // see https://nikoheikkila.fi/blog/layman-s-guide-to-higher-order-functions/
   #occlusionTester(fnNames) {
-    return function(rayOrigin, rayDirection) {
-      return fnNames.some(name => this[name](rayOrigin, rayDirection));
+    return function(rayOrigin, rayDirection, collisionTest) {
+      return fnNames.some(name => this[name](rayOrigin, rayDirection, collisionTest));
     }
   }
 
@@ -341,21 +386,16 @@ export class ObstacleOcclusionTest {
   #placeablesWithinRay(placeableName, rayOrigin, rayDirection) {
     using rayEnd = rayOrigin.add(rayDirection);
 
-    // Regions do not have a quadtree.
-    // For all other placeables, narrow by quadtree first.
-    let placeables;
-    if ( placeableName === "regions" ) placeables = new Set(canvas.regions.placeables); // Array
-    else {
-      const bounds = this.#tmpBounds;
-      AABB2d.fromPoints([rayOrigin, rayEnd], bounds);
-      placeables = canvas[placeableName].quadtree.getObjects(bounds); // Note this is a Set.
+    // Narrow by quadtree first.
+    const bounds = this.#tmpBounds;
+    AABB2d.fromPoints([rayOrigin, rayEnd], bounds);
+    const placeables = GEOMETRY_CLASSES[placeableName].quadtree.getObjects(bounds); // Note this is a Set.
 
-      // If the ray is vertical or horizontal, quadtree bounds are sufficient.
-      if ( !rayDirection.z && !(rayDirection.x || rayDirection.y) ) return placeables;
+    // If the ray is vertical or horizontal, quadtree bounds are sufficient.
+    if ( !rayDirection.z && !(rayDirection.x || rayDirection.y) ) return placeables;
 
-      // If the ray is very small, quadtree bounds are sufficient.
-      if ( Point3d.distanceSquaredBetween(rayOrigin, rayEnd) < (canvas.dimensions.size ** 2) ) return placeables;
-    }
+    // If the ray is very small, quadtree bounds are sufficient.
+    if ( Point3d.distanceSquaredBetween(rayOrigin, rayEnd) < (canvas.dimensions.size ** 2) ) return placeables;
 
     // Narrow by aabb of the placeable, which gives a much closer fit for long rays
     for ( const placeable of placeables ) {
@@ -367,14 +407,16 @@ export class ObstacleOcclusionTest {
 
   wallsOcclude(rayOrigin, rayDirection) {
     const walls = this.obstacles.walls.intersection(this.#placeablesWithinRay("walls", rayOrigin, rayDirection));
-    return walls.some(wall => placeableIntersection(wall, rayOrigin, rayDirection));
+    const opts = { ignoreLevelIds: this.invalidLevels };
+    return walls.some(wall => placeableIntersection(wall, rayOrigin, rayDirection, opts));
   }
 
   terrainWallsOcclude(rayOrigin, rayDirection) {
     let limitedOcclusion = 0;
     const terrainWalls = this.obstacles.terrainWalls.intersection(this.#placeablesWithinRay("walls", rayOrigin, rayDirection));
+    const opts = { ignoreLevelIds: this.invalidLevels };
     for ( const wall of terrainWalls ) {
-      if ( placeableIntersection(wall, rayOrigin, rayDirection) ) continue;
+      if ( !placeableIntersection(wall, rayOrigin, rayDirection, opts) ) continue;
       if ( limitedOcclusion++ ) return true;
     }
     return false;
@@ -384,27 +426,34 @@ export class ObstacleOcclusionTest {
     const walls = this.#placeablesWithinRay("walls", rayOrigin, rayDirection);
     const proximateWalls = this.obstacles.proximateWalls.intersection(walls);
     const reverseProximateWalls = this.obstacles.reverseProximateWalls.intersection(walls);
+    const opts = { ignoreLevelIds: this.invalidLevels };
     for ( const wall of [...proximateWalls, ...reverseProximateWalls] ) {
       // If the proximity threshold is met, this edge excluded from perception calculations.
       if ( wall.edge.applyThreshold(this._config.senseType, rayOrigin) ) continue;
-      if ( placeableIntersection(wall, rayOrigin, rayDirection) ) return true;
+      if ( placeableIntersection(wall, rayOrigin, rayDirection, opts) ) return true;
     }
     return false;
   }
 
   tilesOcclude(rayOrigin, rayDirection) {
-    const tiles = this.obstacles.tiles.intersection(this.#placeablesWithinRay("tiles", rayOrigin, rayDirection));
-    return tiles.some(tile => placeableIntersection(tile, rayOrigin, rayDirection));
+    return this.obstacles.tiles
+      .filter(tile => this.validLevels.has(tile.document.level))
+      .intersection(this.#placeablesWithinRay("tiles", rayOrigin, rayDirection))
+      .some(tile => placeableIntersection(tile, rayOrigin, rayDirection));
   }
 
   tokensOcclude(rayOrigin, rayDirection) {
-    const tokens = this.obstacles.tokens.intersection(this.#placeablesWithinRay("tokens", rayOrigin, rayDirection));
-    return tokens.some(token => placeableIntersection(token, rayOrigin, rayDirection));
+    const validLevels = this.validLevels;
+    return this.obstacles.tokens
+      .filter(token => validLevels.has(token.document.level))
+      .intersection(this.#placeablesWithinRay("tokens", rayOrigin, rayDirection))
+      .some(token => placeableIntersection(token, rayOrigin, rayDirection));
   }
 
   regionsOcclude(rayOrigin, rayDirection) {
     const regions = this.obstacles.regions.intersection(this.#placeablesWithinRay("regions", rayOrigin, rayDirection));
-    return regions.some(region => placeableIntersection(region, rayOrigin, rayDirection));
+    const opts = { ignoreLevelIds: this.invalidLevels };
+    return regions.some(region => placeableIntersection(region, rayOrigin, rayDirection, opts));
   }
 
   // ----- NOTE: Static methods ----- //
@@ -461,9 +510,9 @@ export class ObstacleOcclusionTest {
   }
 }
 
-function placeableIntersection(placeable, rayOrigin, rayDirection) {
+function placeableIntersection(placeable, rayOrigin, rayDirection, opts) {
   const geom = placeable[GEOMETRY_LIB_ID][GEOMETRY_ID];
-  return geom.rayIntersection(rayOrigin, rayDirection);
+  return geom.rayIntersection(rayOrigin, rayDirection, opts);
 }
 
 function placeableAABB(placeable) {

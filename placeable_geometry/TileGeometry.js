@@ -11,7 +11,8 @@ import {
   PlaceableGeometry,
   PlaceableAABBMixin,
   PlaceableModelMatrixMixin,
-  PlaceableFacesMixin
+  PlaceableFacesMixin,
+  PlaceableQuadtreeMixin,
 } from "./PlaceableGeometry.js";
 
 // LibGeometry
@@ -56,7 +57,7 @@ const TRACKER_TYPES = {
     "texture.src",
   ],
 };
- 
+
 /**
  * @typedef {function} TileAlphaBoundingBoxMixin
  *
@@ -71,7 +72,7 @@ const TileAlphaBoundingBoxMixin = superclass => class extends superclass {
     top: new Quad3d(),
     bottom: new Quad3d(),
   };
-  
+
   /** @type {boolean} */
   #needsUpdate = true;
 
@@ -86,7 +87,7 @@ const TileAlphaBoundingBoxMixin = superclass => class extends superclass {
     this.#needsUpdate = true;
     super.shapeUpdated();
   }
-  
+
   get alphaBoundingBox() {
     if ( this.#needsUpdate ) {
       this._updateAlphaBoundingBox();
@@ -103,20 +104,20 @@ const TileAlphaBoundingBoxMixin = superclass => class extends superclass {
     const rectOrPoly = this.tile.evPixelCache.getThresholdCanvasBoundingBox(this.alphaThreshold).toPolygon();
     const bb = this.#alphaBoundingBox;
     const elevationZ = this.tile.elevationZ
-        
+
 		Quad3d.fromPolygon(rectOrPoly, elevationZ, bb.top);
 		Quad3d.fromPolygon(rectOrPoly, elevationZ, bb.bottom);
     bb.bottom.reverseOrientation();
   }
-} 
- 
+}
+
 /**
  * @typedef {function} TileAlphaBoundingPolygonMixin
  *
  * Add faces for the tile alpha bounding polygon.
  * @param {function} superclass
  * @returns {function} A subclass of `superclass.`
- */ 
+ */
 const TileAlphaBoundingPolygonMixin = superclass => class extends superclass {
 
   /** @type {object<Polygon3d>} */
@@ -124,7 +125,7 @@ const TileAlphaBoundingPolygonMixin = superclass => class extends superclass {
     top: new Polygon3d(),
     bottom: new Polygon3d(),
   };
-  
+
   /** @type {boolean} */
   #needsUpdate = true;
 
@@ -139,7 +140,7 @@ const TileAlphaBoundingPolygonMixin = superclass => class extends superclass {
     this.#needsUpdate = true;
     super.shapeUpdated();
   }
-  
+
   get alphaBoundingPolygon() {
     if ( this.#needsUpdate ) {
       this._updateAlphaBoundingPolygon();
@@ -156,12 +157,12 @@ const TileAlphaBoundingPolygonMixin = superclass => class extends superclass {
     const poly = this.tile.evPixelCache.getThresholdCanvasBoundingPolygon(this.alphaThreshold);
     const bp = this.#alphaBoundingPolygon;
     const elevationZ = this.tile.elevationZ;
-            
+
     Polygon3d.fromPolygon(poly, elevationZ, bp.top);
     Polygon3d.fromPolygon(poly, elevationZ, bp.bottom);
     bp.bottom.reverseOrientation();
   }
-} 
+}
 
 /**
  * @typedef {function} TileAlphaPolygonsMixin
@@ -177,7 +178,7 @@ const TileAlphaPolygonsMixin = superclass => class extends superclass {
     top: new Polygons3d(),
     bottom: new Polygons3d(),
   };
-  
+
   /** @type {boolean} */
   #needsUpdate = true;
 
@@ -185,7 +186,7 @@ const TileAlphaPolygonsMixin = superclass => class extends superclass {
     this.#needsUpdate = true;
     super.shapeUpdated();
   }
-  
+
   get alphaThresholdPolygons() {
     if ( this.#needsUpdate ) {
       this._updatePathsToFacePolygons();
@@ -208,7 +209,7 @@ const TileAlphaPolygonsMixin = superclass => class extends superclass {
   _updatePathsToFacePolygons() {
     const polys = this.tile.evPixelCache.getCanvasAlphaISOBands(this.alphaThreshold);
     if ( !polys ) return;
-    
+
     Polygons3d.fromPolygons(polys, this.tile.elevationZ, this.#alphaThresholdPolygons.top);
     this.#alphaThresholdPolygons.top.clone(this.#alphaThresholdPolygons.bottom).reverseOrientation(); // Reverse orientation but keep the hole designations.
   }
@@ -228,15 +229,15 @@ const TileAlphaTrianglesMixin = superclass => class extends superclass {
     top: new Polygons3d(),
     bottom: new Polygons3d(),
   };
-  
+
   /** @type {boolean} */
   #needsUpdate = true;
 
   shapeUpdated() {
     this.#needsUpdate = true;
-    super.shapeUpdated(); 
+    super.shapeUpdated();
   }
-  
+
   get alphaThresholdTriangles() {
     if ( this.#needsUpdate ) {
       this._updatePathsToFaceTriangles();
@@ -261,10 +262,10 @@ const TileAlphaTrianglesMixin = superclass => class extends superclass {
   _updatePathsToFaceTriangles() {
     // TODO: Fix. Need to convert multiply polygons with holes to triangles.
     console.error("Not yet implemented.")
-  
+
     const polys = this.tile.evPixelCache.getCanvasAlphaISOBands(this.alphaThreshold);
     if ( !polys ) return;
-    
+
     // Convert the polygons to top and bottom faces.
     // Then make these into triangles.
     // Trickier than leaving as polygons but can dramatically cut down the number of polys
@@ -282,7 +283,7 @@ const TileAlphaTrianglesMixin = superclass => class extends superclass {
       .fromVertices(topTrimmed)
       .filter(tri => !foundry.utils.orient2dFast(tri.a, tri.b, tri.c).almostEqual(0, 1e-06));
     Polygons3d.from3dPolygons(triTop, this.#alphaThresholdTriangles.top);
-      
+
     const triBottom = Triangle3d
       .fromVertices(bottomTrimmed)
       .filter(tri => !foundry.utils.orient2dFast(tri.a, tri.b, tri.c).almostEqual(0, 1e-06));
@@ -298,8 +299,9 @@ const TileAlphaTrianglesMixin = superclass => class extends superclass {
  * TileGeometryTracker -> PlaceableFacesMixin -> PlaceableMatricesMixin -> PlaceableAABBMixin -> PlaceableGeometry
  */
 export class TileGeometry extends mix(PlaceableGeometry).with(
-  PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin, 
+  PlaceableAABBMixin, PlaceableQuadtreeMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin,
   TileAlphaBoundingBoxMixin, TileAlphaBoundingPolygonMixin, TileAlphaPolygonsMixin, TileAlphaTrianglesMixin) {
+
   /** @type {string} */
   static PLACEABLE_NAME = "Tile";
 
@@ -321,7 +323,7 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
   get tile() { return this.placeable; }
 
   get alphaThreshold() { return this.tile.document.texture.alphaThreshold || 0; }
-  
+
   // ----- NOTE: AABB ----- //
   calculateAABB() { return AABB3d.fromTileAlpha(this.tile, this.alphaThreshold, this.aabb); }
 
@@ -344,7 +346,7 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
     const { width, height } = this.tile.document;
     return MatrixFloat32.scale(width, height, 1.0, mat);
   }
-  
+
   // ----- NOTE: Polygon3d ---- //
 
   /** @type {Faces} */
@@ -353,7 +355,7 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
     bottom: new Quad3d(),
     sides: [],
   }
-  
+
   /**
    * Create the initial face shapes for this tile, assuming a 0.5 x 0.5 flat planar rectangle.
    * Alpha bounds handled in _updateFaces.
@@ -371,7 +373,7 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
    */
   _updateFaces() {
     super._updateFaces();
-    
+
     // Confirm orientation.
     const tile = this.tile;
     const ctr = this.tile.center;
@@ -410,9 +412,9 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
     if ( px > pxThreshold ) return t;
     return null;
   }
-  
+
   // ----- NOTE: Tile characteristics ----- //
-  
+
   /**
    * Determine the tile rotation.
    * @param {Tile} tile
