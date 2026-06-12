@@ -45,7 +45,11 @@ const PATCHES = {
   // PixelCache
   "foundry.canvas.placeables.Tile": PATCHES_Tile,
 
-  // Elevation patches.
+  // Elevation document patches
+  "foundry.documents.TokenDocument": PATCHES_ELEVATION.TokenDocument,
+  "foundry.documents.WallDocument": PATCHES_ELEVATION.WallDocument,
+
+  // Elevation patches (deprecated).
   "foundry.canvas.sources.BaseEffectSource": PATCHES_ELEVATION.PointSource,
   "foundry.canvas.sources.PointVisionSource": PATCHES_ELEVATION.VisionSource,
   "foundry.canvas.placeables.PlaceableObject": PATCHES_ELEVATION.PlaceableObject,
