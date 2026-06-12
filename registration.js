@@ -58,7 +58,16 @@ Hooks.on("init", function() {
 Hooks.on("setup", function() {
   registerPlaceableGeometry();
   deregisterPlaceableGeometry();
-})
+
+  // Add Pixel cache manager for tiles and levels
+  CONFIG[GEOMETRY_LIB_ID].tilePixelCache = new TilePixelCacheManager();
+  CONFIG[GEOMETRY_LIB_ID].levelBackgroundPixelCache = new LevelBackgroundPixelCacheManager();
+  CONFIG[GEOMETRY_LIB_ID].levelForegroundPixelCache = new LevelForegroundPixelCacheManager();
+
+  CONFIG[GEOMETRY_LIB_ID].tilePixelCache.registerHooks();
+  CONFIG[GEOMETRY_LIB_ID].levelBackgroundPixelCache.registerHooks();
+  CONFIG[GEOMETRY_LIB_ID].levelForegroundPixelCache.registerHooks();
+});
 
 function registerGeometryLibClasses() {
   CONFIG[GEOMETRY_LIB_ID].lib = lib;
