@@ -244,9 +244,42 @@ export class AABB2d {
 
   static fromTileAlpha(tile, alphaThreshold, out) {
     alphaThreshold ??= tile.document.texture.alphaThreshold || 0;
-    if ( !(alphaThreshold && tile.texture && tile.evPixelCache) ) return this.fromTile(tile, out);
-    const bbox = tile.evPixelCache.getThresholdCanvasBoundingBox(alphaThreshold);
+    const cache = CONFIG[GEOMETRY_LIB_ID].tilePixelCache.cacheForTile(tile);
+    if ( !(alphaThreshold && cache) ) return this.fromTile(tile, out);
+    const bbox = cache.getThresholdCanvasBoundingBox(alphaThreshold);
     return bbox instanceof PIXI.Polygon ? AABB2d.fromPolygon(bbox, out) : AABB2d.fromRectangle(bbox, out);
+  }
+
+  static fromTileDocumentAlpha(tileD, alphaThreshold, out) {
+    alphaThreshold ??= tileD.texture?.alphaThreshold || 0;
+    const cache = CONFIG[GEOMETRY_LIB_ID].tilePixelCache.cacheForTile(tile);
+    if ( !(alphaThreshold && tileD) ) return this.fromTileDocument(tileD, out);
+    const bbox = cache.getThresholdCanvasBoundingBox(alphaThreshold);
+    return bbox instanceof PIXI.Polygon ? AABB2d.fromPolygon(bbox, out) : AABB2d.fromRectangle(bbox, out);
+  }
+
+  static fromTileDocument(tileD, out) {
+    // From Tile.bounds.
+    let { x, y, width, height, texture, rotation } = tileD;
+
+    // Adjust top left coordinate and dimensions according to scale
+    if ( texture.scaleX !== 1 ) {
+      const w0 = width;
+      width *= Math.abs(texture.scaleX);
+      x += (w0 - width) / 2;
+    }
+    if ( texture.scaleY !== 1 ) {
+      const h0 = height;
+      height *= Math.abs(texture.scaleY);
+      y += (h0 - height) / 2;
+    }
+
+    // If the tile is rotated, return recomputed bounds according to rotation
+    if ( rotation !== 0 ) return PIXI.Rectangle.fromRotation(x, y, width, height, Math.toRadians(rotation)).normalize();
+
+    // Normal case
+    const rect = new PIXI.Rectangle(x, y, width, height).normalize();
+    return AABB2d.fromRectangle(rect, out);
   }
 
   /**
@@ -255,6 +288,12 @@ export class AABB2d {
    */
   static fromWall(wall, out) {
     return this.fromEdge(wall.edge, out);
+  }
+
+  static fromWallDocument(wallD, out) {
+    using a = PIXI.Point.tmp.set(wallD.c[0], wallD.c[1]);
+    using b = PIXI.Point.tmp.set(wallD.c[2], wallD.c[3]);
+    return this.fromPoints([a, b], out);
   }
 
   /**
@@ -271,6 +310,15 @@ export class AABB2d {
    */
   static fromToken(token, out) {
     const border = token.tokenBorder;
+    return AABB2d.fromShape(border, out);
+  }
+
+  /**
+   * @param {TokenDocument} tokenD
+   * @returns {AABB2d}
+   */
+  static fromTokenDocument(tokenD, out) {
+    const border = tokenBorder(tokenD);
     return AABB2d.fromShape(border, out);
   }
 
@@ -552,3 +600,75 @@ export class AABB2d {
 
 // For consistency with PIXI.Rectangle
 AABB2d.prototype.overlaps = AABB2d.prototype.overlapsRectangle;
+
+
+// From Token:
+function tokenCenter(tokenDocument) {
+  const { x, y } = tokenDocument;
+  const { width, height } = tokenDocument.getSize();
+  return PIXI.Point.tmp.set(x + (width * 0.5), y + (height * 0.5));
+}
+
+function tokenBounds(tokenDocument) {
+  const { x, y } = tokenDocument;
+  const { width, height } = tokenDocument.getSize();
+  return new PIXI.Rectangle(x, y, width, height);
+}
+
+function getShape(tokenDocument) {
+  if ( canvas.scene.grid.isGridless ) {
+    const { width, height } = tokenDocument.getSize();
+    const shape = tokenDocument.shape;
+    if ( (shape === TOKEN_SHAPES.ELLIPSE_1) || (shape === TOKEN_SHAPES.ELLIPSE_2) ) {
+      if ( width === height ) {
+        const radius = width / 2;
+        return new PIXI.Circle(radius, radius, radius);
+      }
+      const radiusX = width / 2;
+      const radiusY = height / 2;
+      return new PIXI.Ellipse(radiusX, radiusY, radiusX, radiusY);
+    }
+    return new PIXI.Rectangle(0, 0, width, height);
+  }
+  return new PIXI.Polygon(tokenDocument.getGridSpacePolygon());
+}
+
+
+function tokenBorder(tokenDocument) {
+  // TODO: Does rotation count?
+
+  // Treat sphere as circle at largest radii.
+  if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.useTokenSphere ) {
+    const { width, height } = tokenDocument;
+    const center = tokenCenter(tokenDocument);
+    const pixelWidth = width * canvas.dimensions.size;
+    const pixelHeight = height * canvas.dimensions.size;
+    const radius = Math.max(pixelWidth, pixelHeight) * 0.5; // Only care about 2d here.
+    return new PIXI.Circle(center.x, center.y, radius);
+  }
+
+  /* Shape options
+  In dnd5e at least, shapes change based on grid type.
+  But the underlying token document shape may be different.
+  Further, prototype tokens do not get a shape.
+  See Token#getShape.
+
+  Options available in the token config:
+  Square grid:
+    RECTANGLE_1: PIXI.Polygon.
+
+  Hex grid:
+    - All 6 options. Some may not change depending on token. Result is always PIXI.Polygon.
+
+  Gridless:
+   - ELLIPSE_1: PIXI.Circle or PIXI.Ellipse
+   - RECTANGLE_1: PIXI.Rectangle
+  */
+
+  // If square grid, use token bounds, which form a rectangle, instead of token shape (polygon).
+  // If canvas not fully loaded, this.shape may be undefined.
+
+  if ( canvas.grid.isSquare ) return tokenBounds(tokenDocument);
+  const shape = getShape(tokenDocument);
+  return shape.translate(tokenDocument.x, tokenDocument.y); // Return new shape; do not modify original.
+}

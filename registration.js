@@ -34,7 +34,7 @@ import { TileGeometryTracker } from "./placeable_tracking/TileGeometryTracker.js
   // Track geometries need to load.
   CONFIG[GEOMETRY_LIB_ID].CONFIG.placeableGeometries ??= new Set();
   const geometries = GEOMETRY_LIB_OPTS.placeableGeometries;
-  if ( geometries ) geometries.forEach(name => CONFIG[GEOMETRY_LIB_ID].CONFIG.placeableGeometries.add(name));
+  if ( geometries ) geometries.forEach(name => CONFIG[GEOMETRY_LIB_ID].CONFIG.placeableGeometries.add(name));\
 })();
 
 /**

@@ -71,13 +71,12 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
     properties: new Set(TRACKER_TYPES.direction),
   };
 
-  get wall() { return this.placeable; }
+  get wall() { return this.placeableDocument.object; }
 
   get edge() {
-    if ( !this.placeable.edge ) this.wall.initializeEdge();
-    return this.placeable.edge;
+    if ( !this.wall.edge ) this.wall.initializeEdge();
+    return this.wall.edge;
   }
-
 
   // ----- NOTE: Updating ----- //
 
@@ -86,14 +85,13 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
   }
 
   // ----- NOTE: AABB ----- //
-  calculateAABB() { return AABB3d.fromEdge(this.edge, this.aabb); }
+  calculateAABB() { return AABB3d.fromWallDocument(this.placeableDocument, this.aabb); }
 
   // ----- NOTE: Matrices ---- //
 
   calculateTranslationMatrix() {
     const mat = super.calculateTranslationMatrix();
-    const edge = this.edge;
-    const pos = this.constructor.edgeCenter(edge);
+    const pos = this.constructor.wallCenter(this.placeableDocument);
     const { top, bottom } = this.constructor.edgeElevation(edge);
     const zHeight = top - bottom;
     const z = top - (zHeight * 0.5);
@@ -179,7 +177,7 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
     const M = this.modelMatrix.model;
     const hasTop = this.edge.direction === 0 || this.edge.direction === 1;    // 1: Restricts from left (from a --> b).
     const hasBottom = this.edge.direction === 0 || this.edge.direction === 2; // 2: Restricts from right (from a --> b).
-    const hasLevelSplit = this.wall.document.levels.size !== canvas.scene.levels.size;
+    const hasLevelSplit = this.placeableDocument.levels.size !== canvas.scene.levels.size;
     this.faceLevels.clear();
 
     const sides = [];
@@ -241,7 +239,7 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
     }
 
     // Create quads accordingly.
-    const wallLevels = this.wall.document.levels.size ? this.wall.document.levels : new Set(canvas.scene.levels.keys());
+    const wallLevels = this.placeableDocument.levels.size ? this.placeableDocument.levels : new Set(canvas.scene.levels.keys());
     const quads = [];
     for ( const segment of segments ) {
       // Drop segments that are exclusively for a level that does not contain this wall.
@@ -275,74 +273,63 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
    * @returns {number|null} The distance along the ray, as a multiple of rayDirection
    */
   rayIntersection(rayOrigin, rayDirection, opts) {
-    if ( this.wall.isOpen ) return null; // If door is open, no intersection.
+    if ( this.placeableDocument.isOpen ) return null; // If door is open, no intersection.
     return super.rayIntersection(rayOrigin, rayDirection, opts);
   }
 
   // ----- NOTE: Wall characteristics ----- //
 
   /**
-   * Determine the top and bottom edge elevations. Null values will be given large constants.
-   * @param {Edge} edge
-   * @returns {object}
-   * - @prop {number} top         1e05 if null
-   * - @prop {number} bottom      -1e05 if null
-   */
-  static edgeElevation(edge) {
-    let { top, bottom } = edge.elevationLibGeometry.a;
-    top ??= 1e05;
-    bottom ??= -1e05;
-    top = gridUnitsToPixels(top);
-    bottom = gridUnitsToPixels(bottom);
-    return { top, bottom };
-  }
-
-  /**
    * Determine the 2d center point of the edge.
-   * @param {Edge} edge
+   * @param {WallDocument} wallD
    * @returns {PIXI.Point}
    */
-  static edgeCenter(edge) {
+  static wallCenter(wallD) {
+    using a = PIXI.Point.tmp.set(wallD.c[0], wallD.c[1]);
+    using b = PIXI.Point.tmp.set(wallD.c[2], wallD.c[3]);
     const ctr = PIXI.Point.tmp;
-    return edge.a.add(edge.b, ctr).multiplyScalar(0.5, ctr);
+    return a.add(b, ctr).multiplyScalar(0.5, ctr);
   }
 
   /**
    * Determine the 2d length of the edge.
-   * @param {Edge} edge
+   * @param {WallDocument} wallD
    * @returns {number}
    */
-  static edgeLength(edge) { return PIXI.Point.distanceBetween(edge.a, edge.b); }
+  static wallLength(wallD) {
+    using a = PIXI.Point.tmp.set(wallD.c[0], wallD.c[1]);
+    using b = PIXI.Point.tmp.set(wallD.c[2], wallD.c[3]);
+    return PIXI.Point.distanceBetween(a, b);
+  }
 
   /**
    * Angle of the edge on the 2d canvas.
-   * @param {Edge} edge
+   * @param {WallDocument} edge
    * @returns {number} Angle in radians
    */
-  static edgeAngle(edge) {
-    using delta = edge.b.subtract(edge.a, PIXI.Point.tmp);
+  static wallAngle(wallD) {
+    using a = PIXI.Point.tmp.set(wallD.c[0], wallD.c[1]);
+    using b = PIXI.Point.tmp.set(wallD.c[2], wallD.c[3]);
+    using delta = b.subtract(a);
     return Math.atan2(delta.y, delta.x);
   }
 
   /**
    * Is this a terrain (limited) edge?
-   * @param {Edge} edge
+   * @param {WallDocument} wallD
    * @returns {boolean}
    */
-  static isTerrain(edge, { senseType = "sight" } = {}) {
-    return edge[senseType] === CONST.EDGE_SENSE_TYPES.LIMITED;
+  static isTerrain(wallD, { senseType = "sight" } = {}) {
+    return wallD[senseType] === CONST.EDGE_SENSE_TYPES.LIMITED;
   }
 
   /**
    * Is this a directional edge?
-   * @param {Edge} edge
+   * @param {WallDocument} wallD
    * @returns {boolean}
    */
-  static isDirectional(edge) { return Boolean(edge.direction); }
+  static isDirectional(wallD) { return Boolean(wallD.dir); }
 }
-
-
-
 
 
 /**

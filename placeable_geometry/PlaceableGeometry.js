@@ -60,25 +60,16 @@ export class PlaceableGeometry {
 
   // ----- NOTE: Constructor ----- //
 
-  /** @type {Placeable} */
-  placeable;
+  /** @type {Placeable|null} */
+  get placeable() { return this.placeableDocument.object; };
+
+  /** @type {CanvasDocument} */
+  placeableDocument;
 
   /**
-   * @param {PlaceableObject} placeable
+   * @param {CanvasDocument} placeable
    */
-  constructor(placeable) { this.placeable = placeable; }
-
-  /**
-   * Create geometry on a given placeable.
-   * Enforces uniqueness per placeable.
-   * @param {Placeable} placeable
-   * @returns {AbstractPlaceableGeometry}
-   */
-  static create(placeable) {
-    const obj = placeable[GEOMETRY_LIB_ID] ??= {};
-    obj[GEOMETRY_ID] ??= new this(placeable);
-    return obj[GEOMETRY_ID];
-  }
+  constructor(placeableDocument) { this.placeableDocument = placeableDocument; }
 
   initialize() { }
 
@@ -153,29 +144,6 @@ export const PlaceableAABBMixin = superclass => class extends superclass {
   shapeUpdated() { super.shapeUpdated(); this.calculateAABB(); }
 
   calculateAABB() { console.error(`${this.constructor.name} must implement calculateAABB method.`); }
-}
-
-// ----- NOTE: PlaceableQuadtreeMixin ----- //
-export const PlaceableQuadtreeMixin = superclass => class extends superclass {
-  static quadtree = new foundry.canvas.geometry.CanvasQuadtree();
-
-  static _registerHooks() {
-    Hooks.on("canvasReady", canvas => {
-      const label = this.PLACEABLE_LABEL_PLURAL;
-      canvas.scene[label].forEach(placeableD => {
-        const placeable = placeableD.object;
-        this.quadtree.insert({ t: placeable, r: placeable.bounds })
-      });
-    });
-
-    Hooks.on("canvasTearDown", () => this.quadtree.clear());
-
-    Hooks.on("drawTile", placeable => this.quadtree.insert({ t: placeable, r: placeable.bounds }));
-
-    Hooks.on("updateTile", placeable => this.quadtree.update({ t: placeable, r: placeable.bounds }));
-
-    Hooks.on("deleteTile", placeable => this.quadtree.delete(placeable));
-  }
 }
 
 // ----- NOTE: PlaceableModelMatrixMixin ----- //
@@ -260,7 +228,7 @@ export const PlaceableModelMatrixMixin = superclass => {
      * Create an id used for the model matrix tracking.
      * @type {string}
      */
-    get placeableId() { return this.placeable.sourceId; }
+    get placeableId() { return this.placeableDocument.uuid; }
 
     positionUpdated() {
       super.positionUpdated();
@@ -437,20 +405,16 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
   }
 
   /** @type {Faces} */
-  _prototypeFaces = { top: null, bottom: null, sides: [] };
+  _prototypeFaces = [];
 
   /** @type {Faces} */
-  faces = { top: null, bottom: null, sides: [] };
+  faces = [];
 
   /**
    * Iterate over the faces.
    * @param {object} [_opts]        Used by child classes, like WallGeometry
    */
-  *iterateFaces(_opts) {
-    if ( this.faces.top ) yield this.faces.top;
-    if ( this.faces.bottom ) yield this.faces.bottom;
-    for ( const side of this.faces.sides ) yield side;
-  }
+  *iterateFaces(_opts) { yield* this.faces.values(); }
 
   /**
    * Construct the prototype faces.
@@ -462,17 +426,8 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
   }
 
   _initializePrototypeFaces() {
-    if ( this._prototypeFaces.top instanceof Sphere ) {
-      if ( !(this.faces.top instanceof Sphere) ) this.faces.top = this._prototypeFaces.top.clone();
-      this.faces.bottom = null;
-      this.faces.sides.length = 0;
-      return;
-    }
-    if ( this._prototypeFaces.top ) this.faces.top = this._prototypeFaces.top._cloneEmpty(); // Preserves hole status.
-    if ( this._prototypeFaces.bottom ) this.faces.bottom = this._prototypeFaces.bottom._cloneEmpty();
-    const numSides = this._prototypeFaces.sides.length;
-    this.faces.sides.length = numSides;
-    for ( let i = 0; i < numSides; i += 1 ) this.faces.sides[i] ??= this._prototypeFaces.sides[i]._cloneEmpty();
+    const numSides = this._prototypeFaces.length;
+    for ( let i = 0; i < numSides; i += 1 ) this.faces[i] ??= this._prototypeFaces[i].clone();
   }
 
   /**
@@ -481,9 +436,8 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
    */
   _updateFaces() {
     const M = this.modelMatrix.model;
-    if ( this._prototypeFaces.top ) this._prototypeFaces.top.transform(M, this.faces.top)
-    if ( this._prototypeFaces.bottom ) this._prototypeFaces.bottom.transform(M, this.faces.bottom)
-    for ( let i = 0, iMax = this._prototypeFaces.sides.length; i < iMax; i += 1 ) this._prototypeFaces.sides[i].transform(M, this.faces.sides[i]);
+    const numSides = this._prototypeFaces.length;
+    for ( let i = 0; i < numSides; i += 1 ) this._prototypeFaces[i].transform(M, this.faces[i]);
   }
 
   shapeUpdated() {
@@ -567,11 +521,7 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
 export const PlaceableFacePointsMixin = superclass => class extends superclass {
 
   /** @typedef {FacePoints} */
-  facePoints = {
-    top: null,
-    bottom: null,
-    sides: [],
-  };
+  facePoints = [];
 
   _updateFaces() {
     super._updateFaces();
@@ -585,12 +535,7 @@ export const PlaceableFacePointsMixin = superclass => class extends superclass {
     if ( !this.faces ) return; // Requires the FacesMixin.
 
     const opts = { spacing: CONFIG[GEOMETRY_LIB_ID].CONFIG.perPixelSpacing || 10, startAtEdge: false };
-    if ( this.faces.top ) this.facePoints.top = this.faces.top.pointsLattice(opts);
-    if ( this.faces.bottom ) this.facePoints.bottom = this.faces.bottom.pointsLattice(opts);
-
-    // Process each side; store in equivalent structure to face.sides array.
     const numSides = this.faces.sides.length;
-    this.facePoints.sides = new Array(numSides);
-    for ( let i = 0; i < numSides; i += 1 ) this.facePoints.sides[i] = this.faces.sides[i].pointsLattice(opts);
+    for ( let i = 0; i < numSides; i += 1 ) this.facePoints[i] = this.faces[i].pointsLattice(opts);
   }
 }

@@ -5,7 +5,7 @@ PIXI,
 "use strict";
 
 import { Point3d } from "./Point3d.js";
-import { almostLessThan } from "../util.js";
+import { almostLessThan, gridUnitsToPixels, clamp } from "../util.js";
 import { AABB2d } from "../AABB.js";
 import { Quad3d, Circle3d } from "./Polygon3d.js";
 
@@ -112,8 +112,6 @@ export class AABB3d extends AABB2d {
     return this.fromRectangle(rrect, z, out);
   }
 
-
-
   /**
    * @param {PIXI.Polygon} poly             2d polygon, assumed to be flat on the plane
    * @param {number|number[]} z             Elevation(s) to use
@@ -160,7 +158,15 @@ export class AABB3d extends AABB2d {
    */
   static fromTileAlpha(tile, alphaThreshold, out) {
     out = super.fromTileAlpha(tile, alphaThreshold, out);
-    const elevZ = tile.elevationZ;
+    const elevZ = gridUnitsToPixels(tile.document.elevation);
+    out.max.z = elevZ;
+    out.min.z = elevZ;
+    return out;
+  }
+
+  static fromTileDocument(tileD, alphaThreshold, out) {
+    out = super.fromTileDocument(tileD, alphaThreshold, out);
+    const elevZ = gridUnitsToPixels(tileD.elevation);
     out.max.z = elevZ;
     out.min.z = elevZ;
     return out;
@@ -171,9 +177,9 @@ export class AABB3d extends AABB2d {
    * @returns {AABB3d}
    */
   static fromWall(wall, out) {
-    const { topZ, bottomZ } = wall;
+    const { topZ, bottomZ } = wall.document;
     out = super.fromWall(wall, out);
-    out.min.z = bottomZ
+    out.min.z = bottomZ;
     out.max.z = topZ;
     return out;
   }
@@ -196,8 +202,20 @@ export class AABB3d extends AABB2d {
    */
   static fromToken(token, out) {
     out = super.fromToken(token, out);
-    out.min.z = token.bottomZ;
-    out.max.z = token.topZ;
+    const { topZ, bottomZ } = token.document;
+    out.min.z = bottomZ;
+    out.max.z = topZ;
+    return out;
+  }
+
+  /**
+   * @param {TokenDocument} tokenD
+   * @returns {AABB3d}
+   */
+  static fromTokenDocument(tokenD, out) {
+    out = super.fromTokenDocument(tokenD, out);
+    out.min.z = tokenD.bottomZ;
+    out.max.z = tokenD.topZ;
     return out;
   }
 
@@ -212,8 +230,6 @@ export class AABB3d extends AABB2d {
     out.max.set(center.x + radius, center.y + radius, center.z + radius);
     return out;
   }
-
-
 
   /**
    * @param {Polygon3d} poly3d
@@ -445,3 +461,4 @@ function projectPolygon(polygon, axis) {
   });
   return { min, max };
 }
+

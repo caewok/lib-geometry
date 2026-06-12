@@ -12,10 +12,10 @@ import {
   PlaceableModelMatrixMixin,
   PlaceableFacesMixin,
   PlaceableQuadtreeMixin,
-} from "./PlaceableGeometry.js";
+} from "./CanvasGeometry.js";
 
 // LibGeometry
-import { NULL_SET } from "../util.js";
+import { NULL_SET, gridUnitsToPixels } from "../util.js";
 import { CenteredPolygon } from "../CenteredPolygon/CenteredPolygon.js";
 import { CenteredRectangle } from "../CenteredPolygon/CenteredRectangle.js";
 import { Ellipse } from "../Ellipse.js";
@@ -77,16 +77,9 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableQuadtre
 
   get region() { return this.placeable; }
 
-  get shapes() { return this.placeable.document.shapes; }
+  get shapes() { return this.placeableDocument.shapes; }
 
-  get polygons() { return this.placeable.document.polygons; }
-
-  get hasMultiPlaneRamp() {
-    const TM = OTHER_MODULES.TERRAIN_MAPPER;
-    if ( !TM ) return false;
-    const tmHandler = this.region[TM.KEY];
-    return tmHandler.isRamp && tmHandler.splitPolygons;
-  }
+  get polygons() { return this.placeableDocument.polygons; }
 
   get type() {
     const shapes = this.shapes;
@@ -112,10 +105,10 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableQuadtre
     switch ( this.type ) {
       case ST.EMPTY:
       case ST.HOLE:
-      case ST.POLYGONS: return RegionPolygonShapeGeometry.create(this.region);
-      case ST.RECTANGLE: return RegionRectangleShapeGeometry.create(this.region);
-      case ST.ELLIPSE: return RegionEllipseShapeGeometry.create(this.region);
-      case ST.CIRCLE: return RegionCircleShapeGeometry.create(this.region);
+      case ST.POLYGONS: return new RegionPolygonShapeGeometry(this.placeableDocument);
+      case ST.RECTANGLE: return new RegionRectangleShapeGeometry(this.placeableDocument);
+      case ST.ELLIPSE: return new RegionEllipseShapeGeometry(this.placeableDocument);
+      case ST.CIRCLE: return new RegionCircleShapeGeometry(this.placeableDocument);
     }
   }
 
@@ -157,7 +150,7 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableQuadtre
 
   get _polygonGeom() {
     if ( this.shapeGeom instanceof RegionPolygonShapeGeometry ) return this.shapeGeom;
-    const geom = RegionPolygonShapeGeometry.create(this.region);
+    const geom = new RegionPolygonShapeGeometry(this.placeableDocument);
     geom.initialize();
     return geom;
   };
@@ -172,20 +165,17 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableQuadtre
   }
 
   /**
-   * Top and bottom elevation of a region, accounting for plateaus.
+   * Top and bottom elevation of a region.
    * @param {Region} region
    * @returns {object}
    * - @prop {number} topZ
    * - @prop {number} bottomZ
    */
-  static regionElevation(region) {
+  static regionElevation(regionDocument) {
     const MAX_ELEV = 1e06;
-    let topZ = region.topZ;
-    let bottomZ = region.bottomZ;
-
-    // If terrain mapper is active, use the plateau elevation if present.
-    const TM = OTHER_MODULES.TERRAIN_MAPPER;
-    if ( TM ) topZ = region.document.getFlag(TM.ID, TM.FLAGS.PLATEAU_ELEVATION) ?? topZ;
+    const elev = regionDocument.elevation;
+    let topZ = regionDocument.topZ - (!elev.topInclusive * 1); // Subtract 1 pixel if not inclusive.
+    let bottomZ = regionDocument.bottomZ
 
     // Force elevations to be finite values.
     if ( !isFinite(topZ) ) topZ = MAX_ELEV;
@@ -202,9 +192,8 @@ class AbstractRegionShapeGeometry extends mix(PlaceableGeometry).with(PlaceableA
 
   get region() { return this.placeable; }
 
-  get shapes() { return this.placeable.document.shapes; }
+  get shapes() { return this.placeableDocument.shapes; }
 
-  static create(region) { return new this(region); }
 }
 
 class InstancedShape extends AbstractRegionShapeGeometry {
@@ -230,7 +219,7 @@ class InstancedShape extends AbstractRegionShapeGeometry {
   // ----- NOTE: AABB ----- /
 
   calculateAABB() {
-    const { topZ, bottomZ } = this.region;
+    const { topZ, bottomZ } = RegionGeometry.regionElevation(this.placeableDocument);
     return AABB3d.fromShape(this.shapePIXI, [topZ, bottomZ], this.aabb);
   }
 
@@ -238,7 +227,7 @@ class InstancedShape extends AbstractRegionShapeGeometry {
 
   calculateTranslationMatrix() {
     const mat = super.calculateTranslationMatrix();
-    const { topZ, bottomZ } = RegionGeometry.regionElevation(this.region);
+    const { topZ, bottomZ } = RegionGeometry.regionElevation(this.placeableDocument);
     const zHeight = topZ - bottomZ;
     const z = topZ - (zHeight * 0.5);
     const center = this.unrotatedShapePIXI.center;
@@ -254,18 +243,17 @@ class InstancedShape extends AbstractRegionShapeGeometry {
   calculateScaleMatrix() {
     const mat = super.calculateScaleMatrix();
     const bounds = this.unrotatedShapePIXI.getBounds();
-    const { topZ, bottomZ } = RegionGeometry.regionElevation(this.region);
+    const { topZ, bottomZ } = RegionGeometry.regionElevation(this.placeableDocument);
     const scaleZ = topZ - bottomZ;
     return MatrixFloat32.scale(bounds.width, bounds.height, scaleZ, mat);
   }
 
   _initializePrototypeFaces() {
     if ( this.isHole ) {
-      this._prototypeFaces.top.reverseOrientation();
-      this._prototypeFaces.bottom.reverseOrientation();
-      this._prototypeFaces.top.isHole = true;
-      this._prototypeFaces.bottom.isHole = true;
-      this._prototypeFaces.sides.forEach(side => side.reverseOrientation());
+      // By default, it is assumed that top and bottom are 0 and 1 on the prototype faces.
+      this._prototypeFaces[0].isHole = true; // Top.
+      this._prototypeFaces[1].isHole = true; // Bottom.
+      this._prototypeFaces.forEach(face => face.reverseOrientation());
       // Don't mark sides as holes as they are supposed to be solid (marking the inside side walls for the hole).
     }
     super._initializePrototypeFaces();
@@ -277,11 +265,14 @@ export class RegionRectangleShapeGeometry extends InstancedShape {
   // ----- NOTE: Faces ---- //
 
   /** @type {Faces} */
-  _prototypeFaces = {
-    top: new Quad3d(),
-    bottom: new Quad3d(),
-    sides: [new Quad3d(), new Quad3d(), new Quad3d(), new Quad3d()],
-  }
+  _prototypeFaces = [ // Cube shape.
+    new Quad3d(),
+    new Quad3d(),
+    new Quad3d(),
+    new Quad3d(),
+    new Quad3d(),
+    new Quad3d(),
+  ];
 
   /**
    * Create the initial face shapes for this wall, using a 0.5 x 0.5 x 0.5 unit cube.
@@ -290,26 +281,25 @@ export class RegionRectangleShapeGeometry extends InstancedShape {
   _initializePrototypeFaces() {
     // Same as TokenGeometry#initializeCubeFaces.
     // Build top/bottom.
-    this.constructor.QUADS.up.clone(this._prototypeFaces.top);
-    this.constructor.QUADS.down.clone(this._prototypeFaces.bottom);
-    this._prototypeFaces.top.setZ(0.5);
-    this._prototypeFaces.bottom.setZ(-0.5);
+    const top = this._prototypeFaces[0];
+    const bottom = this._prototypeFaces[1];
+    this.constructor.QUADS.up.clone(top);
+    this.constructor.QUADS.down.clone(bottom);
+    top.setZ(0.5);
+    bottom.setZ(-0.5);
 
     // Build sides.
-    this._prototypeFaces.sides.length = 0;
-    this._prototypeFaces.sides.push(
-      this.constructor.QUADS.north.clone(),
-      this.constructor.QUADS.west.clone(),
-      this.constructor.QUADS.south.clone(),
-      this.constructor.QUADS.east.clone(),
-    );
+    const north = this.constructor.QUADS.north.clone(this._prototypeFaces[2]);
+    const south = this.constructor.QUADS.south.clone(this._prototypeFaces[3]);
+    const east = this.constructor.QUADS.east.clone(this._prototypeFaces[4]);
+    const west = this.constructor.QUADS.west.clone(this._prototypeFaces[5]);
 
     // Adjust the sides so that they are at the region edge.
     for ( let i = 0; i < 4; i += 1 ) {
-      this._prototypeFaces.sides[0].points[i].y = -0.5; // North.
-      this._prototypeFaces.sides[1].points[i].x = -0.5; // West.
-      this._prototypeFaces.sides[2].points[i].y = 0.5; // South.
-      this._prototypeFaces.sides[3].points[i].x = 0.5; // East.
+      north.points[i].y = -0.5; // North.
+      west.points[i].x = -0.5; // West.
+      south.points[i].y = 0.5; // South.
+      east.points[i].x = 0.5; // East.
     }
     super._initializePrototypeFaces();
   }
@@ -320,11 +310,15 @@ export class RegionEllipseShapeGeometry extends InstancedShape {
   // ----- NOTE: Faces ---- //
 
   /** @type {Faces} */
-  _prototypeFaces = {
-    top: new Ellipse3d(),
-    bottom: new Ellipse3d(),
-    sides: [],
-  }
+  _prototypeFaces = [
+    new Ellipse3d(),
+    new Ellipse3d(),
+    // Will have TBD number of side faces.
+  ];
+
+  get radiusX() { return this.shape.radiusX; }
+
+  get radiusY() { return this.shape.radiusY; }
 
   /**
    * Create the initial face shapes for this ellipse.
@@ -333,47 +327,40 @@ export class RegionEllipseShapeGeometry extends InstancedShape {
   _initializePrototypeFaces() {
     // By default, the Ellipse3d faces up.
     // Same as TokenGeometry#initializeEllipseFaces
-    this._prototypeFaces.top.radiusX = 1;
-    this._prototypeFaces.top.radiusY = 1;
-    this._prototypeFaces.top.clone(this._prototypeFaces.bottom);
-    this._prototypeFaces.bottom.reverseOrientation();
-    this._prototypeFaces.top.setZ(0.5);
-    this._prototypeFaces.bottom.setZ(-0.5);
+    this._prototypeFaces.length = 2;
+    const top = this._prototypeFaces[0];
+    const bottom = this._prototypeFaces[1];
 
-    const density = PIXI.Circle.approximateVertexDensity(Math.max(this.shape.radiusX, this.shape.radiusY));
-    this._prototypeFaces.sides = this._prototypeFaces.top.buildTopSides(-0.5, { density });
+    top.radiusX = 1;
+    top.radiusY = 1;
+    top.clone(bottom);
+    bottom.reverseOrientation();
+    top.setZ(0.5);
+    bottom.setZ(-0.5);
+
+    const density = PIXI.Circle.approximateVertexDensity(Math.max(this.radiusX, this.radiusY));
+    this._prototypeFaces.sides.push(...this._prototypeFaces.top.buildTopSides(-0.5, { density }));
     super._initializePrototypeFaces();
   }
 }
 
-export class RegionCircleShapeGeometry extends InstancedShape {
+export class RegionCircleShapeGeometry extends RegionEllipseShapeGeometry {
 
   // ----- NOTE: Faces ---- //
 
   /** @type {Faces} */
-  _prototypeFaces = {
-    top: new Circle3d(),
-    bottom: new Circle3d(),
-    sides: [],
-  }
+  _prototypeFaces = [
+    new Circle3d(),
+    new Circle3d(),
+    // Will have TBD number of side faces.
+  ];
 
-  /**
-   * Create the initial face shapes for this wall, using a 0.5 x 0.5 x 0.5 unit cube.
-   * Normal walls have front (top) and back (bottom). One-directional walls have only top.
-   */
-  _initializePrototypeFaces() {
-    // By default, the Circle3d faces up.
-    // Same as TokenGeometry#initializeEllipseFaces
-    this._prototypeFaces.top.radius = 1;
-    this._prototypeFaces.top.clone(this._prototypeFaces.bottom);
-    this._prototypeFaces.bottom.reverseOrientation();
-    this._prototypeFaces.top.setZ(0.5);
-    this._prototypeFaces.bottom.setZ(-0.5);
+  get radiusX() { return this.shape.radius; }
 
-    const density = PIXI.Circle.approximateVertexDensity(this.shape.radius);
-    this._prototypeFaces.sides = this._prototypeFaces.top.buildTopSides(-0.5, { density });
-    super._initializePrototypeFaces();
-  }
+  get radiusY() { return this.shape.radius; }
+
+  get radius() { return this.shape.radius; }
+
 }
 
 export class RegionPolygonShapeGeometry extends AbstractRegionShapeGeometry {
@@ -394,39 +381,20 @@ export class RegionPolygonShapeGeometry extends AbstractRegionShapeGeometry {
   /** @type {Faces} */
   _initializePrototypeFaces() { /* Unused */ }
 
-  // Mostly for debugging at the moment, but may become important for ramps.
-  // TODO: if the number of region polygons === number of region shapes,
-  // can we infer a 1:1 relationship?
-  // And if so, can we use the actual shape (circle/ellipse/rectangle/poly)?
-  _polygonFaces = {
-    top: [],
-    bottom: [],
-    sides: [],
-  };
-
   _updateFaces() {
     // TODO: Handle ramps
 
-    this._polygonFaces.top.length = 0;
-    this._polygonFaces.bottom.length = 0;
-    this._polygonFaces.sides.length = 0;
     const polys = this.polygons;
     if ( !polys.length ) {
-      this.faces.top = null;
-      this.faces.bottom = null;
-      this.faces.sides = [];
+      this.faces.length = 0;
       return;
     }
 
     let top;
     let bottom;
     let sides;
-    if ( polys.length === 1 ) {
-      ({ top, bottom, sides } = this._buildPolygonFaces(polys[0]));
-      this._polygonFaces.top.push(top);
-      this._polygonFaces.bottom.push(bottom);
-      this._polygonFaces.sides.push(sides);
-    } else {
+    if ( polys.length === 1 ) ({ top, bottom, sides } = this._buildPolygonFaces(polys[0]));
+    else {
       top = new Polygons3d();
       bottom = new Polygons3d();
       sides = [];
@@ -435,19 +403,15 @@ export class RegionPolygonShapeGeometry extends AbstractRegionShapeGeometry {
         top.polygons.push(res.top);
         bottom.polygons.push(res.bottom);
         sides.push(...res.sides);
-
-        this._polygonFaces.top.push(res.top);
-        this._polygonFaces.bottom.push(res.bottom);
-        this._polygonFaces.sides.push(res.sides);
       }
     }
-    this.faces.top = top;
-    this.faces.bottom = bottom;
-    this.faces.sides = sides;
+
+    this.faces.length = 0;
+    this.faces.push(top, bottom, ...sides);
   }
 
   _buildPolygonFaces(poly) {
-    const { topZ, bottomZ } = RegionGeometry.regionElevation(this.region);
+    const { topZ, bottomZ } = RegionGeometry.regionElevation(this.placeableDocument);
     const top = Polygon3d.fromPolygon(poly, topZ);
     const bottom = top.clone()
     top.setZ(topZ);

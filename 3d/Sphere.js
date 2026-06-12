@@ -522,7 +522,7 @@ export class Sphere {
     return out;
   }
   */
-  
+
   pointsLattice({ spacing = CONFIG[GEOMETRY_LIB_ID].CONFIG.perPixelSpacing || 10 } = {}) {
     // Estimated number of points:
     // Consider each point sitting inside the center of a hexagon (or circle) with a given diameter.

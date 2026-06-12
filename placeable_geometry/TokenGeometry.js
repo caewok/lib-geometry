@@ -267,7 +267,7 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
   };
 
   /** @type {Token} */
-  get token() { return this.placeable; }
+  get token() { return this.placeableDocument.object; }
 
   /** @type {SHAPE_TYPES} */
   get shapeType() {
@@ -290,13 +290,13 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
 
   // ----- NOTE: AABB ----- //
 
-  calculateAABB() { return AABB3d.fromToken(this.token, this.aabb); }
+  calculateAABB() { return AABB3d.fromTokenDocument(this.placeableDocument, this.aabb); }
 
   // ----- NOTE: Matrices ---- //
 
   calculateTranslationMatrix() {
     const mat = super.calculateTranslationMatrix();
-    const ctr = this.constructor.tokenCenter(this.token); // Translate from 3d center of token.
+    const ctr = this.constructor.tokenCenter(this.placeableDocument); // Translate from 3d center of token.
     return MatrixFloat32.translation(ctr.x, ctr.y, ctr.z, mat);
   }
 
@@ -304,26 +304,30 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
 
   calculateScaleMatrix() {
     const mat = super.calculateScaleMatrix();
-    const { width, height, zHeight } = this.constructor.tokenDimensions(this.token);
+    const { width, height, zHeight } = this.constructor.tokenDimensions(this.placeableDocument);
     return MatrixFloat32.scale(width, height, zHeight, mat);
   }
 
   // ----- NOTE: Faces ----- //
 
   #initializeSphericalTopFace() {
-    if ( !(this._prototypeFaces.top instanceof Sphere) )  this._prototypeFaces.top = new Sphere();
-    this._prototypeFaces.top.radius = 0.5;
-    this._prototypeFaces.bottom = null;
-    this._prototypeFaces.sides.length = 0;
+    this._prototypeFaces.length = 1;
+    if ( !(this._prototypeFaces[0] instanceof Sphere) )  this._prototypeFaces[0] = new Sphere();
+    this._prototypeFaces[0].radius = 0.5;
   }
 
   #initializeEllipseFaces() {
-    if ( !(this._prototypeFaces.top instanceof Ellipse3d) ) {
-      this._prototypeFaces.top = new Ellipse3d();
-      this._prototypeFaces.bottom = new Ellipse3d();
+    this._prototypeFaces.length = 2;
+    if ( !(this._prototypeFaces[0] instanceof Ellipse3d) ) {
+      this._prototypeFaces[0] = new Ellipse3d();
+      this._prototypeFaces[1] = new Ellipse3d();
     }
-    this._prototypeFaces.top.radiusX = 0.5;
-    this._prototypeFaces.top.radiusY = 0.5;
+    const [top, bottom] = this._prototypeFaces;
+    top.radiusX = 0.5;
+    bottom.radiusY = 0.5;
+
+    top.radiusX = 0.5;
+    bottom.radiusY = 0.5;
 
     // Default ellipse points up; set up the rest.
     const density = PIXI.Circle.approximateVertexDensity(100);
@@ -333,54 +337,61 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
   get hexagonalUnitShape() { return Hex3dVertices.hexagonalUnitShapeForToken(this.token); }
 
   #initializeHexagonalFaces() {
-    if ( !(this._prototypeFaces.top instanceof Polygon3d) ) {
-      this._prototypeFaces.top = new Polygon3d();
-      this._prototypeFaces.bottom = new Polygon3d();
+
+
+    if ( !(this._prototypeFaces[0] instanceof Polygon3d) ) {
+      this._prototypeFaces[0] = new Polygon3d();
+      this._prototypeFaces[1] = new Polygon3d();
     }
     const poly = this.hexagonalUnitShape;
 
     // Ensure the top is pointing up by passing a counter-clockwise polygon.
     if ( poly.isPositive ) poly.reverseOrientation();
-    Polygon3d.fromPolygon(poly, 0.5, this._prototypeFaces.top);
+    Polygon3d.fromPolygon(poly, 0.5, this._prototypeFaces[0]);
     this.#initializePolyFaces();
   }
 
   #initializePolyFaces(density) {
     // Assumed here that the top face is pointing up and is correctly set.
-    this._prototypeFaces.top.clone(this._prototypeFaces.bottom);
-    this._prototypeFaces.bottom.reverseOrientation();
-    this._prototypeFaces.top.setZ(0.5);
-    this._prototypeFaces.bottom.setZ(-0.5);
-    this._prototypeFaces.sides = this._prototypeFaces.top.buildTopSides(-0.5, { density });
+    this._prototypeFaces.length = 2;
+    const top = this._prototypeFaces[0];
+    const bottom = this._prototypeFaces[1];
+
+    top.clone(bottom);
+    bottom.reverseOrientation();
+    top.setZ(0.5);
+    bottom.setZ(-0.5);
+    this._prototypeFaces.push(...top.buildTopSides(-0.5, { density }));
   }
 
   #initializeCubeFaces() {
-    if ( !(this._prototypeFaces.top instanceof Quad3d) ) {
-      this._prototypeFaces.top = new Quad3d();
-      this._prototypeFaces.bottom = new Quad3d();
+    this._prototypeFaces.length = 2;
+
+    if ( !(this._prototypeFaces[0] instanceof Quad3d) ) {
+      this._prototypeFaces[0] = new Quad3d();
+      this._prototypeFaces[1] = new Quad3d();
     }
 
     // Build top/bottom.
-    this.constructor.QUADS.up.clone(this._prototypeFaces.top);
-    this.constructor.QUADS.down.clone(this._prototypeFaces.bottom);
-    this._prototypeFaces.top.setZ(0.5);
-    this._prototypeFaces.bottom.setZ(-0.5);
+    const [top, bottom] = this._prototypeFaces;
+    this.constructor.QUADS.up.clone(top);
+    this.constructor.QUADS.down.clone(bottom);
+    top.setZ(0.5);
+    bottom.setZ(-0.5);
 
     // Build sides.
-    this._prototypeFaces.sides.length = 0;
-    this._prototypeFaces.sides.push(
-      this.constructor.QUADS.north.clone(),
-      this.constructor.QUADS.west.clone(),
-      this.constructor.QUADS.south.clone(),
-      this.constructor.QUADS.east.clone(),
-    );
+    const north = this.constructor.QUADS.north.clone(),
+    const west = this.constructor.QUADS.west.clone(),
+    const south = this.constructor.QUADS.south.clone(),
+    const east = this.constructor.QUADS.east.clone(),
+    this._prototypeSides.push(north, west, south, east);
 
     // Adjust the sides so that they are at the token edge.
     for ( let i = 0; i < 4; i += 1 ) {
-      this._prototypeFaces.sides[0].points[i].y = -0.5; // North.
-      this._prototypeFaces.sides[1].points[i].x = -0.5; // West.
-      this._prototypeFaces.sides[2].points[i].y = 0.5; // South.
-      this._prototypeFaces.sides[3].points[i].x = 0.5; // East.
+      north.points[i].y = -0.5; // North.
+      west.points[i].x = -0.5; // West.
+      south.points[i].y = 0.5; // South.
+      east.points[i].x = 0.5; // East.
     }
   }
 
@@ -451,9 +462,9 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
    * @prop {number} height      In y direction
    * @prop {number} zHeight     In z direction
    */
-  static tokenDimensions(token) {
-    const { width, height } = token.document; // Multiplier, e.g. 1, 2, or 3.
-    const zHeight = token.topZ - token.bottomZ;
+  static tokenDimensions(tokenD) {
+    const { width, height } = tokenD; // Multiplier, e.g. 1, 2, or 3.
+    const zHeight = tokenD.verticalHeightZ;
     return {
       width: (width * canvas.dimensions.size) - this.SPACER,
       height: (height * canvas.dimensions.size) - this.SPACER,
@@ -469,13 +480,25 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
    * @prop {number} y      In y direction
    * @prop {number} z     In z direction
    */
-  static tokenCenter(token) {
-    return Point3d.fromTokenCenter(token);
+  static tokenCenter(tokenD) {
+    const { x, y, topZ, bottomZ } = tokenDocument;
+    const { width, height } = tokenDocument.getSize();
+    const z = bottomZ + ((topZ - bottomZ) * 0.5);
+    return Point3d.set(x + (width * 0.5), y + (height * 0.5), z);
   }
 }
 
+
 /**
- * Track faces for a token constrained border.
- * Not worth tracking AABB, and the model matrix remains the same.
+ * Calculate token LOS height.
+ * Comparable to Wall Height method.
+ * Does not consider "ducking" here—that is done in tokenVerticalHeight, tokenTopElevation.
  */
+function calculateTokenHeightFromTokenShape(tokenD) {
+  const { width, height, texture } = tokenD;
+  return canvas.scene.dimensions.distance
+    * Math.max(width, height)
+    * (Math.abs(texture.scaleX) + Math.abs(texture.scaleY))
+    * 0.5;
+}
 
