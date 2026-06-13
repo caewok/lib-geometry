@@ -3,29 +3,14 @@ canvas,
 CONST,
 CONFIG,
 foundry,
-PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
 import { NULL_SET } from "./util.js";
-import { OTHER_MODULES, GEOMETRY_LIB_ID, GEOMETRY_ID } from "./const.js";
-import { AABB2d } from "./AABB.js";
-import { Point3d } from "./3d/Point3d.js";
+import { OTHER_MODULES, GEOMETRY_LIB_ID } from "./const.js";
+import { AABB3d } from "./3d/AABB3d.js";
 import { Draw } from "./Draw.js";
-import { WallGeometry } from "./placeable_geometry/WallGeometry.js";
-import { TokenGeometry } from "./placeable_geometry/TokenGeometry.js";
-import { TileGeometry } from "./placeable_geometry/TileGeometry.js";
-import { RegionGeometry } from "./placeable_geometry/RegionGeometry.js";
-
-/** @type {enum<PlaceableGeometry>} */
-const GEOMETRY_CLASSES = {
-  regions: RegionGeometry,
-  tokens: TokenGeometry,
-  tiles: TileGeometry,
-  walls: WallGeometry,
-};
-
 
 /**
  * An instance that, for a given configuration, tracks potential obstacles.
@@ -34,7 +19,7 @@ const GEOMETRY_CLASSES = {
  * Store temporary sets of placeable objects within the viewing shape.
  */
 export class ObstacleOcclusionTest {
-  obstacles = {
+  obstacleGeometries = {
     tiles: NULL_SET,
     tokens: NULL_SET,
     regions: NULL_SET,
@@ -42,35 +27,32 @@ export class ObstacleOcclusionTest {
     terrainWalls: NULL_SET,
     proximateWalls: NULL_SET,
     reverseProximateWalls: NULL_SET,
+    foregroundLevels: NULL_SET,
+    backgroundLevels: NULL_SET,
   };
 
   /**
-   * Shape that restricts the universe of placeables to test.
-   * Must have:
-   * - aabb or getBounds
-   * - Optionally contains placeable.
-   * @type {*}
+   * Further restrict the universe of placeables to test.
+   * @type {Frustum}
    */
-  #frustum = canvas.dimensions.sceneRect;
+  #frustum;
 
-  #frustum2dBounds = canvas.dimensions.sceneRect; // For Quadtree.
+  #aabb = new AABB3d();
+
+  get aabb() { return this.#aabb; }
+
+  // Note that this does not reset the frustum.
+  setBoundsFromShape(shape, z) {
+    AABB3d.fromShape(shape, z, this.#aabb);
+    this.update();
+  }
 
   get frustum() { return this.#frustum; }
 
   set frustum(value) {
     this.#frustum = value;
-    this.#setFrustumRect();
+    this.#aabb.copyFrom(value.aabb);
     this.update();
-  }
-
-  #setFrustumRect() {
-    const f = this.#frustum;
-    if ( f instanceof PIXI.Rectangle || f instanceof AABB2d ) this.#frustum2dBounds = f;
-    else if ( f.aabb ) this.#frustum2dBounds = f.aabb;
-    else if ( f.toRectangle ) this.#frustum2dBounds = f.toRectangle();
-    else if ( f.getBounds ) this.#frustum2dBounds = f.getBounds();
-    else if ( f.bounds ) this.#frustum2dBounds = f.bounds;
-    else this.#frustum2dBounds = f;
   }
 
   /**
@@ -102,6 +84,10 @@ export class ObstacleOcclusionTest {
     walls: true,
     tiles: true,
     regions: true,
+    levels: {
+      background: true,
+      foreground: true,
+    },
     tokens: {
       dead: false,
       live: false,
@@ -133,8 +119,9 @@ export class ObstacleOcclusionTest {
   get subjectToken() { return this.#subjectToken; }
 
   set subjectToken(value) {
+    if ( value.document ) value = value.document;
     this.#subjectToken = value;
-    this.obstacles.tokens = this.findBlockingTokens();
+    this.obstacleGeometries.tokens = this.findBlockingTokens();
   }
 
   /**
@@ -149,9 +136,9 @@ export class ObstacleOcclusionTest {
     if ( !tokens ) this.#tokensToExclude = new WeakSet();
     else {
       if ( !tokens[Symbol.iterator] ) tokens = [tokens];
-      this.#tokensToExclude = new WeakSet(tokens);
+      this.#tokensToExclude = new WeakSet(tokens.map(t => t.document ? t.document : t));
     }
-    this.obstacles.tokens = this.findBlockingTokens();
+    this.obstacleGeometries.tokens = this.findBlockingTokens();
   }
 
   /**
@@ -194,8 +181,8 @@ export class ObstacleOcclusionTest {
   initialize({ subjectToken, tokensToExclude, levelId, ...cfg } = {}) {
     // Set privately and then trigger full update.
     if ( levelId ) this.levelId = levelId;
-    if ( subjectToken ) this.#subjectToken = subjectToken;
-    if ( tokensToExclude ) this.#tokensToExclude = new WeakSet(tokensToExclude);
+    if ( subjectToken ) this.#subjectToken = subjectToken.document ? subjectToken.document : subjectToken;
+    if ( tokensToExclude ) this.#tokensToExclude = new WeakSet(tokensToExclude.map(t => t.document ? t.document : t));
     this.config = cfg; // Even if empty, trigger this.constructObstacleTester() via config setter;
   }
 
@@ -218,47 +205,57 @@ export class ObstacleOcclusionTest {
 
   _updateObstacles() {
     const senseType = this._config.senseType;
-    this.obstacles.tiles = this.findBlockingTiles();
-    this.obstacles.tokens = this.findBlockingTokens();
-    this.obstacles.regions = this.findBlockingRegions();
-    this.obstacles.walls = this.findBlockingWalls();
-    this.obstacles.terrainWalls = this.constructor.subsetWallsByType(this.obstacles.walls, CONST.EDGE_SENSE_TYPES.LIMITED, senseType);
-    this.obstacles.proximateWalls = this.constructor.subsetWallsByType(this.obstacles.walls, CONST.EDGE_SENSE_TYPES.PROXIMITY, senseType);
-    this.obstacles.reverseProximateWalls = this.constructor.subsetWallsByType(this.obstacles.walls, CONST.EDGE_SENSE_TYPES.DISTANCE, senseType);
+    this.obstacleGeometries.tiles = this.findBlockingTiles();
+    this.obstacleGeometries.tokens = this.findBlockingTokens();
+    this.obstacleGeometries.regions = this.findBlockingRegions();
+    this.obstacleGeometries.walls = this.findBlockingWalls();
+    this.obstacleGeometries.terrainWalls = this.constructor.subsetWallsByType(this.obstacleGeometries.walls, CONST.EDGE_SENSE_TYPES.LIMITED, senseType);
+    this.obstacleGeometries.proximateWalls = this.constructor.subsetWallsByType(this.obstacleGeometries.walls, CONST.EDGE_SENSE_TYPES.PROXIMITY, senseType);
+    this.obstacleGeometries.reverseProximateWalls = this.constructor.subsetWallsByType(this.obstacleGeometries.walls, CONST.EDGE_SENSE_TYPES.DISTANCE, senseType);
+    this.obstacleGeometries.foregroundLevels = this.findBlockingLevels("foreground");
+    this.obstacleGeometries.backgroundLevels = this.findBlockingLevels("background");
   }
 
   // ----- NOTE: Filter potential obstacles ----- //
 
+  /*
+    FindBlocking filters placeable documents by AABB, frustum (if present), and any document-specific tests.
+    Does not filter based on level; that is left to the occlusion tests.
+    (Particularly relevant for regions and walls, which have more nuanced level tests based on geometry.)
+  */
+
   /**
-   * @returns {Set<Wall>}
+   * Helper to get placeable docs within bounds, filter by the 3d aabb, and filter by frustum.
+   */
+  #filterDocGeometries(mgr, opts) {
+    const geoms = mgr.quadtree.getObjects(this.bounds, opts)
+      .map(doc => mgr.geomForDocument(doc))
+      .filter(geom => this.aabb.overlaps(geom));
+
+    if ( this.frustum ) return geoms.filter(geom => this.#frustum.overlapsGeometry(geom));
+    return geoms;
+  }
+
+  /**
+   * @returns {Set<WallDocument>}
    */
   findBlockingWalls() {
     if ( !this._config.walls ) return NULL_SET;
 
-    let walls = WallGeometry.quadtree.getObjects(this.#frustum2dBounds);
-
     // Drop non-blocking walls for this sense type.
-    walls = walls.filter(wall => wall.document[this._config.senseType]); // CONST.EDGE_SENSE_TYPES.NONE === 0.
-
-    // Specialized exclusion tests
-    if ( this.#frustum.aabb ) walls = walls.filter(wall => this.#frustum.aabb.overlapsAABB(placeableAABB(wall)));
-    if ( this.#frustum.overlapsWall ) walls = walls.filter(wall => this.#frustum.overlapsWall(wall));
-    return walls;
+    const collisionTest = o => o.t[this._config.senseType];
+    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.wall, { collisionTest });
   }
 
   /**
-   * @returns {Set<Token>}
+   * @returns {Set<TokenDocument>}
    */
   findBlockingTokens() {
     const tokensCfg = this._config.tokens;
     if ( !(tokensCfg.dead || tokensCfg.live) ) return NULL_SET;
-    let tokens = TokenGeometry.quadtree.getObjects(this.#frustum2dBounds, {
-      collisionTest: o => this.includeToken(o.t)
-    });
 
-    // Specialized exclusion tests
-    if ( this.#frustum.aabb ) tokens = tokens.filter(token => this.#frustum.aabb.overlapsAABB(placeableAABB(token)));
-    if ( this.#frustum.overlapsToken ) tokens = tokens.filter(token => this.#frustum.overlapsToken(token));
+    const collisionTest = o => this.includeToken(o.t);
+    let tokenGeoms = this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.token, { collisionTest });
 
     // Module-specific
     const RIDEABLE = OTHER_MODULES.RIDEABLE;
@@ -266,84 +263,88 @@ export class ObstacleOcclusionTest {
       // Cannot iterate the weak set.
       // This is slower but preserves the weak set.
       // Drop any token with a riding connection to an excluded token.
-      for ( const t of canvas.tokens.placeable ) {
+      for ( const t of canvas.scene.tokens ) {
+        if ( !t.object ) continue;
         if ( this.subjectToken === t || this.tokensToExclude.has(t) ) {
-          tokens.filter(token => !RIDEABLE.API.RidingConnection(token, t));
+          tokenGeoms = tokenGeoms.filter(tokenGeom => !(tokenGeom.token && RIDEABLE.API.RidingConnection(tokenGeom.token, t.object)));
         }
       }
     }
-    return tokens;
+    return tokenGeoms;
   }
 
   /**
-   * @returns {Set<Tile>}
+   * @returns {Set<TileDocument>}
    */
   findBlockingTiles() {
     if ( !this._config.tiles ) return NULL_SET;
-    let tiles = TileGeometry.quadtree.getObjects(this.#frustum2dBounds);
-
-    // Specialized exclusion tests
-    if ( this.#frustum.aabb ) tiles = tiles.filter(tile => this.#frustum.aabb.overlapsAABB(placeableAABB(tile)));
-    if ( this.#frustum.overlapsTile ) tiles = tiles.filter(tile => this.#frustum.overlapsTile(tile));
-    return tiles;
+    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.tile);
   }
 
   /**
-   * @returns {Set<Region>}
+   * @returns {Set<RegionDocument>}
    */
   findBlockingRegions() {
     if ( !this._config.regions || !canvas.regions.placeables.length ) return NULL_SET;
-    let regions = RegionGeometry.quadtree.getObjects(this.#frustum2dBounds);
+    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.region);
+  }
 
-    // Specialized exclusion tests
-    if ( this.#frustum.aabb ) regions = regions.filter(region => this.#frustum.aabb.overlapsAABB(placeableAABB(region)));
-    if ( this.#frustum.overlapsToken ) regions = regions.filter(region => this.#frustum.overlapsRegion(region));
-    return regions;
+  /**
+   * @param {"foreground"|"background"} [levelType="background"]      For Level docs, foreground or background texture?
+   * @returns {Set<Level>}
+   */
+  findBlockingLevels(levelType = "background") {
+    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.level[levelType]);
   }
 
   /**
    * Does the token block with respect to a movement token?
-   * @param {Token} token           Token to test for whether it could block
-   * @param {Token} [subjectToken]       Token doing the movement or viewing
+   * @param {TokenDocument} tokenD           Token to test for whether it could block
+   * @param {TokenDocument} [subjectTokenD]       Token doing the movement or viewing
    * @param {TokenBlockingConfig} blockingCfg
    * @returns {boolean}
    */
-  static tokenBlocks(token, subjectToken, blockingCfg = {}) {
+  static tokenBlocks(tokenD, subjectTokenD, blockingCfg = {}) {
+    if ( tokenD.document ) tokenD = tokenD.document;
+    if ( subjectTokenD.document ) subjectTokenD = subjectTokenD.document;
+
     // Hidden tokens don't block.
-    if ( token.document.hidden ) return false;
+    if ( tokenD.hidden ) return false;
 
     // Don't block self. Note this is ignored if no subject token.
-    if ( subjectToken === token ) return false;
+    if ( subjectTokenD === tokenD ) return false;
 
     // Exclude certain token statuses.
     blockingCfg.excludedStatuses ??= NULL_SET;
-    if ( token.actor
-      && token.actor.statuses.intersects(blockingCfg.excludedStatuses) ) return false;
+    if ( tokenD.actor
+      && tokenD.actor.statuses.intersects(blockingCfg.excludedStatuses) ) return false;
 
     // Tests for dead tokens.
-    if ( !blockingCfg.dead && CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsDead(token) ) return false;
+    if ( !blockingCfg.dead && CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsDead(tokenD) ) return false;
 
     // Tests for live tokens.
-    if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsAlive(token) ) {
+    if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsAlive(tokenD) ) {
       if ( !blockingCfg.live ) return false;
-      if ( !blockingCfg.prone && token.isProne ) return false;
+      if ( !blockingCfg.prone && tokenD.isProne ) return false;
 
       // Compare disposition to subject token.
-      if ( subjectToken ) {
-        if ( !blockingCfg.enemies && CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsEnemy(subjectToken, token) ) return false;
-        if ( !blockingCfg.allies && CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsAlly(subjectToken, token) ) return false;
+      if ( subjectTokenD ) {
+        if ( !blockingCfg.enemies && CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsEnemy(subjectTokenD, tokenD) ) return false;
+        if ( !blockingCfg.allies && CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsAlly(subjectTokenD, tokenD) ) return false;
       }
     }
     return true;
   }
 
-  static includeToken(token, { blockingCfg = {}, subjectToken, tokensToExclude = NULL_SET }) {
-    if ( token === subjectToken || tokensToExclude.has(token) ) return false;
-    return this.tokenBlocks(token, subjectToken, blockingCfg);
+  static includeToken(tokenD, { blockingCfg = {}, subjectToken, tokensToExclude = NULL_SET }) {
+    if ( subjectToken && subjectToken.document ) subjectToken = subjectToken.document;
+
+    if ( tokenD === subjectToken || tokensToExclude.has(tokenD) ) return false;
+    return this.tokenBlocks(tokenD, subjectToken, blockingCfg);
   }
 
-  includeToken(token) {
-    return this.constructor.includeToken(token, {
+  includeToken(tokenD) {
+    return this.constructor.includeToken(tokenD, {
       blockingCfg: this._config.tokens,
       subjectToken: this.subjectToken,
       tokensToExclude: this.tokensToExclude
@@ -357,12 +358,15 @@ export class ObstacleOcclusionTest {
     // Obstacle found should follow the blocking config.
     // Note that obstacles will have NULL_SET if config is not set to block.
     const fnNames = [];
-    if ( this.obstacles.walls.size ) fnNames.push("wallsOcclude");
-    if ( this.obstacles.terrainWalls.size ) fnNames.push("terrainWallsOcclude");
-    if ( this.obstacles.proximateWalls.size || this.obstacles.reverseProximateWalls.size ) fnNames.push("proximateWallsOcclude");
-    if ( this.obstacles.tiles.size ) fnNames.push("tilesOcclude");
-    if ( this.obstacles.tokens.size ) fnNames.push("tokensOcclude");
-    if ( this.obstacles.regions.size ) fnNames.push("regionsOcclude");
+    if ( this.obstacleGeometries.walls.size ) fnNames.push("wallsOcclude");
+    if ( this.obstacleGeometries.terrainWalls.size ) fnNames.push("terrainWallsOcclude");
+    if ( this.obstacleGeometries.proximateWalls.size
+      || this.obstacleGeometries.reverseProximateWalls.size ) fnNames.push("proximateWallsOcclude");
+    if ( this.obstacleGeometries.tiles.size ) fnNames.push("tilesOcclude");
+    if ( this.obstacleGeometries.tokens.size ) fnNames.push("tokensOcclude");
+    if ( this.obstacleGeometries.regions.size ) fnNames.push("regionsOcclude");
+    if ( this.obstacleGeometries.foregroundLevels.size ) fnNames.push("foregroundLevelsOcclude");
+    if ( this.obstacleGeometries.backgroundLevels.size ) fnNames.push("backgroundLevelsOcclude");
     this.obstacleTester = this.#occlusionTester(fnNames);
   }
 
@@ -374,105 +378,114 @@ export class ObstacleOcclusionTest {
   }
 
   /** @type {PIXI.Rectangle} */
-  #tmpBounds = new AABB2d();
+  #tmpBounds = new AABB3d();
 
   /**
-   * Return canvas placeables that are within a ray.
-   * @param {"walls"|"tokens"|"regions"|"tiles"} placeableName
+   * Determine if a geometry is within a ray
+   * @param {PlaceableGeometry} geom
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayEnd
+   * @returns {boolean}
+   */
+  #geomWithinRayBounds(geom, rayOrigin, rayEnd) {
+    const bounds = this.#tmpBounds;
+    AABB3d.fromPoints([rayOrigin, rayEnd], bounds);
+    return geom.aabb.overlapsAABB(bounds) && bounds.overlapsAABB(geom.aabb);
+  }
+
+  /**
+   * Determine if a set of geometries occlude a given ray.
+   * @param {Set<PlaceableGeometry>} geoms
    * @param {Point3d} rayOrigin
    * @param {Point3d} rayDirection
-   * @returns {Set<Placeable>}
+   * @returns {boolean}
    */
-  #placeablesWithinRay(placeableName, rayOrigin, rayDirection) {
+  #geometriesOcclude(geoms, rayOrigin, rayDirection) {
     using rayEnd = rayOrigin.add(rayDirection);
-
-    // Narrow by quadtree first.
-    const bounds = this.#tmpBounds;
-    AABB2d.fromPoints([rayOrigin, rayEnd], bounds);
-    const placeables = GEOMETRY_CLASSES[placeableName].quadtree.getObjects(bounds); // Note this is a Set.
-
-    // If the ray is vertical or horizontal, quadtree bounds are sufficient.
-    if ( !rayDirection.z && !(rayDirection.x || rayDirection.y) ) return placeables;
-
-    // If the ray is very small, quadtree bounds are sufficient.
-    if ( Point3d.distanceSquaredBetween(rayOrigin, rayEnd) < (canvas.dimensions.size ** 2) ) return placeables;
-
-    // Narrow by aabb of the placeable, which gives a much closer fit for long rays
-    for ( const placeable of placeables ) {
-      const geom = placeable[GEOMETRY_LIB_ID][GEOMETRY_ID];
-      if ( !geom.aabb.overlapsSegment(rayOrigin, rayEnd) ) placeables.delete(placeable);
-    }
-    return placeables;
-  }
-
-  wallsOcclude(rayOrigin, rayDirection) {
-    const walls = this.obstacles.walls.intersection(this.#placeablesWithinRay("walls", rayOrigin, rayDirection));
     const opts = { ignoreLevelIds: this.invalidLevels };
-    return walls.some(wall => placeableIntersection(wall, rayOrigin, rayDirection, opts));
+    return geoms.some(geom => this.#geomWithinRayBounds(geom, rayOrigin, rayEnd)
+      && geom.rayIntersection(rayOrigin, rayDirection, opts));
   }
 
-  terrainWallsOcclude(rayOrigin, rayDirection) {
+  /**
+   * Do the wall geometry obstacles occlude this ray?
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @returns {boolean}
+   */
+  wallGeometriesOcclude(rayOrigin, rayDirection) {
+    return this.#geometriesOcclude(this.obstacleGeometries.walls, rayOrigin, rayDirection);
+  }
+
+  terrainWallGeometriesOcclude(rayOrigin, rayDirection) {
     let limitedOcclusion = 0;
-    const terrainWalls = this.obstacles.terrainWalls.intersection(this.#placeablesWithinRay("walls", rayOrigin, rayDirection));
+    using rayEnd = rayOrigin.add(rayDirection);
+    const geoms = geoms.filter(geom => this.#geomWithinRayBounds(geom, rayOrigin, rayEnd));
     const opts = { ignoreLevelIds: this.invalidLevels };
-    for ( const wall of terrainWalls ) {
-      if ( !placeableIntersection(wall, rayOrigin, rayDirection, opts) ) continue;
+    for ( const geom of geoms ) {
+      if ( !geom.rayIntersection(rayOrigin, rayDirection, opts) ) continue;
       if ( limitedOcclusion++ ) return true;
     }
     return false;
   }
 
-  proximateWallsOcclude(rayOrigin, rayDirection) {
-    const walls = this.#placeablesWithinRay("walls", rayOrigin, rayDirection);
-    const proximateWalls = this.obstacles.proximateWalls.intersection(walls);
-    const reverseProximateWalls = this.obstacles.reverseProximateWalls.intersection(walls);
+  proximateWallGeometriesOcclude(rayOrigin, rayDirection) {
+    using rayEnd = rayOrigin.add(rayDirection);
+    const geoms = [
+      ...this.obstacleGeometries.proximateWalls,
+      ...this.obstacleGeometries.reverseProximateWalls
+    ];
     const opts = { ignoreLevelIds: this.invalidLevels };
-    for ( const wall of [...proximateWalls, ...reverseProximateWalls] ) {
+    for ( const geom of geoms ) {
+      if ( !this.#geomWithinRayBounds(geom, rayOrigin, rayEnd) ) continue;
+
       // If the proximity threshold is met, this edge excluded from perception calculations.
-      if ( wall.edge.applyThreshold(this._config.senseType, rayOrigin) ) continue;
-      if ( placeableIntersection(wall, rayOrigin, rayDirection, opts) ) return true;
+      if ( geom.edge.applyThreshold(this._config.senseType, rayOrigin) ) continue;
+
+      // If an intersection is found, we can stop.
+      if ( geom.rayIntersection(rayOrigin, rayDirection, opts) ) return true;
+
     }
     return false;
   }
 
   tilesOcclude(rayOrigin, rayDirection) {
-    return this.obstacles.tiles
-      .filter(tile => this.validLevels.has(tile.document.level))
-      .intersection(this.#placeablesWithinRay("tiles", rayOrigin, rayDirection))
-      .some(tile => placeableIntersection(tile, rayOrigin, rayDirection));
+    return this.#geometriesOcclude(this.obstacleGeometries.tiles, rayOrigin, rayDirection);
   }
 
   tokensOcclude(rayOrigin, rayDirection) {
-    const validLevels = this.validLevels;
-    return this.obstacles.tokens
-      .filter(token => validLevels.has(token.document.level))
-      .intersection(this.#placeablesWithinRay("tokens", rayOrigin, rayDirection))
-      .some(token => placeableIntersection(token, rayOrigin, rayDirection));
+    return this.#geometriesOcclude(this.obstacleGeometries.tokens, rayOrigin, rayDirection);
   }
 
   regionsOcclude(rayOrigin, rayDirection) {
-    const regions = this.obstacles.regions.intersection(this.#placeablesWithinRay("regions", rayOrigin, rayDirection));
-    const opts = { ignoreLevelIds: this.invalidLevels };
-    return regions.some(region => placeableIntersection(region, rayOrigin, rayDirection, opts));
+    return this.#geometriesOcclude(this.obstacleGeometries.regions, rayOrigin, rayDirection);
+  }
+
+  foregroundLevelsOcclude(rayOrigin, rayDirection) {
+    return this.#geometriesOcclude(this.obstacleGeometries.foregroundLevels, rayOrigin, rayDirection);
+  }
+
+  backgroundLevelsOcclude(rayOrigin, rayDirection) {
+    return this.#geometriesOcclude(this.obstacleGeometries.backgroundLevels, rayOrigin, rayDirection);
   }
 
   // ----- NOTE: Static methods ----- //
 
   /**
    * Pull out terrain walls or other wall types from a set of walls.
-   * @param {Set<Wall>} walls               Set of walls to divide
+   * @param {Set<WallGeometry>} wallGeoms               Set of wall geomeries to divide
    * @param {CONST.EDGE_SENSE_TYPES}        What type of wall to pull out
    * @param {string} [senseType="sight"]    Restriction type to test
    * @returns {Set<Wall>}  Modifies walls set *in place* and returns terrain walls.
    */
-  static subsetWallsByType(walls, wallType = CONST.EDGE_SENSE_TYPES.LIMITED, senseType = "sight") {
-    if ( !walls.size ) return NULL_SET;
+  static subsetWallsByType(wallGeoms, wallType = CONST.EDGE_SENSE_TYPES.LIMITED, senseType = "sight") {
+    if ( !wallGeoms.size ) return NULL_SET;
     const wallSubset = new Set();
-    walls
-      .filter(w => w.document[senseType] === wallType)
-      .forEach(w => {
-        walls.delete(w);
-        wallSubset.add(w);
+    wallGeoms
+      .filter(geom => geom.placeableDocument[senseType] === wallType)
+      .forEach(geom => {
+        wallGeoms.delete(geom);
+        wallSubset.add(geom);
       });
     return wallSubset;
   }
@@ -480,6 +493,7 @@ export class ObstacleOcclusionTest {
   // ----- NOTE: Debug ----- //
 
   _drawFrustum(draw) {
+    if ( !this.frustum ) return;
     const drawOpts = { draw, width: 0, fill: Draw.COLORS.gray, fillAlpha: 0.1 }
     if ( this.frustum.draw2d ) this.frustum.draw2d(drawOpts);
     else {
@@ -501,21 +515,13 @@ export class ObstacleOcclusionTest {
       tiles: colors.yellow,
       tokens: colors.orange,
       regions: colors.red,
+      foregroundLevels: colors.LIGHT.orange,
+      backgroundLevels: colors.DARK.orange,
     }
-    for ( const [key, obstacles] of Object.entries(this.obstacles) ) {
+    for ( const [key, obstacleGeoms] of Object.entries(this.obstacleGeometries) ) {
       const color = OBSTACLE_COLORS[key];
       const drawOpts = { draw, color, fillAlpha: 0.1, fill: color };
-      obstacles.forEach(placeable => placeable[GEOMETRY_LIB_ID][GEOMETRY_ID].draw2d(drawOpts));
+      obstacleGeoms.forEach(geom => geom.draw2d(drawOpts));
     }
   }
-}
-
-function placeableIntersection(placeable, rayOrigin, rayDirection, opts) {
-  const geom = placeable[GEOMETRY_LIB_ID][GEOMETRY_ID];
-  return geom.rayIntersection(rayOrigin, rayDirection, opts);
-}
-
-function placeableAABB(placeable) {
-  const geom = placeable[GEOMETRY_LIB_ID][GEOMETRY_ID];
-  return geom.aabb;
 }

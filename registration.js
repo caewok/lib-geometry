@@ -11,12 +11,6 @@ import { GEOMETRY_LIB_ID, VERSION } from "./const.js";
 import { mergeConfigs } from "./config.js";
 import { registerGeometryLibPatches } from "./patching.js";
 
-import { WallGeometry } from "./placeable_geometry/WallGeometry.js";
-import { TokenGeometry } from "./placeable_geometry/TokenGeometry.js";
-import { RegionGeometry } from "./placeable_geometry/RegionGeometry.js";
-import { TileGeometry } from "./placeable_geometry/TileGeometry.js";
-import { LevelBackgroundGeometry, LevelForegroundGeometry } from "./placeable_geometry/LevelGeometry.js";
-
 import {
   TilePixelCacheManager,
   LevelForegroundPixelCacheManager,
@@ -109,53 +103,8 @@ function registerGeometryLibClasses() {
  */
 function registerPlaceableGeometry() {
   if ( !CONFIG[GEOMETRY_LIB_ID].CONFIG.placeableGeometries.size ) return;
-
-  const GEOMETRY_CLASSES = {
-    Tile: TileGeometry,
-    Region: RegionGeometry,
-    Wall: WallGeometry,
-    Token: TokenGeometry,
-    Level: {
-      background: LevelBackgroundGeometry,
-      foreground: LevelForegroundGeometry,
-    },
-  };
-
-  const GEOMETRY_MANAGERS = {
-    Tile: TileGeometryManager,
-    Region: RegionGeometryManager,
-    Wall: WallGeometryManager,
-    Token: TokenGeometryManager,
-    Level: {
-      background: LevelBackgroundGeometryManager,
-      foreground: LevelForegroundGeometryManager,
-    },
-  };
-
-  CONFIG[GEOMETRY_LIB_ID].geometryManagers ??= {};
-  for ( const name of CONFIG[GEOMETRY_LIB_ID].CONFIG.placeableGeometries ) {
-    if ( name === "Level" ) {
-      CONFIG[GEOMETRY_LIB_ID].geometryManagers.Level = {};
-      CONFIG[GEOMETRY_LIB_ID].geometryManagers.Level.background = new GEOMETRY_MANAGERS.Level.background();
-      CONFIG[GEOMETRY_LIB_ID].geometryManagers.Level.foreground = new GEOMETRY_MANAGERS.Level.foreground();
-
-    } else CONFIG[GEOMETRY_LIB_ID].geometryManagers[name] = new GEOMETRY_MANAGERS[name]()
-  }
-
-  Hooks.on("canvasReady", () => {
-    for ( const name of CONFIG[GEOMETRY_LIB_ID].CONFIG.placeableGeometries ) {
-      if ( name === "Level" ) {
-        GEOMETRY_CLASSES.Level.background.registerHooks();
-        GEOMETRY_CLASSES.Level.foreground.registerHooks();
-        CONFIG[GEOMETRY_LIB_ID].geometryManagers.Level.background.initializeScene();
-        CONFIG[GEOMETRY_LIB_ID].geometryManagers.Level.foreground.initializeScene();
-      } else {
-        const geomCl = GEOMETRY_CLASSES[name];
-        geomCl.registerHooks();
-        CONFIG[GEOMETRY_LIB_ID].geometryManagers[name].initializeScene();
-      }
-    }
-  });
+  const mgr = CONFIG[GEOMETRY_LIB_ID].geometryManager = new GeometryManager(CONFIG[GEOMETRY_LIB_ID].CONFIG.placeableGeometries);
+  mgr.registerHooks();
 }
 
 /* TODO: Any deconstruction needed?
@@ -176,5 +125,133 @@ function deregisterPlaceableGeometry() {
 }
 */
 
+/**
+ * Helper to manage the different placeable document geometries.
+ */
+class GeometryManager {
 
+  static GEOMETRY_MANAGERS = {
+    tile: TileGeometryManager,
+    region: RegionGeometryManager,
+    wall: WallGeometryManager,
+    token: TokenGeometryManager,
+    level: {
+      background: LevelBackgroundGeometryManager,
+      foreground: LevelForegroundGeometryManager,
+    },
+  };
 
+  /**
+   * @typedef {string} GeometryType
+   * Wall|Tile|Region|Token|Level
+   */
+
+  /** @type {GeometryType[]} */
+  types = [];
+
+  /** @type {TileGeometryManager} */
+  tile = null;
+
+  /** @type {RegionGeometryManager} */
+  region = null;
+
+  /** @type {WallGeometryManager} */
+  wall = null;
+
+  /** @type {object<LevelGeometryManager>} */
+  level = {
+    background: null,
+    foreground: null,
+  }
+
+  constructor(types) {
+    this.types.push(...types.map(t => t.toLowerCase())); // For consistency.
+    this.#createManagers();
+  }
+
+  #createManagers() {
+    const GEOMETRY_MANAGERS = this.constructor.GEOMETRY_MANAGERS;
+    for ( const type of this.types ) {
+      // Create a manager for each type.
+      if ( type === "level" ) {
+        this.level.background = new GEOMETRY_MANAGERS.level.background();
+        this.level.foreground = new GEOMETRY_MANAGERS.level.foreground();
+      } else this[type] = new GEOMETRY_MANAGERS[type]();
+    }
+  }
+
+  /**
+   * Iterate through the valid managers.
+   * @yield {GeometryManager}
+   */
+  *iterateManagers() {
+     for ( const type of this.types ) {
+       if ( type === "level" ) {
+         if ( this.level.background ) yield this.level.background;
+         if ( this.level.foreground ) yield this.level.foreground;
+       } else if ( this.level[type] ) yield this.level.type;
+     }
+  }
+
+  /**
+   * For every relevant document in the scene, initialize the geometry.
+   */
+  initializeScene() { for ( const mgr of this.iterateManagers() ) mgr.initializeScene(); }
+
+  /**
+   * Register hooks to track the geometries as documents change.
+   */
+  registerHooks() {
+    for ( const mgr of this.iterateManagers() ) mgr.registerHooks();
+  }
+
+  /**
+   * Retrieve the manager for a specific document.
+   * @param {CanvasDocument|GeometryType} typeOrDoc
+   * @param {"foreground"|"background"} [levelType="background"]      For Level docs, foreground or background texture?
+   * @returns {GeometryManager}
+   */
+  _managerForDocument(typeOrDoc, levelType = "background") {
+    const type = (typeOrDoc.documentName || typeOrDoc).toLowerCase();
+    if ( type === "level" ) return this.level[levelType];
+    return this[type];
+  }
+
+  /**
+   * Find objects using quadtree for a specific type.
+   * @param {CanvasDocument|GeometryType} typeOrDoc
+   * @param {AABB} bounds             2d bounds
+   * @param {object} [opts]
+   * @param {"foreground"|"background"} [opts.levelType="background"]      For Level docs, foreground or background texture?
+   * @param {object} ...opts          Passed to quadtree
+   * @returns {Set<PlaceableGeometry>}
+   */
+  getGeometries(typeOrDoc, bounds, { levelType = "background", ...opts } = {}) {
+    const mgr = this._managerForDocument(typeOrDoc, levelType);
+    return mgr.quadtree.getObjects(bounds, opts);
+  }
+
+  /**
+   * @param {CanvasDocument} typeOrDoc
+   * @param {"foreground"|"background"} [levelType="background"]      For Level docs, foreground or background texture?
+   * @returns {PlaceableGeometry}
+   */
+  geomForDocument(typeOrDoc, levelType = "background") {
+    const mgr = this._managerForDocument(typeOrDoc, levelType);
+    return mgr.geomForDocument(typeOrDoc);
+  }
+
+  /**
+   * @param {PlaceableObject} placeable
+   * @param {"foreground"|"background"} [levelType="background"]      For Level docs, foreground or background texture?
+   * @returns {PlaceableGeometry}
+   */
+  geomForPlaceable(placeable, levelType = "background") {
+    return this.geomForDocument(placeable.document, levelType);
+  }
+
+  /**
+   * Clear all geometry data.
+   */
+  clear() { for ( const mgr of this.iterateManagers() ) mgr.clear(); }
+}

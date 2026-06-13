@@ -190,51 +190,56 @@ export function mergeConfigs(maxVersion = VERSION) {
 
 /**
  * Test if a token is dead. Usually, but not necessarily, the opposite of tokenIsDead.
- * @param {Token} token
+ * @param {TokenDocument|Token} tokenD
  * @returns {boolean} True if dead.
  */
-function tokenIsAlive(token) { return !tokenIsDead(token); }
+function tokenIsAlive(tokenD) { return !tokenIsDead(tokenD); }
 
 /**
  * Test if a token is dead. Usually, but not necessarily, the opposite of tokenIsAlive.
- * @param {Token} token
+ * @param {TokenDocument|Token} tokenD
  * @returns {boolean} True if dead.
  */
-function tokenIsDead(token) {
+function tokenIsDead(tokenD) {
+  if ( tokenD.document ) tokenD = tokenD.document;
+
   // DemonLord using damage system.
   if ( game.system.id === "demonlord") {
-    const health = Number(foundry.utils.getProperty(token, "actor.system.characteristics.health.max"));
-    const damage = Number(foundry.utils.getProperty(token, "actor.system.characteristics.health.value"));
+    const health = Number(foundry.utils.getProperty(tokenD, "actor.system.characteristics.health.max"));
+    const damage = Number(foundry.utils.getProperty(tokenD, "actor.system.characteristics.health.value"));
     const hp = health - damage;
     return hp <= 0;
   }
 
   // Generic.
   const deadStatus = CONFIG.statusEffects.find(status => status.id === "dead");
-  if ( deadStatus && token.actor && token.actor.statuses.has(deadStatus.id) ) return true;
+  if ( deadStatus && tokenD.actor && tokenD.actor.statuses.has(deadStatus.id) ) return true;
 
   const tokenHPAttribute = "system.attributes.hp.value";
-  const hp = getObjectProperty(token.actor, tokenHPAttribute);
+  const hp = getObjectProperty(tokenD.actor, tokenHPAttribute);
   if ( typeof hp !== "number" ) return false;
   return hp <= 0;
 }
 
 /**
  * Test if a token is an enemy with respect to another.
- * @param {Token} subjectToken
- * @param {Token} testToken
+ * @param {TokenDocument|Token} subjectTokenD
+ * @param {TokenDocument|Token} testTokenD
  * @returns {boolean} True if:
  *  subject           |  test
  *  friendly/neutral  |  hostile/secret
  *  hostile           |  friendly/neutral/secret
  *  secret            |  friendly/neutral/hostile/secret
  */
-function tokenIsEnemy(subjectToken, testToken) {
-  const sD = subjectToken.document.disposition;
+function tokenIsEnemy(subjectTokenD, testTokenD) {
+  if ( subjectTokenD.document ) subjectTokenD = subjectTokenD.document;
+  if ( testTokenD.document ) testTokenD = testTokenD.document;
+
+  const sD = subjectTokenD.disposition;
 
   // All secret tokens presumed enemies.
   if ( sD === CONST.TOKEN_DISPOSITIONS.SECRET ) return true;
-  const tD = testToken.document.disposition;
+  const tD = tokenD.disposition;
   if ( tD === CONST.TOKEN_DISPOSITIONS.SECRET ) return true;
 
   // Hostiles are enemies to non-hostiles and vice-versa.
@@ -248,16 +253,19 @@ function tokenIsEnemy(subjectToken, testToken) {
 /**
  * Test if a token is an ally with respect to another.
  * Two hostiles are assumed allies.
- * @param {Token} subjectToken
- * @param {Token} testToken
+ * @param {TokenDocument|Token} subjectTokenD
+ * @param {TokenDocument|Token} testTokenD
  * @returns {boolean} True if:
  *  subject           |  test
  *  friendly/neutral  |  friendly/neutral
  *  hostile           |  hostile
  */
-function tokenIsAlly(subjectToken, testToken) {
-  const sD = subjectToken.document.disposition;
-  const tD = testToken.document.disposition;
+function tokenIsAlly(subjectTokenD, testTokenD) {
+  if ( subjectTokenD.document ) subjectTokenD = subjectTokenD.document;
+  if ( testTokenD.document ) testTokenD = testTokenD.document;
+
+  const sD = subjectTokenD.disposition;
+  const tD = testTokenD.disposition;
 
   // Friendly/neutrals are allies
   if ( sD >= 0 && tD >= 0 ) return true;

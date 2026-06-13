@@ -1,6 +1,7 @@
 /* globals
 canvas,
 CONST,
+foundry,
 PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
@@ -73,6 +74,29 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
   get wall() { return this.placeableDocument.object; }
 
   get edge() {
+    if ( !this.wall ) {
+      // See foundry.js #createEdge
+      const wallD = this.placeableDocument;
+      let { c, id, light, sight, sound, move, dir: direction, threshold } = wallD;
+      if ( wallD.isOpen ) light = sight = sound = move = CONST.WALL_SENSE_TYPES.NONE;
+      const dpx = this.scene.dimensions.distancePixels;
+      return new foundry.canvas.geometry.edges.Edge({ x: c[0], y: c[1] }, { x: c[2], y: c[3] }, {
+        id: `wall.${id}`,
+        type: "wall",
+        object: null,
+        direction,
+        light,
+        sight,
+        sound,
+        move,
+        threshold: {
+          light: threshold.light * dpx,
+          sight: threshold.sight * dpx,
+          sound: threshold.sound * dpx,
+          attenuation: threshold.attenuation
+        }
+      });
+    }
     if ( !this.wall.edge ) this.wall.initializeEdge();
     return this.wall.edge;
   }

@@ -139,6 +139,9 @@ export class CanvasGeometryManager {
    */
   #initialized = false;
 
+  /**
+   * Register hooks to track the geometries as documents change.
+   */
   registerHooks() {
     if ( this.#initialized ) return;
 

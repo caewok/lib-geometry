@@ -133,7 +133,10 @@ export class AABB3d extends AABB2d {
    */
   static fromShape(shape, z, out) {
     out ??= new this();
-    super.fromShape(shape, out);
+    if ( shape instanceof AABB3d ) {
+      out.copyFrom(shape);
+      if ( !z ) return out;
+    } else super.fromShape(shape, out);
     z = this.getMinMaxForValues(z);
     out.min.z = z.min;
     out.max.z = z.max;
@@ -303,6 +306,18 @@ export class AABB3d extends AABB2d {
    */
   overlapsConvexPolygon3d(poly3d) {
     if ( poly3d instanceof Circle3d ) return this.overlapsCircle3d(poly3d);
+    if ( poly3d instanceof Polygons3d ) {
+      // Early exit if polygon is empty
+      if ( !poly3d.polygons.length) return false;
+
+      // Test 1: AABB axes. (Polygon bounding box.)
+      if ( !poly3d.aabb.overlapsAABB(this) ) return false;
+
+      for ( const poly of poly3d.polygons ) {
+        if ( this.overlapsConvexPolygon3d(poly) ) return true;
+      }
+      return false;
+    }
 
     // Early exit if polygon is empty
     if ( !poly3d.points || poly3d.points.length === 0 ) return false;

@@ -33,18 +33,10 @@ export class Frustum {
 
   aabb = new AABB3d();
 
-  /** @type {PIXI.Rectangle} */
-  bounds2d = new PIXI.Rectangle(); // For quadtree
-
   /** @type {Point3d} */
   get viewpoint() { return this.top.a; }
 
-  setAABB() {
-    AABB3d.union([this.floor.aabb, this.top.aabb], this.aabb);
-
-    // Update the bounds to match.
-    this.aabb.toRectangle(this.bounds2d);
-  }
+  setAABB() { AABB3d.union([this.floor.aabb, this.top.aabb], this.aabb); }
 
   /**
    * Vision Polygon for the view point --> target.
@@ -307,26 +299,24 @@ export class Frustum {
     return false;
   }
 
-  overlapsEdge(edge) {
-    // TODO: Could assume vertical walls and avoid a generic convex polygon test.
-    const geom = edge.object[GEOMETRY_LIB_ID]?.[GEOMETRY_ID] ?? edge.object?.object[GEOMETRY_LIB_ID]?.[GEOMETRY_ID];
-    if ( !geom ) return false;
-    return this.poly3dWithinFrustum(geom.faces.top || geom.faces.bottom);
+  overlapsGeometry(geom) {
+    if ( !this.overlapsAABB(geom.aabb) ) return false;
+    for ( const face of geom.iterateFaces() ) {
+      if ( this.poly3dWithinFrustum(face) ) return true;
+    }
+    return false;
   }
 
-  overlapsWall(wall) { return this.overlapsEdge(wall.edge); }
-
-  overlapsTile(tile) {
-    // If the elevations don't change, the tile cannot be an obstacle.
-    if ( this.aabb.min.z === this.aabb.max.z ) return false;
-
-    const geom = tile[GEOMETRY_LIB_ID][GEOMETRY_ID];
-    return this.poly3dWithinFrustum(geom.faces.top || geom.faces.bottom);
+  overlapsDocument(doc, foregroundType = "background") {
+    if ( doc.documentName === "Region" ) return this.overlapsRegionDocument(doc);
+    const geom = CONFIG.GeometryLib.geometryManager.geomForDocument(doc, foregroundType);
+    return this.overlapsGeometry(geom);
   }
 
-  overlapsRegion(region) {
+  overlapsRegionDocument(regionD) {
     // Ignore regions not within the vision rectangle elevation.
-    const { topZ, bottomZ } = region;
+    const topZ = gridUnitsToPixels(regionD.elevation.top);
+    const bottomZ = gridUnitsToPixels(regionD.elevation.bottom);
     if ( this.outsideElevation(topZ, bottomZ) ) return false;
 
     // For each region shape, use the ideal version to test b/c circles and ellipses can be tested faster than polys.

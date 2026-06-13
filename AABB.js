@@ -228,7 +228,8 @@ export class AABB2d {
    */
   static fromShape(shape, out) {
     out ??= new this();
-    if ( shape instanceof PIXI.Rectangle ) AABB2d.fromRectangle(shape, out);
+    if ( shape instanceof AABB2d ) out.copyFrom(shape);
+    else if ( shape instanceof PIXI.Rectangle ) AABB2d.fromRectangle(shape, out);
     else if ( shape instanceof PIXI.Polygon ) AABB2d.fromPolygon(shape, out);
     else if ( shape instanceof PIXI.Circle ) AABB2d.fromCircle(shape, out);
     else if ( shape instanceof PIXI.Ellipse ) AABB2d.fromEllipse(shape, out);
