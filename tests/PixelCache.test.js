@@ -743,7 +743,7 @@ quench.registerBatch(`${MODULE_ID}.libGeometry.tile-pixel-cache`, (context) => {
         it("should create valid cache from specified tile", function() {
             tileGuard.call(this);
 
-            const cache = TilePixelCache.fromTileChannel(testTile, 4);
+            const cache = TilePixelCache.fromTileChannel(testTile, { channel = 4 });
             expect(cache).to.be.instanceOf(TilePixelCache);
             expect(cache.pixels).to.be.instanceOf(Uint8Array);
 

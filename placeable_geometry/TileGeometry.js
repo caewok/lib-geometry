@@ -1,4 +1,5 @@
 /* globals
+CONFIG,
 foundry,
 PIXI,
 */
@@ -12,17 +13,15 @@ import {
   PlaceableAABBMixin,
   PlaceableModelMatrixMixin,
   PlaceableFacesMixin,
-  PlaceableQuadtreeMixin,
 } from "./PlaceableGeometry.js";
 
 // LibGeometry
-import { NULL_SET } from "../util.js";
+import { GEOMETRY_LIB_ID } from "../const.js";
+import { NULL_SET, gridUnitsToPixels } from "../util.js";
 import { AABB3d } from "../3d/AABB3d.js";
 import { MatrixFloat32 } from "../Matrix.js";
 import { Point3d } from "../3d/Point3d.js";
 import { Quad3d, Polygon3d, Polygons3d, Triangle3d } from "../3d/Polygon3d.js";
-import { FixedLengthTrackingBuffer } from "../placeable_tracking/TrackingBuffer.js";
-
 
 // Tile alpha bounds
 import { Polygon3dVertices } from "../placeable_vertices/BasicVertices.js";
@@ -100,7 +99,7 @@ const TileAlphaBoundingBoxMixin = superclass => class extends superclass {
    * Bottom faces have opposite orientation.
    */
   _updateAlphaBoundingBox() {
-    const cache = CONFIG[GEOMETRY_LIB_ID].tilePixelCache.cacheForDocument(this.placeableDocument);
+    const cache = CONFIG[GEOMETRY_LIB_ID].tilePixelCache.pixelCacheForDocument(this.placeableDocument);
     if ( !cache ) return;
 
     const rectOrPoly = cache.getThresholdCanvasBoundingBox(this.alphaThreshold).toPolygon();
@@ -301,7 +300,7 @@ const TileAlphaTrianglesMixin = superclass => class extends superclass {
  * TileGeometryTracker -> PlaceableFacesMixin -> PlaceableMatricesMixin -> PlaceableAABBMixin -> PlaceableGeometry
  */
 export class TileGeometry extends mix(PlaceableGeometry).with(
-  PlaceableAABBMixin, PlaceableQuadtreeMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin,
+  PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin,
   TileAlphaBoundingBoxMixin, TileAlphaBoundingPolygonMixin, TileAlphaPolygonsMixin, TileAlphaTrianglesMixin) {
 
   /** @type {string} */
@@ -326,13 +325,27 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
 
   get alphaThreshold() { return this.placeableDocument.texture.alphaThreshold || 0; }
 
-  get pixelCache() { return CONFIG[GEOMETRY_LIB_ID].tilePixelCache.cacheForDocument(this.placeableDocument); }
+  get pixelCache() { return this.constructor.cacheManager.pixelCacheForDocument(this.placeableDocument); }
 
   get elevationZ() { return gridUnitsToPixels(this.placeableDocument.elevation); }
 
+  static get cacheManager() { return CONFIG[GEOMETRY_LIB_ID].tilePixelCache; }
+
+  initialize() {
+    this.constructor.cacheManager.cacheDocument(this.placeableDocument); // Async.
+    super.initialize();
+  }
+
   // ----- NOTE: AABB ----- //
   calculateAABB() {
-    return AABB3d.fromTileDocumentAlpha(this.placeableDocument, this.alphaThreshold, this.aabb);
+    const cache = this.pixelCache;
+    if ( cache ) {
+      const bbox = cache.getThresholdCanvasBoundingBox(this.alphaThreshold);
+      if ( bbox instanceof PIXI.Polygon ) AABB3d.fromPolygon(bbox, this.elevationZ, this.aabb);
+      else AABB3d.fromRectangle(bbox, this.elevationZ, this.aabb);
+
+    // Fall back on tile dimensions instead of alpha dimensions.
+    } else AABB3d.fromTileDocument(this.placeableDocument, this.aabb);
   }
 
   // ----- NOTE: Matrices ----- //
@@ -340,7 +353,7 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
   calculateTranslationMatrix() {
     const mat = super.calculateTranslationMatrix();
     const ctr = this.constructor.tileCenter(this.placeableDocument);
-    return MatrixFloat32.translation(ctr.x, ctr.y, ctr.z, mat);
+    return MatrixFloat32.translation(ctr.x, ctr.y, this.elevationZ, mat);
   }
 
   calculateRotationMatrix() {
@@ -383,11 +396,8 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
     const top = this.faces[0];
     const bottom = this.faces[1];
 
-
     // Confirm orientation.
-
-    const tile = this.tile;
-    const ctr = this.tile.center;
+    const ctr = this.constructor.tileCenter(this.placeableDocument);
     const ctrTop = Point3d.tmp.set(ctr.x, ctr.y, this.elevationZ + 100);
     if ( !top.isFacing(ctrTop) ) top.reverseOrientation();
 

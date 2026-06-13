@@ -1,7 +1,6 @@
 /* globals
 canvas,
 CONFIG,
-foundry,
 Hooks,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
@@ -10,13 +9,12 @@ Hooks,
 import { FixedLengthTrackingBuffer } from "../placeable_tracking/TrackingBuffer.js";
 
 // LibGeometry
-import { GEOMETRY_LIB_ID, GEOMETRY_ID } from "../const.js";
+import { GEOMETRY_LIB_ID } from "../const.js";
 import { MatrixFloat32, ModelMatrix } from "../Matrix.js";
 import { AABB3d } from "../3d/AABB3d.js";
 import { Quad3d } from "../3d/Polygon3d.js";
 import { almostBetween } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
-import { Sphere } from "../3d/Sphere.js";
 
 
 /* Store key geometry information for each placeable, in 3d.
@@ -44,6 +42,14 @@ propertiesUpdated
 
 */
 
+const LEVEL_SEGMENTS = [];
+
+Hooks.on("updateLevel", function(_level, _changes, _opts, _id) {
+  LEVEL_SEGMENTS.length = 0;
+  LEVEL_SEGMENTS.push(...PlaceableGeometry.segmentLevels());
+});
+
+
 export class PlaceableGeometry {
 
   // ----- NOTE: Static values ----- //
@@ -56,6 +62,54 @@ export class PlaceableGeometry {
     if ( this.hooksInitialized ) return;
     this._registerHooks();
     this.hooksInitialized = true;
+  }
+
+  static _registerHooks() { }
+
+    /**
+   * Reorganize and split level intervals to cover the low to high range with no overlaps.
+   * Add gap intervals as necessary.
+   * @param {Level[]} levels
+   * @returns {object[]} The intervals
+   *  - @prop {number} bottom       Bottom elevation value
+   *  - @prop {number} top          Top elevation value
+   *  - @prop {string[]} id[]       Id of the levels encountered in this interval
+   */
+  static segmentLevels() {
+    // Create a distinct "event" for every bottom and top point.
+    const events = new Array(canvas.scene.levels.size * 2);
+    let i = 0;
+    for ( const level of canvas.scene.levels ) {
+      const { bottom, top } = level.elevation;
+      events[i++] = { value: bottom, type: "start", id: level.id };
+      events[i++] = { value: top, type: "end", id: level.id };
+    }
+
+    // Sort by value, with end events after start events if equal.
+    events.sort((a, b) => {
+      return (a.value - b.value) || a.type === "start";
+    });
+
+    // Sweep through sorted events, identifying boundary changes.
+    const result = [];
+    const activeIds = new Set();
+    let currentPosition = events[0].value;
+    for ( const event of events) {
+      // If we have moved forward in space, commit the previous segment.
+      if ( event.value > currentPosition ) {
+        result.push({
+          bottom: currentPosition,
+          top: event.value,
+          ids: new Set(activeIds), // May be empty if it is a gap.
+        });
+      }
+
+      // Update active ids based on event type.
+      if ( event.type === "start" ) activeIds.add(event.id);
+      else activeIds.delete(event.id);
+      currentPosition = event.value;
+    }
+    return result;
   }
 
   // ----- NOTE: Constructor ----- //
@@ -348,61 +402,7 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
    *  - @prop {number} top          Top elevation value
    *  - @prop {string[]} id[]       Id of the levels encountered in this interval
    */
-  static get segmentLevels() { return _SEGMENT_LEVELS; }
-
-  static _SEGMENT_LEVELS = [];
-
-  static _registerHooks() {
-    Hooks.on("updateLevel", function(_level, _changes, _opts, _id) {
-      this._SEGMENT_LEVELS.length = 0;
-      this._SEGMENT_LEVELS.push(...this.segmentLevels());
-    });
-  }
-
-  /**
-   * Reorganize and split level intervals to cover the low to high range with no overlaps.
-   * Add gap intervals as necessary.
-   * @param {Level[]} levels
-   * @returns {object[]} The intervals
-   *  - @prop {number} bottom       Bottom elevation value
-   *  - @prop {number} top          Top elevation value
-   *  - @prop {string[]} id[]       Id of the levels encountered in this interval
-   */
-  static segmentLevels() {
-    // Create a distinct "event" for every bottom and top point.
-    const events = new Array(canvas.scenes.levels.size * 2);
-    let i = 0;
-    for ( const level of canvas.scenes.levels ) {
-      const { bottom, top } = level.elevation;
-      events[i++] = { value: bottom, type: "start", id: level.id };
-      events[i++] = { value: top, type: "end", id: level.id };
-    }
-
-    // Sort by value, with end events after start events if equal.
-    events.sort((a, b) => {
-      return (a.value - b.value) || a.type === "start";
-    });
-
-    // Sweep through sorted events, identifying boundary changes.
-    const result = [];
-    const activeIds = new Set();
-    let currentPosition = events[0].value;
-    for ( const event of events) {
-      // If we have moved forward in space, commit the previous segment.
-      if ( event.value > currentPosition ) {
-        result.push({
-          bottom: currentPosition,
-          top: event.value,
-          ids: new Set(activeIds), // May be empty if it is a gap.
-        });
-      }
-
-      // Update active ids based on event type.
-      if ( event.type === "start" ) activeIds.add(event.id);
-      else activeIds.delete(event.id);
-    }
-    return result;
-  }
+  static get levelSegments() { return LEVEL_SEGMENTS; }
 
   /** @type {Faces} */
   _prototypeFaces = [];
@@ -420,6 +420,7 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
    * Construct the prototype faces.
    */
   initialize() {
+    if ( !this.constructor.levelSegments.length ) LEVEL_SEGMENTS.push(...PlaceableGeometry.segmentLevels());
     super.initialize();
     this._initializePrototypeFaces();
     this._updateFaces();
@@ -535,7 +536,7 @@ export const PlaceableFacePointsMixin = superclass => class extends superclass {
     if ( !this.faces ) return; // Requires the FacesMixin.
 
     const opts = { spacing: CONFIG[GEOMETRY_LIB_ID].CONFIG.perPixelSpacing || 10, startAtEdge: false };
-    const numSides = this.faces.sides.length;
+    const numSides = this.faces.length;
     for ( let i = 0; i < numSides; i += 1 ) this.facePoints[i] = this.faces[i].pointsLattice(opts);
   }
 }

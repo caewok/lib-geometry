@@ -1,4 +1,7 @@
 /* globals
+canvas,
+CONFIG,
+CONST,
 foundry,
 PIXI,
 */
@@ -7,6 +10,7 @@ PIXI,
 import { Point3d } from "./3d/Point3d.js";
 import { Draw } from "./Draw.js";
 import { almostLessThan, almostGreaterThan, almostBetween } from "./util.js";
+import { GEOMETRY_LIB_ID } from "./const.js";
 
 const axes = {
   x: new Point3d(1, 0, 0),
@@ -240,22 +244,6 @@ export class AABB2d {
    */
   static fromTile(tile, out) {
     return AABB2d.fromRectangle(tile.bounds, out);
-  }
-
-  static fromTileAlpha(tile, alphaThreshold, out) {
-    alphaThreshold ??= tile.document.texture.alphaThreshold || 0;
-    const cache = CONFIG[GEOMETRY_LIB_ID].tilePixelCache.cacheForTile(tile);
-    if ( !(alphaThreshold && cache) ) return this.fromTile(tile, out);
-    const bbox = cache.getThresholdCanvasBoundingBox(alphaThreshold);
-    return bbox instanceof PIXI.Polygon ? AABB2d.fromPolygon(bbox, out) : AABB2d.fromRectangle(bbox, out);
-  }
-
-  static fromTileDocumentAlpha(tileD, alphaThreshold, out) {
-    alphaThreshold ??= tileD.texture?.alphaThreshold || 0;
-    const cache = CONFIG[GEOMETRY_LIB_ID].tilePixelCache.cacheForTile(tile);
-    if ( !(alphaThreshold && tileD) ) return this.fromTileDocument(tileD, out);
-    const bbox = cache.getThresholdCanvasBoundingBox(alphaThreshold);
-    return bbox instanceof PIXI.Polygon ? AABB2d.fromPolygon(bbox, out) : AABB2d.fromRectangle(bbox, out);
   }
 
   static fromTileDocument(tileD, out) {
@@ -619,7 +607,7 @@ function getShape(tokenDocument) {
   if ( canvas.scene.grid.isGridless ) {
     const { width, height } = tokenDocument.getSize();
     const shape = tokenDocument.shape;
-    if ( (shape === TOKEN_SHAPES.ELLIPSE_1) || (shape === TOKEN_SHAPES.ELLIPSE_2) ) {
+    if ( (shape === CONST.TOKEN_SHAPES.ELLIPSE_1) || (shape === CONST.TOKEN_SHAPES.ELLIPSE_2) ) {
       if ( width === height ) {
         const radius = width / 2;
         return new PIXI.Circle(radius, radius, radius);

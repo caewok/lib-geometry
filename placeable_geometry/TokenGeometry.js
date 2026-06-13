@@ -18,7 +18,6 @@ import {
   PlaceableModelMatrixMixin,
   PlaceableFacesMixin,
   PlaceableFacePointsMixin,
-  PlaceableQuadtreeMixin,
 } from "./PlaceableGeometry.js";
 
 // LibGeometry
@@ -34,9 +33,11 @@ import { Sphere } from "../3d/Sphere.js";
  * Build a polygon cube for a token.
  */
 function buildPolygonCube(poly2d, topZ, bottomZ, faces) {
-  Polygon3d.fromPolygon(poly2d, topZ, faces.top);
-  Polygon3d.fromPolygon(poly2d, bottomZ, faces.bottom).reverseOrientation();
-  faces.sides = faces.top.buildTopSides(bottomZ);
+  faces.length = 2;
+  const [top, bottom] = faces;
+  Polygon3d.fromPolygon(poly2d, topZ, top);
+  Polygon3d.fromPolygon(poly2d, bottomZ, bottom).reverseOrientation();
+  faces.push(...top.buildTopSides(bottomZ));
   return faces;
 }
 
@@ -75,11 +76,11 @@ const TokenConstrainedFacesMixin = superclass => class extends superclass {
 
   get isConstrained() { return this.token.isConstrainedTokenBorder; }
 
-  _constrainedFaces = {
-    top: new Polygon3d(),
-    bottom: new Polygon3d(),
-    sides: [],
-  };
+  _constrainedFaces = [
+    new Polygon3d(),
+    new Polygon3d(),
+    // Sides to be added later.
+  ];
 
   get constrainedFaces() {
     if ( this.isConstrained ) {
@@ -92,12 +93,7 @@ const TokenConstrainedFacesMixin = superclass => class extends superclass {
   /**
    * Iterate over the faces.
    */
-  *iterateConstrainedFaces() {
-    const faces = this.constrainedFaces;
-    yield faces.top;
-    yield faces.bottom;
-    for ( const side of faces.sides ) yield side;
-  }
+  *iterateConstrainedFaces() { yield* this.constrainedFaces.values(); }
 
   _updateFaces() {
     this.updateConstrainedFaces();
@@ -133,11 +129,11 @@ const TokenConstrainedLitFacesMixin = superclass => class extends superclass {
 
   #lightsID = -1;
 
-  _constrainedLitFaces = {
-    top: new Polygon3d(),
-    bottom: new Polygon3d(),
-    sides: [],
-  };
+  _constrainedLitFaces = [
+    new Polygon3d(),
+    new Polygon3d(),
+    // Sides to be added later.
+  ];
 
   get constrainedLitFaces() {
     if ( this.isConstrainedLit ) {
@@ -152,10 +148,7 @@ const TokenConstrainedLitFacesMixin = superclass => class extends superclass {
    * Iterate over the faces.
    */
   *iterateConstrainedLitFaces() {
-    const faces = this.constrainedLitFaces;
-    yield faces.top;
-    yield faces.bottom;
-    for ( const side of faces.sides ) yield side;
+    yield* this.constrainedLitFaces.values();
   }
 
   _updateFaces() {
@@ -192,11 +185,11 @@ const TokenConstrainedBrightLitFacesMixin = superclass => class extends supercla
 
   #lightsID = -1;
 
-  _constrainedBrightLitFaces = {
-    top: new Polygon3d(),
-    bottom: new Polygon3d(),
-    sides: [],
-  };
+  _constrainedBrightLitFaces = [
+    new Polygon3d(),
+    new Polygon3d(),
+    // Sides to be added later.
+  ];
 
   get constrainedBrightLitFaces() {
     if ( this.isConstrainedBrightLit ) {
@@ -210,12 +203,7 @@ const TokenConstrainedBrightLitFacesMixin = superclass => class extends supercla
   /**
    * Iterate over the faces.
    */
-  *iterateConstrainedBrightLitFaces() {
-    const faces = this.constrainedBrightLitFaces;
-    yield faces.top;
-    yield faces.bottom;
-    for ( const side of faces.sides ) yield side;
-  }
+  *iterateConstrainedBrightLitFaces() { yield* this.constrainedBrightLitFaces.values(); }
 
   _updateFaces() {
     super._updateFaces();
@@ -239,7 +227,7 @@ const TokenConstrainedBrightLitFacesMixin = superclass => class extends supercla
  */
 export class TokenGeometry extends mix(PlaceableGeometry).with(
   TokenConstrainedBrightLitFacesMixin, TokenConstrainedLitFacesMixin, TokenConstrainedFacesMixin,
-  PlaceableAABBMixin, PlaceableQuadtreeMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin, PlaceableFacePointsMixin) {
+  PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin, PlaceableFacePointsMixin) {
 
   /** @type {string} */
   static PLACEABLE_NAME = "Token";
@@ -380,11 +368,11 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
     bottom.setZ(-0.5);
 
     // Build sides.
-    const north = this.constructor.QUADS.north.clone(),
-    const west = this.constructor.QUADS.west.clone(),
-    const south = this.constructor.QUADS.south.clone(),
-    const east = this.constructor.QUADS.east.clone(),
-    this._prototypeSides.push(north, west, south, east);
+    const north = this.constructor.QUADS.north.clone();
+    const west = this.constructor.QUADS.west.clone();
+    const south = this.constructor.QUADS.south.clone();
+    const east = this.constructor.QUADS.east.clone();
+    this._prototypeFaces.push(north, west, south, east);
 
     // Adjust the sides so that they are at the token edge.
     for ( let i = 0; i < 4; i += 1 ) {
@@ -414,10 +402,13 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
 
     // Confirm orientation against the origin.
     const ctr = new Point3d();
-    if ( this._prototypeFaces.top.isFacing(ctr) ) console.error(`${this.constructor.name}|Prototype face for ${this.placeable.id} has wrong top orientation.`);
-    if ( this._prototypeFaces.bottom && this._prototypeFaces.bottom.isFacing(ctr) ) console.error(`${this.constructor.name}|Prototype face for ${this.placeable.id} has wrong bottom orientation.`);
-    for ( const side of this._prototypeFaces.sides ) {
-     if ( side.isFacing(ctr) ) console.error(`${this.constructor.name}|Prototype face for ${this.placeable.id} has wrong side orientation.`);
+    const top = this._prototypeFaces[0];
+    const bottom = this._prototypeFaces[1];
+    if ( top.isFacing(ctr) ) console.error(`${this.constructor.name}|Prototype face for ${this.placeable.id} has wrong top orientation.`);
+    if ( bottom.isFacing(ctr) ) console.error(`${this.constructor.name}|Prototype face for ${this.placeable.id} has wrong bottom orientation.`);
+    for ( let i = 2, iMax = this._prototypeFaces.length; i < iMax; i += 1 ) {
+      const side = this._prototypeFaces[i];
+      if ( side.isFacing(ctr) ) console.error(`${this.constructor.name}|Prototype face for ${this.placeable.id} has wrong side orientation.`);
     }
 
     super._initializePrototypeFaces()
@@ -456,7 +447,7 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
 
   /**
    * Determine the token 3d dimensions, in pixel units.
-   * @param {Token} token
+   * @param {TokenDocument} tokenD
    * @returns {object}
    * @prop {number} width       In x direction
    * @prop {number} height      In y direction
@@ -474,31 +465,16 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
 
   /**
    * Determine the token center, in pixel units.
-   * @param {Token} token
+   * @param {TokenDocument} tokenD
    * @returns {Point3d}
    * @prop {number} x       In x direction
    * @prop {number} y      In y direction
    * @prop {number} z     In z direction
    */
   static tokenCenter(tokenD) {
-    const { x, y, topZ, bottomZ } = tokenDocument;
-    const { width, height } = tokenDocument.getSize();
+    const { x, y, topZ, bottomZ } = tokenD;
+    const { width, height } = tokenD.getSize();
     const z = bottomZ + ((topZ - bottomZ) * 0.5);
-    return Point3d.set(x + (width * 0.5), y + (height * 0.5), z);
+    return Point3d.tmp.set(x + (width * 0.5), y + (height * 0.5), z);
   }
 }
-
-
-/**
- * Calculate token LOS height.
- * Comparable to Wall Height method.
- * Does not consider "ducking" here—that is done in tokenVerticalHeight, tokenTopElevation.
- */
-function calculateTokenHeightFromTokenShape(tokenD) {
-  const { width, height, texture } = tokenD;
-  return canvas.scene.dimensions.distance
-    * Math.max(width, height)
-    * (Math.abs(texture.scaleX) + Math.abs(texture.scaleY))
-    * 0.5;
-}
-

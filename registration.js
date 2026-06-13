@@ -15,11 +15,20 @@ import { WallGeometry } from "./placeable_geometry/WallGeometry.js";
 import { TokenGeometry } from "./placeable_geometry/TokenGeometry.js";
 import { RegionGeometry } from "./placeable_geometry/RegionGeometry.js";
 import { TileGeometry } from "./placeable_geometry/TileGeometry.js";
+import { LevelBackgroundGeometry, LevelForegroundGeometry } from "./placeable_geometry/LevelGeometry.js";
 
-import { WallGeometryTracker } from "./placeable_tracking/WallGeometryTracker.js";
-import { TokenGeometryTracker } from "./placeable_tracking/TokenGeometryTracker.js";
-import { RegionGeometryTracker } from "./placeable_tracking/RegionGeometryTracker.js";
-import { TileGeometryTracker } from "./placeable_tracking/TileGeometryTracker.js";
+import {
+  TilePixelCacheManager,
+  LevelForegroundPixelCacheManager,
+  LevelBackgroundPixelCacheManager } from "./PixelCacheManager.js";
+
+import {
+  WallGeometryManager,
+  TileGeometryManager,
+  TokenGeometryManager,
+  RegionGeometryManager,
+  LevelBackgroundGeometryManager,
+  LevelForegroundGeometryManager } from "./placeable_tracking/CanvasGeometryManager.js";
 
 
 // Execute immediately on load to identify modules using lib geometry.
@@ -34,8 +43,10 @@ import { TileGeometryTracker } from "./placeable_tracking/TileGeometryTracker.js
   // Track geometries need to load.
   CONFIG[GEOMETRY_LIB_ID].CONFIG.placeableGeometries ??= new Set();
   const geometries = GEOMETRY_LIB_OPTS.placeableGeometries;
-  if ( geometries ) geometries.forEach(name => CONFIG[GEOMETRY_LIB_ID].CONFIG.placeableGeometries.add(name));\
+  if ( geometries ) geometries.forEach(name => CONFIG[GEOMETRY_LIB_ID].CONFIG.placeableGeometries.add(name));
 })();
+
+let IS_CONTROLLING_MODULE = false;
 
 /**
  * On init, determine which module has the most recent version of lib geometry.
@@ -50,23 +61,28 @@ Hooks.on("init", function() {
   mergeConfigs(maxVersion);
 
   const controllingModule = CONFIG[GEOMETRY_LIB_ID].CONFIG.registeredVersions.get(maxVersion);
-  if ( controllingModule === MODULE_ID ) {
-    registerGeometryLibClasses();
-  }
+  IS_CONTROLLING_MODULE = controllingModule === MODULE_ID
+  if ( IS_CONTROLLING_MODULE ) registerGeometryLibClasses();
 });
 
 Hooks.on("setup", function() {
-  registerPlaceableGeometry();
-  deregisterPlaceableGeometry();
+  if ( !IS_CONTROLLING_MODULE ) return;
 
   // Add Pixel cache manager for tiles and levels
-  CONFIG[GEOMETRY_LIB_ID].tilePixelCache = new TilePixelCacheManager();
-  CONFIG[GEOMETRY_LIB_ID].levelBackgroundPixelCache = new LevelBackgroundPixelCacheManager();
-  CONFIG[GEOMETRY_LIB_ID].levelForegroundPixelCache = new LevelForegroundPixelCacheManager();
+  if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.placeableGeometries.has("Tile") ) {
+    CONFIG[GEOMETRY_LIB_ID].tilePixelCache = new TilePixelCacheManager();
+    CONFIG[GEOMETRY_LIB_ID].tilePixelCache.registerHooks();
+  }
+  if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.placeableGeometries.has("Level") ) {
+    CONFIG[GEOMETRY_LIB_ID].levelBackgroundPixelCache = new LevelBackgroundPixelCacheManager();
+    CONFIG[GEOMETRY_LIB_ID].levelForegroundPixelCache = new LevelForegroundPixelCacheManager();
+    CONFIG[GEOMETRY_LIB_ID].levelBackgroundPixelCache.registerHooks();
+    CONFIG[GEOMETRY_LIB_ID].levelForegroundPixelCache.registerHooks();
+  }
 
-  CONFIG[GEOMETRY_LIB_ID].tilePixelCache.registerHooks();
-  CONFIG[GEOMETRY_LIB_ID].levelBackgroundPixelCache.registerHooks();
-  CONFIG[GEOMETRY_LIB_ID].levelForegroundPixelCache.registerHooks();
+  // Register the geometries.
+  registerPlaceableGeometry();
+  // deregisterPlaceableGeometry();
 });
 
 function registerGeometryLibClasses() {
@@ -99,46 +115,66 @@ function registerPlaceableGeometry() {
     Region: RegionGeometry,
     Wall: WallGeometry,
     Token: TokenGeometry,
+    Level: {
+      background: LevelBackgroundGeometry,
+      foreground: LevelForegroundGeometry,
+    },
   };
 
-  const GEOMETRY_TRACKING = {
-    Tile: TileGeometryTracker,
-    Region: RegionGeometryTracker,
-    Wall: WallGeometryTracker,
-    Token: TokenGeometryTracker,
+  const GEOMETRY_MANAGERS = {
+    Tile: TileGeometryManager,
+    Region: RegionGeometryManager,
+    Wall: WallGeometryManager,
+    Token: TokenGeometryManager,
+    Level: {
+      background: LevelBackgroundGeometryManager,
+      foreground: LevelForegroundGeometryManager,
+    },
   };
+
+  CONFIG[GEOMETRY_LIB_ID].geometryManagers ??= {};
+  for ( const name of CONFIG[GEOMETRY_LIB_ID].CONFIG.placeableGeometries ) {
+    if ( name === "Level" ) {
+      CONFIG[GEOMETRY_LIB_ID].geometryManagers.Level = {};
+      CONFIG[GEOMETRY_LIB_ID].geometryManagers.Level.background = new GEOMETRY_MANAGERS.Level.background();
+      CONFIG[GEOMETRY_LIB_ID].geometryManagers.Level.foreground = new GEOMETRY_MANAGERS.Level.foreground();
+
+    } else CONFIG[GEOMETRY_LIB_ID].geometryManagers[name] = new GEOMETRY_MANAGERS[name]()
+  }
 
   Hooks.on("canvasReady", () => {
-    for ( const cl of CONFIG[GEOMETRY_LIB_ID].CONFIG.placeableGeometries ) {
-      const geomCl = GEOMETRY_CLASSES[cl];
-      geomCl.registerHooks();
-
-      const trackingCl = GEOMETRY_TRACKING[cl];
-      trackingCl.registerHooks();
-      trackingCl.registerExistingPlaceables();
-      trackingCl.activate();
+    for ( const name of CONFIG[GEOMETRY_LIB_ID].CONFIG.placeableGeometries ) {
+      if ( name === "Level" ) {
+        GEOMETRY_CLASSES.Level.background.registerHooks();
+        GEOMETRY_CLASSES.Level.foreground.registerHooks();
+        CONFIG[GEOMETRY_LIB_ID].geometryManagers.Level.background.initializeScene();
+        CONFIG[GEOMETRY_LIB_ID].geometryManagers.Level.foreground.initializeScene();
+      } else {
+        const geomCl = GEOMETRY_CLASSES[name];
+        geomCl.registerHooks();
+        CONFIG[GEOMETRY_LIB_ID].geometryManagers[name].initializeScene();
+      }
     }
   });
 }
 
+/* TODO: Any deconstruction needed?
 function deregisterPlaceableGeometry() {
   if ( !CONFIG[GEOMETRY_LIB_ID].CONFIG.placeableGeometries.size ) return;
 
-  const GEOMETRY_TRACKING = {
-    Tile: TileGeometryTracker,
-    Region: RegionGeometryTracker,
-    Wall: WallGeometryTracker,
-    Token: TokenGeometryTracker,
-  };
+  const GEOMETRY_MANAGERS = {
+    Tile: TileGeometryManager,
+    Region: RegionGeometryManager,
+    Wall: WallGeometryManager,
+    Token: TokenGeometryManager,
+    Level: LevelGeometryManager,
+  }
 
   Hooks.on("canvasTearDown", () => {
-    for ( const cl of CONFIG[GEOMETRY_LIB_ID].CONFIG.placeableGeometries ) {
-      const trackingCl = GEOMETRY_TRACKING[cl];
-      trackingCl.deactivate();
-      trackingCl.deRegisterExistingPlaceables();
-    }
+
   });
 }
+*/
 
 
 

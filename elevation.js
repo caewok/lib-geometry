@@ -46,6 +46,8 @@ PATCHES.PlaceableObject = { ELEVATION: {} };
 PATCHES.Token = { ELEVATION: {} };
 PATCHES.Wall = { ELEVATION: {} };
 PATCHES.Region = { ELEVATION: {} };
+PATCHES.TokenDocument = { ELEVATION: {} };
+PATCHES.WallDocument = { ELEVATION: {} };
 
 GEOMETRY_CONFIG.proneStatusId = "prone";
 GEOMETRY_CONFIG.proneMultiplier = 0.33;
@@ -224,33 +226,33 @@ PATCHES.PlaceableObject.ELEVATION.GETTERS = {
 
 // ---- NOTE: Token ----- //
 PATCHES.Token.ELEVATION.GETTERS = {
-  bottomE: () => this.document.elevation,
-  bottomZ: () => this.document.bottomZ,
-  topE: () => pixelsToGridUnits(this.document.topZ),
-  topZ: () => this.document.topZ,
-  verticalHeight: () => pixelsToGridUnits(this.document.verticalHeightZ),
+  bottomE: function() { return this.document.elevation; },
+  bottomZ: function() { return this.document.bottomZ; },
+  topE: function() { return pixelsToGridUnits(this.document.topZ); },
+  topZ: function() { return this.document.topZ; },
+  verticalHeight: function() { return pixelsToGridUnits(this.document.verticalHeightZ); },
 
   // Prone or "ducking"
-  isProne: () => this.document.isProne,
+  isProne: function() { return this.document.isProne; },
 
   // Token vision Height
-  visionE: () => pixelsToGridUnits(this.document.visionZ),
-  visionZ: () => this.document.visionZ,
-  visionHeight: () => pixelsToGridUnits(this.docuement.visionHeightZ),
+  visionE: function() { return pixelsToGridUnits(this.document.visionZ); },
+  visionZ: function() { return this.document.visionZ; },
+  visionHeight: function() { return pixelsToGridUnits(this.docuement.visionHeightZ); },
 };
 
 // ---- NOTE: Wall ----- //
 PATCHES.Wall.ELEVATION.GETTERS = {
-  topE: () => pixelsToGridUnits(this.document.topZ),
-  topZ: () => this.document.topZ,
-  bottomE: () => pixelsToGridUnits(this.document.bottomZ),
-  bottomZ: () => this.document.bottomZ,
+  topE: function() { return pixelsToGridUnits(this.document.topZ); },
+  topZ: function() { return this.document.topZ; },
+  bottomE: function() { return pixelsToGridUnits(this.document.bottomZ); },
+  bottomZ: function() { return this.document.bottomZ; },
 };
 
 // ----- NOTE: Region ----- //
 PATCHES.Region.ELEVATION.GETTERS = {
-  topE: () => this.document.elevation.top,
+  topE: function() { return this.document.elevation.top; },
   topZ: zTop,
-  bottomE: () => this.document.elevation.bottom,
+  bottomE: function() { return this.document.elevation.bottom; },
   bottomZ: zBottom,
 };

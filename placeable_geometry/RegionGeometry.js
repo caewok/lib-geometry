@@ -11,15 +11,13 @@ import {
   PlaceableAABBMixin,
   PlaceableModelMatrixMixin,
   PlaceableFacesMixin,
-  PlaceableQuadtreeMixin,
-} from "./CanvasGeometry.js";
+} from "./PlaceableGeometry.js";
 
 // LibGeometry
-import { NULL_SET, gridUnitsToPixels } from "../util.js";
+import { NULL_SET } from "../util.js";
 import { CenteredPolygon } from "../CenteredPolygon/CenteredPolygon.js";
 import { CenteredRectangle } from "../CenteredPolygon/CenteredRectangle.js";
 import { Ellipse } from "../Ellipse.js";
-import { OTHER_MODULES } from "../const.js";
 import { AABB3d } from "../3d/AABB3d.js";
 import { MatrixFloat32 } from "../Matrix.js";
 import { Quad3d, Polygon3d, Polygons3d, Ellipse3d, Circle3d } from "../3d/Polygon3d.js";
@@ -49,7 +47,7 @@ const TRACKER_TYPES = {
   ],
 };
 
-export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableQuadtreeMixin) {
+export class RegionGeometry extends PlaceableGeometry {
   /** @type {string} */
   static PLACEABLE_NAME = "Region";
 
@@ -198,7 +196,7 @@ class AbstractRegionShapeGeometry extends mix(PlaceableGeometry).with(PlaceableA
 
 class InstancedShape extends AbstractRegionShapeGeometry {
 
-  get shape() { return this.placeable.document.shapes[0]; }
+  get shape() { return this.placeableDocument.shapes[0]; }
 
   initialize() {
     this.unrotatedShapePIXI = this.constructor.shapePIXI(this.shape, false);
@@ -339,7 +337,7 @@ export class RegionEllipseShapeGeometry extends InstancedShape {
     bottom.setZ(-0.5);
 
     const density = PIXI.Circle.approximateVertexDensity(Math.max(this.radiusX, this.radiusY));
-    this._prototypeFaces.sides.push(...this._prototypeFaces.top.buildTopSides(-0.5, { density }));
+    this._prototypeFaces.push(...top.buildTopSides(-0.5, { density }));
     super._initializePrototypeFaces();
   }
 }
@@ -366,10 +364,10 @@ export class RegionCircleShapeGeometry extends RegionEllipseShapeGeometry {
 export class RegionPolygonShapeGeometry extends AbstractRegionShapeGeometry {
 
   /** @type {PIXI.Polygon[]} */
-  get polygons() { return this.placeable.document.polygons; }
+  get polygons() { return this.placeableDocument.polygons; }
 
   calculateAABB() {
-    const { topZ, bottomZ } = RegionGeometry.regionElevation(this.region);
+    const { topZ, bottomZ } = RegionGeometry.regionElevation(this.placeableDocument);
     const z = [topZ, bottomZ];
     const aabbs = this.polygons.map(poly => AABB3d.fromPolygon(poly, z));
     AABB3d.union(aabbs, this.aabb);

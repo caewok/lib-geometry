@@ -8,7 +8,7 @@ CONFIG,
 // LibGeometry
 import { GEOMETRY_LIB_ID, GEOMETRY_ID } from "../const.js";
 
-import { LevelGeometry } from "../placeable_geometry/LevelGeometry.js";
+import { LevelBackgroundGeometry, LevelForegroundGeometry } from "../placeable_geometry/LevelGeometry.js";
 import { RegionGeometry } from "../placeable_geometry/RegionGeometry.js";
 import { TileGeometry } from "../placeable_geometry/TileGeometry.js";
 import { TokenGeometry } from "../placeable_geometry/TokenGeometry.js";
@@ -32,18 +32,12 @@ export class CanvasGeometryManager {
     Wall: "walls",
   };
 
-  /** @type {enum<CanvasDocument>} */
-  static DOCUMENT_KEYS = {
-    Level: foundry.documents.LevelDocument,
-    Region: foundry.documents.RegionDocument,
-    Tile: foundry.documents.TileDocument,
-    Token: foundry.documents.TokenDocument,
-    Wall: foundry.documents.WallDocument,
-  }
-
   /** @type {enum<PlaceableGeometry>} */
   static GEOMETRY_KEYS = {
-    Level: LevelGeometry,
+    Level: {
+      background: LevelBackgroundGeometry,
+      foreground: LevelForegroundGeometry
+    },
     Region: RegionGeometry,
     Tile: TileGeometry,
     Token: TokenGeometry,
@@ -82,7 +76,8 @@ export class CanvasGeometryManager {
    * For every relevant document in the scene, initialize the geometry.
    */
   initializeScene() {
-    for ( const doc of canvas.scene[this.constructor.TYPE] ) this.create(doc);
+    const docs = canvas.scene[this.constructor.LAYER_KEYS[this.constructor.TYPE]];
+    docs.forEach(doc => this.create(doc));
   }
 
   /**
@@ -95,6 +90,7 @@ export class CanvasGeometryManager {
 
     // Create the correct geometry type for this document.
     const geom = new this.constructor.geometryClass(doc);
+    geom.initialize();
     this.geometryMap.set(doc.uuid, geom);
 
     // Add to the respective quadtree.
@@ -141,7 +137,7 @@ export class CanvasGeometryManager {
   /**
    * Bind the relevant hooks to this specific manager.
    */
-  #initalized = false;
+  #initialized = false;
 
   registerHooks() {
     if ( this.#initialized ) return;
@@ -193,10 +189,20 @@ export class TokenGeometryManager extends CanvasGeometryManager {
 
 }
 
-export class LevelGeometryManager extends CanvasGeometryManager {
+export class LevelBackgroundGeometryManager extends CanvasGeometryManager {
 
   /** @type {string} */
   static TYPE = "Level";
+
+  static get geometryClass() { return this.GEOMETRY_KEYS[this.TYPE].background; }
+}
+
+export class LevelForegroundGeometryManager extends CanvasGeometryManager {
+
+  /** @type {string} */
+  static TYPE = "Level";
+
+  static get geometryClass() { return this.GEOMETRY_KEYS[this.TYPE].foreground; }
 
 }
 

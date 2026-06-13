@@ -13,7 +13,6 @@ import {
   PlaceableAABBMixin,
   PlaceableModelMatrixMixin,
   PlaceableFacesMixin,
-  PlaceableQuadtreeMixin,
 } from "./PlaceableGeometry.js";
 
 // LibGeometry
@@ -53,7 +52,7 @@ const TRACKER_TYPES = {
  * Prototype order:
  * WallGeometryTracker -> PlaceableFacesMixin -> PlaceableMatricesMixin -> PlaceableAABBMixin -> PlaceableGeometry
  */
-export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin, PlaceableQuadtreeMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin) {
+export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin) {
 
   /** @type {string} */
   static PLACEABLE_NAME = "Wall";
@@ -92,44 +91,41 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
   calculateTranslationMatrix() {
     const mat = super.calculateTranslationMatrix();
     const pos = this.constructor.wallCenter(this.placeableDocument);
-    const { top, bottom } = this.constructor.edgeElevation(edge);
-    const zHeight = top - bottom;
-    const z = top - (zHeight * 0.5);
+    const { topZ, bottomZ } = this.constructor.wallElevation(this.placeableDocument);
+    const zHeight = topZ - bottomZ;
+    const z = topZ - (zHeight * 0.5);
     return MatrixFloat32.translation(pos.x, pos.y, z, mat);
   }
 
   calculateRotationMatrix() {
     const mat = super.calculateRotationMatrix();
-    const edge = this.edge;
-    const rot = this.constructor.edgeAngle(edge);
+    const rot = this.constructor.wallAngle(this.placeableDocument);
     return MatrixFloat32.rotationZ(rot, true, mat);
   }
 
   calculateScaleMatrix() {
     const mat = super.calculateScaleMatrix();
-    const edge = this.edge;
-    const ln = this.constructor.edgeLength(edge);
-    const { top, bottom } = this.constructor.edgeElevation(edge);
-    const scaleZ = top - bottom;
+    const ln = this.constructor.wallLength(this.placeableDocument);
+    const { topZ, bottomZ } = this.constructor.wallElevation(this.placeableDocument);
+    const scaleZ = topZ - bottomZ;
     return MatrixFloat32.scale(ln, 1.0, scaleZ, mat);
   }
 
   // ----- NOTE: Faces ---- //
 
   /** @type {Faces} */
-  _prototypeFaces = {
-    top: new Quad3d(),      // Left
-    bottom: new Quad3d(),   // Right
-    sides: [],
-  }
+  _prototypeFaces = [
+    new Quad3d(),      // Left
+    new Quad3d(),   // Right
+  ];
 
   /**
    * Create the initial face shapes for this wall, using a 0.5 x 0.5 x 0.5 unit cube.
    * Normal walls have front (top) and back (bottom). One-directional walls have only top.
    */
   _initializePrototypeFaces() {
-    this.constructor.QUADS.north.clone(this._prototypeFaces.top);
-    this.constructor.QUADS.south.clone(this._prototypeFaces.bottom);
+    this.constructor.QUADS.north.clone(this._prototypeFaces[0]);
+    this.constructor.QUADS.south.clone(this._prototypeFaces[1]);
     super._initializePrototypeFaces();
   }
 
@@ -175,26 +171,21 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
 
   _updateFaces() {
     const M = this.modelMatrix.model;
-    const hasTop = this.edge.direction === 0 || this.edge.direction === 1;    // 1: Restricts from left (from a --> b).
-    const hasBottom = this.edge.direction === 0 || this.edge.direction === 2; // 2: Restricts from right (from a --> b).
+    const hasTop = this.placeableDocument.dir === 0 || this.placeableDocument.dir === 1;    // 1: Restricts from left (from a --> b).
+    const hasBottom = this.placeableDocument.dir === 0 || this.placeableDocument.dir === 2; // 2: Restricts from right (from a --> b).
     const hasLevelSplit = this.placeableDocument.levels.size !== canvas.scene.levels.size;
-    this.faceLevels.clear();
 
-    const sides = [];
-    if ( hasTop ) sides.push("top");
-    else this.faces.top = null;
-
-    if ( hasBottom ) sides.push("bottom")
-    else this.faces.bottom = null;
-
-    for ( const side of sides ) {
-      if ( !this.faces[side] || !(this.faces[side] instanceof Quad3d) ) this.faces[side] = new Quad3d();
-      this._prototypeFaces.top.transform(M, this.faces.top);
-
+    const numFaces= hasTop + hasBottom;
+    this.faces.length = numFaces;
+    for ( let i = 0; i < numFaces; i += 1 ) {
+      let face = this.faces[i];
+      if ( !face || !(face instanceof Quad3d) ) face = new Quad3d();
+      this._prototypeFaces[i].transform(M, face);
       if ( hasLevelSplit ) {
-        const quads = this._splitQuadAtLevels(this.faces[side]);
-        this.faces[side] = Polygons3d.from3dPolygons(quads);
+        const quads = this._splitQuadAtLevels(face);
+        face = Polygons3d.from3dPolygons(quads);
       }
+      this.faces[i] = face;
     }
   }
 
@@ -209,7 +200,7 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
     const zMax = aabb.max.z;
 
     // Returns segments in order.
-    const segments = structuredClone(this.constructor.segmentLevels);
+    const segments = structuredClone(this.constructor.levelSegments);
 
     // Add in top and bottom segments as needed; trim segments outside the wall bounds.
     const elevMin = pixelsToGridUnits(zMin);
@@ -329,36 +320,19 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
    * @returns {boolean}
    */
   static isDirectional(wallD) { return Boolean(wallD.dir); }
-}
 
-
-/**
- * Find gaps in a series of intervals.
- * @param {object[]} intervals        Array of { bottom, top } numbers.
- * @returns {object[]} New object representing intervals
- */
-function findGaps(intervals) {
-  if ( intervals.length < 2 ) return [];
-
-  // Sort by bottom value.
-  intervals.sort((a, b) => a.bottom - b.bottom);
-
-  // Track highest point covered thus far.
-  let currentMaxTop = intervals[0].top;
-
-  // Iterate through each interval to find gaps.
-  const gaps = [];
-  for ( const interval of Object.values(intervals) ) {
-    // If next interval starts after the current top, we found a gap.
-    if ( interval.bottom > currentMaxTop ) {
-      gaps.push({
-        bottom: currentMaxTop,
-        top: interval.bottom,
-      });
-    }
-
-    // Update current max to include the current interval.
-    currentMaxTop = Math.max(currentMaxTop, interval.top);
+  /**
+   * Finite elevation of the wall
+   * @param {WallDocument} wallD
+   * @returns {object}
+   * - @prop {number} topZ
+   * - @prop {number} bottomZ
+   */
+  static wallElevation(wallD) {
+    const MAX_ELEV = 1e06;
+    let { topZ, bottomZ } = wallD;
+    if ( !isFinite(topZ) ) topZ = MAX_ELEV;
+    if ( !isFinite(bottomZ) ) bottomZ = -MAX_ELEV;
+    return { topZ, bottomZ };
   }
-  return gaps;
 }

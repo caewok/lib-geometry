@@ -5,7 +5,7 @@ PIXI,
 "use strict";
 
 import { Point3d } from "./Point3d.js";
-import { almostLessThan, gridUnitsToPixels, clamp } from "../util.js";
+import { almostLessThan, gridUnitsToPixels } from "../util.js";
 import { AABB2d } from "../AABB.js";
 import { Quad3d, Circle3d } from "./Polygon3d.js";
 
@@ -147,18 +147,6 @@ export class AABB3d extends AABB2d {
   static fromTile(tile, out) {
     out = super.fromTile(tile, out);
     const elevZ = tile.elevationZ;
-    out.max.z = elevZ;
-    out.min.z = elevZ;
-    return out;
-  }
-
-  /**
-   * @param {Tile} tile
-   * @returns {AABB3d}
-   */
-  static fromTileAlpha(tile, alphaThreshold, out) {
-    out = super.fromTileAlpha(tile, alphaThreshold, out);
-    const elevZ = gridUnitsToPixels(tile.document.elevation);
     out.max.z = elevZ;
     out.min.z = elevZ;
     return out;

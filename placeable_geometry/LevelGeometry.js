@@ -1,11 +1,15 @@
 /* globals
-foundry,
+canvas,
+CONFIG,
 PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
 import { TileGeometry } from "./TileGeometry.js";
+import { GEOMETRY_LIB_ID } from "../const.js";
+import { gridUnitsToPixels, NULL_SET } from "../util.js";
+import { AABB3d } from "../3d/AABB3d.js";
 
 const TRACKER_TYPES = {
   background: [
@@ -49,7 +53,7 @@ const TRACKER_TYPES = {
 };
 
 
-export LevelBackgroundGeometry extends TileGeometry {
+export class LevelBackgroundGeometry extends TileGeometry {
 
   /** @type {string} */
   static PLACEABLE_NAME = "Level";
@@ -66,9 +70,9 @@ export LevelBackgroundGeometry extends TileGeometry {
 
   get alphaThreshold() { return this.scene.background.alphaThreshold; }
 
-  get pixelCache() { return CONFIG[GEOMETRY_LIB_ID].levelBackgroundPixelCache.cacheForDocument(this.placeableDocument); }
+  get elevationZ() { return gridUnitsToPixels(this.placeableDocument.elevation.base); }
 
-  get elevationZ() { gridUnitsToPixels(this.placeableDocument.elevation.base); }
+  static get cacheManager() { return CONFIG[GEOMETRY_LIB_ID].levelBackgroundPixelCache; }
 
   static TRACKER_TYPES = TRACKER_TYPES;
 
@@ -110,18 +114,23 @@ export LevelBackgroundGeometry extends TileGeometry {
    * @returns {Point3d}
    */
   static tileCenter(levelD) {
-    const ctr = tile.center;
-    return Point3d.tmp.set(ctr.x, ctr.y, tile.elevationZ);
+    const cache = this.cacheManager.pixelCacheForDocument(levelD);
+    if ( !cache ) return canvas.scene.dimensions.sceneRect.center;
+    const { width, height } = cache;
+    using TL = cache._toCanvasCoordinates(0, 0);
+    using BR = cache._toCanvasCoordinates(width, height);
+    return PIXI.Point.midPoint(TL, BR);
   }
 
 }
 
-export LevelForegroundGeometry extends LevelBackgroundGeometry {
+export class LevelForegroundGeometry extends LevelBackgroundGeometry {
 
   /** @type {boolean} */
   static foreground = true;
 
-  get pixelCache() { return CONFIG[GEOMETRY_LIB_ID].levelForegroundPixelCache.cacheForDocument(this.placeableDocument); }
+  static get cacheManager() { return CONFIG[GEOMETRY_LIB_ID].levelForegroundPixelCache; }
 
-  get elevationZ() { gridUnitsToPixels(this.placeableDocument.elevation.top); }
+  get elevationZ() { return gridUnitsToPixels(this.placeableDocument.elevation.top); }
+
 }
