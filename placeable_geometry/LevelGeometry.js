@@ -64,9 +64,9 @@ export class LevelBackgroundGeometry extends TileGeometry {
   /** @type {boolean} */
   static foreground = false;
 
-  get level() { return this.placeable; }
+  get level() { return this.placeableDocument; }
 
-  get tile() { return this.placeable; }
+  get tile() { throw Error("LevelGeometry does not have a tile"); }
 
   get alphaThreshold() { return this.level.background.alphaThreshold; }
 
