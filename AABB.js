@@ -228,7 +228,7 @@ export class AABB2d {
    */
   static fromShape(shape, out) {
     out ??= new this();
-    if ( shape instanceof AABB2d ) out.copyFrom(shape);
+    if ( shape instanceof AABB2d ) shape.clone(out);
     else if ( shape instanceof PIXI.Rectangle ) AABB2d.fromRectangle(shape, out);
     else if ( shape instanceof PIXI.Polygon ) AABB2d.fromPolygon(shape, out);
     else if ( shape instanceof PIXI.Circle ) AABB2d.fromCircle(shape, out);
@@ -324,6 +324,7 @@ export class AABB2d {
     return out;
   }
 
+
   // ----- NOTE: Containment tests ----- //
 
   /**
@@ -375,6 +376,18 @@ export class AABB2d {
   }
 
   // ----- NOTE: Overlap tests ----- //
+
+  /**
+   * Generic overlaps test.
+   * @param {*} shape
+   * @returns {boolean}
+   */
+  overlaps(shape) {
+    if ( shape instanceof AABB2d ) return this.overlapsAABB(shape);
+    if ( shape instanceof PIXI.Rectangle ) return this.overlapsRectangle(shape);
+    console.error("AABB2d|overlaps shape not recognized", shape);
+    return false;
+  }
 
   /**
    * Does this AABB overlap another?
@@ -586,9 +599,6 @@ export class AABB2d {
     draw.point(this.max, opts);
   }
 }
-
-// For consistency with PIXI.Rectangle
-AABB2d.prototype.overlaps = AABB2d.prototype.overlapsRectangle;
 
 
 // From Token:

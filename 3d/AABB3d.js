@@ -7,7 +7,7 @@ PIXI,
 import { Point3d } from "./Point3d.js";
 import { almostLessThan, gridUnitsToPixels } from "../util.js";
 import { AABB2d } from "../AABB.js";
-import { Quad3d, Circle3d } from "./Polygon3d.js";
+import { Polygons3d, Quad3d, Circle3d } from "./Polygon3d.js";
 
 const axes = {
   x: new Point3d(1, 0, 0),
@@ -134,7 +134,7 @@ export class AABB3d extends AABB2d {
   static fromShape(shape, z, out) {
     out ??= new this();
     if ( shape instanceof AABB3d ) {
-      out.copyFrom(shape);
+      shape.clone(out);
       if ( !z ) return out;
     } else super.fromShape(shape, out);
     z = this.getMinMaxForValues(z);
@@ -277,6 +277,17 @@ export class AABB3d extends AABB2d {
     out.min.set(x - R.x, y - R.y, z - R.z);
     out.max.set(x + R.x, y + R.y, z + R.z);
     return out;
+  }
+
+  /**
+   * Generic overlaps test.
+   * @param {*} shape
+   * @returns {boolean}
+   */
+  overlaps(shape) {
+    if ( shape instanceof AABB2d ) return shape.overlapsAABB(this); // Ignore z axis.
+    if ( shape instanceof AABB3d ) return this.overlapsAABB(shape);
+    return super.overlaps(shape);
   }
 
   /**

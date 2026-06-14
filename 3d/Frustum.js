@@ -321,7 +321,7 @@ export class Frustum {
 
     // For each region shape, use the ideal version to test b/c circles and ellipses can be tested faster than polys.
     // Ignore holes (some shape with holes may get included but rather be over-inclusive here)
-    const geom = region[GEOMETRY_LIB_ID][GEOMETRY_ID];
+    const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.region.geomForDocument(regionD);
     return geom.shapeGeometries.some(shapeGeom => this._overlapsRegionShapeGeom(shapeGeom));
   }
 

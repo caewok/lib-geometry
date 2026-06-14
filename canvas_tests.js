@@ -4,7 +4,7 @@ CONFIG,
 */
 "use strict";
 
-import { GEOMETRY_LIB_ID, GEOMETRY_ID } from "./const.js";
+import { GEOMETRY_LIB_ID } from "./const.js";
 import { Draw } from "./Draw.js";
 import { Point3d } from "./3d/Point3d.js";
 import { Triangle3d } from "./3d/Polygon3d.js";
@@ -129,15 +129,15 @@ export function drawTokenSoundBorder({ tokens, ...drawingOpts } = {}) {
  * @param {boolean} [opts.aabb=false]           If true, draw the bounding box
  * @param {*} [opts]                            Other opts passed to drawing
  */
-function drawPlaceableGeometry(placeable, placeableColor, { face = "top", aabb = false, ...drawingOpts } = {}) {
-  const geom = placeable[GEOMETRY_LIB_ID][GEOMETRY_ID];
+function drawPlaceableGeometry(placeable, placeableColor, { aabb = false, ...drawingOpts } = {}) {
+  const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.geomForPlaceable(placeable);
   if ( !geom ) {
     console.error(`${placeable.constructor.name} ${placeable.id} has no geometry.`);
     return;
   }
 
   let color = Draw.COLORS[placeableColor];
-  geom.faces[face].draw2d({ color, ...drawingOpts });
+  geom.faces[0].draw2d({ color, ...drawingOpts });
   if ( aabb ) {
     let color = Draw.COLORS[`light${placeableColor}`];
     Draw.shape(geom.aabb.toRectangle(), { color, ...drawingOpts });
@@ -155,14 +155,10 @@ function drawPlaceableGeometry(placeable, placeableColor, { face = "top", aabb =
 export function drawWallGeometries({ walls, ...drawingOpts } = {}) {
   walls ??= canvas.walls.placeables;
   for ( const wall of walls ) {
+    const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.wall.geomForPlaceable(wall);
     let color = "blue";
-    let face = "top"
-    if ( wall.edge.direction ) {
-      const geom = wall[GEOMETRY_LIB_ID][GEOMETRY_ID];
-      face = geom.faces.top ? "top" : "bottom";
-      color = geom.faces.top ? "green": "red";
-    }
-    drawPlaceableGeometry(wall, color, { face, ...drawingOpts });
+    if ( geom.constructor.isDirectional(wall) ) color = wall.dir == 1 ? "green": "red";
+    drawPlaceableGeometry(wall, color, drawingOpts);
   }
 }
 
@@ -210,8 +206,9 @@ export function drawRegionGeometries({ regions, ...drawingOpts } = {}) {
  */
 export function testTokenGeometryContainment() {
   let incorrectTokens = new Set();
+  const mgr = CONFIG.GeometryLib.geometryManager;
   for ( const token of canvas.tokens.placeables ) {
-    const geom = token.GeometryLib.geometry;
+    const geom = mgr.geomForPlaceable(token);
     using ctr = Point3d.fromTokenCenter(token);
     for ( const face of geom.iterateFaces() ) {
       if ( face.isFacing(ctr) ) incorrectTokens.add(token);
@@ -223,8 +220,9 @@ export function testTokenGeometryContainment() {
 
 export function testTokenPrototypeGeometryContainment() {
   let incorrectTokens = new Set();
+  const mgr = CONFIG.GeometryLib.geometryManager;
   for ( const token of canvas.tokens.placeables ) {
-    const geom = token.GeometryLib.geometry;
+    const geom = mgr.geomForPlaceable(token);
     using ctr = Point3d.tmp.set(0, 0, 0);
     const pf = geom._prototypeFaces;
 
@@ -240,8 +238,9 @@ export function testTokenPrototypeGeometryContainment() {
 
 export function testWallGeometryContainment() {
   let incorrectWalls = new Set();
+  const mgr = CONFIG.GeometryLib.geometryManager;
   for ( const wall of canvas.walls.placeables ) {
-    const geom = wall.GeometryLib.geometry;
+    const geom = mgr.geomForPlaceable(wall);
     using ctr = Point3d.midPoint(wall.edge.a, wall.edge.b);
     using delta2d = wall.edge.b.subtract(wall.edge.a);
     using dirLeft = Point3d.tmp.set(delta2d.y, -delta2d.x, 0);
@@ -263,8 +262,9 @@ export function testWallGeometryContainment() {
 
 export function testTileGeometryContainment() {
   let incorrectTiles = new Set();
+  const mgr = CONFIG.GeometryLib.geometryManager;
   for ( const tile of canvas.tiles.placeables ) {
-    const geom = tile.GeometryLib.geometry;
+    const geom = mgr.geomForPlaceable(tile);
     const ctr2d = tile.center;
     using ptTop = Point3d.tmp.set(ctr2d.x, ctr2d.y, tile.elevationZ + 50);
     using ptBottom = Point3d.tmp.set(ctr2d.x, ctr2d.y, tile.elevationZ - 50);
@@ -278,7 +278,7 @@ export function testTileGeometryContainment() {
 export function testRegionGeometryContainment() {
   let incorrectRegions = new Set();
   for ( const region of canvas.regions.placeables ) {
-    const geom = region.GeometryLib.geometry;
+    const geom = mgr.geomForPlaceable(region);
     if ( !geom.faces.top ) continue;
 
     // Plain circles, ellipses, and rectangles are instanced.

@@ -65,11 +65,12 @@ const TRACKER_TYPES = {
  */
 const TileAlphaBoundingBoxMixin = superclass => class extends superclass {
 
-  /** @type {object<Quad3d|Polygon3d>} */
-  #alphaBoundingBox = {
-    top: new Quad3d(),
-    bottom: new Quad3d(),
-  };
+  /** @type {object<Quad3d>} */
+  #alphaBoundingBox = [
+    new Quad3d(),
+    new Quad3d(),
+  ];
+
 
   /** @type {boolean} */
   #needsUpdate = true;
@@ -99,16 +100,16 @@ const TileAlphaBoundingBoxMixin = superclass => class extends superclass {
    * Bottom faces have opposite orientation.
    */
   _updateAlphaBoundingBox() {
-    const cache = CONFIG[GEOMETRY_LIB_ID].tilePixelCache.pixelCacheForDocument(this.placeableDocument);
+    const cache = this.pixelCache;
     if ( !cache ) return;
 
     const rectOrPoly = cache.getThresholdCanvasBoundingBox(this.alphaThreshold).toPolygon();
     const bb = this.#alphaBoundingBox;
     const elevationZ = this.elevationZ
 
-		Quad3d.fromPolygon(rectOrPoly, elevationZ, bb.top);
-		Quad3d.fromPolygon(rectOrPoly, elevationZ, bb.bottom);
-    bb.bottom.reverseOrientation();
+		Quad3d.fromPolygon(rectOrPoly, elevationZ, bb[0]);
+		Quad3d.fromPolygon(rectOrPoly, elevationZ, bb[1]);
+    bb[1].reverseOrientation(); // Bottom.
   }
 }
 
@@ -121,11 +122,11 @@ const TileAlphaBoundingBoxMixin = superclass => class extends superclass {
  */
 const TileAlphaBoundingPolygonMixin = superclass => class extends superclass {
 
-  /** @type {object<Polygon3d>} */
-  #alphaBoundingPolygon = {
-    top: new Polygon3d(),
-    bottom: new Polygon3d(),
-  };
+  /** @type {Polygon3d[]} */
+  #alphaBoundingPolygon = [
+    new Polygon3d(),
+    new Polygon3d(),
+  ];
 
   /** @type {boolean} */
   #needsUpdate = true;
@@ -155,13 +156,16 @@ const TileAlphaBoundingPolygonMixin = superclass => class extends superclass {
    * Bottom faces have opposite orientation.
    */
   _updateAlphaBoundingPolygon() {
-    const poly = this.pixelCache.getThresholdCanvasBoundingPolygon(this.alphaThreshold);
+    const cache = this.pixelCache;
+    if ( !cache ) return;
+
+    const poly = cache.getThresholdCanvasBoundingPolygon(this.alphaThreshold);
     const bp = this.#alphaBoundingPolygon;
     const elevationZ = this.elevationZ;
 
-    Polygon3d.fromPolygon(poly, elevationZ, bp.top);
-    Polygon3d.fromPolygon(poly, elevationZ, bp.bottom);
-    bp.bottom.reverseOrientation();
+    Polygon3d.fromPolygon(poly, elevationZ, bp[0]);
+    Polygon3d.fromPolygon(poly, elevationZ, bp[1]);
+    bp[1].reverseOrientation(); // Bottom.
   }
 }
 
@@ -174,11 +178,11 @@ const TileAlphaBoundingPolygonMixin = superclass => class extends superclass {
  */
 const TileAlphaPolygonsMixin = superclass => class extends superclass {
 
-  /** @type {object<Polygons3d>} */
-  #alphaThresholdPolygons = {
-    top: new Polygons3d(),
-    bottom: new Polygons3d(),
-  };
+  /** @type {Polygons3d[]} */
+  #alphaThresholdPolygons = [
+    new Polygons3d(),
+    new Polygons3d(),
+  ];
 
   /** @type {boolean} */
   #needsUpdate = true;
@@ -208,11 +212,14 @@ const TileAlphaPolygonsMixin = superclass => class extends superclass {
    * Bottom faces have opposite orientation.
    */
   _updatePathsToFacePolygons() {
-    const polys = this.pixelCache.getCanvasAlphaISOBands(this.alphaThreshold);
+    const cache = this.pixelCache;
+    if ( !cache ) return;
+
+    const polys = cache.getCanvasAlphaISOBands(this.alphaThreshold);
     if ( !polys ) return;
 
-    Polygons3d.fromPolygons(polys, this.elevationZ, this.#alphaThresholdPolygons.top);
-    this.#alphaThresholdPolygons.top.clone(this.#alphaThresholdPolygons.bottom).reverseOrientation(); // Reverse orientation but keep the hole designations.
+    Polygons3d.fromPolygons(polys, this.elevationZ, this.#alphaThresholdPolygons[0]);
+    this.#alphaThresholdPolygons[0].clone(this.#alphaThresholdPolygons[1]).reverseOrientation(); // Reverse orientation but keep the hole designations.
   }
 }
 
@@ -225,11 +232,11 @@ const TileAlphaPolygonsMixin = superclass => class extends superclass {
  */
 const TileAlphaTrianglesMixin = superclass => class extends superclass {
 
-  /** @type {object<Polygons3d>} */
-  #alphaThresholdTriangles = {
-    top: new Polygons3d(),
-    bottom: new Polygons3d(),
-  };
+  /** @type {Polygons3d[]} */
+  #alphaThresholdTriangles = [
+    new Polygons3d(),
+    new Polygons3d(),
+  ];
 
   /** @type {boolean} */
   #needsUpdate = true;
@@ -263,8 +270,10 @@ const TileAlphaTrianglesMixin = superclass => class extends superclass {
   _updatePathsToFaceTriangles() {
     // TODO: Fix. Need to convert multiply polygons with holes to triangles.
     console.error("Not yet implemented.")
+    const cache = this.pixelCache;
+    if ( !cache ) return;
 
-    const polys = this.pixelCache.getCanvasAlphaISOBands(this.alphaThreshold);
+    const polys = cache.getCanvasAlphaISOBands(this.alphaThreshold);
     if ( !polys ) return;
 
     // Convert the polygons to top and bottom faces.
@@ -283,15 +292,15 @@ const TileAlphaTrianglesMixin = superclass => class extends superclass {
     const triTop = Triangle3d
       .fromVertices(topTrimmed)
       .filter(tri => !foundry.utils.orient2dFast(tri.a, tri.b, tri.c).almostEqual(0, 1e-06));
-    Polygons3d.from3dPolygons(triTop, this.#alphaThresholdTriangles.top);
+    Polygons3d.from3dPolygons(triTop, this.#alphaThresholdTriangles[0]);
 
     const triBottom = Triangle3d
       .fromVertices(bottomTrimmed)
       .filter(tri => !foundry.utils.orient2dFast(tri.a, tri.b, tri.c).almostEqual(0, 1e-06));
-    Polygons3d.from3dPolygons(triBottom, this.#alphaThresholdTriangles.bottom);
+    Polygons3d.from3dPolygons(triBottom, this.#alphaThresholdTriangles[1]);
 
-    this.#alphaThresholdTriangles.top.setZ(this.elevationZ);
-    this.#alphaThresholdTriangles.bottom.setZ(this.elevationZ);
+    this.#alphaThresholdTriangles[0].setZ(this.elevationZ);
+    this.#alphaThresholdTriangles[1].setZ(this.elevationZ);
   }
 }
 

@@ -23,15 +23,6 @@ Manage hooks and trigger updates.
 
 export class CanvasGeometryManager {
 
-  /** @type {enum<string>} */
-  static LAYER_KEYS = {
-    Level: "levels",
-    Region: "regions",
-    Tile: "tiles",
-    Token: "tokens",
-    Wall: "walls",
-  };
-
   /** @type {enum<PlaceableGeometry>} */
   static GEOMETRY_KEYS = {
     Level: {
@@ -76,7 +67,8 @@ export class CanvasGeometryManager {
    * For every relevant document in the scene, initialize the geometry.
    */
   initializeScene() {
-    const docs = canvas.scene[this.constructor.LAYER_KEYS[this.constructor.TYPE]];
+    const layer = this.constructor.geometryClass.layer;
+    const docs = canvas.scene[layer];
     docs.forEach(doc => this.create(doc));
   }
 

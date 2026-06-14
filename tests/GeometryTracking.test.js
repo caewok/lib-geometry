@@ -27,7 +27,7 @@ describe("Walls", () => {
   describe("Model Matrix", () => {
     it("should have numeric values", () => {
       canvas.walls.placeables.forEach(wall => {
-        const geom = wall[GEOMETRY_LIB_ID][GEOMETRY_ID];
+        const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.wall.geomForPlaceable(wall);
         expect(geom.modelMatrix.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
       });
     });
@@ -42,7 +42,7 @@ describe("Tokens", () => {
   describe("Model Matrix", () => {
     it("should have numeric values", () => {
       canvas.tokens.placeables.forEach(token => {
-        const geom = token[GEOMETRY_LIB_ID][GEOMETRY_ID];
+        const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.token.geomForPlaceable(token);
         expect(geom.modelMatrix.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
       });
     });
@@ -57,7 +57,7 @@ describe("Tiles", () => {
   describe("Model Matrix", () => {
     it("should have numeric values", () => {
       canvas.tiles.placeables.forEach(tile => {
-        const geom = tile[GEOMETRY_LIB_ID][GEOMETRY_ID];
+        const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.tile.geomForPlaceable(tile);
         expect(geom.modelMatrix.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
       });
     });
@@ -73,7 +73,7 @@ describe("Regions", () => {
     // Region shapes have the model matrix
     it("should have numeric values", () => {
       canvas.regions.placeables.forEach(region => {
-        const regionGeom = region[GEOMETRY_LIB_ID][GEOMETRY_ID];
+        const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.region.geomForPlaceable(region);
         expect(regionGeom.modelMatrix.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
       });
     });
@@ -82,7 +82,7 @@ describe("Regions", () => {
   describe("AABB", () => {
     it("should have numeric values", () => {
       canvas.regions.placeables.forEach(region => {
-        const geom = region[GEOMETRY_LIB_ID][GEOMETRY_ID];
+        const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.region.geomForPlaceable(region);
         expect(isFinite(geom.aabb.min.x)).to.be.true;
         expect(isFinite(geom.aabb.min.y)).to.be.true;
         expect(Number.isNumeric(geom.aabb.min.z)).to.be.true;

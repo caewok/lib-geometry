@@ -64,11 +64,11 @@ export class LevelBackgroundGeometry extends TileGeometry {
   /** @type {boolean} */
   static foreground = false;
 
-  get scene() { return this.placeable; }
+  get level() { return this.placeable; }
 
   get tile() { return this.placeable; }
 
-  get alphaThreshold() { return this.scene.background.alphaThreshold; }
+  get alphaThreshold() { return this.level.background.alphaThreshold; }
 
   get elevationZ() { return gridUnitsToPixels(this.placeableDocument.elevation.base); }
 

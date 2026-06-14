@@ -49,9 +49,11 @@ const PATCHES = {
   "foundry.documents.TokenDocument": PATCHES_ELEVATION.TokenDocument,
   "foundry.documents.WallDocument": PATCHES_ELEVATION.WallDocument,
 
+  // Source document patches
+  "foundry.canvas.sources.BaseEffectSource": PATCHES_ELEVATION.BaseEffectSource,
+  "foundry.canvas.sources.PointVisionSource": PATCHES_ELEVATION.PointVisionSource,
+
   // Elevation patches (deprecated).
-  "foundry.canvas.sources.BaseEffectSource": PATCHES_ELEVATION.PointSource,
-  "foundry.canvas.sources.PointVisionSource": PATCHES_ELEVATION.VisionSource,
   "foundry.canvas.placeables.PlaceableObject": PATCHES_ELEVATION.PlaceableObject,
   "foundry.canvas.placeables.Wall": PATCHES_ELEVATION.Wall,
   "foundry.canvas.placeables.Region": PATCHES_ELEVATION.Region,

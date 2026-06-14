@@ -40,8 +40,8 @@ lights can display with varying canvas elevation.
 */
 
 export const PATCHES = {};
-PATCHES.PointSource = { ELEVATION: {} };
-PATCHES.VisionSource = { ELEVATION: {} };
+PATCHES.BaseEffectSource = { ELEVATION: {} };
+PATCHES.PointVisionSource = { ELEVATION: {} };
 PATCHES.PlaceableObject = { ELEVATION: {} };
 PATCHES.Token = { ELEVATION: {} };
 PATCHES.Wall = { ELEVATION: {} };
@@ -93,10 +93,7 @@ Token
     --> document.flags.elevatedvision.tokenHeight
 */
 
-// Set VisionSource (but not MovementSource) to the top elevation of the token
-function visionSourceElevationE() {
-  return this.object?.topE ?? this.object?.elevationE ?? this.document.elevation ?? 0;
-}
+
 
 // NOTE: Wall Elevation
 function wallTopZ() {
@@ -140,9 +137,7 @@ function getTokenVisionZ() { return this.bottomZ + this.visionHeightZ; }
  * Top elevation of a token. Accounts for prone status.
  * @returns {number} In grid units.
  */
-function tokenTopZ() {
-  return this.bottomZ + gridUnitsToPixels(this.verticalHeightZ);
-}
+function tokenTopZ() { return this.bottomZ + this.verticalHeightZ; }
 
 /** @type {boolean} */
 function getIsProne() {
@@ -206,27 +201,41 @@ PATCHES.WallDocument.ELEVATION.GETTERS = {
   bottomZ: wallBottomZ,
 };
 
+// ---- NOTE: PointSource ----- //
+PATCHES.BaseEffectSource.ELEVATION.GETTERS = {
+  elevationE: function() { return this.data.elevation || 0; },
+  elevationZ: function() { return gridUnitsToPixels(this.data.elevation || 0); }
+};
+
+// Set VisionSource (but not MovementSource) to the top elevation of the token
+function visionSourceElevationE() {
+  if ( this.object ) return this.object.topE ?? this.object.elevationE ?? (this.data.elevation || 0);
+  else return this.data.elevation || 0;
+}
+
+// ---- NOTE: VisionSource ----- //
+PATCHES.PointVisionSource.ELEVATION.GETTERS = {
+  elevationE: visionSourceElevationE,
+  elevationZ: function() { return gridUnitsToPixels(this.elevationE); },
+};
+
+
 
 // Deprecated placeable patches.
 
-// ---- NOTE: PointSource ----- //
-PATCHES.PointSource.ELEVATION.GETTERS = {
-  elevationE: () => this.document.elevation,
-  elevationZ: zElevation
-};
 
-// ---- NOTE: VisionSource ----- //
-PATCHES.VisionSource.ELEVATION.GETTERS = { elevationE: visionSourceElevationE };
+
+
 
 // ---- NOTE: PlaceableObject ----- //
 PATCHES.PlaceableObject.ELEVATION.GETTERS = {
-  elevationE: () => this.document.elevation,
-  elevationZ: zElevation
+  elevationE: function() { return this.document.elevation || 0; },
+  elevationZ: function() { return gridUnitsToPixels(this.document.elevation || 0); },
 };
 
 // ---- NOTE: Token ----- //
 PATCHES.Token.ELEVATION.GETTERS = {
-  bottomE: function() { return this.document.elevation; },
+  bottomE: function() { return this.document.elevation || 0; },
   bottomZ: function() { return this.document.bottomZ; },
   topE: function() { return pixelsToGridUnits(this.document.topZ); },
   topZ: function() { return this.document.topZ; },
@@ -238,7 +247,7 @@ PATCHES.Token.ELEVATION.GETTERS = {
   // Token vision Height
   visionE: function() { return pixelsToGridUnits(this.document.visionZ); },
   visionZ: function() { return this.document.visionZ; },
-  visionHeight: function() { return pixelsToGridUnits(this.docuement.visionHeightZ); },
+  visionHeight: function() { return pixelsToGridUnits(this.document.visionHeightZ); },
 };
 
 // ---- NOTE: Wall ----- //
@@ -252,7 +261,7 @@ PATCHES.Wall.ELEVATION.GETTERS = {
 // ----- NOTE: Region ----- //
 PATCHES.Region.ELEVATION.GETTERS = {
   topE: function() { return this.document.elevation.top; },
-  topZ: zTop,
+  topZ: function() { return gridUnitsToPixels(this.document.elevation.top); },
   bottomE: function() { return this.document.elevation.bottom; },
-  bottomZ: zBottom,
+  bottomZ: function() { return gridUnitsToPixels(this.document.elevation.bottom); },
 };

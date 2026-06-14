@@ -187,9 +187,9 @@ class GeometryManager {
   *iterateManagers() {
      for ( const type of this.types ) {
        if ( type === "level" ) {
-         if ( this.level.background ) yield this.level.background;
-         if ( this.level.foreground ) yield this.level.foreground;
-       } else if ( this.level[type] ) yield this.level.type;
+         yield this.level.background;
+         yield this.level.foreground;
+       } else yield this[type];
      }
   }
 

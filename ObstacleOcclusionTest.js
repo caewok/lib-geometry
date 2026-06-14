@@ -39,11 +39,12 @@ export class ObstacleOcclusionTest {
 
   #aabb = new AABB3d();
 
-  get aabb() { return this.#aabb; }
+  get aabb() { return this.#frustum?.aabb || this.#aabb; }
 
-  // Note that this does not reset the frustum.
+  // Note that this removes the frustum.
   setBoundsFromShape(shape, z) {
     AABB3d.fromShape(shape, z, this.#aabb);
+    this.#frustum = null;
     this.update();
   }
 
@@ -51,7 +52,6 @@ export class ObstacleOcclusionTest {
 
   set frustum(value) {
     this.#frustum = value;
-    this.#aabb.copyFrom(value.aabb);
     this.update();
   }
 
@@ -75,6 +75,9 @@ export class ObstacleOcclusionTest {
    * @prop {boolean} walls        True if walls block
    * @prop {boolean} tiles        True if tiles block
    * @prop {boolean} regions      True if regions block
+   * @prop {object} levels
+   * - @prop {boolean} background   True if level background texture blocks
+   * - @prop {boolean} foreground   True if level foreground texture blocks
    * @prop {TokenBlockingConfig} tokens     Token-specific blocking settings
    */
 
@@ -199,6 +202,7 @@ export class ObstacleOcclusionTest {
 
   update() {
     if ( !canvas.ready ) return;
+    if ( this.frustum ) this.frustum.aabb.clone(this.#aabb);
     this._updateObstacles();
     this._constructObstacleTester();
   }
@@ -228,10 +232,7 @@ export class ObstacleOcclusionTest {
    * Helper to get placeable docs within bounds, filter by the 3d aabb, and filter by frustum.
    */
   #filterDocGeometries(mgr, opts) {
-    const geoms = mgr.quadtree.getObjects(this.bounds, opts)
-      .map(doc => mgr.geomForDocument(doc))
-      .filter(geom => this.aabb.overlaps(geom));
-
+    const geoms = [...mgr.quadtree.getObjects(this.aabb, opts)] // Convert to array so filter works.
     if ( this.frustum ) return geoms.filter(geom => this.#frustum.overlapsGeometry(geom));
     return geoms;
   }
@@ -294,7 +295,8 @@ export class ObstacleOcclusionTest {
    * @returns {Set<Level>}
    */
   findBlockingLevels(levelType = "background") {
-    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.level[levelType]);
+    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.level[levelType])
+      .filter(geom => geom.level[levelType].src); // Must have a defined texture.
   }
 
   /**

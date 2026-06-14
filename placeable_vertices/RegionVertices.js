@@ -26,13 +26,13 @@ export class RegionVertices extends AbstractInstancedVertices  {
   get region() { return this.placeable; }
 
   get instanced() {
-    const geom = this.region[GEOMETRY_LIB_ID][GEOMETRY_ID];
+    const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.region.geomForPlaceable(this.region);
     const ST = this.constructor.SHAPE_TYPES;
     return geom.type > ST.POLYGONS;
   }
 
   calculateModel() {
-    const geom = this.region[GEOMETRY_LIB_ID][GEOMETRY_ID];
+    const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.region.geomForPlaceable(this.region);
     const ST = geom.constructor.SHAPE_TYPES;
     const type = geom.type;
     let cl;
