@@ -244,7 +244,7 @@ export class ObstacleOcclusionTest {
     if ( !this._config.walls ) return NULL_SET;
 
     // Drop non-blocking walls for this sense type.
-    const collisionTest = o => o.t[this._config.senseType];
+    const collisionTest = o => o.t.placeableDocument[this._config.senseType];
     return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.wall, { collisionTest });
   }
 
