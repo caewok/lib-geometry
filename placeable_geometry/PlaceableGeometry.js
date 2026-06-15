@@ -42,11 +42,10 @@ propertiesUpdated
 
 */
 
-const LEVEL_SEGMENTS = [];
+let LEVEL_SEGMENTS;
 
 Hooks.on("updateLevel", function(_level, _changes, _opts, _id) {
-  LEVEL_SEGMENTS.length = 0;
-  LEVEL_SEGMENTS.push(...PlaceableGeometry.segmentLevels());
+  LEVEL_SEGMENTS = PlaceableGeometry.segmentLevels();
 });
 
 
@@ -70,10 +69,13 @@ export class PlaceableGeometry {
    * Reorganize and split level intervals to cover the low to high range with no overlaps.
    * Add gap intervals as necessary.
    * @param {Level[]} levels
-   * @returns {object[]} The intervals
-   *  - @prop {number} bottom       Bottom elevation value
-   *  - @prop {number} top          Top elevation value
-   *  - @prop {string[]} id[]       Id of the levels encountered in this interval
+   * @returns {object[]}
+   * - @prop {number} minElevation    Minimum elevation for the scene levels
+   * - @prop {number} maxElevation    Maximum elevation for the scene levels
+   * - @prop {object[]} segments      The intervals
+   *    - @prop {number} bottom       Bottom elevation value
+   *    - @prop {number} top          Top elevation value
+   *    - @prop {string[]} id[]       Id of the levels encountered in this interval
    */
   static segmentLevels() {
     // Create a distinct "event" for every bottom and top point.
@@ -90,14 +92,18 @@ export class PlaceableGeometry {
       return (a.value - b.value) || a.type === "start";
     });
 
+    // Store min and max elevations for later use.
+    const minElevation = events.at(0).value;
+    const maxElevation = events.at(-1).value;
+
     // Sweep through sorted events, identifying boundary changes.
-    const result = [];
+    const segments = [];
     const activeIds = new Set();
     let currentPosition = events[0].value;
     for ( const event of events) {
       // If we have moved forward in space, commit the previous segment.
       if ( event.value > currentPosition ) {
-        result.push({
+        segments.push({
           bottom: currentPosition,
           top: event.value,
           ids: new Set(activeIds), // May be empty if it is a gap.
@@ -109,7 +115,7 @@ export class PlaceableGeometry {
       else activeIds.delete(event.id);
       currentPosition = event.value;
     }
-    return result;
+    return { segments, minElevation, maxElevation };
   }
 
   // ----- NOTE: Constructor ----- //
@@ -420,7 +426,7 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
    * Construct the prototype faces.
    */
   initialize() {
-    if ( !this.constructor.levelSegments.length ) LEVEL_SEGMENTS.push(...PlaceableGeometry.segmentLevels());
+    LEVEL_SEGMENTS ??= PlaceableGeometry.segmentLevels();
     super.initialize();
     this._initializePrototypeFaces();
     this._updateFaces();

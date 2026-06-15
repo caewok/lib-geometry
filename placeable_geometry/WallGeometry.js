@@ -186,7 +186,6 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
       const polys3d = new Polygons3d(0);
       polys3d.polygons = face.polygons.filter(poly3d => {
         const polyLevels = this.faceLevels.get(poly3d);
-        if ( !polyLevels.size ) return true;
         return polyLevels.difference(ignoreLevelIds).size;
       });
       yield polys3d;
@@ -222,13 +221,15 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
     const aabb = quad.aabb;
     const zMin = aabb.min.z;
     const zMax = aabb.max.z;
+    const allLevels = new Set(canvas.scene.levels.keys());
+    this.faceLevels.clear();
 
     // Returns segments in order.
-    const segments = structuredClone(this.constructor.levelSegments);
+    const { minElevation, maxElevation, segments } = structuredClone(this.constructor.levelSegments);
 
     // Add in top and bottom segments as needed; trim segments outside the wall bounds.
     const elevMin = pixelsToGridUnits(zMin);
-    if ( segments[0].bottom > elevMin ) segments.unshift({ bottom: elevMin, top: segments[0].bottom, ids: NULL_SET });
+    if ( minElevation > elevMin ) segments.unshift({ bottom: elevMin, top: minElevation, ids: allLevels });
     else {
       while ( segments.length ) {
         const s = segments[0];
@@ -241,7 +242,7 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
     }
 
     const elevMax = pixelsToGridUnits(zMax);
-    if ( segments[0].top < elevMax ) segments.push({ bottom: segments[0].top, top: elevMax, ids: NULL_SET });
+    if ( maxElevation < elevMax ) segments.push({ bottom: maxElevation, top: elevMax, ids: allLevels });
     else {
        while ( segments.length ) {
         const s = segments.at(-1);
@@ -254,11 +255,11 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
     }
 
     // Create quads accordingly.
-    const wallLevels = this.placeableDocument.levels.size ? this.placeableDocument.levels : new Set(canvas.scene.levels.keys());
+    const wallLevels = this.placeableDocument.levels.size ? this.placeableDocument.levels : allLevels;
     const quads = [];
     for ( const segment of segments ) {
       // Drop segments that are exclusively for a level that does not contain this wall.
-      if ( segment.ids.size && !wallLevels.intersects(segment.ids) ) continue;
+      if ( !wallLevels.intersects(segment.ids) ) continue;
 
       const bottomZ = gridUnitsToPixels(segment.bottom);
       const topZ = gridUnitsToPixels(segment.top);
