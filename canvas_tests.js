@@ -50,6 +50,10 @@ canvasTests.drawRegionVertices()
 canvasTests.testTokenVertices()
 canvasTests.testRegionVertices()
 
+calc = _token.tokenvisibility.visibility.losViewer.calculator
+ot = calc.occlusionTester
+
+
 
 */
 

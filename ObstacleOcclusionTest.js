@@ -232,7 +232,7 @@ export class ObstacleOcclusionTest {
    * Helper to get placeable docs within bounds, filter by the 3d aabb, and filter by frustum.
    */
   #filterDocGeometries(mgr, opts) {
-    const geoms = [...mgr.quadtree.getObjects(this.aabb, opts)] // Convert to array so filter works.
+    const geoms = mgr.quadtree.getObjects(this.aabb, opts);
     if ( this.frustum ) return geoms.filter(geom => this.#frustum.overlapsGeometry(geom));
     return geoms;
   }
