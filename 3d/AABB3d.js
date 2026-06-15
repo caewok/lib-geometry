@@ -163,6 +163,7 @@ export class AABB3d extends AABB2d {
     return out;
   }
 
+
   /**
    * @param {Edge} edge
    * @returns {AABB3d}
@@ -172,6 +173,13 @@ export class AABB3d extends AABB2d {
     out = super.fromWall(wall, out);
     out.min.z = bottomZ;
     out.max.z = topZ;
+    return out;
+  }
+
+  static fromWallDocument(wallD, out) {
+    out = super.fromWallDocument(wallD, out);
+    out.max.z = wallD.topZ;
+    out.min.z = wallD.bottomZ;
     return out;
   }
 
