@@ -258,16 +258,19 @@ export class ObstacleOcclusionTest {
     const collisionTest = o => this.includeToken(o.t);
     let tokenGeoms = this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.token, { collisionTest });
 
+    // Filter out the subject token and other tokens to exclude (such as the target).
+    tokenGeoms = tokenGeoms.filter(geom => !(this.subjectToken === geom.placeableDocument || this.tokensToExclude.has(geom.placeableDocument)));
+
     // Module-specific
     const RIDEABLE = OTHER_MODULES.RIDEABLE;
     if ( RIDEABLE ) {
       // Cannot iterate the weak set.
       // This is slower but preserves the weak set.
       // Drop any token with a riding connection to an excluded token.
-      for ( const t of canvas.scene.tokens ) {
-        if ( !t.object ) continue;
-        if ( this.subjectToken === t || this.tokensToExclude.has(t) ) {
-          tokenGeoms = tokenGeoms.filter(tokenGeom => !(tokenGeom.token && RIDEABLE.API.RidingConnection(tokenGeom.token, t.object)));
+      for ( const tDoc of canvas.scene.tokens ) {
+        if ( !tDoc.object ) continue;
+        if ( this.subjectToken === tDoc || this.tokensToExclude.has(tDoc) ) {
+          tokenGeoms = tokenGeoms.filter(tokenGeom => !(tokenGeom.token && RIDEABLE.API.RidingConnection(tokenGeom.token, tDoc.object)));
         }
       }
     }
