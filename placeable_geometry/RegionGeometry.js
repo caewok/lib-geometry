@@ -45,6 +45,9 @@ const TRACKER_TYPES = {
     "flags.terrainmapper.splitPolygons",
     "flags.terrainmapper.elevationAlgorithm",
   ],
+  level: [
+    "levels",
+  ],
 };
 
 export class RegionGeometry extends PlaceableGeometry {
@@ -70,7 +73,7 @@ export class RegionGeometry extends PlaceableGeometry {
     scale: NULL_SET,
     rotation: NULL_SET,
     shape: new Set(TRACKER_TYPES.shapes),
-    properties: NULL_SET,
+    properties: new Set(TRACKER_TYPES.level),
   };
 
   get region() { return this.placeable; }

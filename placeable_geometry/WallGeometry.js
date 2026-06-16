@@ -47,6 +47,9 @@ const TRACKER_TYPES = {
     "threshold.sight",
     "threshold.sound",
   ],
+  level: [
+    "levels",
+  ],
 };
 
 /**
@@ -68,7 +71,7 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
     scale: new Set(TRACKER_TYPES.position),
     rotation: new Set(TRACKER_TYPES.position),
     shape: NULL_SET,
-    properties: new Set(TRACKER_TYPES.direction),
+    properties: new Set([...TRACKER_TYPES.direction, ...TRACKER_TYPES.level]),
   };
 
   get wall() { return this.placeableDocument.object; }

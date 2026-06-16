@@ -16,6 +16,10 @@ const TRACKER_TYPES = {
     "background.alphaThreshold",
     "background.src",
   ],
+  foreground: [
+    "foreground.alphaThreshold",
+    "foreground.src",
+  ],
   elevation: [
     "elevation.bottom",
     "elevation.top",
@@ -82,7 +86,7 @@ export class LevelBackgroundGeometry extends TileGeometry {
     rotation: new Set(TRACKER_TYPES.rotation),
     shape: NULL_SET,
     properties: NULL_SET,
-    texture: new Set(TRACKER_TYPES.texture),
+    texture: new Set([...TRACKER_TYPES.texture, ...TRACKER_TYPES.background]),
     texturePosition: new Set(TRACKER_TYPES.texturePosition),
   };
 
@@ -125,6 +129,11 @@ export class LevelBackgroundGeometry extends TileGeometry {
 }
 
 export class LevelForegroundGeometry extends LevelBackgroundGeometry {
+
+  static UPDATE_KEYS = {
+    ...super.UPDATE_KEYS,
+    texture: new Set(TRACKER_TYPES.texture, TRACKER_TYPES.foreground),
+  };
 
   /** @type {boolean} */
   static foreground = true;

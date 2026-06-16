@@ -54,6 +54,9 @@ const TRACKER_TYPES = {
     "texture.alphaThreshold",
     "texture.src",
   ],
+  level: [
+    "levels",
+  ],
 };
 
 /**
@@ -325,7 +328,7 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
     scale: new Set(TRACKER_TYPES.scale),
     rotation: new Set(TRACKER_TYPES.rotation),
     shape: NULL_SET,
-    properties: NULL_SET,
+    properties: new Set(TRACKER_TYPES.level),
     texture: new Set(TRACKER_TYPES.texture),
     texturePosition: new Set(TRACKER_TYPES.texturePosition),
   };

@@ -137,13 +137,13 @@ export class CanvasGeometryManager {
   registerHooks() {
     if ( this.#initialized ) return;
 
-    const docName = this.constructor.Type;
+    const docName = this.constructor.TYPE;
     Hooks.on("canvasReady", () => this.initializeScene());
-    Hooks.on(`create${docName}`, doc => this.create());
+    Hooks.on(`create${docName}`, doc => this.create(doc));
     Hooks.on(`update${docName}`, (doc, changeData) => {
       // Flatten the change object to handle nested keys, like flags.
       const updateKeys = Object.keys(foundry.utils.flattenObject(changeData));
-      this.update(updateKeys);
+      this.update(doc, updateKeys);
     });
     Hooks.on(`delete${docName}`, docId => this.delete(docId));
 
