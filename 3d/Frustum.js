@@ -2,16 +2,15 @@
 canvas,
 CONFIG,
 foundry,
-PIXI
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { GEOMETRY_LIB_ID, GEOMETRY_ID } from "../const.js";
+import { GEOMETRY_LIB_ID } from "../const.js";
 import { Point3d } from "./Point3d.js";
 import { Triangle3d, Quad3d } from "./Polygon3d.js";
 import { AABB3d } from "./AABB3d.js";
-
+import { gridUnitsToPixels, almostLessThan } from "../util.js";
 
 /**
  * The viewable area between viewer and target.
@@ -39,6 +38,88 @@ export class Frustum {
   setAABB() { AABB3d.union([this.floor.aabb, this.top.aabb], this.aabb); }
 
   /**
+   * Determine the 3d (volumetric) center of the pyramid.
+   * @type {Point3d}
+   */
+  get centroid() {
+    const baseCentroid = this.floor.centroid;
+
+    // Center of pyramid is 1/4 of the way from the base to the viewpoint.
+    using tmp = Point3d.tmp;
+    return this.viewpoint.add(baseCentroid.multiplyScalar(3, tmp), tmp).multiplyScalar(1/4);
+  }
+
+  /**
+   * Verify that the frustum faces all face outward; adjust if necessary.
+   */
+  _verifyOrientation() {
+    // Ensure the face normals all point away.
+    const centroid = this.centroid;
+    for ( const face of this.iterateFaces(true) ) {
+      if ( face.orient3d(centroid) > 0 ) {
+        if ( face instanceof Quad3d ) {
+          // Quad: Swap b and d to invert winding direction.
+          using tmp = face.b.clone();
+          face.b.copyFrom(face.d);
+          face.d.copyFrom(tmp);
+        } else {
+          // Triangle: Swap b and c
+          using tmp = face.b.clone();
+          face.b.copyFrom(face.c);
+          face.c.copyFrom(tmp);
+        }
+        face.clearCache();
+      }
+    }
+  }
+
+  /**
+   * Build the frustum from four corners of the floor plus the viewpoint.
+   * @param {Point3d} viewpoint
+   * @param {object}
+   * - @prop {Point3d} TL     Point a of the floor
+   * - @prop {Point3d} TR     Point b of the floor
+   * - @prop {Point3d} BR     Point c of the floor
+   * - @prop {Point3d} BL     Point d of the floor
+   */
+  static fromCorners(viewpoint, { TL, TR, BR, BL, frustum } = {}) {
+    frustum ??= new this();
+
+    // Assign the points to the frustum.
+    frustum.top.a.copyFrom(viewpoint);
+    frustum.top.b.copyFrom(TR);
+    frustum.top.c.copyFrom(TL);
+
+    frustum.bottom.a.copyFrom(viewpoint);
+    frustum.bottom.b.copyFrom(BL);
+    frustum.bottom.c.copyFrom(BR);
+
+    frustum.left.a.copyFrom(viewpoint);
+    frustum.left.b.copyFrom(TL);
+    frustum.left.c.copyFrom(BL);
+
+    frustum.right.a.copyFrom(viewpoint);
+    frustum.right.b.copyFrom(BR);
+    frustum.right.c.copyFrom(TR);
+
+    frustum.floor.a.copyFrom(TL);
+    frustum.floor.b.copyFrom(TR);
+    frustum.floor.c.copyFrom(BR);
+    frustum.floor.d.copyFrom(BL);
+
+    // Reset cache.
+    for ( const face of frustum.iterateFaces(true) ) face.clearCache();
+
+    // Ensure the face normals all point away.
+    frustum._verifyOrientation()
+
+    // Finalize the bounding box.
+    frustum.setAABB();
+
+    return frustum;
+  }
+
+  /**
    * Vision Polygon for the view point --> target.
    * From the given token location, get the edge-most viewable points of the target.
    * Construct a triangle between the two target points and the token center.
@@ -59,126 +140,97 @@ export class Frustum {
     return out.rebuild(opts);
   }
 
-  /**
-   * @param {PIXI.Point|Point3d} viewpoint
-   * @param {PIXI.Polygon|PIXI.Rectangle} border2d
-   * @param {number} [topZ=0]
-   * @param {number} [bottomZ=topZ]
-   * @returns {object}
-   */
-  static computeTriangle(viewpoint, border2d) {
-    // Shrink border2d by 2 pixels to avoid picking walls on the back edge.
-    try {
-      border2d = border2d.clone();
-      border2d.pad(-2);
-    } catch(error) {
-      console.warn("Border padding not supported.", error);
-    }
-
-    const keyPoints = border2d.viewablePoints(viewpoint, { outermostOnly: false }) ?? [];
-    let b;
-    let c;
-    switch ( keyPoints.length ) {
-      case 0:
-      case 1: {
-        const iter = border2d.toPolygon().iteratePoints();
-        b = iter.next().value;
-        c = iter.next().value;
-        break;
-      }
-      case 2: {
-        const k0 = keyPoints[0];
-        const k1 = keyPoints[1];
-        const center = border2d.center;
-
-        // Extend the triangle rays from viewpoint so they intersect the perpendicular line from the center.
-        const dir = viewpoint.to2d().subtract(center, Point3d.tmp);
-        const perpPt = Point3d.tmp.set(center.x - dir.y, center.y + dir.x); // Project along the perpDir: center + perpDir
-        b = foundry.utils.lineLineIntersection(viewpoint, k0, center, perpPt);
-        c = foundry.utils.lineLineIntersection(viewpoint, k1, center, perpPt);
-        if ( !(b && c) ) {
-          const iter = border2d.toPolygon().iteratePoints();
-          b = iter.next().value;
-          c = iter.next().value;
-        }
-        break;
-      }
-      default:
-        b = keyPoints[0];
-        c = keyPoints.at(-1);
-    }
-    return { b, c };
+  static fromTarget(target, opts = {}) {
+    opts.border2d ??= (CONFIG[GEOMETRY_LIB_ID].CONFIG.constrainTokens ? target.constrainedTokenBorder : target.tokenBorder);
+    opts.topZ ??= target.topZ;
+    opts.bottomZ ??= target.bottomZ;
+    return this.from2dBorder(opts);
   }
 
-  rebuild({ viewpoint, target, border2d, topZ, bottomZ, infiniteDistance } = {}) {
-    if ( target ) {
-      border2d = (CONFIG[GEOMETRY_LIB_ID].CONFIG.constrainTokens ? target.constrainedTokenBorder : target.tokenBorder);
-      topZ ??= target.topZ;
-      bottomZ ??= target.bottomZ;
-    }
+  static from2dBorder({ viewpoint, border2d, topZ, bottomZ, infiniteDistance, frustum } = {}) {
+    if ( !frustum
+      && (typeof topZ === "undefined"
+       || typeof bottomZ === "undefined"
+       || typeof viewpoint === "undefined") ) console.error("Frustum.from2dBorder|Either frustum or all of topZ|bottomZ|viewpoint must be provided.");
+
+    frustum ??= new this();
 
     // Use existing properties if undefined.
-    viewpoint ??= this.viewpoint;
-    topZ ??= this.top.b.z;
-    bottomZ ??= this.bottom.b.z;
-    let b;
-    let c;
-    if ( border2d ) {
-      const res = this.constructor.computeTriangle(viewpoint, border2d, topZ, bottomZ)
-      b = res.b;
-      c = res.c;
-    } else {
-      b = this.top.b.to2d();
-      c = this.top.c.to2d();
+    viewpoint ??= frustum.viewpoint;
+    topZ ??= frustum.top.b.z;
+    bottomZ ??= frustum.bottom.b.z;
+
+    // Calculate the 3d center of the boundary shape.
+    const center2d = border2d.center;
+    const targetCenter = Point3d.tmp.set(center2d.x, center2d.y, (topZ + bottomZ) * 0.5);
+
+    // Derive the camera's local orthonormal basis.
+    using dir = targetCenter.subtract(viewpoint);
+    const distToCenter = dir.magnitude();
+    const N = dir.normalize(dir); // Forward/view vector.
+
+    // Right vector using world's vertical axis
+    using upWorld = Point3d.tmp.set(0, 0, 1);
+    using right = upWorld.cross(N);
+    if ( right.magnitudeSquared.almostEqual(0) ) right.set(1, 0, 0); // Fallback if looking perfectly up/down.
+    else right.normalize(right);
+    using vUp = N.cross(right);
+    vUp.normalize(vUp); // True local vertical up vector.
+
+    // Establish the base plane distance
+    const distPlane = infiniteDistance ? canvas.dimensions.maxR : distToCenter;
+    using planeCenter = Point3d.tmp;
+    viewpoint.add(N.multiplyScalar(distPlane, planeCenter), planeCenter);
+
+    // Project each 3d vertex of the extruded prism onto the base plane.
+    let uMin = Number.POSITIVE_INFINITY;
+    let uMax = Number.NEGATIVE_INFINITY;
+    let vMin = Number.POSITIVE_INFINITY;
+    let vMax = Number.NEGATIVE_INFINITY;
+    using P = Point3d.tmp;
+    using vToP = Point3d.tmp;
+    using pProj = Point3d.tmp;
+    using vec = Point3d.tmp;
+    for ( const p2d of border2d.iteratePoints ) {
+      for ( const z of [topZ, bottomZ] ) {
+        P.set(p2d.x, p2d.y, z);
+        P.subtract(viewpoint, vToP);
+
+        const dotPN = vToP.dot(N);
+        if ( almostLessThan(dotPN, 0) ) continue; // Ignore vertices behind near-plane truncation.
+
+        const t = distPlane / dotPN;
+        viewpoint.add(vToP.multiplyScalar(t, pProj), pProj);
+
+        // Transform projected point to local plane coordinates (u, v).
+        pProj.subtract(planeCenter, vec);
+        const u = vec.dot(right);
+        const v = vec.dot(vUp);
+
+        uMin = Math.min(uMin, u);
+        uMax = Math.max(uMax, u);
+        vMin = Math.min(vMin, v);
+        vMax = Math.max(vMax, v);
+      }
     }
-    this._rebuild(viewpoint, b, c, topZ, bottomZ, infiniteDistance);
-    return this;
-  }
 
-  _rebuild(viewpoint, b, c, topZ = 0, bottomZ = topZ, infiniteDistance = false) {
-    if ( infiniteDistance ) {
-      const dist2 = canvas.dimensions.maxR ** 2;
-      b = viewpoint.towardsPointSquared(b, dist2);
-      c = viewpoint.towardsPointSquared(c, dist2);
-    }
+    // Map base corners.
+    using am = right.multiplyScalar(uMin);
+    using bm = right.multiplyScalar(uMax);
+    using bv = vUp.multiplyScalar(vMax);
+    using sv = vUp.multiplyScalar(vMin);
+    using TL = Point3d.tmp;
+    using TR = Point3d.tmp;
+    using BR = Point3d.tmp;
+    using BL = Point3d.tmp;
 
-    if ( foundry.utils.orient2dFast(viewpoint, c, b) < 0 ) [b, c] = [c, b]; // Force view --> b --> c to be CW
-    const elevationZ = this.constructor.elevationZMinMax(viewpoint, topZ, bottomZ);
+    planeCenter.add(am, TL).add(bv, TL); // Top-Left
+    planeCenter.add(bm, TR).add(bv, TR); // Top-Right
+    planeCenter.add(bm, BR).add(sv, BR); // Bottom-Right
+    planeCenter.add(am, BL).add(sv, BL); // Bottom-Left
 
-    // All shapes are CCW from viewpoint outside the frustrum.
-    // Left, right, top, bottom from view of viewpoint facing the frustum bottom.
-    // Quad is clockwise from point of view of the viewpoint.
-    this.floor.a.set(b.x, b.y, elevationZ.max);
-    this.floor.b.set(c.x, c.y, elevationZ.max);
-    this.floor.c.set(c.x, c.y, elevationZ.min);
-    this.floor.d.set(b.x, b.y, elevationZ.min);
-
-    this.top.a.copyFrom(viewpoint);
-    this.bottom.a.copyFrom(viewpoint);
-    this.left.a.copyFrom(viewpoint);
-    this.right.a.copyFrom(viewpoint);
-
-    this.top.b.set(c.x, c.y, elevationZ.max);
-    this.top.c.set(b.x, b.y, elevationZ.max);
-
-    this.bottom.b.set(b.x, b.y, elevationZ.min);
-    this.bottom.c.set(c.x, c.y, elevationZ.min);
-
-    this.right.b.set(c.x, c.y, elevationZ.min);
-    this.right.c.set(c.x, c.y, elevationZ.max);
-
-    this.left.b.set(b.x, b.y, elevationZ.max);
-    this.left.c.set(b.x, b.y, elevationZ.min);
-
-    this.top.clearCache();
-    this.bottom.clearCache();
-    this.left.clearCache();
-    this.right.clearCache();
-    this.floor.clearCache();
-
-    this.setAABB();
-
-    return this; // For convenience.
+    // Rebuild the converging pyramid side faces.
+    return this.fromCorners(viewpoint, { TL, TR, BR, BL, frustum});
   }
 
   static elevationZMinMax(viewpoint, topZ = 0, bottomZ = topZ) {
@@ -187,6 +239,42 @@ export class Frustum {
     const tBottomZ = bottomZ ?? Number.NEGATIVE_INFINITY;
     const tTopZ = topZ ?? Number.POSITIVE_INFINITY;
     return Math.minMax(vBottomZ, vTopZ, tBottomZ, tTopZ);
+  }
+
+  /**
+   * Shift the base/floor to a given point.
+   * Used, for example, to lengthen or shrink the base in relation to the viewpoint while
+   * not modifying the base plane normal.
+   * @param {Point3d} pt
+   */
+  extendBaseToPoint(pt) {
+    // Redefine the base plane, keeping the normal.
+    const basePlane = this.floor.plane;
+    basePlane.point.copyFrom(pt);
+
+    // Intersect each face with the new base plane to determine the corner points.
+    using dir = Point3d.tmp;
+    for ( const face of this.iterateFaces(false) ) {
+      // Point a is always the viewpoint for a face.
+      face.b.subtract(face.a, dir);
+      using ixAB = basePlane.lineIntersection(face.a, dir);
+      face.b.copyFrom(ixAB);
+
+      face.c.subtract(face.a, dir);
+      using ixAC = basePlane.lineIntersection(face.a, dir);
+      face.c.copyFrom(ixAC);
+    }
+
+    // Rebuild the floor points from the newly defined face points.
+    this.floor.a.copyFrom(this.top.c);
+    this.floor.b.copyFrom(this.top.b);
+    this.floor.c.copyFrom(this.bottom.c);
+    this.floor.d.copyFrom(this.bottom.b);
+
+    // Don't reset face cache b/c we did not touch their planes.
+
+    // Finalize the bounding box.
+    this.setAABB();
   }
 
   *iteratePoints() {
@@ -259,26 +347,32 @@ export class Frustum {
    * @returns {boolean}
    */
   overlapsAABB(aabb) {
+    aabb.toFinite(aabb);
+
     // For AABB to overlap, it must be on the "inside" side of all frustum planes.
-    // Use n-vertex and p-vertex method (corners closest and furthest from the plane's normal).
-    // Frustum points the planes' normals outside (positive side).
+    // Use n-vertex: corner of the AABB furthest inside the frustum.
+    // If even that deepest corner is outside the plane (> 0), then the entire box is outside.
+    using positiveVertex = Point3d.tmp;
     for ( const face of this.iterateFaces() ) {
       const plane = face.plane;
       const { normal, constant } = plane;
 
       // Find the "positive" vertex of the AABB (one most likely to be outside).
-      const positiveVertex = Point3d.tmp.set(
+      positiveVertex.set(
         normal.x >= 0 ? aabb.min.x : aabb.max.x,
         normal.y >= 0 ? aabb.min.y : aabb.max.y,
         normal.z >= 0 ? aabb.min.z : aabb.max.z,
       );
 
-      // Distance from the plane to the positive vetex.
+      // Distance from the plane to the positive vertex.
       // Distance = (n • P) + d.
-      const dist = normal.dot(positiveVertex) + constant;
+      const dist = normal.dot(positiveVertex) + constant; // Should equal plane.whichSide(positiveVertex).
+      const s = plane.whichSide(positiveVertex);
+      // s and dist may be infinity, which almostEqual does not catch.
+      if ( s !== dist && !dist.almostEqual(plane.whichSide(positiveVertex)) ) console.error("overlapsAABB|Dist does not equal plane.whichSide", { dist, side: plane.whichSide(positiveVertex) });
 
       // Check if the positive vertex is outside the frustum for this plane.
-      if ( plane.whichSide(positiveVertex) > 0 ) return false;
+      if ( s > 0 ) return false;
     }
     return true;
   }

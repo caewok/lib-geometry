@@ -535,9 +535,6 @@ export class Plane {
 
   /**
    * Intersect this plane with another
-   * Algorithm taken from http://geomalgorithms.com/a05-_intersect-1.html. See the
-   * section 'Intersection of 2 Planes' and specifically the subsection
-   * (A) Direct Linear Equation
    * @param {Plane} other   Other plane to intersect
    * @returns {object|null} { point: Point3d, direction: Point3d } The resulting line or null if planes are parallel.
    *   The line is returned as point, direction
@@ -547,7 +544,7 @@ export class Plane {
     const N2 = other.normal;
 
     // Cross product of the two normals is the direction of the line.
-    using direction = N1.cross(N2);
+    const direction = N1.cross(N2);
 
     // Parallel planes have a cross product with zero magnitude
     if ( !direction.magnitudeSquared() ) return null;
@@ -595,13 +592,13 @@ export class Plane {
    */
   projectPointOnPlane(pt, outPoint) {
     outPoint ??= Point3d.tmp;
-    
+
     // Calculate vector from point on plane to the 3d point.
     using v = pt.subtract(this.point);
-    
+
     // Calculate scalar projection (distance) of w onto normal using dot product.
     const dist = v.dot(this.normal);
-    
+
     // Subtract the distance times the normal vector from the original point.
     using vScaled = this.normal.multiplyScalar(dist);
     return pt.subtract(vScaled, outPoint);
