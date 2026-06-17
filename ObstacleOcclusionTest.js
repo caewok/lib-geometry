@@ -418,11 +418,11 @@ export class ObstacleOcclusionTest {
    * @param {Point3d} rayDirection
    * @returns {boolean}
    */
-  wallGeometriesOcclude(rayOrigin, rayDirection) {
+  wallsOcclude(rayOrigin, rayDirection) {
     return this.#geometriesOcclude(this.obstacleGeometries.walls, rayOrigin, rayDirection);
   }
 
-  terrainWallGeometriesOcclude(rayOrigin, rayDirection) {
+  terrainWallsOcclude(rayOrigin, rayDirection) {
     let limitedOcclusion = 0;
     using rayEnd = rayOrigin.add(rayDirection);
     const geoms = geoms.filter(geom => this.#geomWithinRayBounds(geom, rayOrigin, rayEnd));
@@ -434,7 +434,7 @@ export class ObstacleOcclusionTest {
     return false;
   }
 
-  proximateWallGeometriesOcclude(rayOrigin, rayDirection) {
+  proximateWallsOcclude(rayOrigin, rayDirection) {
     using rayEnd = rayOrigin.add(rayDirection);
     const geoms = [
       ...this.obstacleGeometries.proximateWalls,
