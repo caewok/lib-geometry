@@ -25,12 +25,19 @@ import { gridUnitsToPixels, pixelsToGridUnits, NULL_SET } from "../util.js";
 const TRACKER_TYPES = {
   position: [
     "c",
+  ],
+  elevation: [
     "flags-wall-height.top",
     "flags.wall-height.bottom",
   ],
   direction: [
     "dir",
   ],
+  level: [
+    "levels",
+  ],
+
+  // Currently don't need restriction, door, or threshold; Handled by obstacle occlusion tracking.
   restriction: [
     "light",
     "move",
@@ -46,9 +53,6 @@ const TRACKER_TYPES = {
     "threshold.light",
     "threshold.sight",
     "threshold.sound",
-  ],
-  level: [
-    "levels",
   ],
 };
 
@@ -67,11 +71,12 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
   static TRACKER_TYPES = TRACKER_TYPES;
 
   static UPDATE_KEYS = {
-    position: new Set(TRACKER_TYPES.position),
-    scale: new Set(TRACKER_TYPES.position),
-    rotation: new Set(TRACKER_TYPES.position),
-    shape: NULL_SET,
-    properties: new Set([...TRACKER_TYPES.direction, ...TRACKER_TYPES.level]),
+    ...super.UPDATE_KEYS,
+    properties: new Set(TRACKER_TYPES.direction),
+    position2d: new Set(TRACKER_TYPES.position),
+    elevation: new Set(TRACKER_TYPES.elevation),
+    level: new Set(TRACKER_TYPES.level),
+
   };
 
   get wall() { return this.placeableDocument.object; }

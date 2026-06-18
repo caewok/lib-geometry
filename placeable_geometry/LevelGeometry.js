@@ -25,7 +25,7 @@ const TRACKER_TYPES = {
     "elevation.top",
     "elevation.base",
   ],
-  position: [
+  position2d: [
     "textures.offsetX",
     "textures.offsetY",
   ],
@@ -42,9 +42,6 @@ const TRACKER_TYPES = {
 
   texture: [
     "textures.fit",
-  ],
-
-  textures: [
     "textures.anchorX",
     "textures.anchorY",
     "textures.fit",
@@ -81,13 +78,10 @@ export class LevelBackgroundGeometry extends TileGeometry {
   static TRACKER_TYPES = TRACKER_TYPES;
 
   static UPDATE_KEYS = {
-    position: new Set([...TRACKER_TYPES.elevation, ...TRACKER_TYPES.textures]),
-    scale: new Set(TRACKER_TYPES.scale),
-    rotation: new Set(TRACKER_TYPES.rotation),
-    shape: NULL_SET,
-    properties: NULL_SET,
-    texture: new Set([...TRACKER_TYPES.texture, ...TRACKER_TYPES.background]),
-    texturePosition: new Set(TRACKER_TYPES.texturePosition),
+    ...super.UPDATE_KEYS,
+    properties: new Set([...TRACKER_TYPES.texture, ...TRACKER_TYPES.background]),
+    level: NULL_SET,
+    position2d: new Set([...TRACKER_TYPES.elevation, ...TRACKER_TYPES.texture]),
   };
 
   // ----- NOTE: AABB ----- //
@@ -132,7 +126,7 @@ export class LevelForegroundGeometry extends LevelBackgroundGeometry {
 
   static UPDATE_KEYS = {
     ...super.UPDATE_KEYS,
-    texture: new Set(TRACKER_TYPES.texture, TRACKER_TYPES.foreground),
+    texture: new Set(TRACKER_TYPES.textures, TRACKER_TYPES.foreground),
   };
 
   /** @type {boolean} */

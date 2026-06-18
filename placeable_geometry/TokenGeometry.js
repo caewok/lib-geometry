@@ -21,7 +21,6 @@ import {
 } from "./PlaceableGeometry.js";
 
 // LibGeometry
-import { NULL_SET } from "../util.js";
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { AABB3d } from "../3d/AABB3d.js";
 import { MatrixFloat32 } from "../Matrix.js";
@@ -42,25 +41,23 @@ function buildPolygonCube(poly2d, topZ, bottomZ, faces) {
 }
 
 const TRACKER_TYPES = {
+  shape: [
+    "shape",
+  ],
+  level: ["level"],
   position: [
     "x",
     "y",
-    "elevation",
   ],
+  elevation: ["elevation"],
   scale: [
     "width",
     "height"
   ],
-  shape: [
-    "shape",
-  ],
+
   disposition: [
     "disposition",
   ],
-  refresh: [
-    "refreshPosition",
-    "refreshElevation",
-  ]
 };
 
 /**
@@ -238,11 +235,12 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
   static TRACKER_TYPES = TRACKER_TYPES;
 
   static UPDATE_KEYS = {
-    position: new Set([...TRACKER_TYPES.position, ...TRACKER_TYPES.refresh]),
+    ...super.UPDATE_KEYS,
+    properties: new Set([...TRACKER_TYPES.shape, ...TRACKER_TYPES.disposition]),
+    level: new Set(TRACKER_TYPES.level),
+    position: new Set(TRACKER_TYPES.position),
+    elevation: new Set(TRACKER_TYPES.elevation),
     scale: new Set(TRACKER_TYPES.scale),
-    rotation: NULL_SET,
-    shape: new Set(TRACKER_TYPES.shape),
-    properties: NULL_SET,
   };
 
   /** @type {enum<string:number>} */

@@ -17,7 +17,7 @@ import {
 
 // LibGeometry
 import { GEOMETRY_LIB_ID } from "../const.js";
-import { NULL_SET, gridUnitsToPixels } from "../util.js";
+import { gridUnitsToPixels } from "../util.js";
 import { AABB3d } from "../3d/AABB3d.js";
 import { MatrixFloat32 } from "../Matrix.js";
 import { Point3d } from "../3d/Point3d.js";
@@ -30,8 +30,8 @@ const TRACKER_TYPES = {
   position: [
     "x",
     "y",
-    "elevation",
   ],
+  elevation: ["elevation"],
   scale: [
     "width",
     "height",
@@ -324,13 +324,13 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
   static TRACKER_TYPES = TRACKER_TYPES;
 
   static UPDATE_KEYS = {
-    position: new Set(TRACKER_TYPES.position),
+    ...super.UPDATE_KEYS,
+    properties: new Set([...TRACKER_TYPES.texturePosition, ...TRACKER_TYPES.texture]),
+    level: new Set(TRACKER_TYPES.level),
+    position2d: new Set(TRACKER_TYPES.position),
+    elevation: new Set(TRACKER_TYPES.elevation),
     scale: new Set(TRACKER_TYPES.scale),
     rotation: new Set(TRACKER_TYPES.rotation),
-    shape: NULL_SET,
-    properties: new Set(TRACKER_TYPES.level),
-    texture: new Set(TRACKER_TYPES.texture),
-    texturePosition: new Set(TRACKER_TYPES.texturePosition),
   };
 
   get tile() { return this.placeableDocument.object; }

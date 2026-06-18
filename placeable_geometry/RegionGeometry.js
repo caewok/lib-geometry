@@ -69,11 +69,10 @@ export class RegionGeometry extends PlaceableGeometry {
   static TRACKER_TYPES = TRACKER_TYPES;
 
   static UPDATE_KEYS = {
-    position: new Set(TRACKER_TYPES.elevation),
-    scale: NULL_SET,
-    rotation: NULL_SET,
-    shape: new Set(TRACKER_TYPES.shapes),
-    properties: new Set(TRACKER_TYPES.level),
+    ...super.UPDATE_KEYS,
+    properties: new Set(TRACKER_TYPES.shapes),
+    level: new Set(TRACKER_TYPES.level),
+    elevation: new Set(TRACKER_TYPES.elevation),
   };
 
   get region() { return this.placeable; }
