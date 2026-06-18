@@ -605,6 +605,11 @@ export const PlaceableVerticesMixin = superclass => class extends superclass {
     },
   };
 
+  getVertexObject(type = "model", normals = true) {
+    normals = normals ? "withNormals" : "withoutNormals";
+    return this.vertexObject[type][normals];
+  }
+
   /**
    * Update instance vertices.
    * Default approach uses the prototype faces.

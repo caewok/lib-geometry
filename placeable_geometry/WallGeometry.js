@@ -1,6 +1,5 @@
 /* globals
 canvas,
-CONFIG,
 CONST,
 foundry,
 PIXI,
@@ -19,11 +18,10 @@ import {
 } from "./PlaceableGeometry.js";
 
 // LibGeometry
-import { GEOMETRY_LIB_ID } from "../const.js";
 import { AABB3d } from "../3d/AABB3d.js";
 import { MatrixFloat32 } from "../Matrix.js";
 import { Quad3d, Polygons3d } from "../3d/Polygon3d.js";
-import { pixelsToGridUnits, NULL_SET } from "../util.js";
+import { pixelsToGridUnits, gridUnitsToPixels } from "../util.js";
 
 const TRACKER_TYPES = {
   position: [
@@ -59,11 +57,18 @@ const TRACKER_TYPES = {
   ],
 };
 
-/**
- * Prototype order:
- * WallGeometryTracker -> PlaceableFacesMixin -> PlaceableMatricesMixin -> PlaceableAABBMixin -> PlaceableGeometry
- */
-export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin, PlaceableVerticesMixin) {
+
+/* Walls split by levels.
+WallGeometry:
+User-facing geometry. Holds 1+ level segment walls split at distinct elevations.
+
+WallLevelSegmentGeometry:
+A wall segment representing a piece of a wall, with a given elevation range.
+Has numeric id to track which segment it represents.
+
+*/
+
+export class WallGeometry extends PlaceableGeometry {
 
   /** @type {string} */
   static PLACEABLE_NAME = "Wall";
@@ -79,142 +84,10 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
     position2d: new Set(TRACKER_TYPES.position),
     elevation: new Set(TRACKER_TYPES.elevation),
     level: new Set(TRACKER_TYPES.level),
-
   };
 
-  get wall() { return this.placeableDocument.object; }
 
-  get edge() {
-    if ( !this.wall ) {
-      // See foundry.js #createEdge
-      const wallD = this.placeableDocument;
-      let { c, id, light, sight, sound, move, dir: direction, threshold } = wallD;
-      if ( wallD.isOpen ) light = sight = sound = move = CONST.WALL_SENSE_TYPES.NONE;
-      const dpx = this.scene.dimensions.distancePixels;
-      return new foundry.canvas.geometry.edges.Edge({ x: c[0], y: c[1] }, { x: c[2], y: c[3] }, {
-        id: `wall.${id}`,
-        type: "wall",
-        object: null,
-        direction,
-        light,
-        sight,
-        sound,
-        move,
-        threshold: {
-          light: threshold.light * dpx,
-          sight: threshold.sight * dpx,
-          sound: threshold.sound * dpx,
-          attenuation: threshold.attenuation
-        }
-      });
-    }
-    if ( !this.wall.edge ) this.wall.initializeEdge();
-    return this.wall.edge;
-  }
 
-  // ----- NOTE: Updating ----- //
-
-  initialize() {
-    this.wallLevelSegments = this.constructor.defineWallLevelSegments();
-    super.initialize();
-  }
-
-  propertiesUpdated() {
-    this._initializePrototypeFaces(); // In case wall direction changed.
-    super.propertiesUpdated();
-  }
-
-  levelUpdated() {
-    if ( !this._updateFlags.properties ) this._initializePrototypeFaces();
-    super.levelUpdated();
-  }
-
-  elevationUpdated() {
-    // Update the wall level segments for the scene.
-    this.constructor.defineWallLevelSegments();
-
-    // this.constructor.updateWallLevels(); // TODO: Necessary or can we update each wall later?
-    super.elevationUpdated();
-  }
-
-  static updateWallLevels() {
-    // TODO: Can we easily determine if this can be skipped b/c the scene segments remain the same?
-
-    // Update the wall level segments for the scene.
-    this.constructor.defineWallLevelSegments();
-
-    // Update all walls in the scene.
-    const mgr = CONFIG[GEOMETRY_LIB_ID].geometryManager.wall;
-    for ( const wallD of canvas.scene.walls ) {
-      const geom = mgr.geomForDocument(wallD);
-      geom._initializePrototypeFaces();
-      geom._updateFaces();
-    }
-  }
-
-  // ----- NOTE: AABB ----- //
-  calculateAABB() { return AABB3d.fromWallDocument(this.placeableDocument, this.aabb); }
-
-  // ----- NOTE: Matrices ---- //
-
-  calculateTranslationMatrix() {
-    const mat = super.calculateTranslationMatrix();
-    const pos = this.constructor.wallCenter(this.placeableDocument);
-    const { topZ, bottomZ } = this.constructor.wallElevation(this.placeableDocument);
-    const zHeight = topZ - bottomZ;
-    const z = topZ - (zHeight * 0.5);
-    return MatrixFloat32.translation(pos.x, pos.y, z, mat);
-  }
-
-  calculateRotationMatrix() {
-    const mat = super.calculateRotationMatrix();
-    const rot = this.constructor.wallAngle(this.placeableDocument);
-    return MatrixFloat32.rotationZ(rot, true, mat);
-  }
-
-  calculateScaleMatrix() {
-    const mat = super.calculateScaleMatrix();
-    const ln = this.constructor.wallLength(this.placeableDocument);
-    const { topZ, bottomZ } = this.constructor.wallElevation(this.placeableDocument);
-    const scaleZ = topZ - bottomZ;
-    return MatrixFloat32.scale(ln, 1.0, scaleZ, mat);
-  }
-
-  // ----- NOTE: Faces ---- //
-
-  /** @type {Faces} */
-  _prototypeFaces = [
-    new Quad3d(),      // Left
-    new Quad3d(),   // Right
-  ];
-
-  get hasLevelSplit() {
-    return this.placeableDocument.levels.size
-          || this.placeableDocument.levels.size !== canvas.scene.levels.size;
-  }
-
-  /**
-   * Create the initial face shapes for this wall, using a 0.5 x 0.5 x 0.5 unit cube.
-   * Normal walls have front (top) and back (bottom). One-directional walls have only top.
-   */
-  _initializePrototypeFaces() {
-    // If walls are Polygons3d, recreate the original quads.
-    if ( !(this._prototypeFaces[0] instanceof Quad3d) ) this._prototypeFaces[0] = new Quad3d();
-    if ( !(this._prototypeFaces[1] instanceof Quad3d) ) this._prototypeFaces[1] = new Quad3d();
-
-    // Define two sides for each wall.
-    this.constructor.QUADS.north.clone(this._prototypeFaces[0]);
-    this.constructor.QUADS.south.clone(this._prototypeFaces[1]);
-    super._initializePrototypeFaces();
-
-    // Use the wall segment elevations to break the prototype faces into pieces.
-    if ( this.hasLevelSplit ) {
-      for ( let i = 0; i < 2; i += 1 ) {
-        const quads = this._splitPrototypeQuadAtLevels(this.faces[i]);
-        this._prototypeFaces[i] = Polygons3d.from3dPolygons(quads);
-      }
-    }
-  }
 
   /* Foundry v14 levels
     In Foundry v14, walls can have 1+ assigned levels.
@@ -257,57 +130,6 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
 
   static wallLevelSegments;
 
-  /** @type {Map<Quad3d, Set(string)>} */
-  prototypeFaceLevels = new Map();
-
-  /** @type {Map<Quad3d, Set(string)>} */
-  faceLevels = new Map();
-
-  /**
-   * Iterate over the faces.
-   */
-  *iterateFaces({ ignoreLevelIds = NULL_SET } = {}) {
-    if ( !ignoreLevelIds.size || !this.faceLevels.size ) {
-      yield* super.iterateFaces();
-      return;
-    }
-
-    // For each face, trim polygons that are on the level to ignore.
-    // To avoid messing up the original, clone the Polygons3d.
-    for ( const face of super.iterateFaces() ) {
-      const polys3d = new Polygons3d(0);
-      polys3d.polygons = face.polygons.filter(poly3d => {
-        const polyLevels = this.faceLevels.get(poly3d);
-        return polyLevels.difference(ignoreLevelIds).size;
-      });
-      yield polys3d;
-    }
-  }
-
-  _updateFaces() {
-    if ( this.hasLevelSplit ) {
-      if ( !(this.faces[0] instanceof Polygons3d) ) this.faces[0] = new Polygons3d();
-      if ( !(this.faces[1] instanceof Polygons3d) ) this.faces[1] = new Polygons3d();
-    } else {
-      if ( !(this.faces[0] instanceof Quad3d) ) this.faces[0] = new Quad3d();
-      if ( !(this.faces[1] instanceof Quad3d) ) this.faces[1] = new Quad3d();
-    }
-    super._updateFaces();
-
-    // Copy over the face levels from the prototypes so we know which model shape goes with which level segments.
-    this.faceLevels.clear();
-    if ( this.hasLevelSplit ) {
-      for ( let i = 0; i < 2; i += 1 ) {
-        const pf = this._prototypeFaces[i];
-        const f = this.faces[i];
-        for ( let i = 0, iMax = pf.polygons.length; i < iMax; i += 1 ) {
-          const value = this.prototypeFaceLevels.get(pf.polygons[i]);
-          this.faceLevels.set(f.polygons[i], value);
-        }
-      }
-    }
-  }
-
   /**
    * Define segments for walls in the scene.
    * @returns {LevelSegments}
@@ -330,46 +152,105 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
     }
   }
 
-  /**
-   * Split prototype quad face at segment levels.
-   * @param {Quad3d} quad                 The quad representing the full wall shape.
-   * @param {LevelSegments} segments      All the segments for this level.
-   * @returns {Polygons3d}
-   */
-  _splitPrototypeQuadAtLevels(quad) {
-    const allLevels = new Set(canvas.scene.levels.keys());
-    this.prototypeFaceLevels.clear();
 
-    // Use the wall segment elevations to break the prototype faces into pieces.
-    // Prototype wall goes from -0.5 to 0.5 (spans 1 unit).
-    const { minElevation, maxElevation, segments } = this.constructor.wallLevelSegments;
-    const totalElevation = maxElevation - minElevation;
-    const toPrototypeZ = elev => {
-      const percent = (elev - minElevation) / totalElevation;
-      return percent - 0.5;
-    };
+  /** @type {WallLevelSegmentGeometry[]} */
+  segmentGeoms = [];
 
-    const wallLevels = this.placeableDocument.levels.size ? this.placeableDocument.levels : allLevels;
-    const quads = [];
-    for ( const segment of segments ) {
-      // Drop segments that are exclusively for a level that does not contain this wall.
-      if ( !wallLevels.intersects(segment.ids) ) continue;
-
-      const bottomElev = toPrototypeZ(segment.bottom);
-      const topElev = toPrototypeZ(segment.top);
-      const newQuad = quad.clone();
-      for ( const pt of newQuad.iteratePoints() ) {
-        // Points are iterated in place, so can modify in place.
-        if ( pt.z === 0.5 ) pt.z = topElev;
-        else if (pt.z === -0.5 ) pt.z = bottomElev;
-      }
-      quads.push(newQuad);
-      this.prototypeFaceLevels.set(newQuad, new Set(segment.ids));
+  initialize() {
+    if ( !this.constructor.wallLevelSegments ) this.constructor.defineWallLevelSegments();
+    const segmentData = this.constructor.wallLevelSegments;
+    const numSegments = segmentData.segments.length;
+    this.segmentGeoms.length = numSegments;
+    for ( let i = 0; i < numSegments; i += 1 ) {
+      this.segmentGeoms[i] = new WallLevelSegmentGeometry(this.placeableDocument, i);
+      this.segmentGeoms[i].initialize();
     }
-
-    return quads;
+    super.initialize();
   }
 
+  // ----- NOTE: Updating ----- //
+
+  update(updateKeys) {
+    for ( const geom of this.segmentGeoms ) geom.update(updateKeys);
+  }
+
+  propertiesUpdated() { for ( const geom of this.segmentGeoms ) geom.propertiesUpdated(); }
+
+  levelUpdated() { for ( const geom of this.segmentGeoms ) geom.levelUpdated(); }
+
+  position2dUpdated() { for ( const geom of this.segmentGeoms ) geom.position2dUpdated(); }
+
+  elevationUpdated() { for ( const geom of this.segmentGeoms ) geom.elevationUpdated(); }
+
+  scaleUpdated() { for ( const geom of this.segmentGeoms ) geom.scaleUpdated(); }
+
+  rotationUpdated() { for ( const geom of this.segmentGeoms ) geom.rotationUpdated(); }
+
+  shapeUpdated() { for ( const geom of this.segmentGeoms ) geom.shapeUpdated(); }
+
+  destroy() {
+    for ( const geom of this.segmentGeoms ) geom.destroy();
+    this.segmentGeoms.length = 0;
+  }
+
+  // ----- NOTE: AABB ----- //
+
+  get aabb() { return AABB3d.union(this.segmentGeoms.map(geom => geom.aabb)); }
+
+  // ----- NOTE: Matrices ----- //
+
+  /**
+   * Iterate over the matrix of each segment geometry.
+   * @param {object} [opts]
+   * @param {string} [opts.levelId]    Filter faces from point of view of a specific level?
+   * @yields {PlaceableModelMatrix}
+   */
+  *iterateMatrices({ levelId = ""} = {}) {
+    for ( const geom of this.segmentGeoms ) {
+      if ( !geom.isActiveForLevel(levelId) ) continue;
+      yield geom.model;
+    }
+  }
+
+  // ----- NOTE: Faces ----- //
+
+  /**
+   * Iterate over the faces, combining the segments to Polygons3d.
+   * @param {object} [opts]
+   * @param {string} [opts.levelId]    Filter faces from point of view of a specific level?
+   * @yields {Polygons3d}
+   */
+  *iterateFaces({ levelId = "" } = {}) {
+    const geoms = this.segmentGeoms.filter(geom => geom.isActiveForLevel(levelId));
+    if ( !geoms.length ) return;
+
+    const top = new Polygons3d()
+    top.plane = geoms[0].faces[0].plane;
+    geoms.forEach(geom => top.polygons.push(geom.faces[0]));
+    yield top;
+
+    const bottom = new Polygons3d()
+    bottom.plane = geoms[0].faces[1].plane;
+    geoms.forEach(geom => bottom.polygons.push(geom.faces[1]));
+    yield bottom;
+  }
+
+  /**
+   * Iterate over the individual faces as Quad3d.
+   * @param {object} [opts]
+   * @param {string} [opts.levelId]    Filter faces from point of view of a specific level?
+   * @yields {Quad3d}
+   */
+  *iterateFaceSegments({ levelId = ""} = {}) {
+    for ( const geom of this.segmentGeoms ) {
+      if ( !geom.isActiveForLevel(levelId) ) continue;
+      yield* geom.iterateFaces();
+    }
+  }
+
+  _updateFaces() { for ( const geom of this.segmentGeoms ) geom._updateFaces(); }
+
+  _initializePrototypeFaces() { for ( const geom of this.segmentGeoms ) geom._initializePrototypeFaces();}
 
   /**
    * Determine where a ray hits this object in 3d.
@@ -378,19 +259,36 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
    * @param {Point3d} rayOrigin
    * @param {Point3d} rayDirection
    * @param {object} [opts]
+   * @param {string} [opts.levelId]       Filter faces from point of view of a specific level?
    * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
    * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
    * @returns {number|null} The distance along the ray, as a multiple of rayDirection
    */
-  rayIntersection(rayOrigin, rayDirection, opts) {
+  rayIntersection(rayOrigin, rayDirection, { levelId = "", ...opts } = {}) {
     if ( this.placeableDocument.isOpen ) return null; // If door is open, no intersection.
-    return super.rayIntersection(rayOrigin, rayDirection, opts);
+    for ( const geom of this.segmentGeoms ) {
+      if ( !geom.isActiveForLevel(levelId) ) continue;
+      const t = geom.rayIntersection(rayOrigin, rayDirection, opts);
+      if ( t !== null ) return t;
+    }
+    return null;
   }
 
   // ----- NOTE: Vertices ----- //
 
-  // TODO: Do we need to track vertices with the level segments?
-  // Could we use elevation to get at that after the fact?
+  /**
+   * Iterate over the vertex object of each segment geometry.
+   * @param {object} [opts]
+   * @param {string} [opts.levelId]    Filter faces from point of view of a specific level?
+   * @yields {VertexObject}
+   */
+  *iterateVertices({ levelId = "", type = "model", normals = true } = {}) {
+    normals = normals ? "withNormals" : "withoutNormals";
+    for ( const geom of this.segmentGeoms ) {
+      if ( !geom.isActiveForLevel(levelId) ) continue;
+      yield geom.vertexObject[type][normals];
+    }
+  }
 
   // ----- NOTE: Wall characteristics ----- //
 
@@ -459,4 +357,159 @@ export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin
     if ( !isFinite(bottomZ) ) bottomZ = -MAX_ELEV;
     return { topZ, bottomZ };
   }
+
+}
+
+class WallLevelSegmentGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin, PlaceableVerticesMixin) {
+
+  #idx = 0;
+
+  constructor(placeableDocument, idx = 0) {
+    super(placeableDocument);
+    this.#idx = idx;
+  }
+
+  get segmentData() { return WallGeometry.wallLevelSegments.segments[this.#idx]; }
+
+  get segmentElevationZ() {
+    const { top, bottom } = this.segmentData;
+    return {
+      topZ: gridUnitsToPixels(top),
+      bottomZ: gridUnitsToPixels(bottom),
+    };
+  }
+
+  /**
+   * Is this wall segment currently part of this overall wall?
+   * Depends on the wall levels.
+   * @type {boolean}
+   */
+  get isActive() {
+    const { ids } = this.segmentData;
+    return this.placeableDocument.levels.intersects(ids);
+  }
+
+  /**
+   * Is this wall part of the overall wall, from the view of a specific level?
+   * @param {string} levelId
+   * @returns {boolean}
+   */
+  isActiveForLevel(levelId) {
+    const { ids } = this.segmentData;
+    return ids.has(levelId) && this.placeableDocument.levels.intersects(ids); // Second part is from isActive.
+  }
+
+  get hasLevelSplit() {
+    return this.placeableDocument.levels.size
+          || this.placeableDocument.levels.size !== canvas.scene.levels.size;
+  }
+
+  get wall() { return this.placeableDocument.object; }
+
+  get edge() {
+    if ( !this.wall ) {
+      // See foundry.js #createEdge
+      const wallD = this.placeableDocument;
+      let { c, id, light, sight, sound, move, dir: direction, threshold } = wallD;
+      if ( wallD.isOpen ) light = sight = sound = move = CONST.WALL_SENSE_TYPES.NONE;
+      const dpx = this.scene.dimensions.distancePixels;
+      return new foundry.canvas.geometry.edges.Edge({ x: c[0], y: c[1] }, { x: c[2], y: c[3] }, {
+        id: `wall.${id}`,
+        type: "wall",
+        object: null,
+        direction,
+        light,
+        sight,
+        sound,
+        move,
+        threshold: {
+          light: threshold.light * dpx,
+          sight: threshold.sight * dpx,
+          sound: threshold.sound * dpx,
+          attenuation: threshold.attenuation
+        }
+      });
+    }
+    if ( !this.wall.edge ) this.wall.initializeEdge();
+    return this.wall.edge;
+  }
+
+  // ----- NOTE: AABB ----- //
+
+  calculateAABB() {
+    AABB3d.fromWallDocument(this.placeableDocument, this.aabb)
+
+    // Adjust for segment elevation.
+    const { topZ, bottomZ } = this.segmentElevationZ;
+    this.aabb.min.z = bottomZ;
+    this.aabb.max.z = topZ;
+  }
+
+  // ----- NOTE: Matrices ----- //
+
+  /**
+   * Create an id used for the model matrix tracking.
+   * @type {string}
+   */
+  get placeableId() { return `${this.placeableDocument.uuid}_${this.#idx}`; }
+
+  calculateTranslationMatrix() {
+    const mat = super.calculateTranslationMatrix();
+    const pos = WallGeometry.wallCenter(this.placeableDocument);
+    const { topZ, bottomZ } = this.segmentElevationZ;
+    const zHeight = topZ - bottomZ;
+    const z = topZ - (zHeight * 0.5);
+    return MatrixFloat32.translation(pos.x, pos.y, z, mat);
+  }
+
+  calculateRotationMatrix() {
+    const mat = super.calculateRotationMatrix();
+    const rot = WallGeometry.wallAngle(this.placeableDocument);
+    return MatrixFloat32.rotationZ(rot, true, mat);
+  }
+
+  calculateScaleMatrix() {
+    const mat = super.calculateScaleMatrix();
+    const ln = WallGeometry.wallLength(this.placeableDocument);
+    const { topZ, bottomZ } = this.segmentElevationZ;
+    const scaleZ = topZ - bottomZ;
+    return MatrixFloat32.scale(ln, 1.0, scaleZ, mat);
+  }
+
+  // ----- NOTE: Faces ----- //
+
+  /** @type {Faces} */
+  _prototypeFaces = [
+    new Quad3d(),      // Left
+    new Quad3d(),   // Right
+  ];
+
+  /**
+   * Create the initial face shapes for this wall, using a 0.5 x 0.5 x 0.5 unit cube.
+   * Normal walls have front (top) and back (bottom). One-directional walls have only top.
+   */
+  _initializePrototypeFaces() {
+    // Define two sides for each wall.
+    this.constructor.QUADS.north.clone(this._prototypeFaces[0]);
+    this.constructor.QUADS.south.clone(this._prototypeFaces[1]);
+    super._initializePrototypeFaces();
+  }
+
+  /**
+   * Determine where a ray hits this object in 3d.
+   * Stops at the first hit for a triangle facing the correct direction.
+   * Ignores intersections behind the ray.
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @param {object} [opts]
+   * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
+   * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
+   * @returns {number|null} The distance along the ray, as a multiple of rayDirection
+   */
+  rayIntersection(rayOrigin, rayDirection, opts) {
+    if ( this.placeableDocument.isOpen ) return null; // If door is open, no intersection.
+    return super.rayIntersection(rayOrigin, rayDirection, opts);
+  }
+
+  // Vertices should be automatic from the parent PlaceableGeometry.
 }
