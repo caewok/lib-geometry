@@ -11,10 +11,10 @@ import {
   PlaceableAABBMixin,
   PlaceableModelMatrixMixin,
   PlaceableFacesMixin,
+  PlaceableVerticesMixin,
 } from "./PlaceableGeometry.js";
 
 // LibGeometry
-import { NULL_SET } from "../util.js";
 import { CenteredPolygon } from "../CenteredPolygon/CenteredPolygon.js";
 import { CenteredRectangle } from "../CenteredPolygon/CenteredRectangle.js";
 import { Ellipse } from "../Ellipse.js";
@@ -50,7 +50,7 @@ const TRACKER_TYPES = {
   ],
 };
 
-export class RegionGeometry extends PlaceableGeometry {
+export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableVerticesMixin) {
   /** @type {string} */
   static PLACEABLE_NAME = "Region";
 
@@ -183,10 +183,37 @@ export class RegionGeometry extends PlaceableGeometry {
     return { topZ, bottomZ };
   }
 
+  // ----- NOTE: Vertices -----
+
+  _updateModelVertices() {
+    this.vertexObject.model.withNormals.vertices = [];
+    this.vertexObject.model.withoutNormals.vertices = [];
+    switch ( this.type ) {
+      case this.SHAPE_TYPES.EMPTY:
+      case this.SHAPE_TYPES.HOLE: return;
+
+      case this.SHAPE_TYPES.RECTANGLE:
+      case this.SHAPE_TYPES.ELLIPSE:
+      case this.SHAPE_TYPES.CIRCLE: return super._updateModelVertices();
+
+      // Polygons or multiple shapes: use faces.
+    }
+
+    // TODO: split levels.
+
+    // Update using faces.
+    const { withNormals, withoutNormals } = this.vertexObject.model;
+    const vertices = this.constructor.verticesFromFaces(this.faces, false);
+    this.constructor.updateVertexObject(withoutNormals, vertices);
+
+    const verticesN = this.constructor.verticesFromFaces(this.faces, true);
+    this.constructor.updateVertexObject(withNormals, verticesN);
+  }
+
 }
 
 // Track each shape separately, per region.
-class AbstractRegionShapeGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin) {
+class AbstractRegionShapeGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin, PlaceableVerticesMixin) {
   /** @type {TrackerKeys} */
   static TRACKERS = {};
 

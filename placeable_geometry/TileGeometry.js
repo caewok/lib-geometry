@@ -13,6 +13,7 @@ import {
   PlaceableAABBMixin,
   PlaceableModelMatrixMixin,
   PlaceableFacesMixin,
+  PlaceableVerticesMixin,
 } from "./PlaceableGeometry.js";
 
 // LibGeometry
@@ -312,7 +313,7 @@ const TileAlphaTrianglesMixin = superclass => class extends superclass {
  * TileGeometryTracker -> PlaceableFacesMixin -> PlaceableMatricesMixin -> PlaceableAABBMixin -> PlaceableGeometry
  */
 export class TileGeometry extends mix(PlaceableGeometry).with(
-  PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin,
+  PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin, PlaceableVerticesMixin,
   TileAlphaBoundingBoxMixin, TileAlphaBoundingPolygonMixin, TileAlphaPolygonsMixin, TileAlphaTrianglesMixin) {
 
   /** @type {string} */

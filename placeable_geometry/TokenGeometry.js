@@ -18,6 +18,7 @@ import {
   PlaceableModelMatrixMixin,
   PlaceableFacesMixin,
   PlaceableFacePointsMixin,
+  PlaceableVerticesMixin,
 } from "./PlaceableGeometry.js";
 
 // LibGeometry
@@ -27,6 +28,7 @@ import { MatrixFloat32 } from "../Matrix.js";
 import { Quad3d, Polygon3d, Ellipse3d } from "../3d/Polygon3d.js";
 import { Point3d } from "../3d/Point3d.js";
 import { Sphere } from "../3d/Sphere.js";
+import { VertexObject } from "../placeable_vertices/VertexObject.js";
 
 /**
  * Build a polygon cube for a token.
@@ -105,6 +107,28 @@ const TokenConstrainedFacesMixin = superclass => class extends superclass {
     buildPolygonCube(poly, token.topZ - SPACER, token.bottomZ + SPACER, this._constrainedFaces);
     this.#wallsID = ConstrainedTokenBorder._wallsID;
   }
+
+  // ----- NOTE: Vertices -----
+
+  constrainedVertexObject = {
+    // No instance vertices.
+    model: {
+      withNormals: new VertexObject(),
+      withoutNormals: new VertexObject(),
+    },
+  };
+
+  _updateModelVertices() {
+    super._updateModelVertices();
+
+    // Update using faces.
+    const { withNormals, withoutNormals } = this.constrainedVertexObject.model;
+    const vertices = this.constructor.verticesFromFaces(this._constrainedFaces, false);
+    this.constructor.updateVertexObject(withoutNormals, vertices);
+
+    const verticesN = this.constructor.verticesFromFaces(this._constrainedFaces, true);
+    this.constructor.updateVertexObject(withNormals, verticesN);
+  }
 }
 
 /**
@@ -162,6 +186,28 @@ const TokenConstrainedLitFacesMixin = superclass => class extends superclass {
     this.#wallsID = ConstrainedTokenBorder._wallsID;
     this.#lightsID = ConstrainedTokenBorder._lightsID;
   }
+
+  // ----- NOTE: Vertices -----
+
+  constrainedLitVertexObject = {
+    // No instance vertices.
+    model: {
+      withNormals: new VertexObject(),
+      withoutNormals: new VertexObject(),
+    },
+  };
+
+  _updateModelVertices() {
+    super._updateModelVertices();
+
+    // Update using faces.
+    const { withNormals, withoutNormals } = this.constrainedLitVertexObject.model;
+    const vertices = this.constructor.verticesFromFaces(this._constrainedLitFaces, false);
+    this.constructor.updateVertexObject(withoutNormals, vertices);
+
+    const verticesN = this.constructor.verticesFromFaces(this._constrainedLitFaces, true);
+    this.constructor.updateVertexObject(withNormals, verticesN);
+  }
 }
 
 /**
@@ -216,6 +262,28 @@ const TokenConstrainedBrightLitFacesMixin = superclass => class extends supercla
     this.#wallsID = ConstrainedTokenBorder._wallsID;
     this.#lightsID = ConstrainedTokenBorder._lightsID;
   }
+
+  // ----- NOTE: Vertices -----
+
+  constrainedBrightVertexObject = {
+    // No instance vertices.
+    model: {
+      withNormals: new VertexObject(),
+      withoutNormals: new VertexObject(),
+    },
+  };
+
+  _updateModelVertices() {
+    super._updateModelVertices();
+
+    // Update using faces.
+    const { withNormals, withoutNormals } = this.constrainedBrightVertexObject.model;
+    const vertices = this.constructor.verticesFromFaces(this._constrainedBrightLitFaces, false);
+    this.constructor.updateVertexObject(withoutNormals, vertices);
+
+    const verticesN = this.constructor.verticesFromFaces(this._constrainedBrightLitFaces, true);
+    this.constructor.updateVertexObject(withNormals, verticesN);
+  }
 }
 
 /**
@@ -224,7 +292,7 @@ const TokenConstrainedBrightLitFacesMixin = superclass => class extends supercla
  */
 export class TokenGeometry extends mix(PlaceableGeometry).with(
   TokenConstrainedBrightLitFacesMixin, TokenConstrainedLitFacesMixin, TokenConstrainedFacesMixin,
-  PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin, PlaceableFacePointsMixin) {
+  PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin, PlaceableFacePointsMixin, PlaceableVerticesMixin) {
 
   /** @type {string} */
   static PLACEABLE_NAME = "Token";

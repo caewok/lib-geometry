@@ -15,7 +15,8 @@ import { AABB3d } from "../3d/AABB3d.js";
 import { Quad3d } from "../3d/Polygon3d.js";
 import { almostBetween } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
-
+import { VertexObject } from "../placeable_vertices/VertexObject.js";
+import { combineTypedArrays, NULL_SET } from "../util.js";
 
 /* Store key geometry information for each placeable, in 3d.
 - AABB
@@ -33,7 +34,7 @@ Once registered, will create tracking objects for each placeable created.
 
 Update methods:
 
-positionUpdated
+position2dUpdated
 scaleUpdated
 rotationUpdated
 shapeUpdated
@@ -68,7 +69,7 @@ export class PlaceableGeometry {
     /**
    * Reorganize and split level intervals to cover the low to high range with no overlaps.
    * Add gap intervals as necessary.
-   * @param {Level[]} levels
+   * @param {number[]} elevations     Elevations to add in addition to the scene levels
    * @returns {object[]}
    * - @prop {number} minElevation    Minimum elevation for the scene levels
    * - @prop {number} maxElevation    Maximum elevation for the scene levels
@@ -77,9 +78,9 @@ export class PlaceableGeometry {
    *    - @prop {number} top          Top elevation value
    *    - @prop {string[]} id[]       Id of the levels encountered in this interval
    */
-  static segmentLevels() {
+  static segmentLevels(elevations = []) {
     // Create a distinct "event" for every bottom and top point.
-    const events = new Array(canvas.scene.levels.size * 2);
+    const events = new Array(canvas.scene.levels.size * 2 + elevations.length);
     let i = 0;
     for ( const level of canvas.scene.levels ) {
       const { bottom, top } = level.elevation;
@@ -87,10 +88,10 @@ export class PlaceableGeometry {
       events[i++] = { value: top, type: "end", id: level.id };
     }
 
+    for ( const elevation of elevations ) events[i++] = { value: elevation, type: "added", id: null };
+
     // Sort by value, with end events after start events if equal.
-    events.sort((a, b) => {
-      return (a.value - b.value) || a.type === "start";
-    });
+    events.sort((a, b) => (a.value - b.value) || a.type === "start");
 
     // Store min and max elevations for later use.
     const minElevation = events.at(0).value;
@@ -111,8 +112,13 @@ export class PlaceableGeometry {
       }
 
       // Update active ids based on event type.
-      if ( event.type === "start" ) activeIds.add(event.id);
-      else activeIds.delete(event.id);
+      switch ( event.type ) {
+        case "start": activeIds.add(event.id); break;
+        case "end": activeIds.delete(event.id); break;
+        // Nothing to do for elevation additions.
+      }
+
+      // Move forward to the new value on the line.
       currentPosition = event.value;
     }
     return { segments, minElevation, maxElevation };
@@ -133,32 +139,58 @@ export class PlaceableGeometry {
 
   initialize() { }
 
-  update(updateKeys) {
-    // Update in order. If any updates, update the shape.
-    const KEYS = this.constructor.UPDATE_KEYS;
-    const updateProperties = KEYS.properties.size && updateKeys.some(key => KEYS.properties.has(key));
-    const updatePosition = KEYS.position.size && updateKeys.some(key => KEYS.position.has(key))
-    const updateScale = KEYS.scale.size && updateKeys.some(key => KEYS.scale.has(key))
-    const updateRotation = KEYS.rotation.size && updateKeys.some(key => KEYS.rotation.has(key))
-    const updateShape = updateProperties || updatePosition || updateScale || updateRotation
-      || KEYS.shape.size && updateKeys.some(key => KEYS.shape.has(key))
+  static UPDATE_KEYS = {
+    properties: NULL_SET,
+    level: NULL_SET,
+    position2d: NULL_SET,
+    elevation: NULL_SET,
+    scale: NULL_SET,
+    rotation: NULL_SET,
+  };
 
-    if ( updateProperties ) this.propertiesUpdated();
-    if ( updatePosition ) this.positionUpdated();
-    if ( updateScale ) this.scaleUpdated();
-    if ( updateRotation ) this.rotationUpdated();
-    if ( updateShape ) this.shapeUpdated();
+  // Temporary tracking of the updates made for a given update.
+  _updateFlags = {
+    properties: false,
+    level: false,
+    position2d: false,
+    elevation: false,
+    scale: false,
+    rotation: false,
+  };
+
+  /**
+   * @param {Set<string>} updateKeys      Flattened keys that were updated
+   */
+  update(updateKeys) {
+    const updateFlags = this._updateFlags;
+    Object.keys.forEach(key => updateFlags[key] = false);
+
+    // Update in order. If any updates, update the shape.
+    let shapeUpdated = false;
+    for ( const [type, s] of Object.entries(this.constructor.UPDATE_KEYS) ) {
+      if ( !s.intersects(updateKeys) ) continue;
+      this[`${type}Updated`]();
+      updateFlags[type] = true;
+    }
+    if ( shapeUpdated ) this.shapeUpdate();
   }
 
-  positionUpdated() { }
+  // Triggered first for defined properties.
+  propertiesUpdated() { }
+
+  // Triggered second.
+  levelUpdated() { }
+
+  position2dUpdated() { }
+
+  elevationUpdated() { }
 
   scaleUpdated() { }
 
   rotationUpdated() { }
 
+  // Triggered last, if any properties are updated.
   shapeUpdated() { }
-
-  propertiesUpdated() { }
 
   destroy() { }
 }
@@ -290,9 +322,13 @@ export const PlaceableModelMatrixMixin = superclass => {
      */
     get placeableId() { return this.placeableDocument.uuid; }
 
-    positionUpdated() {
-      super.positionUpdated();
+    position2dUpdated() {
+      super.position2dUpdated();
       this.calculateTranslationMatrix();
+    }
+
+    elevationUpdated() {
+      if ( !this._updateFlags.position2d ) this.calculateTranslationMatrix();
     }
 
     rotationUpdated() {
@@ -511,7 +547,7 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
  * @typedef {function} PlaceableFacePointsMixin
  *
  * Add face points for this placeable class.
- * Requires matrices.
+ * Requires matrices, PlaceableFacesMixin..
  * @param {function} superclass
  * @returns {function} A subclass of `superclass.`
  */
@@ -544,5 +580,86 @@ export const PlaceableFacePointsMixin = superclass => class extends superclass {
     const opts = { spacing: CONFIG[GEOMETRY_LIB_ID].CONFIG.perPixelSpacing || 10, startAtEdge: false };
     const numSides = this.faces.length;
     for ( let i = 0; i < numSides; i += 1 ) this.facePoints[i] = this.faces[i].pointsLattice(opts);
+  }
+}
+
+/**
+ * @typedef {function} PlaceableVerticesMixin
+ *
+ * Create vertices for the placeable faces.
+ * Requires PlaceableFacesMixin.
+ * @param {function} superclass
+ * @returns {function} A subclass of `superclass.`
+ */
+export const PlaceableVerticesMixin = superclass => class extends superclass {
+
+  /** @type {object<VertexObject>} */
+  vertexObject = {
+    instance: {
+      withNormals: new VertexObject(),
+      withoutNormals: new VertexObject(),
+    },
+    model: {
+      withNormals: new VertexObject(),
+      withoutNormals: new VertexObject(),
+    },
+  };
+
+  /**
+   * Update instance vertices.
+   * Default approach uses the prototype faces.
+   */
+  _updateInstanceVertices() {
+    const { withNormals, withoutNormals } = this.vertexObject.instance;
+
+    // Add vertices from faces.
+    const vertices = this.constructor.verticesFromFaces(this._prototypeFaces, false);
+    this.constructor.updateVertexObject(withoutNormals, vertices);
+
+    // Add vertices with normals from faces.
+    const verticesN = this.constructor.verticesFromFaces(this._prototypeFaces, true);
+    this.constructor.updateVertexObject(withNormals, verticesN);
+  }
+
+  /**
+   * Update the model vertices for this placeable.
+   * Default approach transforms them using the model matrix.
+   * Alternatively, could use the faces.
+   */
+  _updateModelVertices() {
+    const { model, instance } = this.vertexObject;
+
+    // Uses the existing instance vertices and the model matrix.
+    // Just like transforming prototype faces to model faces.
+    model.withoutNormals.transformToModel(this.modelMatrix.model, instance.withoutNormals);
+    model.withNormals.transformToModel(this.modelMatrix.model, instance.withNormals);
+  }
+
+  /**
+   * Create vertices for this placeable using its faces.
+   * @param {Polygon3d[]} faces
+   * @param {boolean} [addNormals=false]
+   * @returns {Float32Array} The vertices
+   */
+  static verticesFromFaces(faces, addNormals = false) {
+    // Store each Float32 array for each face separately.
+    const vertices = [];
+    for ( const face of faces ) vertices.push(face.toVertices({ addNormals }));
+
+    // Combine.
+    return combineTypedArrays(vertices);
+  }
+
+  /**
+   * Update a vertex object in place with vertices.
+   * @param {VertexObject} vo
+   * @param {Float32Array} vertices
+   * @returns {VertexObject} The object, for convenience
+   */
+  static updateVertexObject(vo, vertices) {
+    vo.indices = null;
+    vo.vertices = vertices;
+    vo.condense(vo);
+    return vo;
   }
 }
