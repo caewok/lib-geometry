@@ -391,12 +391,11 @@ class WallLevelSegmentGeometry extends mix(PlaceableGeometry).with(PlaceableAABB
 
   /**
    * Is this wall segment currently part of this overall wall?
-   * Depends on the wall levels.
+   * Depends on the wall levels and door states.
    * @type {boolean}
    */
   get isActive() {
-    const { ids } = this.segmentData;
-    return this.placeableDocument.levels.intersects(ids);
+    return !this.placeableDocument.isOpen && this.placeableDocument.levels.intersects(this.segmentData.ids);
   }
 
   /**
@@ -407,8 +406,7 @@ class WallLevelSegmentGeometry extends mix(PlaceableGeometry).with(PlaceableAABB
   isActiveForLevel(levelId) {
     // If no level id, just use isActive.
     // If level id, then it must be active and the level id must be in the levels for this wall segment.
-    const { ids } = this.segmentData;
-    return (!levelId || ids.has(levelId)) && this.placeableDocument.levels.intersects(ids); // Second part is from isActive.
+    return this.isActive && (!levelId || this.segmentData.ids.has(levelId));
   }
 
   get hasLevelSplit() {
@@ -508,7 +506,7 @@ class WallLevelSegmentGeometry extends mix(PlaceableGeometry).with(PlaceableAABB
    * @returns {number|null} The distance along the ray, as a multiple of rayDirection
    */
   rayIntersection(rayOrigin, rayDirection, opts) {
-    if ( this.placeableDocument.isOpen ) return null; // If door is open, no intersection.
+    if ( !this.isActiveForLevel(opts.levelId) ) return null; // If door is open or not on this level, no intersection.
     return super.rayIntersection(rayOrigin, rayDirection, opts);
   }
 

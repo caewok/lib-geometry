@@ -255,7 +255,8 @@ export class ObstacleOcclusionTest {
     const tokensCfg = this._config.tokens;
     if ( !(tokensCfg.dead || tokensCfg.live) ) return NULL_SET;
 
-    const collisionTest = o => this.includeToken(o.t);
+    const validLevels = this.validLevels;
+    const collisionTest = o => validLevels.has(o.t.placeableDocument.level) && this.includeToken(o.t.placeableDocument);
     let tokenGeoms = this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.token, { collisionTest });
 
     // Filter out the subject token and other tokens to exclude (such as the target).
@@ -282,7 +283,9 @@ export class ObstacleOcclusionTest {
    */
   findBlockingTiles() {
     if ( !this._config.tiles ) return NULL_SET;
-    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.tile);
+    const validLevels = this.validLevels;
+    const collisionTest = o => o.t.placeableDocument.levels.intersects(validLevels);
+    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.tile, { collisionTest });
   }
 
   /**
@@ -298,7 +301,9 @@ export class ObstacleOcclusionTest {
    * @returns {Set<Level>}
    */
   findBlockingLevels(levelType = "background") {
-    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.level[levelType])
+    const validLevels = this.validLevels;
+    const collisionTest = o => validLevels.has(o.t.placeableDocument.id);
+    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.level[levelType], { collisionTest })
       .filter(geom => geom.level[levelType].src); // Must have a defined texture.
   }
 
@@ -343,7 +348,6 @@ export class ObstacleOcclusionTest {
 
   static includeToken(tokenD, { blockingCfg = {}, subjectToken, tokensToExclude = NULL_SET }) {
     if ( subjectToken && subjectToken.document ) subjectToken = subjectToken.document;
-
     if ( tokenD === subjectToken || tokensToExclude.has(tokenD) ) return false;
     return this.tokenBlocks(tokenD, subjectToken, blockingCfg);
   }
@@ -407,7 +411,7 @@ export class ObstacleOcclusionTest {
    */
   #geometriesOcclude(geoms, rayOrigin, rayDirection) {
     using rayEnd = rayOrigin.add(rayDirection);
-    const opts = { ignoreLevelIds: this.invalidLevels };
+    const opts = { levelId: this.levelId };
     return geoms.some(geom => this.#geomWithinRayBounds(geom, rayOrigin, rayEnd)
       && geom.rayIntersection(rayOrigin, rayDirection, opts));
   }
