@@ -65,7 +65,7 @@ export class AbstractPixelCacheManager {
     if ( !texture ) return;
     const cache = this._getCache(doc, texture);
     if ( cache ) this.caches.set(doc.uuid);
-    if ( tmpTexture ) Assets.unload(texture);
+    if ( tmpTexture ) PIXI.Assets.unload(this.textureURL(doc));
   }
 
   /**
