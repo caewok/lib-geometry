@@ -14,6 +14,7 @@ import {
   PlaceableModelMatrixMixin,
   PlaceableFacesMixin,
   PlaceableVerticesMixin,
+  QUADS,
 } from "./PlaceableGeometry.js";
 
 // LibGeometry
@@ -28,7 +29,7 @@ import { Quad3d, Polygon3d, Polygons3d, Triangle3d } from "../3d/Polygon3d.js";
 import { Polygon3dVertices } from "../placeable_vertices/BasicVertices.js";
 
 const TRACKER_TYPES = {
-  position: [
+  position2d: [
     "x",
     "y",
   ],
@@ -328,7 +329,7 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
     ...super.UPDATE_KEYS,
     properties: new Set([...TRACKER_TYPES.texturePosition, ...TRACKER_TYPES.texture]),
     level: new Set(TRACKER_TYPES.level),
-    position2d: new Set(TRACKER_TYPES.position),
+    position2d: new Set(TRACKER_TYPES.position2d),
     elevation: new Set(TRACKER_TYPES.elevation),
     scale: new Set(TRACKER_TYPES.scale),
     rotation: new Set(TRACKER_TYPES.rotation),
@@ -384,21 +385,7 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
   // ----- NOTE: Polygon3d ---- //
 
   /** @type {Faces} */
-  _prototypeFaces = [
-    new Quad3d(),
-    new Quad3d(),
-  ];
-
-  /**
-   * Create the initial face shapes for this tile, assuming a 0.5 x 0.5 flat planar rectangle.
-   * Alpha bounds handled in _updateFaces.
-   */
-  _initializePrototypeFaces() {
-    // Create the basic tile prototype face.
-    this.constructor.QUADS.up.clone(this._prototypeFaces[0]);
-    this.constructor.QUADS.down.clone(this._prototypeFaces[1]);
-    super._initializePrototypeFaces();
-  }
+  static prototypeFaces = [QUADS.up.clone(), QUADS.down.clone()];
 
   /**
    * Update the faces for this tile.

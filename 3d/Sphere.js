@@ -37,6 +37,15 @@ export class Sphere {
     this.#radius = Math.sqrt(value);
   }
 
+  /**
+   * @param {Point3d} [center]
+   * @param {number} [radius = 0]
+   */
+  constructor(center, radius = 0) {
+    if ( center ) this.center.copyFrom(center);
+    if ( radius ) this.radius = radius;
+  }
+
   /** @type {Point3d} */
   center = new Point3d();
 

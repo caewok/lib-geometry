@@ -1,7 +1,9 @@
 /* globals
 canvas,
 CONFIG,
+CONST,
 Hooks,
+PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
@@ -12,11 +14,12 @@ import { FixedLengthTrackingBuffer } from "../placeable_tracking/TrackingBuffer.
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { MatrixFloat32, ModelMatrix } from "../Matrix.js";
 import { AABB3d } from "../3d/AABB3d.js";
-import { Quad3d } from "../3d/Polygon3d.js";
+import { Quad3d, Ellipse3d, Polygon3d } from "../3d/Polygon3d.js";
 import { almostBetween } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
 import { VertexObject } from "../placeable_vertices/VertexObject.js";
 import { combineTypedArrays, NULL_SET } from "../util.js";
+import { getHexagonalShape } from "../placeable_vertices/BasicVertices.js";
 
 /* Store key geometry information for each placeable, in 3d.
 - AABB
@@ -163,7 +166,7 @@ export class PlaceableGeometry {
    */
   update(updateKeys) {
     const updateFlags = this._updateFlags;
-    Object.keys.forEach(key => updateFlags[key] = false);
+    Object.keys(updateFlags).forEach(key => updateFlags[key] = false);
 
     // Update in order. If any updates, update the shape.
     let shapeUpdated = false;
@@ -378,7 +381,7 @@ export const PlaceableModelMatrixMixin = superclass => {
  */
 // All CCW because default GPU test is counter-clockwise
 
-const QUADS = {
+export const QUADS = {
   up: Quad3d.from4Points(
     Point3d.tmp.set(-0.5, -0.5, 0),
     Point3d.tmp.set(-0.5, 0.5, 0),
@@ -446,15 +449,22 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
    */
   static get levelSegments() { return LEVEL_SEGMENTS; }
 
-  /** @type {Faces} */
-  _prototypeFaces = [];
+  /**
+   * @typedef {Polygon3d} Face
+   *
+   * Face of a placeable object, meaning a 3d planar object.
+   */
 
-  /** @type {Faces} */
+  /** @type {Face[]} */
+  static prototypeFaces = [];
+
+  /** @type {Face[]} */
   faces = [];
 
   /**
    * Iterate over the faces.
    * @param {object} [_opts]        Used by child classes, like WallGeometry
+   * @yields {Face}
    */
   *iterateFaces(_opts) { yield* this.faces.values(); }
 
@@ -463,14 +473,9 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
    */
   initialize() {
     LEVEL_SEGMENTS ??= PlaceableGeometry.segmentLevels();
+    this.constructor.prototypeFaces.forEach(f => this.faces.push(f.clone()));
     super.initialize();
-    this._initializePrototypeFaces();
     this._updateFaces();
-  }
-
-  _initializePrototypeFaces() {
-    const numSides = this._prototypeFaces.length;
-    for ( let i = 0; i < numSides; i += 1 ) this.faces[i] ??= this._prototypeFaces[i].clone();
   }
 
   /**
@@ -479,20 +484,14 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
    */
   _updateFaces() {
     const M = this.modelMatrix.model;
-    const numSides = this._prototypeFaces.length;
-    for ( let i = 0; i < numSides; i += 1 ) this._prototypeFaces[i].transform(M, this.faces[i]);
+    const numSides = this.constructor.prototypeFaces.length;
+    for ( let i = 0; i < numSides; i += 1 ) this.constructor.prototypeFaces[i].transform(M, this.faces[i]);
   }
 
   shapeUpdated() {
     super.shapeUpdated();
     this._updateFaces();
   }
-
-  propertiesUpdated() {
-    super.propertiesUpdated();
-    this._initializePrototypeFaces();
-  }
-
 
   /**
    * Determine where a ray hits this object in 3d.
@@ -593,37 +592,28 @@ export const PlaceableFacePointsMixin = superclass => class extends superclass {
  */
 export const PlaceableVerticesMixin = superclass => class extends superclass {
 
-  /** @type {object<VertexObject>} */
-  vertexObject = {
-    instance: {
-      withNormals: new VertexObject(),
-      withoutNormals: new VertexObject(),
-    },
-    model: {
-      withNormals: new VertexObject(),
-      withoutNormals: new VertexObject(),
-    },
-  };
+  /**
+   * Vertices with normals and indices.
+   * @type {object<VertexObject>}
+   */
+  static instanceVO = new VertexObject();
 
-  getVertexObject(type = "model", normals = true) {
-    normals = normals ? "withNormals" : "withoutNormals";
-    return this.vertexObject[type][normals];
-  }
+  /**
+   * Vertices with normals and indices.
+   * @type {object<VertexObject>}
+   */
+  modelVO = new VertexObject();
 
   /**
    * Update instance vertices.
    * Default approach uses the prototype faces.
    */
-  _updateInstanceVertices() {
-    const { withNormals, withoutNormals } = this.vertexObject.instance;
-
+  static updateInstanceVertices() {
     // Add vertices from faces.
-    const vertices = this.constructor.verticesFromFaces(this._prototypeFaces, false);
-    this.constructor.updateVertexObject(withoutNormals, vertices);
-
-    // Add vertices with normals from faces.
-    const verticesN = this.constructor.verticesFromFaces(this._prototypeFaces, true);
-    this.constructor.updateVertexObject(withNormals, verticesN);
+    const vertices = this.constructor.verticesFromFaces(this.constructor.prototypeFaces, true);
+    this.constructor.updateVertexObject(this.constructor.instanceVO, vertices);
+    this.constructor.instanceVO.hasNormals = true;
+    this.constructor.instanceVO.hasUVs = false;
   }
 
   /**
@@ -632,12 +622,9 @@ export const PlaceableVerticesMixin = superclass => class extends superclass {
    * Alternatively, could use the faces.
    */
   _updateModelVertices() {
-    const { model, instance } = this.vertexObject;
-
     // Uses the existing instance vertices and the model matrix.
     // Just like transforming prototype faces to model faces.
-    model.withoutNormals.transformToModel(this.modelMatrix.model, instance.withoutNormals);
-    model.withNormals.transformToModel(this.modelMatrix.model, instance.withNormals);
+    this.constructor.instanceVO.transformToModel(this.modelMatrix.model, this.modelVO);
   }
 
   /**
@@ -646,7 +633,7 @@ export const PlaceableVerticesMixin = superclass => class extends superclass {
    * @param {boolean} [addNormals=false]
    * @returns {Float32Array} The vertices
    */
-  static verticesFromFaces(faces, addNormals = false) {
+  static verticesFromFaces(faces, addNormals = true) {
     // Store each Float32 array for each face separately.
     const vertices = [];
     for ( const face of faces ) vertices.push(face.toVertices({ addNormals }));
@@ -667,4 +654,73 @@ export const PlaceableVerticesMixin = superclass => class extends superclass {
     vo.condense(vo);
     return vo;
   }
+}
+
+/**
+ * Create the instance face shapes for a unit cube.
+ * 1 x 1 x 1 centered at 0,0,0.
+ * @returns {Face[]}
+ */
+export function createUnitCube() {
+  const faces = [
+    QUADS.up.clone(),
+    QUADS.down.clone(),
+    QUADS.north.clone(),
+    QUADS.west.clone(),
+    QUADS.south.clone(),
+    QUADS.east.clone(),
+  ];
+
+  faces[0].setZ(0.5);
+  faces[1].setZ(-0.5);
+
+  // Adjust the sides so that they are at the region edge.
+  for ( let i = 0; i < 4; i += 1 ) {
+    faces[2].points[i].y = -0.5; // North.
+    faces[3].points[i].x = -0.5; // West.
+    faces[4].points[i].y = 0.5; // South.
+    faces[5].points[i].x = 0.5; // East.
+  }
+  return faces;
+}
+
+/**
+ * Create the instance face shapes for an unit ellipse cylinder.
+ * Uses 1 x 1 x 0.5 b/c the scale matrix is set using the half-radii.
+ * Have to guess at the likely radius for the vertex density.
+ * @param {number} densityRadius      How dense to make the ellipse polygon edges.
+ * @returns {Face[]}
+ */
+export function createUnitEllipseCylinder(densityRadius = 100) {
+  const top = new Ellipse3d();
+  const bottom = new Ellipse3d();
+
+  top.radiusX = 1;
+  top.radiusY = 1;
+  top.clone(bottom);
+  bottom.reverseOrientation();
+  top.setZ(0.5);
+  bottom.setZ(-0.5);
+
+  const density = PIXI.Circle.approximateVertexDensity(densityRadius);
+  return [top, bottom, ...top.buildTopSides(-0.5, { density })];
+}
+
+/**
+ * Create the instance face shapes for an unit hexagon cylinder.
+ * @returns {Face[]}
+ */
+export function createUnitHexagonalCylinder() {
+  const res = getHexagonalShape(1, 1, CONST.TOKEN_SHAPES.TRAPEZOID_1, canvas.scene.grid.columns || false);
+  let poly = new PIXI.Polygon(res.points);
+  poly = poly.translate(-res.center.x, -res.center.y);
+  const bounds = poly.getBounds();
+  poly = poly.scale(1/bounds.width, 1/bounds.height);
+  if ( poly.isPositive ) poly.reverseOrientation();
+  const top = Polygon3d.fromPolygon(poly, 0.5);
+  const bottom = top.clone();
+  bottom.reverseOrientation();
+  top.setZ(0.5);
+  bottom.setZ(-0.5);
+  return [top, bottom, ...top.buildTopSides(-0.5)];
 }

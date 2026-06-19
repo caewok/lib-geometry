@@ -73,6 +73,29 @@ export class Plane {
   }
 
   /**
+   * Test if this plane is equivalent to another.
+   * @param {Plane} other
+   * @returns {boolean}
+   */
+  equals(other) {
+    return this.normal.equals(other.normal)
+      && (other.point.equals(this.point) ||
+        (this.whichSide(other.point) === 0 && this.whichSide(this.point) === 0));
+  }
+
+  /**
+   * Test if this plane is nearly equivalent to another.
+   * @param {Plane} other
+   * @param {number} [epsilon = 1e-06]
+   * @returns {boolean}
+   */
+  almostEqual(other, epsilon = 1e-06) {
+    return this.normal.almostEqual(other.normal, epsilon)
+      && (other.point.almostEqual(this.point, epsilon) ||
+        (this.whichSide(other.point).almostEqual(0, epsilon) && this.whichSide(this.point).almostEqual(0, epsilon)));
+  }
+
+  /**
    * Normalize the plane.
    * See https://web.archive.org/web/20120531231005/http://crazyjoke.free.fr/doc/3D/plane%20extraction.pdf
    */

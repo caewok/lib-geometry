@@ -1,4 +1,5 @@
 /* globals
+canvas,
 PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
@@ -12,6 +13,8 @@ import {
   PlaceableModelMatrixMixin,
   PlaceableFacesMixin,
   PlaceableVerticesMixin,
+  createUnitCube,
+  createUnitEllipseCylinder,
 } from "./PlaceableGeometry.js";
 
 // LibGeometry
@@ -20,7 +23,7 @@ import { CenteredRectangle } from "../CenteredPolygon/CenteredRectangle.js";
 import { Ellipse } from "../Ellipse.js";
 import { AABB3d } from "../3d/AABB3d.js";
 import { MatrixFloat32 } from "../Matrix.js";
-import { Quad3d, Polygon3d, Polygons3d, Ellipse3d, Circle3d } from "../3d/Polygon3d.js";
+import { Polygon3d, Polygons3d, Circle3d } from "../3d/Polygon3d.js";
 
 /**
   Region will either be a single shape or a group of polygons.
@@ -132,7 +135,7 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableVertice
 
   // ----- NOTE: Faces ---- //
 
-  get _prototypeFaces() { return this.shapeGeom._prototypeFaces; }
+  static get prototypeFaces() { return this.shapeGeom.constructor.prototypeFaces; }
 
   get faces() { return this.shapeGeom.faces; }
 
@@ -186,8 +189,6 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableVertice
   // ----- NOTE: Vertices -----
 
   _updateModelVertices() {
-    this.vertexObject.model.withNormals.vertices = [];
-    this.vertexObject.model.withoutNormals.vertices = [];
     switch ( this.type ) {
       case this.SHAPE_TYPES.EMPTY:
       case this.SHAPE_TYPES.HOLE: return;
@@ -202,12 +203,8 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableVertice
     // TODO: split levels.
 
     // Update using faces.
-    const { withNormals, withoutNormals } = this.vertexObject.model;
-    const vertices = this.constructor.verticesFromFaces(this.faces, false);
-    this.constructor.updateVertexObject(withoutNormals, vertices);
-
-    const verticesN = this.constructor.verticesFromFaces(this.faces, true);
-    this.constructor.updateVertexObject(withNormals, verticesN);
+    const vertices = this.constructor.verticesFromFaces(this.faces, true);
+    this.constructor.updateVertexObject(this.modelVO, vertices);
   }
 
 }
@@ -274,101 +271,53 @@ class InstancedShape extends AbstractRegionShapeGeometry {
     const scaleZ = topZ - bottomZ;
     return MatrixFloat32.scale(bounds.width, bounds.height, scaleZ, mat);
   }
-
-  _initializePrototypeFaces() {
-    if ( this.isHole ) {
-      // By default, it is assumed that top and bottom are 0 and 1 on the prototype faces.
-      this._prototypeFaces[0].isHole = true; // Top.
-      this._prototypeFaces[1].isHole = true; // Bottom.
-      this._prototypeFaces.forEach(face => face.reverseOrientation());
-      // Don't mark sides as holes as they are supposed to be solid (marking the inside side walls for the hole).
-    }
-    super._initializePrototypeFaces();
-  }
 }
 
 export class RegionRectangleShapeGeometry extends InstancedShape {
 
   // ----- NOTE: Faces ---- //
 
-  /** @type {Faces} */
-  _prototypeFaces = [ // Cube shape.
-    new Quad3d(),
-    new Quad3d(),
-    new Quad3d(),
-    new Quad3d(),
-    new Quad3d(),
-    new Quad3d(),
-  ];
+  /** @type {Face[]} */
+  static #prototypeFaces;
 
-  /**
-   * Create the initial face shapes for this wall, using a 0.5 x 0.5 x 0.5 unit cube.
-   * Normal walls have front (top) and back (bottom). One-directional walls have only top.
-   */
-  _initializePrototypeFaces() {
-    // Same as TokenGeometry#initializeCubeFaces.
-    // Build top/bottom.
-    const top = this._prototypeFaces[0];
-    const bottom = this._prototypeFaces[1];
-    this.constructor.QUADS.up.clone(top);
-    this.constructor.QUADS.down.clone(bottom);
-    top.setZ(0.5);
-    bottom.setZ(-0.5);
+  static get prototypeFaces() { return this.#prototypeFaces ||= createUnitCube(); }
 
-    // Build sides.
-    const north = this.constructor.QUADS.north.clone(this._prototypeFaces[2]);
-    const south = this.constructor.QUADS.south.clone(this._prototypeFaces[3]);
-    const east = this.constructor.QUADS.east.clone(this._prototypeFaces[4]);
-    const west = this.constructor.QUADS.west.clone(this._prototypeFaces[5]);
-
-    // Adjust the sides so that they are at the region edge.
-    for ( let i = 0; i < 4; i += 1 ) {
-      north.points[i].y = -0.5; // North.
-      west.points[i].x = -0.5; // West.
-      south.points[i].y = 0.5; // South.
-      east.points[i].x = 0.5; // East.
-    }
-    super._initializePrototypeFaces();
-  }
 }
+
 
 export class RegionEllipseShapeGeometry extends InstancedShape {
 
   // ----- NOTE: Faces ---- //
 
   /** @type {Faces} */
-  _prototypeFaces = [
-    new Ellipse3d(),
-    new Ellipse3d(),
-    // Will have TBD number of side faces.
-  ];
+  static #prototypeFaces;
+
+  static get prototypeFaces() { return this.#prototypeFaces ||= createUnitEllipseCylinder(canvas.scene.dimensions.maxR / 10); }
 
   get radiusX() { return this.shape.radiusX; }
 
   get radiusY() { return this.shape.radiusY; }
 
-  /**
-   * Create the initial face shapes for this ellipse.
-   * Uses 1 x 1 x 0.5 b/c the scale matrix is set using the half-radii.
-   */
-  _initializePrototypeFaces() {
-    // By default, the Ellipse3d faces up.
-    // Same as TokenGeometry#initializeEllipseFaces
-    this._prototypeFaces.length = 2;
-    const top = this._prototypeFaces[0];
-    const bottom = this._prototypeFaces[1];
+}
 
-    top.radiusX = 1;
-    top.radiusY = 1;
-    top.clone(bottom);
-    bottom.reverseOrientation();
-    top.setZ(0.5);
-    bottom.setZ(-0.5);
+/**
+ * Create the instance face shapes for an circle cylinder.
+ * Uses 1 x 1 x 0.5 b/c the scale matrix is set using the half-radii.
+ * Have to guess at the likely radius for the vertex density.
+ */
+function createCircleUnitCylinder(radiusDensity = 100) {
+  const top = new Circle3d();
+  const bottom = new Circle3d();
 
-    const density = PIXI.Circle.approximateVertexDensity(Math.max(this.radiusX, this.radiusY));
-    this._prototypeFaces.push(...top.buildTopSides(-0.5, { density }));
-    super._initializePrototypeFaces();
-  }
+  top.radiusX = 1;
+  top.radiusY = 1;
+  top.clone(bottom);
+  bottom.reverseOrientation();
+  top.setZ(0.5);
+  bottom.setZ(-0.5);
+
+  density = PIXI.Circle.approximateVertexDensity(radiusDensity);
+  return [top, bottom, ...top.buildTopSides(-0.5, { density })];
 }
 
 export class RegionCircleShapeGeometry extends RegionEllipseShapeGeometry {
@@ -376,11 +325,9 @@ export class RegionCircleShapeGeometry extends RegionEllipseShapeGeometry {
   // ----- NOTE: Faces ---- //
 
   /** @type {Faces} */
-  _prototypeFaces = [
-    new Circle3d(),
-    new Circle3d(),
-    // Will have TBD number of side faces.
-  ];
+  static #prototypeFaces;
+
+  static get prototypeFaces() { return this.#prototypeFaces ||= createCircleUnitCylinder(canvas.scene.dimensions.maxR / 10); }
 
   get radiusX() { return this.shape.radius; }
 

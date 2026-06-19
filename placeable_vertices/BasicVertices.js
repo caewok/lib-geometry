@@ -1525,7 +1525,7 @@ const hexagonalShapes = new Map();
  * @returns {DeepReadonly<TokenHexagonalShapeData>|null}    The hexagonal shape or null if there is no shape
  *                                                          for the given combination of arguments
  */
-function getHexagonalShape(width, height, shape, columns) {
+export function getHexagonalShape(width, height, shape, columns) {
   if ( !Number.isInteger(width * 2) || !Number.isInteger(height * 2) ) return null;
 
   const TOKEN_SHAPES = CONST.TOKEN_SHAPES;

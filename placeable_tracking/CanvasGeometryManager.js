@@ -37,6 +37,8 @@ export class CanvasGeometryManager {
 
   static get geometryClass() { return this.GEOMETRY_KEYS[this.TYPE]; }
 
+  static geometryClassForDocument(_doc) { return this.geometryClass; }
+
   /** @type {object<Map<UUID, PlaceableGeometry>>} */
   geometryMap = new Map();
 
@@ -81,7 +83,8 @@ export class CanvasGeometryManager {
     if ( this.geometryMap.has(doc.uuid) ) return;
 
     // Create the correct geometry type for this document.
-    const geom = new this.constructor.geometryClass(doc);
+    const cl = this.constructor.geometryClassForDocument(doc);
+    const geom = new cl(doc);
     geom.initialize();
     this.geometryMap.set(doc.uuid, geom);
 
@@ -92,7 +95,7 @@ export class CanvasGeometryManager {
   /**
    * Update the geometry for this document.
    * @param {CanvasDocument} doc        A document instance, e.g., TokenDocument, WallDocument, etc.
-   * @param {string[]} updateKeys       Flattened string array of properties that changed
+   * @param {Set<string>} updateKeys       Flattened set of properties that changed
    */
   update(doc, updateKeys) {
     const geom = this.geometryMap.get(doc.uuid);
@@ -143,7 +146,7 @@ export class CanvasGeometryManager {
     Hooks.on(`update${docName}`, (doc, changeData) => {
       // Flatten the change object to handle nested keys, like flags.
       const updateKeys = Object.keys(foundry.utils.flattenObject(changeData));
-      this.update(doc, updateKeys);
+      this.update(doc, new Set(updateKeys));
     });
     Hooks.on(`delete${docName}`, docId => this.delete(docId));
 
@@ -182,6 +185,13 @@ export class TokenGeometryManager extends CanvasGeometryManager {
   /** @type {string} */
   static TYPE = "Token";
 
+  /**
+   * @param {TokenDocument} tokenD
+   * @returns {TokenGeometry} The correct child class
+   */
+  static geometryClassForDocument(tokenD) {
+    return TokenGeometry.geometryClassForToken(tokenD);
+  }
 }
 
 export class LevelBackgroundGeometryManager extends CanvasGeometryManager {

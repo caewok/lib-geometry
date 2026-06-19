@@ -15,16 +15,17 @@ import {
   PlaceableModelMatrixMixin,
   PlaceableFacesMixin,
   PlaceableVerticesMixin,
+  QUADS,
 } from "./PlaceableGeometry.js";
 
 // LibGeometry
 import { AABB3d } from "../3d/AABB3d.js";
 import { MatrixFloat32 } from "../Matrix.js";
-import { Quad3d, Polygons3d } from "../3d/Polygon3d.js";
+import { Polygons3d } from "../3d/Polygon3d.js";
 import { pixelsToGridUnits, gridUnitsToPixels } from "../util.js";
 
 const TRACKER_TYPES = {
-  position: [
+  position2d: [
     "c",
   ],
   elevation: [
@@ -81,7 +82,7 @@ export class WallGeometry extends PlaceableGeometry {
   static UPDATE_KEYS = {
     ...super.UPDATE_KEYS,
     properties: new Set(TRACKER_TYPES.direction),
-    position2d: new Set(TRACKER_TYPES.position),
+    position2d: new Set(TRACKER_TYPES.position2d),
     elevation: new Set(TRACKER_TYPES.elevation),
     level: new Set(TRACKER_TYPES.level),
   };
@@ -152,20 +153,22 @@ export class WallGeometry extends PlaceableGeometry {
     }
   }
 
+  constructor(placeableDocument) {
+    super(placeableDocument);
+
+    if ( !this.constructor.wallLevelSegments ) this.constructor.defineWallLevelSegments();
+    const segmentData = this.constructor.wallLevelSegments;
+    const numSegments = this.segmentGeoms.length = segmentData.segments.length;
+    for ( let i = 0; i < numSegments; i += 1 ) {
+      this.segmentGeoms[i] = new WallLevelSegmentGeometry(this.placeableDocument, i);
+    }
+  }
 
   /** @type {WallLevelSegmentGeometry[]} */
   segmentGeoms = [];
 
   initialize() {
-    if ( !this.constructor.wallLevelSegments ) this.constructor.defineWallLevelSegments();
-    const segmentData = this.constructor.wallLevelSegments;
-    const numSegments = segmentData.segments.length;
-    this.segmentGeoms.length = numSegments;
-    for ( let i = 0; i < numSegments; i += 1 ) {
-      this.segmentGeoms[i] = new WallLevelSegmentGeometry(this.placeableDocument, i);
-      this.segmentGeoms[i].initialize();
-    }
-    super.initialize();
+    for ( const geom of this.segmentGeoms ) geom.initialize();
   }
 
   // ----- NOTE: Updating ----- //
@@ -174,6 +177,7 @@ export class WallGeometry extends PlaceableGeometry {
     for ( const geom of this.segmentGeoms ) geom.update(updateKeys);
   }
 
+  /*
   propertiesUpdated() { for ( const geom of this.segmentGeoms ) geom.propertiesUpdated(); }
 
   levelUpdated() { for ( const geom of this.segmentGeoms ) geom.levelUpdated(); }
@@ -187,6 +191,7 @@ export class WallGeometry extends PlaceableGeometry {
   rotationUpdated() { for ( const geom of this.segmentGeoms ) geom.rotationUpdated(); }
 
   shapeUpdated() { for ( const geom of this.segmentGeoms ) geom.shapeUpdated(); }
+  */
 
   destroy() {
     for ( const geom of this.segmentGeoms ) geom.destroy();
@@ -224,14 +229,10 @@ export class WallGeometry extends PlaceableGeometry {
     const geoms = this.segmentGeoms.filter(geom => geom.isActiveForLevel(levelId));
     if ( !geoms.length ) return;
 
-    const top = new Polygons3d()
-    top.plane = geoms[0].faces[0].plane;
-    geoms.forEach(geom => top.polygons.push(geom.faces[0]));
+    const top = Polygons3d.from3dPolygons(geoms.map(geom => geom.faces[0]));
     yield top;
 
-    const bottom = new Polygons3d()
-    bottom.plane = geoms[0].faces[1].plane;
-    geoms.forEach(geom => bottom.polygons.push(geom.faces[1]));
+    const bottom = Polygons3d.from3dPolygons(geoms.map(geom => geom.faces[1]));
     yield bottom;
   }
 
@@ -358,6 +359,15 @@ export class WallGeometry extends PlaceableGeometry {
     return { topZ, bottomZ };
   }
 
+  // ----- NOTE: Debug ----- //
+
+  /**
+   * Draw face, omitting an axis.
+   */
+  draw2d(opts) {
+    for ( const face of this.iterateFaces(opts) ) face.draw2d(opts);
+  }
+
 }
 
 class WallLevelSegmentGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin, PlaceableVerticesMixin) {
@@ -395,8 +405,10 @@ class WallLevelSegmentGeometry extends mix(PlaceableGeometry).with(PlaceableAABB
    * @returns {boolean}
    */
   isActiveForLevel(levelId) {
+    // If no level id, just use isActive.
+    // If level id, then it must be active and the level id must be in the levels for this wall segment.
     const { ids } = this.segmentData;
-    return ids.has(levelId) && this.placeableDocument.levels.intersects(ids); // Second part is from isActive.
+    return (!levelId || ids.has(levelId)) && this.placeableDocument.levels.intersects(ids); // Second part is from isActive.
   }
 
   get hasLevelSplit() {
@@ -479,21 +491,10 @@ class WallLevelSegmentGeometry extends mix(PlaceableGeometry).with(PlaceableAABB
   // ----- NOTE: Faces ----- //
 
   /** @type {Faces} */
-  _prototypeFaces = [
-    new Quad3d(),      // Left
-    new Quad3d(),   // Right
+  static prototypeFaces = [
+    QUADS.north.clone(),   // Left
+    QUADS.south.clone(),   // Right
   ];
-
-  /**
-   * Create the initial face shapes for this wall, using a 0.5 x 0.5 x 0.5 unit cube.
-   * Normal walls have front (top) and back (bottom). One-directional walls have only top.
-   */
-  _initializePrototypeFaces() {
-    // Define two sides for each wall.
-    this.constructor.QUADS.north.clone(this._prototypeFaces[0]);
-    this.constructor.QUADS.south.clone(this._prototypeFaces[1]);
-    super._initializePrototypeFaces();
-  }
 
   /**
    * Determine where a ray hits this object in 3d.
