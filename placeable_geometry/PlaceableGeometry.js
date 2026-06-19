@@ -596,7 +596,11 @@ export const PlaceableVerticesMixin = superclass => class extends superclass {
    * Vertices with normals and indices.
    * @type {object<VertexObject>}
    */
-  static instanceVO = new VertexObject();
+  static _instanceVO;
+
+  static get instanceVO() {
+    return this._instanceVO || this.updateInstanceVertices();
+  }
 
   /**
    * Vertices with normals and indices.
@@ -610,10 +614,18 @@ export const PlaceableVerticesMixin = superclass => class extends superclass {
    */
   static updateInstanceVertices() {
     // Add vertices from faces.
-    const vertices = this.constructor.verticesFromFaces(this.constructor.prototypeFaces, true);
-    this.constructor.updateVertexObject(this.constructor.instanceVO, vertices);
-    this.constructor.instanceVO.hasNormals = true;
-    this.constructor.instanceVO.hasUVs = false;
+    const vo = this._instanceVO ??= new VertexObject();
+    const vertices = this.verticesFromFaces(this.prototypeFaces, true);
+    this.updateVertexObject(vo, vertices);
+    vo.hasNormals = true;
+    vo.hasUVs = false;
+    vo.indices = null;
+    return vo;
+  }
+
+  _updateFaces() {
+    super._updateFaces();
+    this._updateModelVertices();
   }
 
   /**

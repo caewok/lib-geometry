@@ -291,6 +291,8 @@ export class WallGeometry extends PlaceableGeometry {
     }
   }
 
+  static get instanceVO() { return WallLevelSegmentGeometry.instanceVO; }
+
   // ----- NOTE: Wall characteristics ----- //
 
   /**
@@ -511,4 +513,5 @@ class WallLevelSegmentGeometry extends mix(PlaceableGeometry).with(PlaceableAABB
   }
 
   // Vertices should be automatic from the parent PlaceableGeometry.
+
 }
