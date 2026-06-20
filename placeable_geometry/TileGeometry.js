@@ -17,9 +17,15 @@ import {
   QUADS,
 } from "./PlaceableGeometry.js";
 
+// Vertices
+import { BasicVertices } from "../placeable_vertices/BasicVertices.js";
+import { VertexObject } from "../placeable_vertices/VertexObject.js";
+import { VerticesIndicesTrackingBuffer, VerticesIndicesFixedLengthTrackingBuffer } from "../../geometry/placeable_tracking/TrackingBuffer.js";
+
+
 // LibGeometry
 import { GEOMETRY_LIB_ID } from "../const.js";
-import { gridUnitsToPixels } from "../util.js";
+import { gridUnitsToPixels, combineTypedArrays } from "../util.js";
 import { AABB3d } from "../3d/AABB3d.js";
 import { MatrixFloat32 } from "../Matrix.js";
 import { Point3d } from "../3d/Point3d.js";
@@ -68,6 +74,7 @@ const TRACKER_TYPES = {
  * @param {function} superclass
  * @returns {function} A subclass of `superclass.`
  */
+// NOTE: TileAlphaBoundingBoxMixin
 const TileAlphaBoundingBoxMixin = superclass => class extends superclass {
 
   /** @type {object<Quad3d>} */
@@ -75,7 +82,6 @@ const TileAlphaBoundingBoxMixin = superclass => class extends superclass {
     new Quad3d(),
     new Quad3d(),
   ];
-
 
   /** @type {boolean} */
   #needsUpdate = true;
@@ -93,12 +99,16 @@ const TileAlphaBoundingBoxMixin = superclass => class extends superclass {
   }
 
   get alphaBoundingBox() {
-    if ( this.#needsUpdate ) {
-      this._updateAlphaBoundingBox();
-      this.#needsUpdate = false;
-    }
+    this.#updateCachedValues()
     return this.#alphaBoundingBox;
   }
+
+  #updateCachedValues() {
+    if ( !this.#needsUpdate ) return
+    this._updateAlphaBoundingBox();
+    this.#needsUpdate = false;
+  }
+
 
   /**
    * Convert polygon or rectangle representing a tile shape to top and bottom faces.
@@ -116,6 +126,66 @@ const TileAlphaBoundingBoxMixin = superclass => class extends superclass {
 		Quad3d.fromPolygon(rectOrPoly, elevationZ, bb[1]);
     bb[1].reverseOrientation(); // Bottom.
   }
+
+  // ----- NOTE: Vertices ----- //
+
+  // Simple quad, just like regular tiles.
+
+  /**
+   * Store the vertices for every tile.
+   */
+  static viAlphaBoundsModelTracking = new VerticesIndicesFixedLengthTrackingBuffer({ stride: 8 }); // Stride = position + normals + uv
+
+  /**
+   * Vertices with normals and indices.
+   * @type {object<VertexObject>}
+   */
+  _alphaBoundsModelVO;
+
+  get alphaBoundsModelVO() { return this._alphaBoundsModelVO ||= this.#createModelVO; }
+
+  /**
+   * Create the model VO.
+   * Basic tiles are all the same shape: quad.
+   */
+  #createModelVO() {
+    // Basic tiles can be instanced, so can just transform the instanceVO to a modelVO.
+    const vo = this.constructor.instanceVO.transformToModel(this.modelMatrix.model);
+    this.constructor.viAlphaBoundsModelTracking.addFacet(this.placeableId, { newVertices: vo.vertices, newIndices: vo.indices } );
+
+    // Replace the vo indices and vertices so they can be updated in place.
+    // (Works b/c tile is always quad-shaped.)
+    const { vertices, indices } = this.trackers.vi.viewFacetById(this.placeableId);
+    vo.vertices = vertices;
+    vo.indices = indices;
+    return vo;
+  }
+
+  /**
+   * Update the model vertices for this placeable.
+   * Default approach transforms them using the model matrix.
+   * Alternatively, could use the faces.
+   */
+  _updateAlphaBoundingBoxModelVertices() {
+    // Uses the existing instance vertices and the model matrix.
+    // Just like transforming prototype faces to model faces.
+
+    // Determine the width and height of the alpha rectangle in canvas dimensions.
+    const cache = this.pixelCache;
+    if ( !cache ) return;
+    const aabb = cache.getThresholdLocalAABB(this.alphaThreshold);
+    const scaleM = cache.modelMatrix.scale;
+    using minPt = scaleM.multiplyPoint2d(aabb.min);
+    using maxPt = scaleM.multiplyPoint2d(aabb.max);
+    const width = Math.abs(maxPt.x - minPt.x);
+    const height = Math.abs(maxPt.y - minPt.y);
+
+    // Temporarily change the scaling for the model.
+    MatrixFloat32.scale(width, height, 1.0, this.modelMatrix.scale);
+    this.constructor.instanceVO.transformToModel(this.modelMatrix.model, this.alphaBoundsModelVO);
+    this.calculateScaleMatrix(); // Refit the original scale matrix.
+  }
+
 }
 
 /**
@@ -125,6 +195,7 @@ const TileAlphaBoundingBoxMixin = superclass => class extends superclass {
  * @param {function} superclass
  * @returns {function} A subclass of `superclass.`
  */
+// NOTE: TileAlphaBoundingPolygonMixin
 const TileAlphaBoundingPolygonMixin = superclass => class extends superclass {
 
   /** @type {Polygon3d[]} */
@@ -149,11 +220,15 @@ const TileAlphaBoundingPolygonMixin = superclass => class extends superclass {
   }
 
   get alphaBoundingPolygon() {
-    if ( this.#needsUpdate ) {
-      this._updateAlphaBoundingPolygon();
-      this.#needsUpdate = false;
-    }
+    this.#updateCachedValues()
     return this.#alphaBoundingPolygon;
+  }
+
+  #updateCachedValues() {
+    if ( !this.#needsUpdate ) return
+    this._updateAlphaBoundingPolygon();
+    this._updateAlphaBoundingPolygonModelVertices();
+    this.#needsUpdate = false;
   }
 
   /**
@@ -172,6 +247,44 @@ const TileAlphaBoundingPolygonMixin = superclass => class extends superclass {
     Polygon3d.fromPolygon(poly, elevationZ, bp[1]);
     bp[1].reverseOrientation(); // Bottom.
   }
+
+  // ----- NOTE: Vertices ----- //
+
+  // Each model is distinct; use the faces to calculate.
+
+  /**
+   * Store the vertices for every tile.
+   */
+  static viTracking = new VerticesIndicesTrackingBuffer({ stride: 8 }); // Stride = position + normals + uv
+
+  /**
+   * Vertices with normals and indices.
+   * @type {object<VertexObject>}
+   */
+  _alphaBoundingPolygonModelVO = new VertexObject();
+
+  get alphaBoundingPolygonModelVO() {
+    this.#updateCachedValues()
+    return this._alphaBoundingPolygonModelVO;
+  }
+
+  /**
+   * Update the model vertices for this placeable.
+   */
+  _updateAlphaBoundingPolygonModelVertices() {
+    // Use the model faces.
+    const faces = this.alphaBoundingPolygon;
+    const n = faces.length;
+    const vertices = new Array(2);
+    for ( let i = 0; i < n; i += 1 ) vertices[i] = faces[i].toVertices({ addNormals: true });
+
+    const vo = this.alphaBoundingPolygonModelVO;
+    vo.vertices = BasicVertices.calculateUVs(combineTypedArrays(vertices), { stride: 6 })
+    vo.indices = null;
+    vo.condense(vo);
+    this.constructor.viTracking.updateFacet(this.placeableId, { newVertices: vo.vertices, newIndices: vo.indices } );
+  }
+
 }
 
 /**
@@ -181,6 +294,7 @@ const TileAlphaBoundingPolygonMixin = superclass => class extends superclass {
  * @param {function} superclass
  * @returns {function} A subclass of `superclass.`
  */
+// NOTE: TileAlphaPolygonsMixin
 const TileAlphaPolygonsMixin = superclass => class extends superclass {
 
   /** @type {Polygons3d[]} */
@@ -198,11 +312,15 @@ const TileAlphaPolygonsMixin = superclass => class extends superclass {
   }
 
   get alphaThresholdPolygons() {
-    if ( this.#needsUpdate ) {
-      this._updatePathsToFacePolygons();
-      this.#needsUpdate = false;
-    }
+    this.#updateCachedValues();
     return this.#alphaThresholdPolygons;
+  }
+
+  #updateCachedValues() {
+    if ( !this.#needsUpdate ) return
+    this._updatePathsToFacePolygons();
+    this._updateAlphaPolygonsModelVertices();
+    this.#needsUpdate = false;
   }
 
 	update(updateKeys) {
@@ -226,6 +344,44 @@ const TileAlphaPolygonsMixin = superclass => class extends superclass {
     Polygons3d.fromPolygons(polys, this.elevationZ, this.#alphaThresholdPolygons[0]);
     this.#alphaThresholdPolygons[0].clone(this.#alphaThresholdPolygons[1]).reverseOrientation(); // Reverse orientation but keep the hole designations.
   }
+
+  // ----- NOTE: Vertices ----- //
+
+  // Each model is distinct; use the faces to calculate.
+
+  /**
+   * Store the vertices for every tile.
+   */
+  static viAlphaPolygonsModelTracking = new VerticesIndicesTrackingBuffer({ stride: 8 }); // Stride = position + normals + uv
+
+  /**
+   * Vertices with normals and indices.
+   * @type {object<VertexObject>}
+   */
+  _alphaPolygonsModelVO = new VertexObject();
+
+  get alphaPolygonsModelVO() {
+    this.#updateCachedValues()
+    return this._alphaPolygonsModelVO;
+  }
+
+  /**
+   * Update the model vertices for this placeable.
+   */
+  _updateAlphaBoundingPolygonModelVertices() {
+    // Use the model faces.
+    const faces = this.alphaThresholdPolygons;
+    const n = faces.length;
+    const vertices = new Array(2);
+    for ( let i = 0; i < n; i += 1 ) vertices[i] = faces[i].toVertices({ addNormals: true });
+
+    const vo = this.alphaPolygonsModelVO;
+    vo.vertices = BasicVertices.calculateUVs(combineTypedArrays(vertices), { stride: 6 })
+    vo.indices = null;
+    vo.condense(vo);
+    this.constructor.viAlphaPolygonsModelTracking.updateFacet(this.placeableId, { newVertices: vo.vertices, newIndices: vo.indices } );
+  }
+
 }
 
 /**
@@ -235,6 +391,7 @@ const TileAlphaPolygonsMixin = superclass => class extends superclass {
  * @param {function} superclass
  * @returns {function} A subclass of `superclass.`
  */
+// NOTE: TileAlphaTrianglesMixin
 const TileAlphaTrianglesMixin = superclass => class extends superclass {
 
   /** @type {Polygons3d[]} */
@@ -252,11 +409,15 @@ const TileAlphaTrianglesMixin = superclass => class extends superclass {
   }
 
   get alphaThresholdTriangles() {
-    if ( this.#needsUpdate ) {
-      this._updatePathsToFaceTriangles();
-      this.#needsUpdate = false;
-    }
+    this.#updateCachedValues();
     return this.#alphaThresholdTriangles;
+  }
+
+  #updateCachedValues() {
+    if ( !this.#needsUpdate ) return
+    this._updatePathsToFaceTriangles();
+    this._updateAlphaTrianglesModelVertices();
+    this.#needsUpdate = false;
   }
 
 	update(updateKeys) {
@@ -306,6 +467,43 @@ const TileAlphaTrianglesMixin = superclass => class extends superclass {
 
     this.#alphaThresholdTriangles[0].setZ(this.elevationZ);
     this.#alphaThresholdTriangles[1].setZ(this.elevationZ);
+  }
+
+  // ----- NOTE: Vertices ----- //
+
+  // Each model is distinct; use the faces to calculate.
+
+  /**
+   * Store the vertices for every tile.
+   */
+  static viAlphaTrianglesModelTracking = new VerticesIndicesTrackingBuffer({ stride: 8 }); // Stride = position + normals + uv
+
+  /**
+   * Vertices with normals and indices.
+   * @type {object<VertexObject>}
+   */
+  _alphaTrianglesModelVO = new VertexObject();
+
+  get alphaTrianglesModelVO() {
+    this.#updateCachedValues()
+    return this._alphaTrianglesModelVO;
+  }
+
+  /**
+   * Update the model vertices for this placeable.
+   */
+  _updateAlphaTrianglesModelVertices() {
+    // Use the model faces.
+    const faces = this.alphaThresholdPolygons;
+    const n = faces.length;
+    const vertices = new Array(2);
+    for ( let i = 0; i < n; i += 1 ) vertices[i] = faces[i].toVertices({ addNormals: true });
+
+    const vo = this.alphaTrianglesModelVO;
+    vo.vertices = BasicVertices.calculateUVs(combineTypedArrays(vertices), { stride: 6 })
+    vo.indices = null;
+    vo.condense(vo);
+    this.constructor.viAlphaTrianglesModelTracking.updateFacet(this.placeableId, { newVertices: vo.vertices, newIndices: vo.indices } );
   }
 }
 
@@ -404,6 +602,8 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
     // Create the bottom as a mirror of the top.
     top.clone(bottom);
     bottom.reverseOrientation();
+
+    this.#updateModelVertices();
   }
 
   /**
@@ -433,6 +633,63 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
     const px = pixelCache.pixelAtCanvas(projPt.x, projPt.y);
     if ( px > pxThreshold ) return t;
     return null;
+  }
+
+  // ----- NOTE: Vertices ----- //
+
+  /**
+   * Update instance vertices.
+   * Add in the UVs for the tile.
+   */
+  static updateInstanceVertices() {
+    const vo = super.updateInstanceVertices();
+
+    // Add UVs.
+    vo.expand(vo);
+    vo.vertices = BasicVertices.calculateUVs(vo.vertices, { stride: vo.stride })
+    vo.condense(vo);
+    return vo;
+  }
+
+  /**
+   * Store the vertices for every tile.
+   */
+  static viTracking = new VerticesIndicesFixedLengthTrackingBuffer({ stride: 8 }); // Stride = position + normals + uv
+
+  /**
+   * Vertices with normals and indices.
+   * @type {object<VertexObject>}
+   */
+  _modelVO;
+
+  get modelVO() { return this._modelVO ||= this.#createModelVO; }
+
+  /**
+   * Create the model VO.
+   * Basic tiles are all the same shape: quad.
+   */
+  #createModelVO() {
+    // Basic tiles can be instanced, so can just transform the instanceVO to a modelVO.
+    const vo = this.constructor.instanceVO.transformToModel(this.modelMatrix.model);
+    this.constructor.viTracking.addFacet(this.placeableId, { newVertices: vo.vertices, newIndices: vo.indices } );
+
+    // Replace the vo indices and vertices so they can be updated in place.
+    // (Works b/c tile is always quad-shaped.)
+    const { vertices, indices } = this.trackers.vi.viewFacetById(this.placeableId);
+    vo.vertices = vertices;
+    vo.indices = indices;
+    return vo;
+  }
+
+  /**
+   * Update the model vertices for this placeable.
+   * Default approach transforms them using the model matrix.
+   * Alternatively, could use the faces.
+   */
+  #updateModelVertices() {
+    // Uses the existing instance vertices and the model matrix.
+    // Just like transforming prototype faces to model faces.
+    this.constructor.instanceVO.transformToModel(this.modelMatrix.model, this.modelVO);
   }
 
   // ----- NOTE: Tile characteristics ----- //
