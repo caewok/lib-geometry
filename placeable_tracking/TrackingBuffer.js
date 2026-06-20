@@ -730,6 +730,13 @@ export class VerticesIndicesTrackingBuffer extends VerticesIndicesAbstractTracki
 
 }
 
+export class VerticesIndicesFixedLengthTrackingBuffer {
+  static vBufferClass = FixedLengthAbstractBuffer;
+
+  static iBufferClass = FixedLengthAbstractBuffer;
+
+}
+
 
 
 

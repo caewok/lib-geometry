@@ -51,9 +51,13 @@ export class VertexObject {
   }
 
   transformToModel(M, out) {
-    out ??= this._lightCopy();
-    out.vertices = new Float32Array(this.vertices); // Copy the vertices b/c transformVertexPositions will overwrite them.
-    out.indices = this.indices;
+    out ??= this.clone();
+    if ( !(this.stride == out.stride
+        && this.positionStride === out.stride) ) console.warn("VertexObject|transformToModel strides don't match.");
+
+    // Indices also need to be equivalent, but testing every one would be performance-intensive. Just confirm the lengths.
+    if ( out.indices.length !== this.indices.length ) console.warn("VertexObject|transformToModel indices don't match.");
+
     BasicVertices.transformVertexPositions(out.vertices, M, { stride: this.stride });
     return out;
   }
@@ -82,6 +86,7 @@ export class VertexObject {
   expand(out) {
     out ??= this._lightCopy();
     out.vertices = BasicVertices.expandVertexData(this.indices, this.vertices, { stride: this.stride });
+    out.indices = null;
     return out;
   }
 

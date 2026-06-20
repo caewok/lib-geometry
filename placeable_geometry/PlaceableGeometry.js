@@ -10,6 +10,7 @@ PIXI,
 
 import { FixedLengthTrackingBuffer } from "../placeable_tracking/TrackingBuffer.js";
 
+
 // LibGeometry
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { MatrixFloat32, ModelMatrix } from "../Matrix.js";
@@ -592,6 +593,8 @@ export const PlaceableFacePointsMixin = superclass => class extends superclass {
  */
 export const PlaceableVerticesMixin = superclass => class extends superclass {
 
+  // Most placeables only need the instance vertices with normals.
+
   /**
    * Vertices with normals and indices.
    * @type {object<VertexObject>}
@@ -599,14 +602,8 @@ export const PlaceableVerticesMixin = superclass => class extends superclass {
   static _instanceVO;
 
   static get instanceVO() {
-    return this._instanceVO || this.updateInstanceVertices();
+    return (this._instanceVO ||= this.updateInstanceVertices());
   }
-
-  /**
-   * Vertices with normals and indices.
-   * @type {object<VertexObject>}
-   */
-  modelVO = new VertexObject();
 
   /**
    * Update instance vertices.
@@ -614,29 +611,13 @@ export const PlaceableVerticesMixin = superclass => class extends superclass {
    */
   static updateInstanceVertices() {
     // Add vertices from faces.
-    const vo = this._instanceVO ??= new VertexObject();
+    const vo = this._instanceVO || new VertexObject();
     const vertices = this.verticesFromFaces(this.prototypeFaces, true);
     this.updateVertexObject(vo, vertices);
     vo.hasNormals = true;
     vo.hasUVs = false;
     vo.indices = null;
     return vo;
-  }
-
-  _updateFaces() {
-    super._updateFaces();
-    this._updateModelVertices();
-  }
-
-  /**
-   * Update the model vertices for this placeable.
-   * Default approach transforms them using the model matrix.
-   * Alternatively, could use the faces.
-   */
-  _updateModelVertices() {
-    // Uses the existing instance vertices and the model matrix.
-    // Just like transforming prototype faces to model faces.
-    this.constructor.instanceVO.transformToModel(this.modelMatrix.model, this.modelVO);
   }
 
   /**
