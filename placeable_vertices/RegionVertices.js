@@ -3,7 +3,8 @@
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { AbstractInstancedVertices, VertexObject } from "./PlaceableVertices.js";
+import { AbstractInstancedVertices } from "./PlaceableVertices.js";
+import { VertexObject } from "./VertexObject.js";
 import { Rectangle3dVertices, Polygon3dVertices, Ellipse3dVertices, Circle3dVertices } from "./BasicVertices.js";
 import { RegionGeometry } from "../placeable_geometry/RegionGeometry.js";
 import { gridUnitsToPixels } from "../util.js";

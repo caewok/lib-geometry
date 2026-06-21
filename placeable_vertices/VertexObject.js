@@ -53,7 +53,7 @@ export class VertexObject {
   transformToModel(M, out) {
     out ??= this.clone();
     if ( !(this.stride == out.stride
-        && this.positionStride === out.stride) ) console.warn("VertexObject|transformToModel strides don't match.");
+        && this.positionStride === out.positionStride) ) console.warn("VertexObject|transformToModel strides don't match.");
 
     // Indices also need to be equivalent, but testing every one would be performance-intensive. Just confirm the lengths.
     if ( out.indices.length !== this.indices.length ) console.warn("VertexObject|transformToModel indices don't match.");
@@ -77,6 +77,14 @@ export class VertexObject {
 
   condense(out) {
     out ??= this._lightCopy();
+    if ( this.indices ) {
+      console.warn("VertexObject#condense|Object already has indices.");
+      if ( out === this ) return this;
+      out.vertices = this.vertices.slice();
+      out.indices = this.indices.slice();
+      return out;
+    }
+
     const res = BasicVertices.condenseVertexData(this.vertices, { stride: this.stride });
     out.vertices = res.vertices;
     out.indices = res.indices;
@@ -85,6 +93,13 @@ export class VertexObject {
 
   expand(out) {
     out ??= this._lightCopy();
+    if ( !this.indices ) {
+      console.warn("VertexObject#expand|Object does not have indices.");
+      if ( out === this ) return this;
+      out.vertices = this.vertices.slice();
+      out.indices = null;
+      return out;
+    }
     out.vertices = BasicVertices.expandVertexData(this.indices, this.vertices, { stride: this.stride });
     out.indices = null;
     return out;

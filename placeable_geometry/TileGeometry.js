@@ -19,13 +19,12 @@ import {
 
 // Vertices
 import { BasicVertices } from "../placeable_vertices/BasicVertices.js";
-import { VertexObject } from "../placeable_vertices/VertexObject.js";
-import { VerticesIndicesTrackingBuffer, VerticesIndicesFixedLengthTrackingBuffer } from "../../geometry/placeable_tracking/TrackingBuffer.js";
+import { VerticesIndicesFixedLengthTrackingBuffer } from "../../geometry/placeable_tracking/TrackingBuffer.js";
 
 
 // LibGeometry
 import { GEOMETRY_LIB_ID } from "../const.js";
-import { gridUnitsToPixels, combineTypedArrays } from "../util.js";
+import { gridUnitsToPixels } from "../util.js";
 import { AABB3d } from "../3d/AABB3d.js";
 import { MatrixFloat32 } from "../Matrix.js";
 import { Point3d } from "../3d/Point3d.js";
@@ -469,8 +468,9 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
     const vo = super.updateInstanceVertices();
 
     // Add UVs.
-    vo.expand(vo);
-    vo.vertices = BasicVertices.calculateUVs(vo.vertices, { stride: vo.stride })
+    if ( vo.indices ) vo.expand(vo);
+    vo.vertices = BasicVertices.appendUVs(vo.vertices, { stride: vo.stride, uvsOffset: 6 })
+    vo.hasUVs = true;
     vo.condense(vo);
     return vo;
   }
@@ -478,7 +478,27 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
   /**
    * Store the vertices for every tile.
    */
-  static viTracking = new VerticesIndicesFixedLengthTrackingBuffer({ stride: 8 }); // Stride = position + normals + uv
+  static _viTracking;
+
+  static get viTracking()  {
+    if ( !this._viTracking ) {
+      const stride = 8; // Stride = position + normals + uv
+      const initialMaxFacets = canvas.scene.tiles.size;
+
+      // For tiles, the instance vertices and indices match the model.
+      const vo = this.instanceVO;
+      const verticesFacetLengths = vo.vertices.length;
+      const indicesFacetLengths = vo.indices.length;
+      this._viTracking = new VerticesIndicesFixedLengthTrackingBuffer({
+        stride,
+        numFacets: 0,
+        verticesFacetLengths,
+        indicesFacetLengths,
+        initialMaxFacets
+      });
+    }
+    return this._viTracking;
+  }
 
   /**
    * Vertices with normals and indices.
@@ -486,7 +506,7 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
    */
   _modelVO;
 
-  get modelVO() { return this._modelVO ||= this.#createModelVO; }
+  get modelVO() { return (this._modelVO ||= this.#createModelVO()); }
 
   /**
    * Create the model VO.
@@ -495,11 +515,11 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
   #createModelVO() {
     // Basic tiles can be instanced, so can just transform the instanceVO to a modelVO.
     const vo = this.constructor.instanceVO.transformToModel(this.modelMatrix.model);
-    this.constructor.viTracking.addFacet(this.placeableId, { newVertices: vo.vertices, newIndices: vo.indices } );
+    this.constructor.viTracking.addFacet({ id: this.placeableId, newVertices: vo.vertices, newIndices: vo.indices } );
 
     // Replace the vo indices and vertices so they can be updated in place.
     // (Works b/c tile is always quad-shaped.)
-    const { vertices, indices } = this.trackers.vi.viewFacetById(this.placeableId);
+    const { vertices, indices } = this.constructor.viTracking.viewFacetById(this.placeableId);
     vo.vertices = vertices;
     vo.indices = indices;
     return vo;
