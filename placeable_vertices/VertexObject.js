@@ -58,7 +58,7 @@ export class VertexObject {
     // Indices also need to be equivalent, but testing every one would be performance-intensive. Just confirm the lengths.
     if ( out.indices.length !== this.indices.length ) console.warn("VertexObject|transformToModel indices don't match.");
 
-    BasicVertices.transformVertexPositions(out.vertices, M, { stride: this.stride });
+    BasicVertices.transformVertexPositions(this.vertices, M, { stride: this.stride, outVertices: out.vertices });
     return out;
   }
 

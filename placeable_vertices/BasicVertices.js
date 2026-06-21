@@ -116,20 +116,23 @@ export class BasicVertices {
    * It is assumed that the vertex position is first in the array: x, y, z, ...
    * @param {Float32Array} vertices
    * @param {MatrixFloat32} M
-   * @param {number} [stride=8]       The number of elements representing each vertex
-   * @param {}
-   * @returns {Float32Array} The vertices, modified in place
+   * @param {object} [opts]
+   * @param {number} [opts.stride=8]            The number of elements representing each vertex
+   * @param {number} [opts.positionOffset=0]    Where to start copying the vertices
+   * @param {Float32Array} [opts.outVertices]   Where to save the points
+   * @returns {Float32Array} The vertices
    */
-  static transformVertexPositions(vertices, M, { stride = this.NUM_VERTEX_ELEMENTS, positionOffset = 0 } = {}) {
+  static transformVertexPositions(vertices, M, { stride = this.NUM_VERTEX_ELEMENTS, positionOffset = 0, outVertices } = {}) {
+    outVertices ??= vertices.slice();
     using pt = Point3d.tmp;
     for ( let i = positionOffset, iMax = vertices.length; i < iMax; i += stride ) {
       pt.set(vertices[i], vertices[i+1], vertices[i+2]);
       M.multiplyPoint3d(pt, pt);
-      vertices[i] = pt.x;
-      vertices[i+1] = pt.y;
-      vertices[i+2] = pt.z;
+      outVertices[i] = pt.x;
+      outVertices[i+1] = pt.y;
+      outVertices[i+2] = pt.z;
     }
-    return vertices;
+    return outVertices;
   }
 
   /**
@@ -157,7 +160,7 @@ export class BasicVertices {
     // Convert unit edge to match this edge.
     const modelMatrix = this.modelMatrixFromShape(shape, opts);
     const vertices = new Float32Array(this.getUnitVertices(opts.type)); // Clone vertices before transform.
-    return this.transformVertexPositions(vertices, modelMatrix.model, { stride: 8 });
+    return this.transformVertexPositions(vertices, modelMatrix.model, { stride: 8, outVertices: vertices });
   }
 
   /**

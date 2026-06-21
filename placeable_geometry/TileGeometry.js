@@ -506,7 +506,16 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
    */
   _modelVO;
 
-  get modelVO() { return (this._modelVO ||= this.#createModelVO()); }
+  get modelVO() {
+    const vo = this._modelVO ||= this.#createModelVO();
+
+    // Update the vertices and indices.
+    // Must do this each time b/c additions or subtractions may have modified the tracker buffer.
+    const { vertices, indices } = this.constructor.viTracking.viewFacetById(this.placeableId);
+    vo.vertices = vertices;
+    vo.indices = indices;
+    return vo;
+  }
 
   /**
    * Create the model VO.
@@ -516,12 +525,6 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
     // Basic tiles can be instanced, so can just transform the instanceVO to a modelVO.
     const vo = this.constructor.instanceVO.transformToModel(this.modelMatrix.model);
     this.constructor.viTracking.addFacet({ id: this.placeableId, newVertices: vo.vertices, newIndices: vo.indices } );
-
-    // Replace the vo indices and vertices so they can be updated in place.
-    // (Works b/c tile is always quad-shaped.)
-    const { vertices, indices } = this.constructor.viTracking.viewFacetById(this.placeableId);
-    vo.vertices = vertices;
-    vo.indices = indices;
     return vo;
   }
 
@@ -534,6 +537,13 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
     // Uses the existing instance vertices and the model matrix.
     // Just like transforming prototype faces to model faces.
     this.constructor.instanceVO.transformToModel(this.modelMatrix.model, this.modelVO);
+  }
+
+  destroy() {
+    this.constructor.viTracking.deleteFacet(this.placeableId);
+    this._modelVO = null;
+    this.modelMatrix = null;
+    super.destroy();
   }
 
   // ----- NOTE: Tile characteristics ----- //
