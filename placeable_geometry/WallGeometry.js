@@ -87,7 +87,9 @@ export class WallGeometry extends PlaceableGeometry {
     level: new Set(TRACKER_TYPES.level),
   };
 
+  // ----- Model Matrix ----- //
 
+  static get modelMatrixTracker() { return WallLevelSegmentGeometry.modelMatrixTracker; }
 
 
   /* Foundry v14 levels
