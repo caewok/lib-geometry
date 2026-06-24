@@ -159,7 +159,7 @@ function drawPlaceableGeometry(placeable, placeableColor, { aabb = false, ...dra
 export function drawWallGeometries({ walls, ...drawingOpts } = {}) {
   walls ??= canvas.walls.placeables;
   for ( const wall of walls ) {
-    const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.wall.geomForPlaceable(wall);
+    const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.walls.geomForPlaceable(wall);
     let color = "blue";
     if ( geom.constructor.isDirectional(wall) ) color = wall.dir == 1 ? "green": "red";
     drawPlaceableGeometry(wall, color, drawingOpts);

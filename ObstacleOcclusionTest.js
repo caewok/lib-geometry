@@ -245,7 +245,7 @@ export class ObstacleOcclusionTest {
 
     // Drop non-blocking walls for this sense type.
     const collisionTest = o => o.t.placeableDocument[this._config.senseType];
-    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.wall, { collisionTest });
+    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.walls, { collisionTest });
   }
 
   /**
@@ -257,7 +257,7 @@ export class ObstacleOcclusionTest {
 
     const validLevels = this.validLevels;
     const collisionTest = o => validLevels.has(o.t.placeableDocument.level) && this.includeToken(o.t.placeableDocument);
-    let tokenGeoms = this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.token, { collisionTest });
+    let tokenGeoms = this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.tokens, { collisionTest });
 
     // Filter out the subject token and other tokens to exclude (such as the target).
     tokenGeoms = tokenGeoms.filter(geom => !(this.subjectToken === geom.placeableDocument || this.tokensToExclude.has(geom.placeableDocument)));
@@ -285,7 +285,7 @@ export class ObstacleOcclusionTest {
     if ( !this._config.tiles ) return NULL_SET;
     const validLevels = this.validLevels;
     const collisionTest = o => o.t.placeableDocument.levels.intersects(validLevels);
-    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.tile, { collisionTest });
+    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.tiles, { collisionTest });
   }
 
   /**
@@ -293,7 +293,7 @@ export class ObstacleOcclusionTest {
    */
   findBlockingRegions() {
     if ( !this._config.regions || !canvas.regions.placeables.length ) return NULL_SET;
-    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.region);
+    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.regions);
   }
 
   /**
@@ -303,7 +303,7 @@ export class ObstacleOcclusionTest {
   findBlockingLevels(levelType = "background") {
     const validLevels = this.validLevels;
     const collisionTest = o => validLevels.has(o.t.placeableDocument.id);
-    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.level[levelType], { collisionTest })
+    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.levels[levelType], { collisionTest })
       .filter(geom => geom.level[levelType].src); // Must have a defined texture.
   }
 

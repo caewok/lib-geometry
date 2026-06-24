@@ -1,13 +1,12 @@
 /* globals
 canvas,
-CONFIG,
+foundry,
+Hooks,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
 // LibGeometry
-import { GEOMETRY_LIB_ID, GEOMETRY_ID } from "../const.js";
-
 import { LevelBackgroundGeometry, LevelForegroundGeometry } from "../placeable_geometry/LevelGeometry.js";
 import { RegionGeometry } from "../placeable_geometry/RegionGeometry.js";
 import { TileGeometry } from "../placeable_geometry/TileGeometry.js";
@@ -23,19 +22,8 @@ Manage hooks and trigger updates.
 
 export class CanvasGeometryManager {
 
-  /** @type {enum<PlaceableGeometry>} */
-  static GEOMETRY_KEYS = {
-    Level: {
-      background: LevelBackgroundGeometry,
-      foreground: LevelForegroundGeometry
-    },
-    Region: RegionGeometry,
-    Tile: TileGeometry,
-    Token: TokenGeometry,
-    Wall: WallGeometry,
-  }
-
-  static get geometryClass() { return this.GEOMETRY_KEYS[this.TYPE]; }
+  /** @type { PlaceableGeometry } */
+  static geometryClass = null;
 
   static geometryClassForDocument(_doc) { return this.geometryClass; }
 
@@ -66,10 +54,20 @@ export class CanvasGeometryManager {
   }
 
   /**
+   * @param {string} id
+   * @returns {PlaceableGeometry}
+   */
+  geomForPlaceableId(id) {
+    const uuid = id.split("_")[0];
+    if ( !uuid ) return null;
+    return this.geometryMap.get(uuid);
+  }
+
+  /**
    * For every relevant document in the scene, initialize the geometry.
    */
   initializeScene() {
-    const layer = this.constructor.geometryClass.layer;
+    const layer = this.constructor.geometryClass.LAYER;
     const docs = canvas.scene[layer];
     docs.forEach(doc => this.create(doc));
   }
@@ -79,7 +77,7 @@ export class CanvasGeometryManager {
    * @param {CanvasDocument} doc        A document instance, e.g., TokenDocument, WallDocument, etc.
    */
   create(doc) {
-    if ( doc.documentName !== this.constructor.TYPE ) return;
+    if ( doc.documentName !== this.constructor.geometryClass.PLACEABLE_NAME ) return;
     if ( this.geometryMap.has(doc.uuid) ) return;
 
     // Create the correct geometry type for this document.
@@ -110,7 +108,7 @@ export class CanvasGeometryManager {
    */
   delete(docOrId) {
     const id = isString(docOrId) ? docOrId : docOrId.id;
-    const uuid = `Scene.${canvas.scene.id}.${this.constructor.TYPE}.id`;
+    const uuid = `Scene.${canvas.scene.id}.${this.constructor.geometryClass.PLACEABLE_NAME}.${id}`;
     return this._deleteByUUID(uuid);
   }
 
@@ -140,7 +138,7 @@ export class CanvasGeometryManager {
   registerHooks() {
     if ( this.#initialized ) return;
 
-    const docName = this.constructor.TYPE;
+    const docName = this.constructor.geometryClass.PLACEABLE_NAME;
     Hooks.on("canvasReady", () => this.initializeScene());
     Hooks.on(`create${docName}`, doc => this.create(doc));
     Hooks.on(`update${docName}`, (doc, changeData) => {
@@ -161,29 +159,40 @@ export class CanvasGeometryManager {
 
 export class TileGeometryManager extends CanvasGeometryManager {
 
-  /** @type {string} */
-  static TYPE = "Tile";
+  /** @type {PlaceableGeometry} */
+  static geometryClass = TileGeometry;
 
 }
 
 export class WallGeometryManager extends CanvasGeometryManager {
 
-  /** @type {string} */
-  static TYPE = "Wall";
+  /** @type {PlaceableGeometry} */
+  static geometryClass = WallGeometry;
 
+  /**
+   * @param {string} id
+   * @returns {PlaceableGeometry}
+   */
+  geomForPlaceableId(id) {
+    const [uuid, subId] = id.split("_");
+    if ( !uuid ) return null;
+    const geom = this.geometryMap.get(uuid);
+    if ( !subId ) return geom;
+    return geom.segmentGeoms[subId];
+  }
 }
 
 export class RegionGeometryManager extends CanvasGeometryManager {
 
-  /** @type {string} */
-  static TYPE = "Region";
+  /** @type {PlaceableGeometry} */
+  static geometryClass = RegionGeometry;
 
 }
 
 export class TokenGeometryManager extends CanvasGeometryManager {
 
-  /** @type {string} */
-  static TYPE = "Token";
+  /** @type {PlaceableGeometry} */
+  static geometryClass = TokenGeometry;
 
   /**
    * @param {TokenDocument} tokenD
@@ -192,22 +201,40 @@ export class TokenGeometryManager extends CanvasGeometryManager {
   static geometryClassForDocument(tokenD) {
     return TokenGeometry.geometryClassForToken(tokenD);
   }
+
+  /**
+   * Update the geometry for this document.
+   * @param {CanvasDocument} doc        A document instance, e.g., TokenDocument, WallDocument, etc.
+   * @param {Set<string>} updateKeys       Flattened set of properties that changed
+   */
+  update(doc, updateKeys) {
+    const geom = this.geometryMap.get(doc.uuid);
+    if ( !geom ) return;
+
+    if ( this.constructor.geometryClassForDocument(doc) !== geom.constructor ) {
+      // Change the token geometry class if necessary.
+      this.delete(doc);
+      this.create(doc);
+      return;
+
+    } else {
+      // Otherwise do the update as normal.
+      geom.update(updateKeys);
+      this.quadtree.update({ t: geom, r: geom.aabb });
+    }
+  }
 }
 
 export class LevelBackgroundGeometryManager extends CanvasGeometryManager {
 
-  /** @type {string} */
-  static TYPE = "Level";
-
-  static get geometryClass() { return this.GEOMETRY_KEYS[this.TYPE].background; }
+  /** @type {PlaceableGeometry} */
+  static geometryClass = LevelBackgroundGeometry;
 }
 
 export class LevelForegroundGeometryManager extends CanvasGeometryManager {
 
-  /** @type {string} */
-  static TYPE = "Level";
-
-  static get geometryClass() { return this.GEOMETRY_KEYS[this.TYPE].foreground; }
+  /** @type {PlaceableGeometry} */
+  static geometryClass = LevelForegroundGeometry;
 
 }
 

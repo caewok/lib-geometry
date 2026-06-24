@@ -131,14 +131,12 @@ function deregisterPlaceableGeometry() {
 class GeometryManager {
 
   static GEOMETRY_MANAGERS = {
-    tile: TileGeometryManager,
-    region: RegionGeometryManager,
-    wall: WallGeometryManager,
-    token: TokenGeometryManager,
-    level: {
-      background: LevelBackgroundGeometryManager,
-      foreground: LevelForegroundGeometryManager,
-    },
+    tiles: TileGeometryManager,
+    regions: RegionGeometryManager,
+    walls: WallGeometryManager,
+    tokens: TokenGeometryManager,
+    backgroundLevels: LevelBackgroundGeometryManager,
+    foregroundLevels: LevelForegroundGeometryManager,
   };
 
   /**
@@ -150,48 +148,51 @@ class GeometryManager {
   types = [];
 
   /** @type {TileGeometryManager} */
-  tile = null;
+  tiles = null;
 
   /** @type {RegionGeometryManager} */
-  region = null;
+  regions = null;
 
   /** @type {WallGeometryManager} */
-  wall = null;
+  walls = null;
 
-  /** @type {object<LevelGeometryManager>} */
-  level = {
-    background: null,
-    foreground: null,
+  /** @type {TokenGeometryManager} */
+  tokens = null;
+
+  /** @type {object<LevelBackgroundGeometry>} */
+  backgroundLevels = null;
+
+  /** @type {object<LevelForegroundGeometry>} */
+  foregroundLevels = null;
+
+  /** @type {object} */
+  get levels() {
+    // So levels are accessible at levels.background and levels.foreground.
+    return {
+      background: this.backgroundLevels,
+      foreground: this.foregroundLevels,
+    };
   }
 
   constructor(types) {
-    this.types.push(...types.map(t => t.toLowerCase())); // For consistency.
+    for ( let type of types ) {
+      type = pluralize(type.toLowerCase());  // For consistency. Tile --> tiles
+      if ( type === "levels" ) this.types.push("backgroundLevels", "foregroundLevels");
+      else this.types.push(type);
+    }
     this.#createManagers();
   }
 
   #createManagers() {
     const GEOMETRY_MANAGERS = this.constructor.GEOMETRY_MANAGERS;
-    for ( const type of this.types ) {
-      // Create a manager for each type.
-      if ( type === "level" ) {
-        this.level.background = new GEOMETRY_MANAGERS.level.background();
-        this.level.foreground = new GEOMETRY_MANAGERS.level.foreground();
-      } else this[type] = new GEOMETRY_MANAGERS[type]();
-    }
+    for ( const type of this.types ) this[type] = new GEOMETRY_MANAGERS[type]();
   }
 
   /**
    * Iterate through the valid managers.
    * @yield {GeometryManager}
    */
-  *iterateManagers() {
-     for ( const type of this.types ) {
-       if ( type === "level" ) {
-         yield this.level.background;
-         yield this.level.foreground;
-       } else yield this[type];
-     }
-  }
+  *iterateManagers() { for ( const type of this.types ) yield this[type]; }
 
   /**
    * For every relevant document in the scene, initialize the geometry.
@@ -201,9 +202,9 @@ class GeometryManager {
   /**
    * Register hooks to track the geometries as documents change.
    */
-  registerHooks() {
-    for ( const mgr of this.iterateManagers() ) mgr.registerHooks();
-  }
+  registerHooks() { for ( const mgr of this.iterateManagers() ) mgr.registerHooks(); }
+
+  _typeFromDocument(typeOrDoc) { return pluralize((typeOrDoc.documentName || typeOrDoc).toLowerCase()); }
 
   /**
    * Retrieve the manager for a specific document.
@@ -212,8 +213,8 @@ class GeometryManager {
    * @returns {GeometryManager}
    */
   _managerForDocument(typeOrDoc, levelType = "background") {
-    const type = (typeOrDoc.documentName || typeOrDoc).toLowerCase();
-    if ( type === "level" ) return this.level[levelType];
+    const type = this._typeFromDocument(typeOrDoc);
+    if ( type === "levels" ) return this.level[levelType];
     return this[type];
   }
 
@@ -254,4 +255,9 @@ class GeometryManager {
    * Clear all geometry data.
    */
   clear() { for ( const mgr of this.iterateManagers() ) mgr.clear(); }
+}
+
+function pluralize(str) {
+  if ( str.endsWith("s") ) return str;
+  return `${str}s`;
 }
