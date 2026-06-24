@@ -9,6 +9,7 @@ import { Draw } from "./Draw.js";
 import { Point3d } from "./3d/Point3d.js";
 import { Triangle3d } from "./3d/Polygon3d.js";
 import { ElevatedPoint } from "./3d/ElevatedPoint.js";
+import { TokenGeometry } from "./placeable_geometry/TokenGeometry.js";
 
 // Testing functions that require a loaded canvas.
 
@@ -411,52 +412,12 @@ export function drawTokenVertices({ tokens, type = "all", ...drawingOpts } = {})
  * @param {object} [opts]
  * @param {Token[]} [opts.tokens]                 Walls to draw; otherwise test entire canvas
  */
-export function testTokenVertices({ tokens, type = "all" } = {}) {
-  const TokenInstancedVertices = CONFIG.GeometryLib.lib.placeableVertices.TokenInstancedVertices;
-  const ConstrainedTokenModelVertices = CONFIG.GeometryLib.lib.placeableVertices.ConstrainedTokenModelVertices;
-  const LitTokenModelVertices = CONFIG.GeometryLib.lib.placeableVertices.LitTokenModelVertices;
-  const BrightLitTokenModelVertices = CONFIG.GeometryLib.lib.placeableVertices.BrightLitTokenModelVertices;
-
-  tokens ??= canvas.tokens.placeables;
-  using ctr = Point3d.tmp;
-  for ( const token of tokens ) {
-    Point3d.fromTokenCenter(token, ctr);
-    Draw.star(ctr);
-
-    if ( type === "all" || type === "bright" ) {
-        const vToken = new BrightLitTokenModelVertices(token);
-        const vo = vToken.calculateModel();
-        const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
-        for ( const tri of tris ) {
-          if ( tri.orient3d(ctr) > 0 ) console.error(`Token ${token.name} (${token.id}) bright triangle facing wrong direction`);
-        }
-    }
-
-    if ( type === "all" || type === "lit" ) {
-      const vToken = new LitTokenModelVertices(token);
-      const vo = vToken.calculateModel();
-      const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
-      for ( const tri of tris ) {
-        if ( tri.orient3d(ctr) > 0  ) console.error(`Token ${token.name} (${token.id}) lit triangle facing wrong direction`);
-      }
-    }
-
-    if ( type === "all" || type === "constrained" ) {
-      const vToken = new ConstrainedTokenModelVertices(token);
-      const vo = vToken.calculateModel();
-      const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
-      for ( const tri of tris ) {
-        if ( tri.orient3d(ctr) > 0  ) console.error(`Token ${token.name} (${token.id}) constrained triangle facing wrong direction`);
-      }
-    }
-
-    if ( type === "all" || type === "normal" ) {
-      const vo = TokenInstancedVertices.calculateModelForPlaceable(token);
-      const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
-      for ( const tri of tris ) {
-        if ( tri.orient3d(ctr) > 0  ) console.error(`Token ${token.name} (${token.id}) normal triangle facing wrong direction`);
-      }
-    }
+export function testTokenVertices({ tokens } = {}) {
+  const vo = TokenGeometry.instanceVO;
+  const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
+  const ctr = Point3d.tmp.set(0, 0, 0);
+  for ( const tri of tris ) {
+    if ( tri.orient3d(ctr) > 0 ) console.error(`Token ${token.name} (${token.id}) instance triangle facing wrong direction`);
   }
 }
 
