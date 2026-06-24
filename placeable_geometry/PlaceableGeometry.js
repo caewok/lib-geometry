@@ -163,6 +163,11 @@ export class PlaceableGeometry {
   };
 
   /**
+   * Increment a count of updates, used by things like webGL to know when to update.
+   */
+  updateCount = 0;
+
+  /**
    * @param {Set<string>} updateKeys      Flattened keys that were updated
    */
   update(updateKeys) {
@@ -175,8 +180,12 @@ export class PlaceableGeometry {
       if ( !s.intersects(updateKeys) ) continue;
       this[`${type}Updated`]();
       updateFlags[type] = true;
+      shapeUpdated ||= true;
     }
-    if ( shapeUpdated ) this.shapeUpdate();
+    if ( shapeUpdated ) {
+      this.shapeUpdated();
+      this.updateCount += 1;
+    }
   }
 
   // Triggered first for defined properties.
