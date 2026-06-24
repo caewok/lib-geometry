@@ -478,10 +478,10 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
   /**
    * Store the vertices for every tile.
    */
-  static _viTracking;
+  static _viTracker;
 
-  static get viTracking()  {
-    if ( !this._viTracking ) {
+  static get viTracker()  {
+    if ( !this._viTracker ) {
       const stride = 8; // Stride = position + normals + uv
       const initialMaxFacets = canvas.scene.tiles.size;
 
@@ -489,7 +489,7 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
       const vo = this.instanceVO;
       const verticesFacetLengths = vo.vertices.length;
       const indicesFacetLengths = vo.indices.length;
-      this._viTracking = new VerticesIndicesFixedLengthTrackingBuffer({
+      this._viTracker = new VerticesIndicesFixedLengthTrackingBuffer({
         stride,
         numFacets: 0,
         verticesFacetLengths,
@@ -497,7 +497,7 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
         initialMaxFacets
       });
     }
-    return this._viTracking;
+    return this._viTracker;
   }
 
   /**
@@ -511,7 +511,7 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
 
     // Update the vertices and indices.
     // Must do this each time b/c additions or subtractions may have modified the tracker buffer.
-    const { vertices, indices } = this.constructor.viTracking.viewFacetById(this.placeableId);
+    const { vertices, indices } = this.constructor.viTracker.viewFacetById(this.placeableId);
     vo.vertices = vertices;
     vo.indices = indices;
     return vo;
@@ -524,7 +524,7 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
   #createModelVO() {
     // Basic tiles can be instanced, so can just transform the instanceVO to a modelVO.
     const vo = this.constructor.instanceVO.transformToModel(this.modelMatrix.model);
-    this.constructor.viTracking.addFacet({ id: this.placeableId, newVertices: vo.vertices, newIndices: vo.indices } );
+    this.constructor.viTracker.addFacet({ id: this.placeableId, newVertices: vo.vertices, newIndices: vo.indices } );
     return vo;
   }
 
@@ -540,7 +540,7 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
   }
 
   destroy() {
-    this.constructor.viTracking.deleteFacet(this.placeableId);
+    this.constructor.viTracker.deleteFacet(this.placeableId);
     this._modelVO = null;
     this.modelMatrix = null;
     super.destroy();

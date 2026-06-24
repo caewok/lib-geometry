@@ -622,10 +622,9 @@ export const PlaceableVerticesMixin = superclass => class extends superclass {
     // Add vertices from faces.
     const vo = this._instanceVO || new VertexObject();
     const vertices = this.verticesFromFaces(this.prototypeFaces, true);
-    this.updateVertexObject(vo, vertices);
     vo.hasNormals = true;
     vo.hasUVs = false;
-    vo.indices = null;
+    this.updateVertexObject(vo, vertices);
     return vo;
   }
 
