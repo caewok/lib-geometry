@@ -62,8 +62,8 @@ export class LevelBackgroundGeometry extends TileGeometry {
   /** @type {string} */
   static LAYER = "levels";
 
-  /** @type {boolean} */
-  static foreground = false;
+  /** @type {string} */
+  static LEVEL_TYPE = "background";
 
   get level() { return this.placeableDocument; }
 
@@ -73,13 +73,19 @@ export class LevelBackgroundGeometry extends TileGeometry {
 
   get elevationZ() { return gridUnitsToPixels(this.placeableDocument.elevation.base); }
 
+  /**
+   * Create an id used for the model matrix tracking.
+   * @type {string}
+   */
+  get placeableId() { return `${this.placeableDocument.uuid}_${this.constructor.LEVEL_TYPE}`; }
+
   static get cacheManager() { return CONFIG[GEOMETRY_LIB_ID].levelBackgroundPixelCache; }
 
   static TRACKER_TYPES = TRACKER_TYPES;
 
   static UPDATE_KEYS = {
     ...super.UPDATE_KEYS,
-    properties: new Set([...TRACKER_TYPES.texture, ...TRACKER_TYPES.background]),
+    properties: new Set([...TRACKER_TYPES.texture, ...TRACKER_TYPES[this.LEVEL_TYPE]]),
     level: NULL_SET,
     position2d: new Set([...TRACKER_TYPES.elevation, ...TRACKER_TYPES.texture]),
   };
@@ -124,13 +130,8 @@ export class LevelBackgroundGeometry extends TileGeometry {
 
 export class LevelForegroundGeometry extends LevelBackgroundGeometry {
 
-  static UPDATE_KEYS = {
-    ...super.UPDATE_KEYS,
-    texture: new Set(TRACKER_TYPES.textures, TRACKER_TYPES.foreground),
-  };
-
-  /** @type {boolean} */
-  static foreground = true;
+  /** @type {string} */
+  static LEVEL_TYPE = "foreground";
 
   static get cacheManager() { return CONFIG[GEOMETRY_LIB_ID].levelForegroundPixelCache; }
 
