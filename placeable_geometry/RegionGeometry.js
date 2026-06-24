@@ -58,7 +58,7 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(PlaceableVertice
   static PLACEABLE_NAME = "Region";
 
   /** @type {string} */
-  static layer = "regions";
+  static LAYER = "regions";
 
   static SHAPE_TYPES = {
     EMPTY: -1,

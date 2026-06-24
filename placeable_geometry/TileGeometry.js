@@ -342,7 +342,7 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
   static PLACEABLE_NAME = "Tile";
 
   /** @type {string} */
-  static layer = "tiles";
+  static LAYER = "tiles";
 
   static TRACKER_TYPES = TRACKER_TYPES;
 

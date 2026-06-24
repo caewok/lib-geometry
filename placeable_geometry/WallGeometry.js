@@ -75,7 +75,7 @@ export class WallGeometry extends PlaceableGeometry {
   static PLACEABLE_NAME = "Wall";
 
   /** @type {string} */
-  static layer = "walls";
+  static LAYER = "walls";
 
   static TRACKER_TYPES = TRACKER_TYPES;
 

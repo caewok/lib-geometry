@@ -277,7 +277,7 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
   static PLACEABLE_NAME = "Token";
 
   /** @type {string} */
-  static layer = "tokens";
+  static LAYER = "tokens";
 
   static TRACKER_TYPES = TRACKER_TYPES;
 

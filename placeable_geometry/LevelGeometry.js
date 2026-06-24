@@ -60,7 +60,7 @@ export class LevelBackgroundGeometry extends TileGeometry {
   static PLACEABLE_NAME = "Level";
 
   /** @type {string} */
-  static layer = "levels";
+  static LAYER = "levels";
 
   /** @type {boolean} */
   static foreground = false;
