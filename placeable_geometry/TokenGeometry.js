@@ -362,7 +362,7 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
       case TYPES.CUBE: return TokenSquareGeometry;
       case TYPES.ELLIPSE: return TokenEllipseGeometry;
       case TYPES.HEXAGONAL: {
-        if ( tokenD.w > 1 || tokenD.h > 1 || tokenD.w !== tokenD.h ) return TokenPolygonGeometry;
+        if ( tokenD.w > 1 || tokenD.w !== tokenD.h ) return TokenPolygonGeometry;
         return TokenHexagonGeometry;
       }
       default: return TokenSquareGeometry;
