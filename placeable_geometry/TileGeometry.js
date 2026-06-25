@@ -1,4 +1,5 @@
 /* globals
+canvas,
 CONFIG,
 foundry,
 PIXI,
@@ -37,6 +38,8 @@ const TRACKER_TYPES = {
   position2d: [
     "x",
     "y",
+    "texture.anchorX",
+    "texture.anchorY",
   ],
   elevation: ["elevation"],
   scale: [
@@ -49,17 +52,14 @@ const TRACKER_TYPES = {
     "rotation",
     "texture.rotation",
   ],
-  texturePosition: [
-    "texture.anchorX",
-    "texture.anchorY",
+
+  texture: [
+    "texture.alphaThreshold",
+    "texture.src",
     "texture.fit",
     "texture.fill",
     "texture.offsetX",
     "texture.offsetY",
-  ],
-  texture: [
-    "texture.alphaThreshold",
-    "texture.src",
   ],
   level: [
     "levels",
@@ -88,8 +88,7 @@ const TileAlphaBoundingBoxMixin = superclass => class extends superclass {
 	update(updateKeys) {
 		super.update(updateKeys);
 		const KEYS = this.constructor.UPDATE_KEYS;
-		this.#needsUpdate ||= updateKeys.some(key => KEYS.texturePosition.has(key))
-		  || updateKeys.some(key => KEYS.texture.has(key));
+		this.#needsUpdate ||= updateKeys.some(key => KEYS.texture.has(key));
 	}
 
   shapeUpdated() {
@@ -149,8 +148,7 @@ const TileAlphaBoundingPolygonMixin = superclass => class extends superclass {
 	update(updateKeys) {
 		super.update(updateKeys);
 		const KEYS = this.constructor.UPDATE_KEYS;
-		this.#needsUpdate ||= updateKeys.some(key => KEYS.texturePosition.has(key))
-		  || updateKeys.some(key => KEYS.texture.has(key));
+		this.#needsUpdate ||= updateKeys.some(key => KEYS.texture.has(key));
 	}
 
   shapeUpdated() {
@@ -225,8 +223,7 @@ const TileAlphaPolygonsMixin = superclass => class extends superclass {
 	update(updateKeys) {
 		super.update(updateKeys);
 		const KEYS = this.constructor.UPDATE_KEYS;
-		this.#needsUpdate ||= updateKeys.some(key => KEYS.texturePosition.has(key))
-		  || updateKeys.some(key => KEYS.texture.has(key));
+		this.#needsUpdate ||= updateKeys.some(key => KEYS.texture.has(key));
 	}
 
   /**
@@ -283,8 +280,7 @@ const TileAlphaTrianglesMixin = superclass => class extends superclass {
 	update(updateKeys) {
 		super.update(updateKeys);
 		const KEYS = this.constructor.UPDATE_KEYS;
-		this.#needsUpdate ||= updateKeys.some(key => KEYS.texturePosition.has(key))
-		  || updateKeys.some(key => KEYS.texture.has(key));
+		this.#needsUpdate ||= updateKeys.some(key => KEYS.texture.has(key));
 	}
 
   /**
@@ -348,7 +344,7 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
 
   static UPDATE_KEYS = {
     ...super.UPDATE_KEYS,
-    properties: new Set([...TRACKER_TYPES.texturePosition, ...TRACKER_TYPES.texture]),
+    properties: new Set(TRACKER_TYPES.texture),
     level: new Set(TRACKER_TYPES.level),
     position2d: new Set(TRACKER_TYPES.position2d),
     elevation: new Set(TRACKER_TYPES.elevation),
@@ -561,7 +557,14 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
    * @returns {Point3d}
    */
   static tileCenter(tileD) {
-    const { x, y, width, height } = tileD;
-    return PIXI.Point.tmp.set(x + (width * 0.5), y + (height * 0.5));
+    const { x, y, width, height, texture } = tileD;
+    const anchorX = texture?.anchorX ?? 0.5;
+    const anchorY = texture?.anchorY ?? 0.5;
+
+    // Shift TL by the difference between the center (0.5) and the anchor position.
+    return PIXI.Point.tmp.set(
+      x + (width * (0.5 - anchorX)),
+      y + (height * (0.5 - anchorY)),
+    );
   }
 }

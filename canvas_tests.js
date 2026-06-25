@@ -9,7 +9,7 @@ import { Draw } from "./Draw.js";
 import { Point3d } from "./3d/Point3d.js";
 import { Triangle3d } from "./3d/Polygon3d.js";
 import { ElevatedPoint } from "./3d/ElevatedPoint.js";
-import { TokenGeometry } from "./placeable_geometry/TokenGeometry.js";
+import { TokenSquareGeometry } from "./placeable_geometry/TokenGeometry.js";
 
 // Testing functions that require a loaded canvas.
 
@@ -413,7 +413,7 @@ export function drawTokenVertices({ tokens, type = "all", ...drawingOpts } = {})
  * @param {Token[]} [opts.tokens]                 Walls to draw; otherwise test entire canvas
  */
 export function testTokenVertices({ tokens } = {}) {
-  const vo = TokenGeometry.instanceVO;
+  const vo = TokenSquareGeometry.instanceVO;
   const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
   const ctr = Point3d.tmp.set(0, 0, 0);
   for ( const tri of tris ) {
