@@ -33,6 +33,11 @@ canvasTests.drawConstrainedTokenBorder()
 canvasTests.drawWallGeometries()
 canvasTests.drawTokenGeometries()
 canvasTests.drawTileGeometries()
+canvasTests.drawTileGeometries({ faces: "alphaBoundingBox" })
+canvasTests.drawTileGeometries({ faces: "alphaBoundingPolygon" })
+canvasTests.drawTileGeometries({ faces: "alphaThresholdPolygons" })
+canvasTests.drawTileGeometries({ faces: "alphaThresholdTriangles" })
+
 canvasTests.drawRegionGeometries()
 
 incorrectProtoTokens = canvasTests.testTokenPrototypeGeometryContainment()
@@ -134,7 +139,7 @@ export function drawTokenSoundBorder({ tokens, ...drawingOpts } = {}) {
  * @param {boolean} [opts.aabb=false]           If true, draw the bounding box
  * @param {*} [opts]                            Other opts passed to drawing
  */
-function drawPlaceableGeometry(placeable, placeableColor, { aabb = false, ...drawingOpts } = {}) {
+function drawPlaceableGeometry(placeable, placeableColor, { aabb = false, faces = "faces", ...drawingOpts } = {}) {
   const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.geomForPlaceable(placeable);
   if ( !geom ) {
     console.error(`${placeable.constructor.name} ${placeable.id} has no geometry.`);
@@ -142,7 +147,7 @@ function drawPlaceableGeometry(placeable, placeableColor, { aabb = false, ...dra
   }
 
   let color = Draw.COLORS[placeableColor];
-  geom.faces[0].draw2d({ color, ...drawingOpts });
+  geom[faces][0].draw2d({ color, ...drawingOpts });
   if ( aabb ) {
     let color = Draw.COLORS[`light${placeableColor}`];
     Draw.shape(geom.aabb.toRectangle(), { color, ...drawingOpts });

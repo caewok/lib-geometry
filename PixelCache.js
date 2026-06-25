@@ -2893,17 +2893,23 @@ export class TextureDocumentPixelCache extends TrimmedPixelCache {
   get rotationRadians() { return Math.toRadians(this.textureDocument.rotation); }
 
   get translationValues() {
+    // Translation must be the canvas coordinate of the anchor point.
+    // Calculate the canvas distance of the anchor and add it to the canvas TL.
     const { x, y } = this.textureDocument;
+    const scale = this.scaleValues;
     const anchor = this.anchorTranslation;
-    return { x: x - anchor.x, y: y - anchor.y };
+    return {
+      x: x - (anchor.x * scale.x),
+      y: y - (anchor.y * scale.y),
+    };
   }
 
   get scaleValues() {
-    // Scale, accounting for document width/height and tile texture width/height.
+    // Scale maps local texture pixels to canvas units, accounting for document size.
     const { scaleX, scaleY } = this.textureSpecs;
     return {
-      x: this.width * scaleX,
-      y: this.height * scaleY,
+      x: (this.textureDocument.width / this.width) * scaleX,
+      y: (this.textureDocument.height / this.height) * scaleY,
     };
   }
 
@@ -2912,7 +2918,7 @@ export class TextureDocumentPixelCache extends TrimmedPixelCache {
     return {
       x: anchorX * this.width,
       y: anchorY * this.height,
-    }
+    };
   }
 
   /**
@@ -2985,9 +2991,20 @@ export class LevelPixelCache extends TextureDocumentPixelCache {
 
   get translationValues() {
     const { offsetX, offsetY } = this.textureSpecs;
+    const scale = this.scaleValues;
     const anchor = this.anchorTranslation;
-    return { x: offsetX - anchor.x, y: offsetY - anchor.y };
+    return {
+      x: offsetX - (anchor.x * scale.x),
+      y: offsetY - (anchor.y * scale.y),
+    };
   }
+
+  get scaleValues() {
+    // Scale maps local texture pixels to canvas units, accounting for document size.
+    const { scaleX, scaleY } = this.textureSpecs;
+    return { x: scaleX, y: scaleY };
+  }
+
 
   /**
    * Match the level to its associated texture at canvas.primary.levelTextures.

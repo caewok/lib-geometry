@@ -63,8 +63,8 @@ export class AbstractPixelCacheManager {
     let tmpTexture = !texture;
     texture ??= await this.loadTexture(this.textureURL(doc));
     if ( !texture ) return;
-    const cache = this._getCache(doc, texture);
-    if ( cache ) this.caches.set(doc.uuid);
+    const cache = this._createPixelCache(doc, texture);
+    if ( cache ) this.caches.set(doc.uuid, cache);
     if ( tmpTexture ) PIXI.Assets.unload(this.textureURL(doc));
   }
 
@@ -75,8 +75,8 @@ export class AbstractPixelCacheManager {
   cacheDocumentSync(doc) {
     const texture = this.getTextureForDocument(doc);
     if ( !texture ) return;
-    const cache = this._getCache(doc, texture);
-    if ( cache ) this.caches.set(doc.uuid);
+    const cache = this._createPixelCache(doc, texture);
+    if ( cache ) this.caches.set(doc.uuid, cache);
   }
 
   /**
@@ -92,7 +92,7 @@ export class AbstractPixelCacheManager {
    * @returns {TextureDocumentPixelCache}
    */
   pixelCacheForDocument(doc) {
-    if ( !this.caches.has(doc.uuid) ) this.cacheDocumentSync(doc);
+    if ( !this.documentIsCached(doc) ) this.cacheDocumentSync(doc);
     return this.caches.get(doc.uuid);
   }
 
@@ -101,21 +101,21 @@ export class AbstractPixelCacheManager {
    * @param {CanvasDocument} doc
    * @returns {PIXI.Texture|undefined}
    */
-  getTextureForDocument(_doc) { throw Error("PixelCacheManager|_getCache must be implemented by child class."); }
+  getTextureForDocument(_doc) { throw Error("PixelCacheManager|_createPixelCache must be implemented by child class."); }
 
   /**
    * Create a PixelCache for a given document.
    * @param {CanvasDocument} doc
    * @returns {PIXI.Texture|undefined}
    */
-  _getCache(_doc, _texture) { throw Error("PixelCacheManager|_getCache must be implemented by child class."); }
+  _createPixelCache(_doc, _texture) { throw Error("PixelCacheManager|_createPixelCache must be implemented by child class."); }
 
   /**
    * Retrieves the url to load a texture for the document.
    * @param {CanvasDocument} doc
    * @returns {string}
    */
-  textureURL(_doc) { throw Error("PixelCacheManager|_getCache must be implemented by child class."); }
+  textureURL(_doc) { throw Error("PixelCacheManager|_createPixelCache must be implemented by child class."); }
 
   /**
    * Loads the texture from a url.
@@ -154,7 +154,7 @@ export class TilePixelCacheManager extends AbstractPixelCacheManager {
    * @param {TileDocument} doc
    * @returns {TilePixelCache|null}
    */
-  _getCache(doc, texture) {
+  _createPixelCache(doc, texture) {
     const resolution = CONFIG.GeometryLib.CONFIG.pixelCacheResolution ?? 1;
     return TileDocumentPixelCache.fromTileAlpha(doc, { texture, resolution });
   }
@@ -193,7 +193,7 @@ export class LevelBackgroundPixelCacheManager extends AbstractPixelCacheManager 
    * @param {TileDocument} doc
    * @returns {TilePixelCache}
    */
-  _getCache(doc, texture) {
+  _createPixelCache(doc, texture) {
     const resolution = CONFIG.GeometryLib.CONFIG.pixelCacheResolution ?? 1;
     const foreground = this.constructor.foreground;
     return LevelPixelCache.fromLevelAlpha(doc, { texture, resolution, foreground })

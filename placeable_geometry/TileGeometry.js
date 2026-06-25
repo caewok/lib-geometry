@@ -118,7 +118,7 @@ const TileAlphaBoundingBoxMixin = superclass => class extends superclass {
 
     const rectOrPoly = cache.getThresholdCanvasBoundingBox(this.alphaThreshold).toPolygon();
     const bb = this.#alphaBoundingBox;
-    const elevationZ = this.elevationZ
+    const elevationZ = this.elevationZ;
 
 		Quad3d.fromPolygon(rectOrPoly, elevationZ, bb[0]);
 		Quad3d.fromPolygon(rectOrPoly, elevationZ, bb[1]);
