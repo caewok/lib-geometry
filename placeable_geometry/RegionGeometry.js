@@ -316,7 +316,7 @@ function createCircleUnitCylinder(radiusDensity = 100) {
   top.setZ(0.5);
   bottom.setZ(-0.5);
 
-  density = PIXI.Circle.approximateVertexDensity(radiusDensity);
+  const density = PIXI.Circle.approximateVertexDensity(radiusDensity);
   return [top, bottom, ...top.buildTopSides(-0.5, { density })];
 }
 
