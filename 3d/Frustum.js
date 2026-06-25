@@ -76,13 +76,14 @@ export class Frustum {
   /**
    * Build the frustum from four corners of the floor plus the viewpoint.
    * @param {Point3d} viewpoint
-   * @param {object}
+   * @param {object}  corners
    * - @prop {Point3d} TL     Point a of the floor
    * - @prop {Point3d} TR     Point b of the floor
    * - @prop {Point3d} BR     Point c of the floor
    * - @prop {Point3d} BL     Point d of the floor
    */
-  static fromCorners(viewpoint, { TL, TR, BR, BL, frustum } = {}) {
+  static fromCorners(viewpoint, corners, frustum) {
+    const { TL, TR, BR, BL } = corners;
     frustum ??= new this();
 
     // Assign the points to the frustum.
@@ -230,7 +231,7 @@ export class Frustum {
     planeCenter.add(am, BL).add(sv, BL); // Bottom-Left
 
     // Rebuild the converging pyramid side faces.
-    return this.fromCorners(viewpoint, { TL, TR, BR, BL, frustum});
+    return this.fromCorners(viewpoint, { TL, TR, BR, BL }, frustum);
   }
 
   static elevationZMinMax(viewpoint, topZ = 0, bottomZ = topZ) {
