@@ -298,15 +298,31 @@ export class WallGeometry extends PlaceableGeometry {
   // ----- NOTE: Wall characteristics ----- //
 
   /**
+   * Create 2d segment points from a wall document.
+   * @param {WallDocument} wallD
+   * @returns {object}
+   * - @prop {PIXI.Point} a
+   * - @prop {PIXI.Point} b
+   */
+  static wallSegment2d(wallD) {
+    const [ax, ay, bx, by] = wallD.c;
+    return {
+      a: PIXI.Point.tmp.set(ax, ay),
+      b: PIXI.Point.tmp.set(bx, by),
+    };
+  }
+
+  /**
    * Determine the 2d center point of the edge.
    * @param {WallDocument} wallD
    * @returns {PIXI.Point}
    */
   static wallCenter(wallD) {
-    using a = PIXI.Point.tmp.set(wallD.c[0], wallD.c[1]);
-    using b = PIXI.Point.tmp.set(wallD.c[2], wallD.c[3]);
+    const { a, b } = this.wallSegment2d(wallD);
     const ctr = PIXI.Point.tmp;
-    return a.add(b, ctr).multiplyScalar(0.5, ctr);
+    const out = a.add(b, ctr).multiplyScalar(0.5, ctr);
+    PIXI.Point.release(a, b);
+    return out;
   }
 
   /**
@@ -315,9 +331,10 @@ export class WallGeometry extends PlaceableGeometry {
    * @returns {number}
    */
   static wallLength(wallD) {
-    using a = PIXI.Point.tmp.set(wallD.c[0], wallD.c[1]);
-    using b = PIXI.Point.tmp.set(wallD.c[2], wallD.c[3]);
-    return PIXI.Point.distanceBetween(a, b);
+    const { a, b } = this.wallSegment2d(wallD);
+    const out = PIXI.Point.distanceBetween(a, b);
+    PIXI.Point.release(a, b);
+    return out;
   }
 
   /**
@@ -326,9 +343,9 @@ export class WallGeometry extends PlaceableGeometry {
    * @returns {number} Angle in radians
    */
   static wallAngle(wallD) {
-    using a = PIXI.Point.tmp.set(wallD.c[0], wallD.c[1]);
-    using b = PIXI.Point.tmp.set(wallD.c[2], wallD.c[3]);
+    const { a, b } = this.wallSegment2d(wallD);
     using delta = b.subtract(a);
+    PIXI.Point.release(a, b);
     return Math.atan2(delta.y, delta.x);
   }
 
