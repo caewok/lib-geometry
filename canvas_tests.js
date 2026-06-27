@@ -37,6 +37,23 @@ canvasTests.drawTileGeometries({ faces: "alphaBoundingBox" })
 canvasTests.drawTileGeometries({ faces: "alphaBoundingPolygon" })
 canvasTests.drawTileGeometries({ faces: "alphaThresholdPolygons" })
 canvasTests.drawTileGeometries({ faces: "alphaThresholdTriangles" })
+canvasTests.drawLevelBackgroundGeometries()
+
+
+Original canvas: 1500 x 1500
+
+anchor: 0.5, 0.5
+offset: -675, 150
+scale: 0.5, 0.5
+
+level = canvas.scene.levels.get("defaultLevel0000")
+geom = CONFIG.GeometryLib.geometryManager.backgroundLevels.geomForDocument(level)
+cache = geom.pixelCache
+
+cache._toCanvasCoordinates(0, 0)
+cache._toCanvasCoordinates(750, 750)
+cache._toCanvasCoordinates(1500, 1500)
+
 
 canvasTests.drawRegionGeometries()
 
@@ -139,13 +156,17 @@ export function drawTokenSoundBorder({ tokens, ...drawingOpts } = {}) {
  * @param {boolean} [opts.aabb=false]           If true, draw the bounding box
  * @param {*} [opts]                            Other opts passed to drawing
  */
-function drawPlaceableGeometry(placeable, placeableColor, { aabb = false, faces = "faces", ...drawingOpts } = {}) {
-  const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.geomForPlaceable(placeable);
+export function drawPlaceableGeometry(placeableDocument, placeableColor, opts) {
+  if ( placeableDocument.document ) placeableDocument = placeableDocument.document;
+  const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.geomForDocument(placeableDocument);
   if ( !geom ) {
     console.error(`${placeable.constructor.name} ${placeable.id} has no geometry.`);
     return;
   }
+  drawGeometry(geom, placeableColor, opts);
+}
 
+export function drawGeometry(geom,  placeableColor, { aabb = false, faces = "faces", ...drawingOpts } = {}) {
   let color = Draw.COLORS[placeableColor];
   geom[faces][0].draw2d({ color, ...drawingOpts });
   if ( aabb ) {
@@ -210,6 +231,27 @@ export function drawRegionGeometries({ regions, ...drawingOpts } = {}) {
   regions ??= canvas.regions.placeables;
   for ( const region of regions ) drawPlaceableGeometry(region, "green", drawingOpts);
 }
+
+export function drawLevelBackgroundGeometries({ levels, ...drawingOpts } = {}) {
+  levels ??= canvas.scene.levels;
+  const mgr = CONFIG[GEOMETRY_LIB_ID].geometryManager.levels.background;
+
+  for ( const level of levels ) {
+    const geom = mgr.geomForDocument(level);
+    drawGeometry(geom, "green", drawingOpts);
+  }
+}
+
+export function drawLevelForegroundGeometries({ levels, ...drawingOpts } = {}) {
+  levels ??= canvas.scene.levels;
+  const mgr = CONFIG[GEOMETRY_LIB_ID].geometryManager.levels.foreground;
+
+  for ( const level of levels ) {
+    const geom = mgr.geomForDocument(level);
+    drawGeometry(geom, "blue", drawingOpts);
+  }
+}
+
 
 /**
  * Test tokens for containment.

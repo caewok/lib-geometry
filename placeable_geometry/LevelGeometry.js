@@ -126,6 +126,24 @@ export class LevelBackgroundGeometry extends TileGeometry {
     return PIXI.Point.midPoint(TL, BR);
   }
 
+  static tileDimensions(levelD) {
+    const cache = this.cacheManager.pixelCacheForDocument(levelD);
+    if ( !cache ) {
+      const { width, height } = canvas.scene;
+      return { width, height };
+    }
+
+    const { width, height } = cache;
+    using TL = cache._toCanvasCoordinates(0, 0);
+    using BL = cache._toCanvasCoordinates(0, height);
+    using TR = cache._toCanvasCoordinates(width, 0);
+
+    return {
+      width: PIXI.Point.distanceBetween(TL, TR),
+      height: PIXI.Point.distanceBetween(TL, BL),
+    };
+  }
+
 }
 
 export class LevelForegroundGeometry extends LevelBackgroundGeometry {

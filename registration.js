@@ -214,7 +214,7 @@ class GeometryManager {
    */
   _managerForDocument(typeOrDoc, levelType = "background") {
     const type = this._typeFromDocument(typeOrDoc);
-    if ( type === "levels" ) return this.level[levelType];
+    if ( type === "levels" ) return this.levels[levelType];
     return this[type];
   }
 

@@ -395,7 +395,7 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
 
   calculateScaleMatrix() {
     const mat = super.calculateScaleMatrix();
-    const { width, height } = this.placeableDocument;
+    const { width, height } = this.constructor.tileDimensions(this.placeableDocument);
     return MatrixFloat32.scale(width, height, 1.0, mat);
   }
 
@@ -566,5 +566,9 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
       x + (width * (0.5 - anchorX)),
       y + (height * (0.5 - anchorY)),
     );
+  }
+
+  static tileDimensions(tileD) {
+    return { width: tileD.width, height: tileD.height };
   }
 }

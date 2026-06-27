@@ -201,7 +201,7 @@ export class LocalCoordinateCache extends AABB2d {
     if ( this.modelMatrix.updated ) this.modelMatrix.update(); // Avoid checking update in the loop.
     for ( const pt of this.iterateVertices() ) {
       this.modelMatrix._model.multiplyPoint2d(pt, pt);
-      pts[i] = pt;
+      pts[i++] = pt;
     }
     const poly = new PIXI.Polygon(...pts);
     return poly.getBounds();
@@ -2895,7 +2895,7 @@ export class TextureDocumentPixelCache extends TrimmedPixelCache {
   get translationValues() {
     // Translation must be the canvas coordinate of the anchor point.
     // Calculate the canvas distance of the anchor and add it to the canvas TL.
-    const { x, y } = this.textureDocument;
+    const { x = 0, y = 0 } = this.textureDocument;
     const scale = this.scaleValues;
     const anchor = this.anchorTranslation;
     return {
@@ -2915,9 +2915,11 @@ export class TextureDocumentPixelCache extends TrimmedPixelCache {
 
   get anchorTranslation() {
     const { anchorX, anchorY } = this.textureSpecs;
+    const fullWidth = this.width / this.resolution;
+    const fullHeight = this.height / this.resolution;
     return {
-      x: anchorX * this.width,
-      y: anchorY * this.height,
+      x: anchorX * fullWidth,
+      y: anchorY * fullHeight,
     };
   }
 
@@ -2989,20 +2991,66 @@ export class LevelPixelCache extends TextureDocumentPixelCache {
 
   get rotationRadians() { return Math.toRadians(this.textureSpecs.rotation); }
 
-  get translationValues() {
-    const { offsetX, offsetY } = this.textureSpecs;
-    const scale = this.scaleValues;
-    const anchor = this.anchorTranslation;
+  get scaleValues() {
+    // Scale maps local texture pixels to canvas units, accounting for document size.
+    const { scaleX = 1, scaleY = 1 } = this.textureSpecs;
+    const fitScale = this._fitScale;
     return {
-      x: offsetX - (anchor.x * scale.x),
-      y: offsetY - (anchor.y * scale.y),
+      x: scaleX * fitScale.x, y:
+      scaleY * fitScale.y
     };
   }
 
-  get scaleValues() {
-    // Scale maps local texture pixels to canvas units, accounting for document size.
-    const { scaleX, scaleY } = this.textureSpecs;
-    return { x: scaleX, y: scaleY };
+  get translationValues() {
+    const { anchorX = 0.5, anchorY = 0.5, offsetX = 0, offsetY = 0} = this.textureSpecs;
+    const scale = this.scaleValues;
+    const anchorLocal = this.anchorTranslation;
+    const sceneRect = canvas.dimensions.sceneRect;
+
+    // Find the exact canvas coordinate for the texture's anchor point.
+    // Anchor of {0.5, 0.5} is the scene center (plus any explicit offsets).
+    const refX = sceneRect.x + (anchorX * sceneRect.width) + offsetX;
+    const refY = sceneRect.y + (anchorY * sceneRect.height) + offsetY;
+
+    // Subtract the scaled anchor offset to determin the true canvas TL (0, 0) coordinate.
+    return {
+      x: refX - (anchorLocal.x * scale.x),
+      y: refY - (anchorLocal.y * scale.y),
+    };
+  }
+
+  /**
+   * Helper to calculate the scale adjustment dictated by the fit mode.
+   * @returns {object}
+   * - @prop {number} x
+   * - @prop {number} y
+   */
+  get _fitScale() {
+    // Full uncached pixel sizes of the source texture.
+    const { width, height, resolution } = this;
+    const texWidth = width / resolution;
+    const texHeight = height / resolution;
+
+    // Target canvas viewport dimensions.
+    const targetWidth = canvas.dimensions.sceneWidth;
+    const targetHeight = canvas.dimensions.sceneHeight;
+    const ratioX = targetWidth / texWidth;
+    const ratioY = targetHeight / texHeight;
+
+    switch ( this.textureSpecs.fit ) {
+      case "fill": return { x: ratioX, y: ratioY };
+      case "contain": {
+        const s = Math.min(ratioX, ratioY);
+        return { x: s, y: s };
+      }
+      case "cover": {
+        const s = Math.max(ratioX, ratioY);
+        return { x: s, y: s };
+      }
+      case "width": return { x: ratioX, y: ratioX };
+      case "height": return { x: ratioY, y: ratioY };
+      default: return { x: 1, y: 1 };
+    }
   }
 
 
