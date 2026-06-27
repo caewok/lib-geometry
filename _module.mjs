@@ -12,6 +12,7 @@ export * as placeableGeometryTracking from "./placeable_tracking/_module.mjs";
 
 export * as sdf from "./sdf/_module.mjs";
 
+export * from "./Segment.js";
 export * from "./AABB.js";
 export * from "./ClipperPaths.js";
 export * from "./Clipper2Paths.js";

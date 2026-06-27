@@ -22,6 +22,7 @@ import {
 import { AABB3d } from "../3d/AABB3d.js";
 import { MatrixFloat32 } from "../Matrix.js";
 import { Polygons3d } from "../3d/Polygon3d.js";
+import { Segment } from "../Segment.js";
 import { pixelsToGridUnits, gridUnitsToPixels } from "../util.js";
 
 const TRACKER_TYPES = {
@@ -300,16 +301,16 @@ export class WallGeometry extends PlaceableGeometry {
   /**
    * Create 2d segment points from a wall document.
    * @param {WallDocument} wallD
-   * @returns {object}
+   * @returns {Segment}
    * - @prop {PIXI.Point} a
    * - @prop {PIXI.Point} b
    */
   static wallSegment2d(wallD) {
     const [ax, ay, bx, by] = wallD.c;
-    return {
-      a: PIXI.Point.tmp.set(ax, ay),
-      b: PIXI.Point.tmp.set(bx, by),
-    };
+    return new Segment(
+      PIXI.Point.tmp.set(ax, ay),
+      PIXI.Point.tmp.set(bx, by),
+    );
   }
 
   /**
@@ -318,11 +319,8 @@ export class WallGeometry extends PlaceableGeometry {
    * @returns {PIXI.Point}
    */
   static wallCenter(wallD) {
-    const { a, b } = this.wallSegment2d(wallD);
-    const ctr = PIXI.Point.tmp;
-    const out = a.add(b, ctr).multiplyScalar(0.5, ctr);
-    PIXI.Point.release(a, b);
-    return out;
+    using s = this.wallSegment2d(wallD);
+    return s.midpoint;
   }
 
   /**
@@ -331,10 +329,8 @@ export class WallGeometry extends PlaceableGeometry {
    * @returns {number}
    */
   static wallLength(wallD) {
-    const { a, b } = this.wallSegment2d(wallD);
-    const out = PIXI.Point.distanceBetween(a, b);
-    PIXI.Point.release(a, b);
-    return out;
+    using s = this.wallSegment2d(wallD);
+    return s.length;
   }
 
   /**
@@ -343,10 +339,8 @@ export class WallGeometry extends PlaceableGeometry {
    * @returns {number} Angle in radians
    */
   static wallAngle(wallD) {
-    const { a, b } = this.wallSegment2d(wallD);
-    using delta = b.subtract(a);
-    PIXI.Point.release(a, b);
-    return Math.atan2(delta.y, delta.x);
+    using s = this.wallSegment2d(wallD);
+    return s.angleXY;
   }
 
   /**
