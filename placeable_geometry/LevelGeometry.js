@@ -10,6 +10,7 @@ import { TileGeometry } from "./TileGeometry.js";
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { gridUnitsToPixels, NULL_SET } from "../util.js";
 import { AABB3d } from "../3d/AABB3d.js";
+import { MatrixFloat32 } from "../Matrix.js";
 
 const TRACKER_TYPES = {
   background: [
@@ -52,6 +53,26 @@ const TRACKER_TYPES = {
     "textures.scaleY",
   ],
 };
+
+/**
+ * On canvas ready, make sure the level textures are loaded so the dimensions can be determined.
+ */
+Hooks.on("canvasReady", async () => {
+  const promises = [];
+  canvas.scene.levels.forEach(levelD => {
+    promises.push(LevelBackgroundGeometry.cacheManager.cacheDocument(levelD));
+    promises.push(LevelForegroundGeometry.cacheManager.cacheDocument(levelD));
+  });
+  await Promise.allSettled(promises);
+
+  // Now force updates for all level geometries, to update aabb and matrices.
+  const bgMgr = CONFIG[GEOMETRY_LIB_ID].geometryManager.levels.background;
+  const fgMgr = CONFIG[GEOMETRY_LIB_ID].geometryManager.levels.foreground;
+  canvas.scene.levels.forEach(levelD => {
+    bgMgr.geomForDocument(levelD).forceUpdate();
+    fgMgr.geomForDocument(levelD).forceUpdate();
+  });
+});
 
 
 export class LevelBackgroundGeometry extends TileGeometry {
@@ -97,15 +118,39 @@ export class LevelBackgroundGeometry extends TileGeometry {
       // Cannot ascertain width and height without the texture. (At least, it would require a partial load.)
       // But there is a decent chance that the scene rect would cover the dimensions.
       AABB3d.fromRectangle(canvas.scene.dimensions.sceneRect, this.elevationZ, this.aabb);
+
     } else {
-      // Lazy way is to use the cache to find the boundary points.
+      // Use the cache to find the boundary points.
       const { width, height } = cache;
       using TL = cache._toCanvasCoordinates(0, 0);
       using BL = cache._toCanvasCoordinates(0, height);
       using TR = cache._toCanvasCoordinates(width, 0);
       using BR = cache._toCanvasCoordinates(width, height);
-      AABB3d.fromPoints([TL, BL, TR, BR], this.elevationZ, this.aabb);
+      AABB3d.fromPoints([TL, BL, TR, BR], this.aabb);
+      this.aabb.min.z = this.elevationZ;
+      this.aabb.max.z = this.elevationZ;
     }
+  }
+
+  // ----- NOTE: Matrices ----- //
+
+  calculateTranslationMatrix() {
+    // Calculate the matrix first to avoid recalculating after the reload is done.
+    const mat = super.calculateTranslationMatrix();
+    const ctr = this.constructor.tileCenter(this.placeableDocument);
+    return MatrixFloat32.translation(ctr.x, ctr.y, this.elevationZ, mat);
+  }
+
+  calculateRotationMatrix() {
+    const mat = super.calculateRotationMatrix();
+    const rot = this.constructor.tileRotation(this.placeableDocument)
+    return MatrixFloat32.rotationZ(rot, true, mat);
+  }
+
+  calculateScaleMatrix() {
+    const mat = super.calculateScaleMatrix();
+    const { width, height } = this.constructor.tileDimensions(this.placeableDocument);
+    return MatrixFloat32.scale(width, height, 1.0, mat);
   }
 
   // ----- NOTE: Scene texture characteristics ----- //

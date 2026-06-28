@@ -188,6 +188,17 @@ export class PlaceableGeometry {
     }
   }
 
+  forceUpdate() {
+    const updateFlags = this._updateFlags;
+    Object.keys(updateFlags).forEach(key => updateFlags[key] = false);
+    for ( const type of Object.keys(this.constructor.UPDATE_KEYS) ) {
+      this[`${type}Updated`]();
+      updateFlags[type] = true;
+    }
+    this.shapeUpdated();
+    this.updateCount += 1;
+  }
+
   // Triggered first for defined properties.
   propertiesUpdated() { }
 

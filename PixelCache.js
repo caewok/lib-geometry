@@ -2989,7 +2989,7 @@ export class LevelPixelCache extends TextureDocumentPixelCache {
     return this.textureDocument[g].alphaThreshold || 0.75;
   }
 
-  get rotationRadians() { return Math.toRadians(this.textureSpecs.rotation); }
+  get rotationRadians() { return Math.toRadians(this.textureSpecs.rotation || 0); }
 
   get scaleValues() {
     // Scale maps local texture pixels to canvas units, accounting for document size.
