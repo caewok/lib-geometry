@@ -25,7 +25,9 @@ import * as MarchingSquares from "./marchingsquares-esm.js";
   TrimmedPixelCache: 1:1 relationship between the local rectangle and represented shape, except that
     the pixels stored do not include edge pixels with 0 value.
 
-  TilePixelCache: Local rectangle tied to some canvas object (tile) shape. Translations performed
+  TexturePixelCache: Local rectangle tied to some texture.
+
+  TextureDocumentPixelCache: Local rectangle tied to some canvas object (tile) shape. Translations performed
     to move to/from the canvas coordinates and the local.
 
   Methods to store and retrieve the border for a given alpha threshold.
@@ -2862,30 +2864,109 @@ export class TrimmedPixelCache extends PixelCache {
   }
 }
 
+/**
+ * Pixel cache specific to a texture.
+ */
+export class TexturePixelCache extends TrimmedPixelCache {
+
+  /** @type {PIXI.Texture} */
+  texture;
+
+  /**
+   * @param {PIXI.Texture} [options.texture]   Texture that corresponds to this cache
+   *   Currently used for tracking only
+   * @inherits
+   */
+  constructor(fullWidth, fullHeight, { texture, ...opts } = {}) {
+    super(fullWidth, fullHeight, opts);
+    this.texture = texture;
+  }
+
+  /**
+   * Convert a textures alpha channel to a pixel cache.
+   * @param {object} [opts]
+   * @param {PIXI.Texture} [opts.texture]   Texture to use
+   * @param {number} [opts.channel=3]       Channel to use for the texture
+   * @returns {TexturePixelCache}
+   */
+  static fromTextureChannel({ texture, channel = 3, ...opts } = {}) {
+    const res = this.extractPixelsFromTexture(texture);
+    opts.pixelsOrClass = this.extractPixelChannel(res.pixels, channel, 4);
+    opts.texture = texture;
+    return new this(res.width, res.height, opts);
+  }
+
+  /**
+   * Convert a texture's alpha channel to a pixel cache.
+   * @param {object} [opts]
+   * @param {PIXI.Texture} [opts.texture]  Texture to use
+   * @returns {LevelBackgroundPixelCache}
+   */
+  static fromTextureAlpha({ texture, ...opts } = {}) {
+    // See TextureLoader.getTextureAlphaData.
+    // Returns non-inclusive pixels. E.g., [minX, maxX)
+    opts.resolution ||= 1;
+    const texData = foundry.canvas.TextureLoader.getTextureAlphaData(texture, opts.resolution);
+    if ( !texData ) throw Error(`PixelCache|Texture is invalid.`);
+
+    // Define bounds of actual data within the full texture frame.
+    opts.bufferBounds = new AABB2d();
+    opts.bufferBounds.min.set(texData.minX, texData.minY);
+    opts.bufferBounds.max.set(texData.maxX - 1, texData.maxY - 1); // Make inclusive: [minX, maxX].
+    opts.pixelsOrClass = texData.data;
+    opts.texture = texture;
+    return new this(texData.width, texData.height, opts);
+  }
+}
+
 
 /**
  * Pixel cache specific to a texture document.
  * Adds additional handling for rotation, scaling, converting from a cache.
  */
-export class TextureDocumentPixelCache extends TrimmedPixelCache {
-  /** @type {Tile} */
+export class TextureDocumentPixelCache extends TexturePixelCache {
+
+  /** @type {PlaceableDocument} */
   textureDocument;
+
+  get texture() { return this.constructor.getTextureSync(this.textureDocument); }
 
   /**
    * @param {TileDocument|Level} [options.textureDocument]   Texture document for which this cache applies
-                                    If provided, scale will be updated
    * @inherits
    */
   constructor(fullWidth, fullHeight, { textureDocument, ...opts } = {}) {
     super(fullWidth, fullHeight, opts);
     this.textureDocument = textureDocument;
-    this.updateTransforms();
+    delete this.texture; // Fix the getter.
+    this.updateTransforms(); // Use the provided document for the transforms.
   }
 
   // ----- NOTE: Tile data getters ----- //
 
   /** @type {object} */
   get textureSpecs() { return this.textureDocument.texture; }
+
+  get textureSource() { return this.textureDocument.texture.src; }
+
+  static textureSource(doc) { return doc.texture.src; }
+
+  /**
+   * Match the level to its associated texture.
+   * @param {TileDocument|Level} doc         Document to match
+   * @returns {PIXI.Texture|null}
+   */
+  static getTextureSync(doc) {
+    const src = this.textureSource(doc);
+    if ( !src ) return null;
+    return PIXI.Assets.get(src);
+  }
+
+  static async getTexture(doc) {
+    const src = this.textureSource(doc);
+    if ( !src ) return null;
+    return PIXI.Assets.load(src);
+  }
 
   /** @type {number} */
   get alphaThreshold() { return this.textureDocument.alphaThreshold || 0.75; }
@@ -2966,27 +3047,39 @@ export class TextureDocumentPixelCache extends TrimmedPixelCache {
    */
   _trimLocalRayToLocalBounds(a, b, alphaThreshold) { return super._trimLocalRayToLocalBounds(a, b, alphaThreshold ?? this.alphaThreshold); }
 
+  static fromTextureChannel({ textureDocument, texture, ...opts} = {}) {
+    texture ??= this.getTextureSync(textureDocument);
+    opts.textureDocument = textureDocument;
+    opts.texture = texture;
+    return super.fromTextureChannel(opts);
+  }
+
+  static fromTextureAlpha({ textureDocument, texture, ...opts} = {}) {
+    texture ??= this.getTextureSync(textureDocument);
+    opts.textureDocument = textureDocument;
+    opts.texture = texture;
+    return super.fromTextureAlpha(opts);
+  }
+
 }
 
-export class LevelPixelCache extends TextureDocumentPixelCache {
+export class LevelBackgroundPixelCache extends TextureDocumentPixelCache {
 
-  /** @type {boolean} */
-  foreground = false;
-
-  constructor(fullWidth, fullHeight, { foreground = false, ...opts } = {}) {
-    super(fullWidth, fullHeight, opts);
-    this.foreground = foreground;
-  }
+  /** @type {string} */
+  static GROUND_TYPE = "background";
 
   // ----- NOTE: Level data getters ----- //
 
   /** @type {object} */
   get textureSpecs() { return this.textureDocument.textures; } // Note "textures" is plural, unlike with tiles.
 
+  get textureSource() { return this.textureDocument[this.constructor.GROUND_TYPE].src; }
+
+  static textureSource(doc) { return doc[this.GROUND_TYPE].src; }
+
   /** @type {number} */
   get alphaThreshold() {
-    const g = this.foreground ? "foreground" : "background";
-    return this.textureDocument[g].alphaThreshold || 0.75;
+    return this.textureDocument[this.constructor.GROUND_TYPE].alphaThreshold || 0.75;
   }
 
   get rotationRadians() { return Math.toRadians(this.textureSpecs.rotation || 0); }
@@ -3052,166 +3145,18 @@ export class LevelPixelCache extends TextureDocumentPixelCache {
       default: return { x: 1, y: 1 };
     }
   }
-
-
-  /**
-   * Match the level to its associated texture at canvas.primary.levelTextures.
-   * @param {Level} level         Level document to match
-   * @returns {PIXI.Texture|null}
-   */
-  static textureForLevel(level, foreground = false) {
-    if ( !level[foreground ? "foreground" : "background"].src ) return null;
-    const idx = [...canvas.scene.levels.keys()].indexOf(level.id);
-    if ( !~idx ) return null;
-    const name = `Level.${idx}.${foreground ? "foreground" : "background"}`;
-    const levelTex = canvas.primary.levelTextures.find(obj => obj.name === name); // Mesh.
-    if ( !levelTex ) return null;
-    return levelTex.texture;
-  }
-
-  /**
-   * Convert a level's alpha channel to a pixel cache.
-   * @param {Level} level         Level document to pull data from
-   * @param {object} [opts]
-   * @param {PIXI.Texture} [opts.texture]   Texture to use; will be pulled from canvas.primary.levelTextures otherwise
-   * @param {number} [opts.channel=3]       Channel to use for the texture.
-   * @returns {TilePixelCache}
-   */
-  static fromTileChannel(level, { texture, foreground = false, channel = 3, ...opts } = {}) {
-    texture ??= this.textureForLevel(level, foreground);
-    if ( !texture ) throw Error(`PixelCache|Texture for level ${level.id} not found.`);
-
-    const res = this.extractPixelsFromTexture(texture);
-    opts.pixelsOrClass = this.extractPixelChannel(res.pixels, channel, 4);
-    opts.textureDocument = level;
-    opts.foreground = foreground;
-    return new this(res.width, res.height, opts);
-  }
-
-  /**
-   * Convert a scene level's foreground or background alpha channel to a pixel cache.
-   * @param {Level} level         Level document to pull data from
-   * @param {object} [opts]
-   * @param {PIXI.Texture} [opts.texture]  Texture to use; will be pulled from canvas.primary.levelTextures otherwise
-   * @returns {LevelPixelCache}
-   */
-  static fromLevelAlpha(level, { texture, foreground = false, ...opts } = {}) {
-    texture ??= this.textureForLevel(level, foreground);
-    if ( !texture ) throw Error(`PixelCache|Texture for level ${level.id} foreground=${foreground} not found.`);
-
-    // See TextureLoader.getTextureAlphaData.
-    // Returns non-inclusive pixels. E.g., [minX, maxX)
-    opts.resolution ||= 1;
-    const texData = foundry.canvas.TextureLoader.getTextureAlphaData(texture, opts.resolution);
-    if ( !texData ) throw Error(`PixelCache|Texture for level ${level.id}, foreground=${foreground} is invalid.`);
-
-    // Define bounds of actual data within the full texture frame.
-    opts.bufferBounds = new AABB2d();
-    opts.bufferBounds.min.set(texData.minX, texData.minY);
-    opts.bufferBounds.max.set(texData.maxX - 1, texData.maxY - 1); // Make inclusive: [minX, maxX].
-    opts.pixelsOrClass = texData.data;
-    opts.textureDocument = level;
-    opts.foreground = foreground;
-    return new this(texData.width, texData.height, opts);
-  }
 }
 
-/**
- * Specific cache for tile objects. For backward compatibility.
- */
-export class TilePixelCache extends TextureDocumentPixelCache {
+export class LevelForegroundPixelCache extends LevelBackgroundPixelCache {
 
-  get tile() { return this.textureDocument.object; }
+  /** @type {string} */
+  static GROUND_TYPE = "foreground";
 
-  /**
-   * Convert a tile's alpha channel to a pixel cache.
-   * At the moment mostly for debugging, b/c overhead tiles have an existing array that
-   * can be used.
-   * @param {Tile} tile     Tile to pull a texture from
-   * @param {object} opts   Options passed to `scalePixels` method
-   * @returns {TilePixelCache}
-   */
-  static fromTileChannel(tile, { channel = 3, ...opts } = {}) {
-    const res = this.extractPixelsFromTexture(tile.texture);
-    opts.pixelsOrClass = this.extractPixelChannel(res.pixels, channel, 4);
-    opts.textureDocument = tile.document;
-    return new this(res.width, res.height, opts);
-  }
-
-  /**
-   * Convert a tile's alpha channel to a pixel cache.
-   * Relies on already-cached tile pixel data.
-   * @param {Tile} tile     Tile to pull a texture from
-   * @param {object} opts   Options passed to `fromTexture` method
-   * @returns {TilePixelCache}
-   */
-  static fromTileAlpha(tile, opts = {}) {
-    if ( Number.isNumeric(opts) ) opts = { resolution: opts }; // Backwards compatibility.
-
-    // See TextureLoader.getTextureAlphaData.
-    // Returns non-inclusive pixels. E.g., [minX, maxX)
-    opts.resolution ||= 1;
-    const texData = foundry.canvas.TextureLoader.getTextureAlphaData(tile.texture, opts.resolution);
-
-    // Define bounds of actual data within the full texture frame.
-    opts.bufferBounds = new AABB2d();
-    opts.bufferBounds.min.set(texData.minX, texData.minY);
-    opts.bufferBounds.max.set(texData.maxX - 1, texData.maxY - 1); // Make inclusive: [minX, maxX].
-    opts.pixelsOrClass = texData.data;
-    opts.textureDocument = tile.document;
-    return new this(texData.width, texData.height, opts);
-  }
 }
 
 export class TileDocumentPixelCache extends TextureDocumentPixelCache {
+
   get tile() { return this.textureDocument.object; }
-
-  static textureForTileDocument(tileD) { return tileD.object?.texture; }
-
-  /**
-   * Convert a tile's alpha channel to a pixel cache.
-   * At the moment mostly for debugging, b/c overhead tiles have an existing array that
-   * can be used.
-   * @param {TileDocument} tileD            Tile document
-   * @param {object} [opts]
-   * @param {PIXI.Texture} [opts.texture]   Texture to use; will be pulled from tileD.object.texture otherwise
-   * @param {number} [opts.channel=3]       Channel to use for the texture.
-   * @returns {TilePixelCache}
-   */
-  static fromTileChannel(tileD, { texture, channel = 3, ...opts } = {}) {
-    texture ??= this.textureForTileDocument(tileD);
-    if ( !texture ) throw Error(`PixelCache|Texture for tile ${tileD.id} not found.`);
-    const res = this.extractPixelsFromTexture(texture);
-    opts.pixelsOrClass = this.extractPixelChannel(res.pixels, channel, 4);
-    opts.textureDocument = tileD;
-    return new this(res.width, res.height, opts);
-  }
-
-  /**
-   * Convert a tile's alpha channel to a pixel cache.
-   * Relies on already-cached tile pixel data.
-   * @param {TileDocument} tileD            Tile to pull a texture from
-   * @param {object} [opts]
-   * @param {PIXI.Texture} [opts.texture]   Texture to use; will be pulled from tileD.object.texture otherwise
-   * @returns {TilePixelCache}
-   */
-  static fromTileAlpha(tileD, { texture, ...opts } = {}) {
-    texture ??= tileD.object?.texture;
-    if ( !texture ) throw Error(`PixelCache|Texture for tile ${tileD.id} not found.`);
-
-    // See TextureLoader.getTextureAlphaData.
-    // Returns non-inclusive pixels. E.g., [minX, maxX)
-    opts.resolution ||= 1;
-    const texData = foundry.canvas.TextureLoader.getTextureAlphaData(texture, opts.resolution);
-
-    // Define bounds of actual data within the full texture frame.
-    opts.bufferBounds = new AABB2d();
-    opts.bufferBounds.min.set(texData.minX, texData.minY);
-    opts.bufferBounds.max.set(texData.maxX - 1, texData.maxY - 1); // Make inclusive: [minX, maxX].
-    opts.pixelsOrClass = texData.data;
-    opts.textureDocument = tileD;
-    return new this(texData.width, texData.height, opts);
-  }
 
 }
 

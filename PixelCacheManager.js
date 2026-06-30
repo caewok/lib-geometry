@@ -8,29 +8,23 @@ PIXI,
 "use strict";
 
 // LibGeometry
-import { LevelPixelCache, TileDocumentPixelCache } from "./PixelCache.js";
+import {
+  LevelBackgroundPixelCache,
+  LevelForegroundPixelCache,
+  TileDocumentPixelCache,
+} from "./PixelCache.js";
+import { NULL_SET } from "./util.js";
 
 export class AbstractPixelCacheManager {
 
   /** @type {Set<string>} */
-  static CHANGE_PARAMS = new Set([
-    "x",
-    "y",
-    "width",
-    "height",
-    "rotation",
-    "texture.scaleX",
-    "texture.scaleY",
-    "texture.src",
-    "texture.fit",
-    "texture.anchorX",
-    "texture.anchorY",
-  ]);
+  static CHANGE_PARAMS = NULL_SET;
 
   /** @type {Set<string>} */
-  static RESET_PARAMS = new Set([
-    "texture.src",
-  ]);
+  static RESET_PARAMS = NULL_SET;
+
+  /** @type {PixelCache} */
+  static PIXELCACHE_CLASS;
 
   /** @type {Map<string, PixelCache>} */
   caches = new Map();
@@ -59,13 +53,10 @@ export class AbstractPixelCacheManager {
    * @param {CanvasDocument} doc
    */
   async cacheDocument(doc) {
-    let texture = this.getTextureForDocument(doc);
-    let tmpTexture = !texture;
-    texture ??= await this.loadTexture(this.textureURL(doc));
+    const texture = await this.constructor.PIXELCACHE_CLASS.getTexture(doc);
     if ( !texture ) return;
-    const cache = this._createPixelCache(doc, texture);
+    const cache = this.constructor.createPixelCache(doc, texture);
     if ( cache ) this.caches.set(doc.uuid, cache);
-    if ( tmpTexture ) PIXI.Assets.unload(this.textureURL(doc));
   }
 
   /**
@@ -73,9 +64,9 @@ export class AbstractPixelCacheManager {
    * @param {CanvasDocument} doc
    */
   cacheDocumentSync(doc) {
-    const texture = this.getTextureForDocument(doc);
+    const texture = this.constructor.PIXELCACHE_CLASS.getTextureSync(doc);
     if ( !texture ) return;
-    const cache = this._createPixelCache(doc, texture);
+    const cache = this.constructor.createPixelCache(doc, texture);
     if ( cache ) this.caches.set(doc.uuid, cache);
   }
 
@@ -89,10 +80,15 @@ export class AbstractPixelCacheManager {
   /**
    * Retrieve the pixel cache for a given document.
    * @param {CanvasDocument}
-   * @returns {TextureDocumentPixelCache}
+   * @returns {TextureDocumentPixelCache|null}
    */
   pixelCacheForDocument(doc) {
-    if ( !this.documentIsCached(doc) ) this.cacheDocumentSync(doc);
+    if ( !this.caches.has(doc.uuid)) {
+      const texture = this.constructor.PIXELCACHE_CLASS.getTextureSync(doc);
+      if ( !texture ) return null;
+      const cache = this.constructor.createPixelCache(doc);
+      if ( cache ) this.caches.set(doc.uuid, cache);
+    }
     return this.caches.get(doc.uuid);
   }
 
@@ -101,21 +97,39 @@ export class AbstractPixelCacheManager {
    * @param {CanvasDocument} doc
    * @returns {PIXI.Texture|undefined}
    */
-  getTextureForDocument(_doc) { throw Error("PixelCacheManager|_createPixelCache must be implemented by child class."); }
+  getTextureForDocumentSync(doc) {
+    const cache = this.pixelCacheForDocument(doc);
+    return cache.getTextureSync(doc);
+  }
 
   /**
-   * Create a PixelCache for a given document.
+   * Retrieves the texture for a tile document asynchronously.
+   * Will load texture if needed.
    * @param {CanvasDocument} doc
    * @returns {PIXI.Texture|undefined}
    */
-  _createPixelCache(_doc, _texture) { throw Error("PixelCacheManager|_createPixelCache must be implemented by child class."); }
+  async getTextureForDocumentAsync(doc) {
+    const cache = this.pixelCacheForDocument(doc);
+    return cache.getTexture(doc); // Async.
+  }
+
+  /**
+   * Create a PixelCache for a given document.
+   * @param {CanvasDocument} textureDocument
+   * @param {PIXI.Texture} texture
+   * @returns {PixelCache}
+   */
+  static createPixelCache(textureDocument, texture) {
+    const resolution = CONFIG.GeometryLib.CONFIG.pixelCacheResolution ?? 1;
+    return this.PIXELCACHE_CLASS.fromTextureAlpha({ textureDocument, texture, resolution });
+  }
 
   /**
    * Retrieves the url to load a texture for the document.
    * @param {CanvasDocument} doc
    * @returns {string}
    */
-  textureURL(_doc) { throw Error("PixelCacheManager|_createPixelCache must be implemented by child class."); }
+  textureURL(doc) { return this.pixelCacheForDocument(doc).textureSource; }
 
   /**
    * Loads the texture from a url.
@@ -132,8 +146,30 @@ export class AbstractPixelCacheManager {
 
 export class TilePixelCacheManager extends AbstractPixelCacheManager {
 
+  /** @type {Set<string>} */
+  static CHANGE_PARAMS = new Set([
+    "x",
+    "y",
+    "width",
+    "height",
+    "rotation",
+    "texture.scaleX",
+    "texture.scaleY",
+    "texture.src",
+    "texture.anchorX",
+    "texture.anchorY",
+  ]);
+
+  /** @type {Set<string>} */
+  static RESET_PARAMS = new Set([
+    "texture.src",
+  ]);
+
   /** @type {string} */
   static TYPE = "Tile";
+
+  /** @type {PixelCache} */
+  static PIXELCACHE_CLASS = TileDocumentPixelCache;
 
   /**
    * Get the cache for a specific tile.
@@ -141,74 +177,67 @@ export class TilePixelCacheManager extends AbstractPixelCacheManager {
    * @returns {PixelCache}
    */
   pixelCacheForTile(tile) { return this.pixelCacheForDocument(tile.document); }
-
-  /**
-   * Retrieves the texture for a tile document.
-   * @param {CanvasDocument} tileD
-   * @returns {PIXI.Texture|undefined}
-   */
-  getTextureForDocument(doc) { return TileDocumentPixelCache.textureForTileDocument(doc); }
-
-  /**
-   * Create a PixelCache for a given document.
-   * @param {TileDocument} doc
-   * @returns {TilePixelCache|null}
-   */
-  _createPixelCache(doc, texture) {
-    const resolution = CONFIG.GeometryLib.CONFIG.pixelCacheResolution ?? 1;
-    return TileDocumentPixelCache.fromTileAlpha(doc, { texture, resolution });
-  }
-
-  /**
-   * Retrieves the url to load a texture for the document.
-   * @param {CanvasDocument} doc
-   * @returns {string}
-   */
-  textureURL(doc) { return doc.texture.src; }
 }
 
 export class LevelBackgroundPixelCacheManager extends AbstractPixelCacheManager {
 
+  /** @type {Set<string>} */
+  static CHANGE_PARAMS = new Set([
+    "textures.scaleX",
+    "textures.scaleY",
+    "textures.rotation",
+    "textures.fit",
+    "textures.anchorX",
+    "textures.anchorY",
+    "textures.offsetX",
+    "textures.offsetY",
+  ]);
+
+  /** @type {Set<string>} */
+  static RESET_PARAMS = new Set([
+    "background.src",
+  ]);
+
+  /** @type {Set<string>} */
+  static SCENE_PARAMS = new Set([
+    "dimensions.sceneWidth",
+    "dimensions.sceneHeight",
+    "dimensions.sceneX",
+    "dimensions.sceneY",
+  ]);
+
   /** @type {string} */
   static TYPE = "Level";
 
-  static foreground = false;
+  /** @type {PixelCache} */
+  static PIXELCACHE_CLASS = LevelBackgroundPixelCache
 
   /**
-   * Get the cache for the background of a specific level.
-   * @param {Level} level
-   * @returns {PixelCache}
+   * Register hooks used to update this document.
    */
-  pixelCacheForLevel = this.cacheForDocument;
-
-  /**
-   * Retrieves the texture for a tile document.
-   * @param {CanvasDocument} tileD
-   * @returns {PIXI.Texture|undefined}
-   */
-  getTextureForDocument(doc) { return LevelPixelCache.textureForLevel(doc, this.constructor.foreground); }
-
-  /**
-   * Create a PixelCache for a given document.
-   * @param {TileDocument} doc
-   * @returns {TilePixelCache}
-   */
-  _createPixelCache(doc, texture) {
-    const resolution = CONFIG.GeometryLib.CONFIG.pixelCacheResolution ?? 1;
-    const foreground = this.constructor.foreground;
-    return LevelPixelCache.fromLevelAlpha(doc, { texture, resolution, foreground })
+  registerHooks() {
+    super.registerHooks();
+    Hooks.on(`updateScene`, (placeableD, changeData, _options, _userId) => {
+      if ( !this.documentIsCached(placeableD) ) return;
+      const updateKeys = Object.keys(foundry.utils.flattenObject(changeData));
+      if ( updateKeys.some(key => this.constructor.SCENE_PARAMS.has(key)) ) {
+        const cache = this.pixelCacheForDocument(placeableD);
+        cache.updateTransforms();
+      }
+    });
   }
 
-  /**
-   * Retrieves the url to load a texture for the document.
-   * @param {CanvasDocument} doc
-   * @returns {string}
-   */
-  textureURL(doc) { return doc[this.constructor.foreground ? "foreground" : "background"].src; }
 }
 
 export class LevelForegroundPixelCacheManager extends LevelBackgroundPixelCacheManager  {
 
-  static foreground = true;
+  /** @type {Set<string>} */
+  static RESET_PARAMS = new Set([
+    "foreground.src",
+  ]);
+
+
+  /** @type {PixelCache} */
+  static PIXELCACHE_CLASS = LevelForegroundPixelCache;
 
 }
