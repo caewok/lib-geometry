@@ -1,20 +1,26 @@
 /* globals
+canvas,
 CONFIG,
+CONST,
+Hooks,
+PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
 import { FixedLengthTrackingBuffer } from "../placeable_tracking/TrackingBuffer.js";
 
+
 // LibGeometry
-import { GEOMETRY_LIB_ID, GEOMETRY_ID } from "../const.js";
+import { GEOMETRY_LIB_ID } from "../const.js";
 import { MatrixFloat32, ModelMatrix } from "../Matrix.js";
 import { AABB3d } from "../3d/AABB3d.js";
-import { Quad3d } from "../3d/Polygon3d.js";
+import { Quad3d, Ellipse3d, Polygon3d } from "../3d/Polygon3d.js";
 import { almostBetween } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
-import { Sphere } from "../3d/Sphere.js";
-
+import { VertexObject } from "../placeable_vertices/VertexObject.js";
+import { combineTypedArrays, NULL_SET } from "../util.js";
+import { getHexagonalShape } from "../placeable_vertices/BasicVertices.js";
 
 /* Store key geometry information for each placeable, in 3d.
 - AABB
@@ -32,7 +38,7 @@ Once registered, will create tracking objects for each placeable created.
 
 Update methods:
 
-positionUpdated
+position2dUpdated
 scaleUpdated
 rotationUpdated
 shapeUpdated
@@ -41,58 +47,174 @@ propertiesUpdated
 
 */
 
+let LEVEL_SEGMENTS;
+
+Hooks.on("updateLevel", function(_level, _changes, _opts, _id) {
+  LEVEL_SEGMENTS = PlaceableGeometry.segmentLevels();
+});
+
+
 export class PlaceableGeometry {
+
+  // ----- NOTE: Static values ----- //
+
+  static get PLACEABLE_LABEL_PLURAL() { return this.PLACEABLE_NAME.toLowerCase().concat("s"); }
+
+  static hooksInitialized = false;
+
+  static registerHooks() {
+    if ( this.hooksInitialized ) return;
+    this._registerHooks();
+    this.hooksInitialized = true;
+  }
+
+  static _registerHooks() { }
+
+    /**
+   * Reorganize and split level intervals to cover the low to high range with no overlaps.
+   * Add gap intervals as necessary.
+   * @param {number[]} elevations     Elevations to add in addition to the scene levels
+   * @returns {object[]}
+   * - @prop {number} minElevation    Minimum elevation for the scene levels
+   * - @prop {number} maxElevation    Maximum elevation for the scene levels
+   * - @prop {object[]} segments      The intervals
+   *    - @prop {number} bottom       Bottom elevation value
+   *    - @prop {number} top          Top elevation value
+   *    - @prop {string[]} id[]       Id of the levels encountered in this interval
+   */
+  static segmentLevels(elevations = []) {
+    // Create a distinct "event" for every bottom and top point.
+    const events = new Array(canvas.scene.levels.size * 2 + elevations.length);
+    let i = 0;
+    for ( const level of canvas.scene.levels ) {
+      const { bottom, top } = level.elevation;
+      events[i++] = { value: bottom, type: "start", id: level.id };
+      events[i++] = { value: top, type: "end", id: level.id };
+    }
+
+    for ( const elevation of elevations ) events[i++] = { value: elevation, type: "added", id: null };
+
+    // Sort by value, with end events after start events if equal.
+    events.sort((a, b) => (a.value - b.value) || a.type === "start");
+
+    // Store min and max elevations for later use.
+    const minElevation = events.at(0).value;
+    const maxElevation = events.at(-1).value;
+
+    // Sweep through sorted events, identifying boundary changes.
+    const segments = [];
+    const activeIds = new Set();
+    let currentPosition = events[0].value;
+    for ( const event of events) {
+      // If we have moved forward in space, commit the previous segment.
+      if ( event.value > currentPosition ) {
+        segments.push({
+          bottom: currentPosition,
+          top: event.value,
+          ids: new Set(activeIds), // May be empty if it is a gap.
+        });
+      }
+
+      // Update active ids based on event type.
+      switch ( event.type ) {
+        case "start": activeIds.add(event.id); break;
+        case "end": activeIds.delete(event.id); break;
+        // Nothing to do for elevation additions.
+      }
+
+      // Move forward to the new value on the line.
+      currentPosition = event.value;
+    }
+    return { segments, minElevation, maxElevation };
+  }
 
   // ----- NOTE: Constructor ----- //
 
-  /** @type {Placeable} */
-  placeable;
+  /** @type {Placeable|null} */
+  get placeable() { return this.placeableDocument.object; };
+
+  /** @type {CanvasDocument} */
+  placeableDocument;
 
   /**
-   * @param {PlaceableObject} placeable
+   * @param {CanvasDocument} placeable
    */
-  constructor(placeable) { this.placeable = placeable; }
-
-  /**
-   * Create geometry on a given placeable.
-   * Enforces uniqueness per placeable.
-   * @param {Placeable} placeable
-   * @returns {AbstractPlaceableGeometry}
-   */
-  static create(placeable) {
-    const obj = placeable[GEOMETRY_LIB_ID] ??= {};
-    obj[GEOMETRY_ID] ??= new this(placeable);
-    return obj[GEOMETRY_ID];
-  }
+  constructor(placeableDocument) { this.placeableDocument = placeableDocument; }
 
   initialize() { }
 
-  update(updateKeys) {
-    // Update in order. If any updates, update the shape.
-    const KEYS = this.constructor.UPDATE_KEYS;
-    const updateProperties = KEYS.properties.size && updateKeys.some(key => KEYS.properties.has(key));
-    const updatePosition = KEYS.position.size && updateKeys.some(key => KEYS.position.has(key))
-    const updateScale = KEYS.scale.size && updateKeys.some(key => KEYS.scale.has(key))
-    const updateRotation = KEYS.rotation.size && updateKeys.some(key => KEYS.rotation.has(key))
-    const updateShape = updateProperties || updatePosition || updateScale || updateRotation
-      || KEYS.shape.size && updateKeys.some(key => KEYS.shape.has(key))
+  static UPDATE_KEYS = {
+    properties: NULL_SET,
+    level: NULL_SET,
+    position2d: NULL_SET,
+    elevation: NULL_SET,
+    scale: NULL_SET,
+    rotation: NULL_SET,
+  };
 
-    if ( updateProperties ) this.propertiesUpdated();
-    if ( updatePosition ) this.positionUpdated();
-    if ( updateScale ) this.scaleUpdated();
-    if ( updateRotation ) this.rotationUpdated();
-    if ( updateShape ) this.shapeUpdated();
+  // Temporary tracking of the updates made for a given update.
+  _updateFlags = {
+    properties: false,
+    level: false,
+    position2d: false,
+    elevation: false,
+    scale: false,
+    rotation: false,
+  };
+
+  /**
+   * Increment a count of updates, used by things like webGL to know when to update.
+   */
+  updateCount = 0;
+
+  /**
+   * @param {Set<string>} updateKeys      Flattened keys that were updated
+   */
+  update(updateKeys) {
+    const updateFlags = this._updateFlags;
+    Object.keys(updateFlags).forEach(key => updateFlags[key] = false);
+
+    // Update in order. If any updates, update the shape.
+    let shapeUpdated = false;
+    for ( const [type, s] of Object.entries(this.constructor.UPDATE_KEYS) ) {
+      if ( !s.intersects(updateKeys) ) continue;
+      this[`${type}Updated`]();
+      updateFlags[type] = true;
+      shapeUpdated ||= true;
+    }
+    if ( shapeUpdated ) {
+      this.shapeUpdated();
+      this.updateCount += 1;
+    }
   }
 
-  positionUpdated() { }
+  forceUpdate() {
+    const updateFlags = this._updateFlags;
+    Object.keys(updateFlags).forEach(key => updateFlags[key] = false);
+    for ( const type of Object.keys(this.constructor.UPDATE_KEYS) ) {
+      this[`${type}Updated`]();
+      updateFlags[type] = true;
+    }
+    this.shapeUpdated();
+    this.updateCount += 1;
+  }
+
+  // Triggered first for defined properties.
+  propertiesUpdated() { }
+
+  // Triggered second.
+  levelUpdated() { }
+
+  position2dUpdated() { }
+
+  elevationUpdated() { }
 
   scaleUpdated() { }
 
   rotationUpdated() { }
 
+  // Triggered last, if any properties are updated.
   shapeUpdated() { }
-
-  propertiesUpdated() { }
 
   destroy() { }
 }
@@ -139,7 +261,6 @@ export const PlaceableAABBMixin = superclass => class extends superclass {
 
   calculateAABB() { console.error(`${this.constructor.name} must implement calculateAABB method.`); }
 }
-
 
 // ----- NOTE: PlaceableModelMatrixMixin ----- //
 
@@ -223,11 +344,15 @@ export const PlaceableModelMatrixMixin = superclass => {
      * Create an id used for the model matrix tracking.
      * @type {string}
      */
-    get placeableId() { return this.placeable.sourceId; }
+    get placeableId() { return this.placeableDocument.uuid; }
 
-    positionUpdated() {
-      super.positionUpdated();
+    position2dUpdated() {
+      super.position2dUpdated();
       this.calculateTranslationMatrix();
+    }
+
+    elevationUpdated() {
+      if ( !this._updateFlags.position2d ) this.calculateTranslationMatrix();
     }
 
     rotationUpdated() {
@@ -277,7 +402,7 @@ export const PlaceableModelMatrixMixin = superclass => {
  */
 // All CCW because default GPU test is counter-clockwise
 
-const QUADS = {
+export const QUADS = {
   up: Quad3d.from4Points(
     Point3d.tmp.set(-0.5, -0.5, 0),
     Point3d.tmp.set(-0.5, 0.5, 0),
@@ -322,6 +447,7 @@ QUADS.north = QUADS.south.clone().reverseOrientation();
 QUADS.east = QUADS.west.clone().reverseOrientation();
 */
 
+
 /**
  * @typedef {function} PlaceableFacesMixin
  *
@@ -332,42 +458,45 @@ QUADS.east = QUADS.west.clone().reverseOrientation();
  * @returns {function} A subclass of `superclass.`
  */
 export const PlaceableFacesMixin = superclass => class extends superclass {
-  /** @type {Faces} */
-  _prototypeFaces = { top: null, bottom: null, sides: [] };
 
-  /** @type {Faces} */
-  faces = { top: null, bottom: null, sides: [] };
+  /**
+   * Reorganize and split level intervals to cover the low to high range with no overlaps.
+   * Add gap intervals as necessary.
+   * @param {Level[]} levels
+   * @returns {object[]} The intervals
+   *  - @prop {number} bottom       Bottom elevation value
+   *  - @prop {number} top          Top elevation value
+   *  - @prop {string[]} id[]       Id of the levels encountered in this interval
+   */
+  static get levelSegments() { return LEVEL_SEGMENTS; }
+
+  /**
+   * @typedef {Polygon3d} Face
+   *
+   * Face of a placeable object, meaning a 3d planar object.
+   */
+
+  /** @type {Face[]} */
+  static prototypeFaces = [];
+
+  /** @type {Face[]} */
+  faces = [];
 
   /**
    * Iterate over the faces.
+   * @param {object} [_opts]        Used by child classes, like WallGeometry
+   * @yields {Face}
    */
-  *iterateFaces() {
-    if ( this.faces.top ) yield this.faces.top;
-    if ( this.faces.bottom ) yield this.faces.bottom;
-    for ( const side of this.faces.sides ) yield side;
-  }
+  *iterateFaces(_opts) { yield* this.faces.values(); }
 
   /**
    * Construct the prototype faces.
    */
   initialize() {
+    LEVEL_SEGMENTS ??= PlaceableGeometry.segmentLevels();
+    this.constructor.prototypeFaces.forEach(f => this.faces.push(f.clone()));
     super.initialize();
-    this._initializePrototypeFaces();
     this._updateFaces();
-  }
-
-  _initializePrototypeFaces() {
-    if ( this._prototypeFaces.top instanceof Sphere ) {
-      if ( !(this.faces.top instanceof Sphere) ) this.faces.top = this._prototypeFaces.top.clone();
-      this.faces.bottom = null;
-      this.faces.sides.length = 0;
-      return;
-    }
-    if ( this._prototypeFaces.top ) this.faces.top = this._prototypeFaces.top._cloneEmpty(); // Preserves hole status.
-    if ( this._prototypeFaces.bottom ) this.faces.bottom = this._prototypeFaces.bottom._cloneEmpty();
-    const numSides = this._prototypeFaces.sides.length;
-    this.faces.sides.length = numSides;
-    for ( let i = 0; i < numSides; i += 1 ) this.faces.sides[i] ??= this._prototypeFaces.sides[i]._cloneEmpty();
   }
 
   /**
@@ -376,21 +505,14 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
    */
   _updateFaces() {
     const M = this.modelMatrix.model;
-    if ( this._prototypeFaces.top ) this._prototypeFaces.top.transform(M, this.faces.top)
-    if ( this._prototypeFaces.bottom ) this._prototypeFaces.bottom.transform(M, this.faces.bottom)
-    for ( let i = 0, iMax = this._prototypeFaces.sides.length; i < iMax; i += 1 ) this._prototypeFaces.sides[i].transform(M, this.faces.sides[i]);
+    const numSides = this.constructor.prototypeFaces.length;
+    for ( let i = 0; i < numSides; i += 1 ) this.constructor.prototypeFaces[i].transform(M, this.faces[i]);
   }
 
   shapeUpdated() {
     super.shapeUpdated();
     this._updateFaces();
   }
-
-  propertiesUpdated() {
-    super.propertiesUpdated();
-    this._initializePrototypeFaces();
-  }
-
 
   /**
    * Determine where a ray hits this object in 3d.
@@ -404,7 +526,7 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
    * @returns {number|null} The distance along the ray, as a multiple of rayDirection
    */
   rayIntersection(rayOrigin, rayDirection, opts) {
-    for ( const face of this.iterateFaces() ) {
+    for ( const face of this.iterateFaces(opts) ) {
       const t = this.constructor.rayIntersectionForFace(face, rayOrigin, rayDirection, opts);
       if ( t !== null ) return t;
     }
@@ -437,7 +559,7 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
    * Draw face, omitting an axis.
    */
   draw2d(opts) {
-    for ( const face of this.iterateFaces() ) face.draw2d(opts);
+    for ( const face of this.iterateFaces(opts) ) face.draw2d(opts);
   }
 }
 
@@ -445,7 +567,7 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
  * @typedef {function} PlaceableFacePointsMixin
  *
  * Add face points for this placeable class.
- * Requires matrices.
+ * Requires matrices, PlaceableFacesMixin..
  * @param {function} superclass
  * @returns {function} A subclass of `superclass.`
  */
@@ -462,11 +584,7 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
 export const PlaceableFacePointsMixin = superclass => class extends superclass {
 
   /** @typedef {FacePoints} */
-  facePoints = {
-    top: null,
-    bottom: null,
-    sides: [],
-  };
+  facePoints = [];
 
   _updateFaces() {
     super._updateFaces();
@@ -480,12 +598,141 @@ export const PlaceableFacePointsMixin = superclass => class extends superclass {
     if ( !this.faces ) return; // Requires the FacesMixin.
 
     const opts = { spacing: CONFIG[GEOMETRY_LIB_ID].CONFIG.perPixelSpacing || 10, startAtEdge: false };
-    if ( this.faces.top ) this.facePoints.top = this.faces.top.pointsLattice(opts);
-    if ( this.faces.bottom ) this.facePoints.bottom = this.faces.bottom.pointsLattice(opts);
-
-    // Process each side; store in equivalent structure to face.sides array.
-    const numSides = this.faces.sides.length;
-    this.facePoints.sides = new Array(numSides);
-    for ( let i = 0; i < numSides; i += 1 ) this.facePoints.sides[i] = this.faces.sides[i].pointsLattice(opts);
+    const numSides = this.faces.length;
+    for ( let i = 0; i < numSides; i += 1 ) this.facePoints[i] = this.faces[i].pointsLattice(opts);
   }
+}
+
+/**
+ * @typedef {function} PlaceableVerticesMixin
+ *
+ * Create vertices for the placeable faces.
+ * Requires PlaceableFacesMixin.
+ * @param {function} superclass
+ * @returns {function} A subclass of `superclass.`
+ */
+export const PlaceableVerticesMixin = superclass => class extends superclass {
+
+  // Most placeables only need the instance vertices with normals.
+
+  /**
+   * Vertices with normals and indices.
+   * @type {object<VertexObject>}
+   */
+  static _instanceVO;
+
+  static get instanceVO() {
+    return (this._instanceVO ||= this.updateInstanceVertices());
+  }
+
+  /**
+   * Update instance vertices.
+   * Default approach uses the prototype faces.
+   */
+  static updateInstanceVertices() {
+    // Add vertices from faces.
+    const vo = this._instanceVO || new VertexObject();
+    const vertices = this.verticesFromFaces(this.prototypeFaces, true);
+    vo.hasNormals = true;
+    vo.hasUVs = false;
+    this.updateVertexObject(vo, vertices);
+    return vo;
+  }
+
+  /**
+   * Create vertices for this placeable using its faces.
+   * @param {Polygon3d[]} faces
+   * @param {boolean} [addNormals=false]
+   * @returns {Float32Array} The vertices
+   */
+  static verticesFromFaces(faces, addNormals = true) {
+    // Store each Float32 array for each face separately.
+    const vertices = [];
+    for ( const face of faces ) vertices.push(face.toVertices({ addNormals }));
+
+    // Combine.
+    return combineTypedArrays(vertices);
+  }
+
+  /**
+   * Update a vertex object in place with vertices.
+   * @param {VertexObject} vo
+   * @param {Float32Array} vertices
+   * @returns {VertexObject} The object, for convenience
+   */
+  static updateVertexObject(vo, vertices) {
+    vo.indices = null;
+    vo.vertices = vertices;
+    vo.condense(vo);
+    return vo;
+  }
+}
+
+/**
+ * Create the instance face shapes for a unit cube.
+ * 1 x 1 x 1 centered at 0,0,0.
+ * @returns {Face[]}
+ */
+export function createUnitCube() {
+  const faces = [
+    QUADS.up.clone(),
+    QUADS.down.clone(),
+    QUADS.north.clone(),
+    QUADS.west.clone(),
+    QUADS.south.clone(),
+    QUADS.east.clone(),
+  ];
+
+  faces[0].setZ(0.5);
+  faces[1].setZ(-0.5);
+
+  // Adjust the sides so that they are at the region edge.
+  for ( let i = 0; i < 4; i += 1 ) {
+    faces[2].points[i].y = -0.5; // North.
+    faces[3].points[i].x = -0.5; // West.
+    faces[4].points[i].y = 0.5; // South.
+    faces[5].points[i].x = 0.5; // East.
+  }
+  return faces;
+}
+
+/**
+ * Create the instance face shapes for an unit ellipse cylinder.
+ * Uses 1 x 1 x 0.5 b/c the scale matrix is set using the half-radii.
+ * Have to guess at the likely radius for the vertex density.
+ * @param {number} densityRadius      How dense to make the ellipse polygon edges.
+ * @returns {Face[]}
+ */
+export function createUnitEllipseCylinder(densityRadius = 100) {
+  const top = new Ellipse3d();
+  const bottom = new Ellipse3d();
+
+  top.radiusX = 1;
+  top.radiusY = 1;
+  top.clone(bottom);
+  bottom.reverseOrientation();
+  top.setZ(0.5);
+  bottom.setZ(-0.5);
+
+  const density = PIXI.Circle.approximateVertexDensity(densityRadius);
+  return [top, bottom, ...top.buildTopSides(-0.5, { density })];
+}
+
+/**
+ * Create the instance face shapes for an unit hexagon cylinder.
+ * @returns {Face[]}
+ */
+export function createUnitHexagonalCylinder() {
+  const res = getHexagonalShape(1, 1, CONST.TOKEN_SHAPES.TRAPEZOID_1, canvas.scene.grid.columns || false);
+  let poly = new PIXI.Polygon(res.points);
+  poly = poly.translate(-res.center.x, -res.center.y);
+  const bounds = poly.getBounds();
+  poly = poly.scale(1/bounds.width, 1/bounds.height);
+  if ( poly.isPositive ) poly.reverseOrientation();
+  const top = Polygon3d.fromPolygon(poly, 0.5);
+  const bottom = top.clone();
+  bottom.reverseOrientation();
+  top.setZ(0.5);
+  bottom.setZ(-0.5);
+  return [top, bottom, ...top.buildTopSides(-0.5)];
 }

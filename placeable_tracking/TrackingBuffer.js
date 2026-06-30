@@ -130,13 +130,11 @@ export class VariableLengthAbstractBuffer {
    * @param {number} [numFacets=0]                  Number of components / facets to represent
    * @param {class} [opts.type=Float32Array]        Class of the typed array; may be modified at any time
    * @param {number|number[]} [opts.facetLengths]   Array identifying the length of each facet or a number if each facet has the same length
-   * @param {number} [opts.maxLength]               If set, the buffer will be at least this large; useful if numFacets is 0
+   * @param {number} [opts.initialMaxFacets]               If set, the buffer will be at least this large; useful if numFacets is 0
    * @param {*[]} [opts.ids]                        Label for each facet; extra labels will be ignored; defaults to index number
    */
-  constructor({ numFacets, facetLengths, type, maxLength, ids } = {}) {
+  constructor({ numFacets = 0, facetLengths = [], type, initialMaxFacets = 1, ids } = {}) {
     if ( type ) this.#type = type;
-    facetLengths ??= [];
-    maxLength ??= 0;
 
     let arrayLength;
     if ( Number.isNumeric(facetLengths) ) {
@@ -145,7 +143,7 @@ export class VariableLengthAbstractBuffer {
       facetLengths = (new Array(numFacets)).fill(facetLengths);
     } else arrayLength = facetLengths.reduce((acc, curr) => acc + curr, 0);
     this.#facetLengths = facetLengths;
-    this.#maxLength = Math.max(arrayLength, maxLength);
+    this.#maxLength = Math.max(arrayLength, initialMaxFacets * (arrayLength / (numFacets || 1))); // Take average facet length to use with initialMaxFacets.
 
     // Set the index ids for each facet created thus far.
     numFacets = this.#facetLengths.length;
@@ -430,7 +428,7 @@ export class VariableLengthTrackingBuffer extends VariableLengthAbstractBuffer {
 
 export class FixedLengthTrackingBuffer extends VariableLengthTrackingBuffer {
 
-  constructor({ facetLengths, numFacets, maxLength, ...opts } = {}) {
+  constructor({ facetLengths, numFacets = 0, initialMaxFacets = 1, ...opts } = {}) {
     // Determine the number of facets and facet lengths based on the facetLengths array and other options.
     // Avoid obliterating the originally passed options, in case they are reused.
     let facetLength;
@@ -448,8 +446,8 @@ export class FixedLengthTrackingBuffer extends VariableLengthTrackingBuffer {
     // Use the constructor to build a zero-length array.
     numFacets = 0
     facetLengths = [];
-    maxLength = Math.max(facetLength * origNumFacets, maxLength || 0); // Ensure buffer is sufficiently large to hold the actual number of facets.
-    super({ numFacets, facetLengths, maxLength, ...opts });
+    initialMaxFacets = Math.max(origNumFacets, initialMaxFacets || 0); // Ensure buffer is sufficiently large to hold the actual number of facets.
+    super({ numFacets, facetLengths, initialMaxFacets, ...opts });
 
     this.#numFacets = origNumFacets;
     this.#facetLength = facetLength;
@@ -596,9 +594,9 @@ export class VerticesIndicesAbstractTrackingBuffer {
 
   indicesOffsetAtIdx(idx) { return Math.floor(this.vertices.facetOffsetAtIdx(idx) / this.stride); }
 
-  constructor({ verticesType = Float32Array, indicesType = Uint16Array, stride = 3 } = {}) {
-    this.vertices = new this.constructor.vBufferClass({ type: verticesType });
-    this.indices = new this.constructor.iBufferClass({ type: indicesType });
+  constructor({ verticesType = Float32Array, indicesType = Uint16Array, verticesFacetLengths, indicesFacetLengths, stride = 3, ...opts } = {}) {
+    this.vertices = new this.constructor.vBufferClass({ type: verticesType, facetLengths: verticesFacetLengths, ...opts });
+    this.indices = new this.constructor.iBufferClass({ type: indicesType, facetLengths: indicesFacetLengths, ...opts });
     this.stride = stride;
   }
 
@@ -727,6 +725,13 @@ export class VerticesIndicesTrackingBuffer extends VerticesIndicesAbstractTracki
 
   // Not yet implemented: makeContiguous.
   // Requires resetting the indicesAdjBuffer and ensuring indices and vertices stay in sync.
+
+}
+
+export class VerticesIndicesFixedLengthTrackingBuffer extends VerticesIndicesTrackingBuffer {
+  static vBufferClass = FixedLengthTrackingBuffer;
+
+  static iBufferClass = FixedLengthTrackingBuffer;
 
 }
 

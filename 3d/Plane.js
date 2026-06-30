@@ -73,6 +73,29 @@ export class Plane {
   }
 
   /**
+   * Test if this plane is equivalent to another.
+   * @param {Plane} other
+   * @returns {boolean}
+   */
+  equals(other) {
+    return this.normal.equals(other.normal)
+      && (other.point.equals(this.point) ||
+        (this.whichSide(other.point) === 0 && this.whichSide(this.point) === 0));
+  }
+
+  /**
+   * Test if this plane is nearly equivalent to another.
+   * @param {Plane} other
+   * @param {number} [epsilon = 1e-06]
+   * @returns {boolean}
+   */
+  almostEqual(other, epsilon = 1e-06) {
+    return this.normal.almostEqual(other.normal, epsilon)
+      && (other.point.almostEqual(this.point, epsilon) ||
+        (this.whichSide(other.point).almostEqual(0, epsilon) && this.whichSide(this.point).almostEqual(0, epsilon)));
+  }
+
+  /**
    * Normalize the plane.
    * See https://web.archive.org/web/20120531231005/http://crazyjoke.free.fr/doc/3D/plane%20extraction.pdf
    */
@@ -535,9 +558,6 @@ export class Plane {
 
   /**
    * Intersect this plane with another
-   * Algorithm taken from http://geomalgorithms.com/a05-_intersect-1.html. See the
-   * section 'Intersection of 2 Planes' and specifically the subsection
-   * (A) Direct Linear Equation
    * @param {Plane} other   Other plane to intersect
    * @returns {object|null} { point: Point3d, direction: Point3d } The resulting line or null if planes are parallel.
    *   The line is returned as point, direction
@@ -547,7 +567,7 @@ export class Plane {
     const N2 = other.normal;
 
     // Cross product of the two normals is the direction of the line.
-    using direction = N1.cross(N2);
+    const direction = N1.cross(N2);
 
     // Parallel planes have a cross product with zero magnitude
     if ( !direction.magnitudeSquared() ) return null;
@@ -595,13 +615,13 @@ export class Plane {
    */
   projectPointOnPlane(pt, outPoint) {
     outPoint ??= Point3d.tmp;
-    
+
     // Calculate vector from point on plane to the 3d point.
     using v = pt.subtract(this.point);
-    
+
     // Calculate scalar projection (distance) of w onto normal using dot product.
     const dist = v.dot(this.normal);
-    
+
     // Subtract the distance times the normal vector from the original point.
     using vScaled = this.normal.multiplyScalar(dist);
     return pt.subtract(vScaled, outPoint);

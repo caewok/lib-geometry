@@ -28,9 +28,6 @@ import { PATCHES as PATCHES_Edge } from "./Edge.js";
 import { PATCHES as PATCHES_AmbientLight } from "./AmbientLight.js";
 import { PATCHES as PATCHES_AmbientSound } from "./AmbientSound.js";
 
-// PixelCache
-import { PATCHES as PATCHES_Tile } from "./Tile.js";
-
 const PATCHES = {
   // Don't need CanvasEdges b/c quadtree already in v13.
   // Do need
@@ -42,12 +39,15 @@ const PATCHES = {
   "PIXI.Ellipse": PATCHES_Ellipse,
   "PIXI.RoundedRectangle": PATCHES_RoundedRectangle,
 
-  // PixelCache
-  "foundry.canvas.placeables.Tile": PATCHES_Tile,
+  // Elevation document patches
+  "foundry.documents.TokenDocument": PATCHES_ELEVATION.TokenDocument,
+  "foundry.documents.WallDocument": PATCHES_ELEVATION.WallDocument,
 
-  // Elevation patches.
-  "foundry.canvas.sources.BaseEffectSource": PATCHES_ELEVATION.PointSource,
-  "foundry.canvas.sources.PointVisionSource": PATCHES_ELEVATION.VisionSource,
+  // Source document patches
+  "foundry.canvas.sources.BaseEffectSource": PATCHES_ELEVATION.BaseEffectSource,
+  "foundry.canvas.sources.PointVisionSource": PATCHES_ELEVATION.PointVisionSource,
+
+  // Elevation patches (deprecated).
   "foundry.canvas.placeables.PlaceableObject": PATCHES_ELEVATION.PlaceableObject,
   "foundry.canvas.placeables.Wall": PATCHES_ELEVATION.Wall,
   "foundry.canvas.placeables.Region": PATCHES_ELEVATION.Region,

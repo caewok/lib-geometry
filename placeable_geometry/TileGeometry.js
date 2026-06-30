@@ -1,4 +1,6 @@
 /* globals
+canvas,
+CONFIG,
 foundry,
 PIXI,
 */
@@ -11,52 +13,59 @@ import {
   PlaceableGeometry,
   PlaceableAABBMixin,
   PlaceableModelMatrixMixin,
-  PlaceableFacesMixin
+  PlaceableFacesMixin,
+  PlaceableVerticesMixin,
+  QUADS,
 } from "./PlaceableGeometry.js";
 
+// Vertices
+import { BasicVertices } from "../placeable_vertices/BasicVertices.js";
+import { VerticesIndicesFixedLengthTrackingBuffer } from "../../geometry/placeable_tracking/TrackingBuffer.js";
+
+
 // LibGeometry
-import { NULL_SET } from "../util.js";
+import { GEOMETRY_LIB_ID } from "../const.js";
+import { gridUnitsToPixels } from "../util.js";
 import { AABB3d } from "../3d/AABB3d.js";
 import { MatrixFloat32 } from "../Matrix.js";
 import { Point3d } from "../3d/Point3d.js";
 import { Quad3d, Polygon3d, Polygons3d, Triangle3d } from "../3d/Polygon3d.js";
-import { FixedLengthTrackingBuffer } from "../placeable_tracking/TrackingBuffer.js";
-
 
 // Tile alpha bounds
 import { Polygon3dVertices } from "../placeable_vertices/BasicVertices.js";
 
 const TRACKER_TYPES = {
-  position: [
+  position2d: [
     "x",
     "y",
-    "elevation",
+    "texture.anchorX",
+    "texture.anchorY",
   ],
+  elevation: ["elevation"],
   scale: [
     "width",
     "height",
+    "texture.scaleX",
+    "texture.scaleY",
   ],
   rotation: [
     "rotation",
+    "texture.rotation",
   ],
-  texturePosition: [
-    "texture.anchorX",
-    "texture.anchorY",
+
+  texture: [
+    "texture.alphaThreshold",
+    "texture.src",
     "texture.fit",
     "texture.fill",
     "texture.offsetX",
     "texture.offsetY",
-    "texture.rotation",
-    "texture.scaleX",
-    "texture.scaleY",
-
   ],
-  texture: [
-    "texture.alphaThreshold",
-    "texture.src",
+  level: [
+    "levels",
   ],
 };
- 
+
 /**
  * @typedef {function} TileAlphaBoundingBoxMixin
  *
@@ -64,88 +73,98 @@ const TRACKER_TYPES = {
  * @param {function} superclass
  * @returns {function} A subclass of `superclass.`
  */
+// NOTE: TileAlphaBoundingBoxMixin
 const TileAlphaBoundingBoxMixin = superclass => class extends superclass {
 
-  /** @type {object<Quad3d|Polygon3d>} */
-  #alphaBoundingBox = {
-    top: new Quad3d(),
-    bottom: new Quad3d(),
-  };
-  
+  /** @type {object<Quad3d>} */
+  #alphaBoundingBox = [
+    new Quad3d(),
+    new Quad3d(),
+  ];
+
   /** @type {boolean} */
   #needsUpdate = true;
 
 	update(updateKeys) {
 		super.update(updateKeys);
 		const KEYS = this.constructor.UPDATE_KEYS;
-		this.#needsUpdate ||= updateKeys.some(key => KEYS.texturePosition.has(key))
-		  || updateKeys.some(key => KEYS.texture.has(key));
+		this.#needsUpdate ||= updateKeys.some(key => KEYS.texture.has(key));
 	}
 
   shapeUpdated() {
     this.#needsUpdate = true;
     super.shapeUpdated();
   }
-  
+
   get alphaBoundingBox() {
-    if ( this.#needsUpdate ) {
-      this._updateAlphaBoundingBox();
-      this.#needsUpdate = false;
-    }
+    this.#updateCachedValues()
     return this.#alphaBoundingBox;
   }
+
+  #updateCachedValues() {
+    if ( !this.#needsUpdate ) return
+    this._updateAlphaBoundingBox();
+    this.#needsUpdate = false;
+  }
+
 
   /**
    * Convert polygon or rectangle representing a tile shape to top and bottom faces.
    * Bottom faces have opposite orientation.
    */
   _updateAlphaBoundingBox() {
-    const rectOrPoly = this.tile.evPixelCache.getThresholdCanvasBoundingBox(this.alphaThreshold).toPolygon();
+    const cache = this.pixelCache;
+    if ( !cache ) return;
+
+    const rectOrPoly = cache.getThresholdCanvasBoundingBox(this.alphaThreshold).toPolygon();
     const bb = this.#alphaBoundingBox;
-    const elevationZ = this.tile.elevationZ
-        
-		Quad3d.fromPolygon(rectOrPoly, elevationZ, bb.top);
-		Quad3d.fromPolygon(rectOrPoly, elevationZ, bb.bottom);
-    bb.bottom.reverseOrientation();
+    const elevationZ = this.elevationZ;
+
+		Quad3d.fromPolygon(rectOrPoly, elevationZ, bb[0]);
+		Quad3d.fromPolygon(rectOrPoly, elevationZ, bb[1]);
+    bb[1].reverseOrientation(); // Bottom.
   }
-} 
- 
+}
+
 /**
  * @typedef {function} TileAlphaBoundingPolygonMixin
  *
  * Add faces for the tile alpha bounding polygon.
  * @param {function} superclass
  * @returns {function} A subclass of `superclass.`
- */ 
+ */
+// NOTE: TileAlphaBoundingPolygonMixin
 const TileAlphaBoundingPolygonMixin = superclass => class extends superclass {
 
-  /** @type {object<Polygon3d>} */
-  #alphaBoundingPolygon = {
-    top: new Polygon3d(),
-    bottom: new Polygon3d(),
-  };
-  
+  /** @type {Polygon3d[]} */
+  #alphaBoundingPolygon = [
+    new Polygon3d(),
+    new Polygon3d(),
+  ];
+
   /** @type {boolean} */
   #needsUpdate = true;
 
 	update(updateKeys) {
 		super.update(updateKeys);
 		const KEYS = this.constructor.UPDATE_KEYS;
-		this.#needsUpdate ||= updateKeys.some(key => KEYS.texturePosition.has(key))
-		  || updateKeys.some(key => KEYS.texture.has(key));
+		this.#needsUpdate ||= updateKeys.some(key => KEYS.texture.has(key));
 	}
 
   shapeUpdated() {
     this.#needsUpdate = true;
     super.shapeUpdated();
   }
-  
+
   get alphaBoundingPolygon() {
-    if ( this.#needsUpdate ) {
-      this._updateAlphaBoundingPolygon();
-      this.#needsUpdate = false;
-    }
+    this.#updateCachedValues()
     return this.#alphaBoundingPolygon;
+  }
+
+  #updateCachedValues() {
+    if ( !this.#needsUpdate ) return
+    this._updateAlphaBoundingPolygon();
+    this.#needsUpdate = false;
   }
 
   /**
@@ -153,15 +172,18 @@ const TileAlphaBoundingPolygonMixin = superclass => class extends superclass {
    * Bottom faces have opposite orientation.
    */
   _updateAlphaBoundingPolygon() {
-    const poly = this.tile.evPixelCache.getThresholdCanvasBoundingPolygon(this.alphaThreshold);
+    const cache = this.pixelCache;
+    if ( !cache ) return;
+
+    const poly = cache.getThresholdCanvasBoundingPolygon(this.alphaThreshold);
     const bp = this.#alphaBoundingPolygon;
-    const elevationZ = this.tile.elevationZ;
-            
-    Polygon3d.fromPolygon(poly, elevationZ, bp.top);
-    Polygon3d.fromPolygon(poly, elevationZ, bp.bottom);
-    bp.bottom.reverseOrientation();
+    const elevationZ = this.elevationZ;
+
+    Polygon3d.fromPolygon(poly, elevationZ, bp[0]);
+    Polygon3d.fromPolygon(poly, elevationZ, bp[1]);
+    bp[1].reverseOrientation(); // Bottom.
   }
-} 
+}
 
 /**
  * @typedef {function} TileAlphaPolygonsMixin
@@ -170,14 +192,15 @@ const TileAlphaBoundingPolygonMixin = superclass => class extends superclass {
  * @param {function} superclass
  * @returns {function} A subclass of `superclass.`
  */
+// NOTE: TileAlphaPolygonsMixin
 const TileAlphaPolygonsMixin = superclass => class extends superclass {
 
-  /** @type {object<Polygons3d>} */
-  #alphaThresholdPolygons = {
-    top: new Polygons3d(),
-    bottom: new Polygons3d(),
-  };
-  
+  /** @type {Polygons3d[]} */
+  #alphaThresholdPolygons = [
+    new Polygons3d(),
+    new Polygons3d(),
+  ];
+
   /** @type {boolean} */
   #needsUpdate = true;
 
@@ -185,20 +208,22 @@ const TileAlphaPolygonsMixin = superclass => class extends superclass {
     this.#needsUpdate = true;
     super.shapeUpdated();
   }
-  
+
   get alphaThresholdPolygons() {
-    if ( this.#needsUpdate ) {
-      this._updatePathsToFacePolygons();
-      this.#needsUpdate = false;
-    }
+    this.#updateCachedValues();
     return this.#alphaThresholdPolygons;
+  }
+
+  #updateCachedValues() {
+    if ( !this.#needsUpdate ) return
+    this._updatePathsToFacePolygons();
+    this.#needsUpdate = false;
   }
 
 	update(updateKeys) {
 		super.update(updateKeys);
 		const KEYS = this.constructor.UPDATE_KEYS;
-		this.#needsUpdate ||= updateKeys.some(key => KEYS.texturePosition.has(key))
-		  || updateKeys.some(key => KEYS.texture.has(key));
+		this.#needsUpdate ||= updateKeys.some(key => KEYS.texture.has(key));
 	}
 
   /**
@@ -206,11 +231,14 @@ const TileAlphaPolygonsMixin = superclass => class extends superclass {
    * Bottom faces have opposite orientation.
    */
   _updatePathsToFacePolygons() {
-    const polys = this.tile.evPixelCache.getCanvasAlphaISOBands(this.alphaThreshold);
+    const cache = this.pixelCache;
+    if ( !cache ) return;
+
+    const polys = cache.getCanvasAlphaISOBands(this.alphaThreshold);
     if ( !polys ) return;
-    
-    Polygons3d.fromPolygons(polys, this.tile.elevationZ, this.#alphaThresholdPolygons.top);
-    this.#alphaThresholdPolygons.top.clone(this.#alphaThresholdPolygons.bottom).reverseOrientation(); // Reverse orientation but keep the hole designations.
+
+    Polygons3d.fromPolygons(polys, this.elevationZ, this.#alphaThresholdPolygons[0]);
+    this.#alphaThresholdPolygons[0].clone(this.#alphaThresholdPolygons[1]).reverseOrientation(); // Reverse orientation but keep the hole designations.
   }
 }
 
@@ -221,35 +249,38 @@ const TileAlphaPolygonsMixin = superclass => class extends superclass {
  * @param {function} superclass
  * @returns {function} A subclass of `superclass.`
  */
+// NOTE: TileAlphaTrianglesMixin
 const TileAlphaTrianglesMixin = superclass => class extends superclass {
 
-  /** @type {object<Polygons3d>} */
-  #alphaThresholdTriangles = {
-    top: new Polygons3d(),
-    bottom: new Polygons3d(),
-  };
-  
+  /** @type {Polygons3d[]} */
+  #alphaThresholdTriangles = [
+    new Polygons3d(),
+    new Polygons3d(),
+  ];
+
   /** @type {boolean} */
   #needsUpdate = true;
 
   shapeUpdated() {
     this.#needsUpdate = true;
-    super.shapeUpdated(); 
+    super.shapeUpdated();
   }
-  
+
   get alphaThresholdTriangles() {
-    if ( this.#needsUpdate ) {
-      this._updatePathsToFaceTriangles();
-      this.#needsUpdate = false;
-    }
+    this.#updateCachedValues();
     return this.#alphaThresholdTriangles;
+  }
+
+  #updateCachedValues() {
+    if ( !this.#needsUpdate ) return
+    this._updatePathsToFaceTriangles();
+    this.#needsUpdate = false;
   }
 
 	update(updateKeys) {
 		super.update(updateKeys);
 		const KEYS = this.constructor.UPDATE_KEYS;
-		this.#needsUpdate ||= updateKeys.some(key => KEYS.texturePosition.has(key))
-		  || updateKeys.some(key => KEYS.texture.has(key));
+		this.#needsUpdate ||= updateKeys.some(key => KEYS.texture.has(key));
 	}
 
   /**
@@ -261,15 +292,17 @@ const TileAlphaTrianglesMixin = superclass => class extends superclass {
   _updatePathsToFaceTriangles() {
     // TODO: Fix. Need to convert multiply polygons with holes to triangles.
     console.error("Not yet implemented.")
-  
-    const polys = this.tile.evPixelCache.getCanvasAlphaISOBands(this.alphaThreshold);
+    const cache = this.pixelCache;
+    if ( !cache ) return;
+
+    const polys = cache.getCanvasAlphaISOBands(this.alphaThreshold);
     if ( !polys ) return;
-    
+
     // Convert the polygons to top and bottom faces.
     // Then make these into triangles.
     // Trickier than leaving as polygons but can dramatically cut down the number of polys
     // for more complex shapes.
-    const elev = this.placeable.elevationZ;
+    const elev = this.elevationZ;
     const { top, bottom } = Polygon3dVertices.polygonTopBottomFaces(polys, { topZ: elev, bottomZ: elev });
 
     // Trim the UVs and Normals.
@@ -281,15 +314,15 @@ const TileAlphaTrianglesMixin = superclass => class extends superclass {
     const triTop = Triangle3d
       .fromVertices(topTrimmed)
       .filter(tri => !foundry.utils.orient2dFast(tri.a, tri.b, tri.c).almostEqual(0, 1e-06));
-    Polygons3d.from3dPolygons(triTop, this.#alphaThresholdTriangles.top);
-      
+    Polygons3d.from3dPolygons(triTop, this.#alphaThresholdTriangles[0]);
+
     const triBottom = Triangle3d
       .fromVertices(bottomTrimmed)
       .filter(tri => !foundry.utils.orient2dFast(tri.a, tri.b, tri.c).almostEqual(0, 1e-06));
-    Polygons3d.from3dPolygons(triBottom, this.#alphaThresholdTriangles.bottom);
+    Polygons3d.from3dPolygons(triBottom, this.#alphaThresholdTriangles[1]);
 
-    this.#alphaThresholdTriangles.top.setZ(this.tile.elevationZ);
-    this.#alphaThresholdTriangles.bottom.setZ(this.tile.elevationZ);
+    this.#alphaThresholdTriangles[0].setZ(this.elevationZ);
+    this.#alphaThresholdTriangles[1].setZ(this.elevationZ);
   }
 }
 
@@ -298,89 +331,98 @@ const TileAlphaTrianglesMixin = superclass => class extends superclass {
  * TileGeometryTracker -> PlaceableFacesMixin -> PlaceableMatricesMixin -> PlaceableAABBMixin -> PlaceableGeometry
  */
 export class TileGeometry extends mix(PlaceableGeometry).with(
-  PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin, 
+  PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin, PlaceableVerticesMixin,
   TileAlphaBoundingBoxMixin, TileAlphaBoundingPolygonMixin, TileAlphaPolygonsMixin, TileAlphaTrianglesMixin) {
+
   /** @type {string} */
   static PLACEABLE_NAME = "Tile";
 
   /** @type {string} */
-  static layer = "tiles";
+  static LAYER = "tiles";
 
   static TRACKER_TYPES = TRACKER_TYPES;
 
   static UPDATE_KEYS = {
-    position: new Set(TRACKER_TYPES.position),
+    ...super.UPDATE_KEYS,
+    properties: new Set(TRACKER_TYPES.texture),
+    level: new Set(TRACKER_TYPES.level),
+    position2d: new Set(TRACKER_TYPES.position2d),
+    elevation: new Set(TRACKER_TYPES.elevation),
     scale: new Set(TRACKER_TYPES.scale),
     rotation: new Set(TRACKER_TYPES.rotation),
-    shape: NULL_SET,
-    properties: NULL_SET,
-    texture: new Set(TRACKER_TYPES.texture),
-    texturePosition: new Set(TRACKER_TYPES.texturePosition),
   };
 
-  get tile() { return this.placeable; }
+  get tile() { return this.placeableDocument.object; }
 
-  get alphaThreshold() { return this.tile.document.texture.alphaThreshold || 0; }
-  
+  get alphaThreshold() { return this.placeableDocument.texture.alphaThreshold || 0; }
+
+  get pixelCache() { return this.constructor.cacheManager.pixelCacheForDocument(this.placeableDocument); }
+
+  get elevationZ() { return gridUnitsToPixels(this.placeableDocument.elevation); }
+
+  static get cacheManager() { return CONFIG[GEOMETRY_LIB_ID].tilePixelCache; }
+
+  initialize() {
+    this.constructor.cacheManager.cacheDocument(this.placeableDocument); // Async.
+    super.initialize();
+  }
+
   // ----- NOTE: AABB ----- //
-  calculateAABB() { return AABB3d.fromTileAlpha(this.tile, this.alphaThreshold, this.aabb); }
+  calculateAABB() {
+    const cache = this.pixelCache;
+    if ( cache ) {
+      const bbox = cache.getThresholdCanvasBoundingBox(this.alphaThreshold);
+      if ( bbox instanceof PIXI.Polygon ) AABB3d.fromPolygon(bbox, this.elevationZ, this.aabb);
+      else AABB3d.fromRectangle(bbox, this.elevationZ, this.aabb);
+
+    // Fall back on tile dimensions instead of alpha dimensions.
+    } else AABB3d.fromTileDocument(this.placeableDocument, this.aabb);
+  }
 
   // ----- NOTE: Matrices ----- //
 
   calculateTranslationMatrix() {
     const mat = super.calculateTranslationMatrix();
-    const ctr = this.constructor.tileCenter(this.tile);
-    return MatrixFloat32.translation(ctr.x, ctr.y, ctr.z, mat);
+    const ctr = this.constructor.tileCenter(this.placeableDocument);
+    return MatrixFloat32.translation(ctr.x, ctr.y, this.elevationZ, mat);
   }
 
   calculateRotationMatrix() {
     const mat = super.calculateRotationMatrix();
-    const rot = this.constructor.tileRotation(this.tile)
+    const rot = this.constructor.tileRotation(this.placeableDocument)
     return MatrixFloat32.rotationZ(rot, true, mat);
   }
 
   calculateScaleMatrix() {
     const mat = super.calculateScaleMatrix();
-    const { width, height } = this.tile.document;
+    const { width, height } = this.constructor.tileDimensions(this.placeableDocument);
     return MatrixFloat32.scale(width, height, 1.0, mat);
   }
-  
+
   // ----- NOTE: Polygon3d ---- //
 
   /** @type {Faces} */
-  _prototypeFaces = {
-    top: new Quad3d(),
-    bottom: new Quad3d(),
-    sides: [],
-  }
-  
-  /**
-   * Create the initial face shapes for this tile, assuming a 0.5 x 0.5 flat planar rectangle.
-   * Alpha bounds handled in _updateFaces.
-   */
-  _initializePrototypeFaces() {
-    // Create the basic tile prototype face.
-    this.constructor.QUADS.up.clone(this._prototypeFaces.top);
-    this.constructor.QUADS.down.clone(this._prototypeFaces.bottom);
-    super._initializePrototypeFaces();
-  }
+  static prototypeFaces = [QUADS.up.clone(), QUADS.down.clone()];
 
   /**
    * Update the faces for this tile.
-   * Either use evPixelCache or for a basic tile, use the modelMatrix.
+   * Either use pixelCache or for a basic tile, use the modelMatrix.
    */
   _updateFaces() {
     super._updateFaces();
-    
+    const top = this.faces[0];
+    const bottom = this.faces[1];
+
     // Confirm orientation.
-    const tile = this.tile;
-    const ctr = this.tile.center;
-    const ctrTop = Point3d.tmp.set(ctr.x, ctr.y, tile.elevationZ + 100);
-    if ( !this.faces.top.isFacing(ctrTop) ) this.faces.top.reverseOrientation();
+    const ctr = this.constructor.tileCenter(this.placeableDocument);
+    const ctrTop = Point3d.tmp.set(ctr.x, ctr.y, this.elevationZ + 100);
+    if ( !top.isFacing(ctrTop) ) top.reverseOrientation();
 
     // Create the bottom as a mirror of the top.
-    this.faces.top.clone(this.faces.bottom);
-    this.faces.bottom.reverseOrientation();
+    top.clone(bottom);
+    bottom.reverseOrientation();
+
+    this.#updateModelVertices();
   }
 
   /**
@@ -399,34 +441,134 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
     if ( t === null ) return null;
 
     // Hits the tile border.
+    const pixelCache = this.pixelCache;
     alphaThreshold ??= this.alphaThreshold;
-    if ( !(alphaThreshold && this.tile.evPixelCache) ) return t;
+    if ( !(alphaThreshold && pixelCache) ) return t;
 
     // Threshold test at the intersection point.
     const pxThreshold = 255 * this.alphaThreshold;
     using projPt = Point3d.tmp;
     rayOrigin.add(rayDirection.multiplyScalar(t, projPt), projPt);
-    const px = this.tile.evPixelCache.pixelAtCanvas(projPt.x, projPt.y);
+    const px = pixelCache.pixelAtCanvas(projPt.x, projPt.y);
     if ( px > pxThreshold ) return t;
     return null;
   }
-  
+
+  // ----- NOTE: Vertices ----- //
+
+  /**
+   * Update instance vertices.
+   * Add in the UVs for the tile.
+   */
+  static updateInstanceVertices() {
+    const vo = super.updateInstanceVertices();
+
+    // Add UVs.
+    if ( vo.indices ) vo.expand(vo);
+    vo.vertices = BasicVertices.appendUVs(vo.vertices, { stride: vo.stride, uvsOffset: 6 })
+    vo.hasUVs = true;
+    vo.condense(vo);
+    return vo;
+  }
+
+  /**
+   * Store the vertices for every tile.
+   */
+  static _viTracker;
+
+  static get viTracker()  {
+    if ( !this._viTracker ) {
+      const stride = 8; // Stride = position + normals + uv
+      const initialMaxFacets = canvas.scene.tiles.size;
+
+      // For tiles, the instance vertices and indices match the model.
+      const vo = this.instanceVO;
+      const verticesFacetLengths = vo.vertices.length;
+      const indicesFacetLengths = vo.indices.length;
+      this._viTracker = new VerticesIndicesFixedLengthTrackingBuffer({
+        stride,
+        numFacets: 0,
+        verticesFacetLengths,
+        indicesFacetLengths,
+        initialMaxFacets
+      });
+    }
+    return this._viTracker;
+  }
+
+  /**
+   * Vertices with normals and indices.
+   * @type {object<VertexObject>}
+   */
+  _modelVO;
+
+  get modelVO() {
+    const vo = this._modelVO ||= this.#createModelVO();
+
+    // Update the vertices and indices.
+    // Must do this each time b/c additions or subtractions may have modified the tracker buffer.
+    const { vertices, indices } = this.constructor.viTracker.viewFacetById(this.placeableId);
+    vo.vertices = vertices;
+    vo.indices = indices;
+    return vo;
+  }
+
+  /**
+   * Create the model VO.
+   * Basic tiles are all the same shape: quad.
+   */
+  #createModelVO() {
+    // Basic tiles can be instanced, so can just transform the instanceVO to a modelVO.
+    const vo = this.constructor.instanceVO.transformToModel(this.modelMatrix.model);
+    this.constructor.viTracker.addFacet({ id: this.placeableId, newVertices: vo.vertices, newIndices: vo.indices } );
+    return vo;
+  }
+
+  /**
+   * Update the model vertices for this placeable.
+   * Default approach transforms them using the model matrix.
+   * Alternatively, could use the faces.
+   */
+  #updateModelVertices() {
+    // Uses the existing instance vertices and the model matrix.
+    // Just like transforming prototype faces to model faces.
+    this.constructor.instanceVO.transformToModel(this.modelMatrix.model, this.modelVO);
+  }
+
+  destroy() {
+    this.constructor.viTracker.deleteFacet(this.placeableId);
+    this._modelVO = null;
+    this.modelMatrix = null;
+    super.destroy();
+  }
+
   // ----- NOTE: Tile characteristics ----- //
-  
+
   /**
    * Determine the tile rotation.
-   * @param {Tile} tile
+   * @param {TileDocument} tileD
    * @returns {number}    Rotation, in radians.
    */
-  static tileRotation(tile) { return Math.toRadians(tile.document.rotation); }
+  static tileRotation(tileD) { return Math.toRadians(tileD.rotation); }
 
   /**
    * Determine the center of the tile, in pixel units.
-   * @param {Tile} tile
+   * @param {TileDocument} tileD
    * @returns {Point3d}
    */
-  static tileCenter(tile) {
-    const ctr = tile.center;
-    return Point3d.tmp.set(ctr.x, ctr.y, tile.elevationZ);
+  static tileCenter(tileD) {
+    const { x, y, width, height, texture } = tileD;
+    const anchorX = texture?.anchorX ?? 0.5;
+    const anchorY = texture?.anchorY ?? 0.5;
+
+    // Shift TL by the difference between the center (0.5) and the anchor position.
+    return PIXI.Point.tmp.set(
+      x + (width * (0.5 - anchorX)),
+      y + (height * (0.5 - anchorY)),
+    );
+  }
+
+  static tileDimensions(tileD) {
+    return { width: tileD.width, height: tileD.height };
   }
 }

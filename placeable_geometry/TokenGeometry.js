@@ -7,7 +7,6 @@ PIXI,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { Hex3dVertices } from "../placeable_vertices/BasicVertices.js";
 import { ConstrainedTokenBorder } from "../ConstrainedTokenBorder.js";
 
 // Mixing
@@ -18,49 +17,53 @@ import {
   PlaceableModelMatrixMixin,
   PlaceableFacesMixin,
   PlaceableFacePointsMixin,
+  PlaceableVerticesMixin,
+  createUnitCube,
+  createUnitEllipseCylinder,
+  createUnitHexagonalCylinder,
 } from "./PlaceableGeometry.js";
 
 // LibGeometry
-import { NULL_SET } from "../util.js";
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { AABB3d } from "../3d/AABB3d.js";
 import { MatrixFloat32 } from "../Matrix.js";
-import { Quad3d, Polygon3d, Ellipse3d } from "../3d/Polygon3d.js";
+import { Polygon3d } from "../3d/Polygon3d.js";
 import { Point3d } from "../3d/Point3d.js";
 import { Sphere } from "../3d/Sphere.js";
+import { VertexObject } from "../placeable_vertices/VertexObject.js";
+import { getHexagonalShape } from "../placeable_vertices/BasicVertices.js";
 
 /**
  * Build a polygon cube for a token.
  */
 function buildPolygonCube(poly2d, topZ, bottomZ, faces) {
-  Polygon3d.fromPolygon(poly2d, topZ, faces.top);
-  Polygon3d.fromPolygon(poly2d, bottomZ, faces.bottom).reverseOrientation();
-  faces.sides = faces.top.buildTopSides(bottomZ);
+  faces.length = 2;
+  const [top, bottom] = faces;
+  Polygon3d.fromPolygon(poly2d, topZ, top);
+  Polygon3d.fromPolygon(poly2d, bottomZ, bottom).reverseOrientation();
+  faces.push(...top.buildTopSides(bottomZ));
   return faces;
 }
 
 const TRACKER_TYPES = {
-  position: [
+  shape: [
+    "shape",
+  ],
+  level: ["level"],
+  position2d: [
     "x",
     "y",
-    "elevation",
   ],
+  elevation: ["elevation"],
   scale: [
     "width",
     "height"
   ],
-  shape: [
-    "shape",
-  ],
+
   disposition: [
     "disposition",
   ],
-  refresh: [
-    "refreshPosition",
-    "refreshElevation",
-  ]
 };
-
 
 /**
  * @typedef {function} TokenConstrainedFacesMixin
@@ -75,11 +78,11 @@ const TokenConstrainedFacesMixin = superclass => class extends superclass {
 
   get isConstrained() { return this.token.isConstrainedTokenBorder; }
 
-  _constrainedFaces = {
-    top: new Polygon3d(),
-    bottom: new Polygon3d(),
-    sides: [],
-  };
+  _constrainedFaces = [
+    new Polygon3d(),
+    new Polygon3d(),
+    // Sides to be added later.
+  ];
 
   get constrainedFaces() {
     if ( this.isConstrained ) {
@@ -92,12 +95,7 @@ const TokenConstrainedFacesMixin = superclass => class extends superclass {
   /**
    * Iterate over the faces.
    */
-  *iterateConstrainedFaces() {
-    const faces = this.constrainedFaces;
-    yield faces.top;
-    yield faces.bottom;
-    for ( const side of faces.sides ) yield side;
-  }
+  *iterateConstrainedFaces() { yield* this.constrainedFaces.values(); }
 
   _updateFaces() {
     this.updateConstrainedFaces();
@@ -111,6 +109,20 @@ const TokenConstrainedFacesMixin = superclass => class extends superclass {
     const poly = token.constrainedTokenBorder.toPolygon();
     buildPolygonCube(poly, token.topZ - SPACER, token.bottomZ + SPACER, this._constrainedFaces);
     this.#wallsID = ConstrainedTokenBorder._wallsID;
+  }
+
+  // ----- NOTE: Vertices -----
+
+  /**
+   * Vertices with normals and indices.
+   * @type {object<VertexObject>}
+   */
+  constrainedVO = new VertexObject();
+
+  _updateModelVertices() {
+    // Update using faces.
+    const vertices = this.constructor.verticesFromFaces(this._constrainedFaces, true);
+    this.constructor.updateVertexObject(this.constrainedVO, vertices);
   }
 }
 
@@ -133,11 +145,11 @@ const TokenConstrainedLitFacesMixin = superclass => class extends superclass {
 
   #lightsID = -1;
 
-  _constrainedLitFaces = {
-    top: new Polygon3d(),
-    bottom: new Polygon3d(),
-    sides: [],
-  };
+  _constrainedLitFaces = [
+    new Polygon3d(),
+    new Polygon3d(),
+    // Sides to be added later.
+  ];
 
   get constrainedLitFaces() {
     if ( this.isConstrainedLit ) {
@@ -152,10 +164,7 @@ const TokenConstrainedLitFacesMixin = superclass => class extends superclass {
    * Iterate over the faces.
    */
   *iterateConstrainedLitFaces() {
-    const faces = this.constrainedLitFaces;
-    yield faces.top;
-    yield faces.bottom;
-    for ( const side of faces.sides ) yield side;
+    yield* this.constrainedLitFaces.values();
   }
 
   _updateFaces() {
@@ -171,6 +180,20 @@ const TokenConstrainedLitFacesMixin = superclass => class extends superclass {
     buildPolygonCube(poly, token.topZ - SPACER, token.bottomZ + SPACER, this._constrainedLitFaces);
     this.#wallsID = ConstrainedTokenBorder._wallsID;
     this.#lightsID = ConstrainedTokenBorder._lightsID;
+  }
+
+  // ----- NOTE: Vertices -----
+
+  /**
+   * Vertices with normals and indices.
+   * @type {object<VertexObject>}
+   */
+  constrainedLitVO = new VertexObject();
+
+  _updateModelVertices() {
+    // Update using faces.
+    const vertices = this.constructor.verticesFromFaces(this._constrainedLitFaces, true);
+    this.constructor.updateVertexObject(this.constrainedLitVO, vertices);
   }
 }
 
@@ -192,11 +215,11 @@ const TokenConstrainedBrightLitFacesMixin = superclass => class extends supercla
 
   #lightsID = -1;
 
-  _constrainedBrightLitFaces = {
-    top: new Polygon3d(),
-    bottom: new Polygon3d(),
-    sides: [],
-  };
+  _constrainedBrightLitFaces = [
+    new Polygon3d(),
+    new Polygon3d(),
+    // Sides to be added later.
+  ];
 
   get constrainedBrightLitFaces() {
     if ( this.isConstrainedBrightLit ) {
@@ -210,12 +233,7 @@ const TokenConstrainedBrightLitFacesMixin = superclass => class extends supercla
   /**
    * Iterate over the faces.
    */
-  *iterateConstrainedBrightLitFaces() {
-    const faces = this.constrainedBrightLitFaces;
-    yield faces.top;
-    yield faces.bottom;
-    for ( const side of faces.sides ) yield side;
-  }
+  *iterateConstrainedBrightLitFaces() { yield* this.constrainedBrightLitFaces.values(); }
 
   _updateFaces() {
     super._updateFaces();
@@ -231,6 +249,20 @@ const TokenConstrainedBrightLitFacesMixin = superclass => class extends supercla
     this.#wallsID = ConstrainedTokenBorder._wallsID;
     this.#lightsID = ConstrainedTokenBorder._lightsID;
   }
+
+  // ----- NOTE: Vertices -----
+
+  /**
+   * Vertices with normals and indices.
+   * @type {object<VertexObject>}
+   */
+  constrainedBrightLitVO = new VertexObject();
+
+  _updateModelVertices() {
+    // Update using faces.
+    const vertices = this.constructor.verticesFromFaces(this._constrainedLitFaces, true);
+    this.constructor.updateVertexObject(this.constrainedBrightLitVO, vertices);
+  }
 }
 
 /**
@@ -239,46 +271,52 @@ const TokenConstrainedBrightLitFacesMixin = superclass => class extends supercla
  */
 export class TokenGeometry extends mix(PlaceableGeometry).with(
   TokenConstrainedBrightLitFacesMixin, TokenConstrainedLitFacesMixin, TokenConstrainedFacesMixin,
-  PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin, PlaceableFacePointsMixin) {
+  PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin, PlaceableFacePointsMixin, PlaceableVerticesMixin) {
+
   /** @type {string} */
   static PLACEABLE_NAME = "Token";
 
   /** @type {string} */
-  static layer = "tokens";
+  static LAYER = "tokens";
 
   static TRACKER_TYPES = TRACKER_TYPES;
 
   static UPDATE_KEYS = {
-    position: new Set([...TRACKER_TYPES.position, ...TRACKER_TYPES.refresh]),
+    ...super.UPDATE_KEYS,
+    properties: new Set([...TRACKER_TYPES.shape, ...TRACKER_TYPES.disposition]),
+    level: new Set(TRACKER_TYPES.level),
+    position2d: new Set(TRACKER_TYPES.position2d),
+    elevation: new Set(TRACKER_TYPES.elevation),
     scale: new Set(TRACKER_TYPES.scale),
-    rotation: NULL_SET,
-    shape: new Set(TRACKER_TYPES.shape),
-    properties: NULL_SET,
   };
-  
+
   /** @type {enum<string:number>} */
   static SHAPE_TYPES = {
     CUBE: 0, 					// Square grid
     HEXAGONAL: 1, 		// Hex grid; extruded hex in 3d; varies by token size
     ELLIPSE: 2,				// Extruded ellipse
-    SPHERICAL: 3,     
+    SPHERICAL: 3,
     ELLIPSOID: 4,
   };
 
   /** @type {Token} */
-  get token() { return this.placeable; }
+  get token() { return this.placeableDocument.object; }
 
-  /** @type {SHAPE_TYPES} */
-  get shapeType() {
-    const TYPES = this.constructor.SHAPE_TYPES;
+  /**
+   * Determine the shape type for a given token
+   * @param {TokenDocument} [tokenD]      Optional token document; used for gridless to choose ellipse or cube.
+   * @returns {SHAPE_TYPES}
+   */
+  static shapeTypeForToken(tokenD) {
+    const TYPES = this.SHAPE_TYPES;
     if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.useTokenEllipsoid ) return TYPES.ELLIPSOID;
     if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.useTokenSphere ) return TYPES.SPHERICAL;
-    
+
     const GRID = CONST.GRID_TYPES;
     switch ( canvas.grid.type ) {
       case GRID.SQUARE: return TYPES.CUBE;
       case GRID.GRIDLESS: {
-        const shape = this.token.document.shape;
+        const shape = tokenD?.shape;
         if ( shape === CONST.TOKEN_SHAPES.ELLIPSE_1
           || shape === CONST.TOKEN_SHAPES.ELLIPSE_2 ) return TYPES.ELLIPSE;
         else return TYPES.CUBE;
@@ -289,13 +327,13 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
 
   // ----- NOTE: AABB ----- //
 
-  calculateAABB() { return AABB3d.fromToken(this.token, this.aabb); }
+  calculateAABB() { return AABB3d.fromTokenDocument(this.placeableDocument, this.aabb); }
 
   // ----- NOTE: Matrices ---- //
 
   calculateTranslationMatrix() {
     const mat = super.calculateTranslationMatrix();
-    const ctr = this.constructor.tokenCenter(this.token); // Translate from 3d center of token.
+    const ctr = this.constructor.tokenCenter(this.placeableDocument); // Translate from 3d center of token.
     return MatrixFloat32.translation(ctr.x, ctr.y, ctr.z, mat);
   }
 
@@ -303,112 +341,32 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
 
   calculateScaleMatrix() {
     const mat = super.calculateScaleMatrix();
-    const { width, height, zHeight } = this.constructor.tokenDimensions(this.token);
+    const { width, height, zHeight } = this.constructor.tokenDimensions(this.placeableDocument);
     return MatrixFloat32.scale(width, height, zHeight, mat);
   }
 
   // ----- NOTE: Faces ----- //
 
-  #initializeSphericalTopFace() {
-    if ( !(this._prototypeFaces.top instanceof Sphere) )  this._prototypeFaces.top = new Sphere();
-    this._prototypeFaces.top.radius = 0.5;
-    this._prototypeFaces.bottom = null;
-    this._prototypeFaces.sides.length = 0;
-  }
-
-  #initializeEllipseFaces() {
-    if ( !(this._prototypeFaces.top instanceof Ellipse3d) ) {
-      this._prototypeFaces.top = new Ellipse3d();
-      this._prototypeFaces.bottom = new Ellipse3d();
-    }
-    this._prototypeFaces.top.radiusX = 0.5;
-    this._prototypeFaces.top.radiusY = 0.5;
-
-    // Default ellipse points up; set up the rest.
-    const density = PIXI.Circle.approximateVertexDensity(100);
-    this.#initializePolyFaces(density);
-  }
-  
-  get hexagonalUnitShape() { return Hex3dVertices.hexagonalUnitShapeForToken(this.token); }
-
-  #initializeHexagonalFaces() {
-    if ( !(this._prototypeFaces.top instanceof Polygon3d) ) {
-      this._prototypeFaces.top = new Polygon3d();
-      this._prototypeFaces.bottom = new Polygon3d();
-    }
-    const poly = this.hexagonalUnitShape;
-
-    // Ensure the top is pointing up by passing a counter-clockwise polygon.
-    if ( poly.isPositive ) poly.reverseOrientation();
-    Polygon3d.fromPolygon(poly, 0.5, this._prototypeFaces.top);
-    this.#initializePolyFaces();
-  }
-
-  #initializePolyFaces(density) {
-    // Assumed here that the top face is pointing up and is correctly set.
-    this._prototypeFaces.top.clone(this._prototypeFaces.bottom);
-    this._prototypeFaces.bottom.reverseOrientation();
-    this._prototypeFaces.top.setZ(0.5);
-    this._prototypeFaces.bottom.setZ(-0.5);
-    this._prototypeFaces.sides = this._prototypeFaces.top.buildTopSides(-0.5, { density });
-  }
-
-  #initializeCubeFaces() {
-    if ( !(this._prototypeFaces.top instanceof Quad3d) ) {
-      this._prototypeFaces.top = new Quad3d();
-      this._prototypeFaces.bottom = new Quad3d();
-    }
-
-    // Build top/bottom.
-    this.constructor.QUADS.up.clone(this._prototypeFaces.top);
-    this.constructor.QUADS.down.clone(this._prototypeFaces.bottom);
-    this._prototypeFaces.top.setZ(0.5);
-    this._prototypeFaces.bottom.setZ(-0.5);
-
-    // Build sides.
-    this._prototypeFaces.sides.length = 0;
-    this._prototypeFaces.sides.push(
-      this.constructor.QUADS.north.clone(),
-      this.constructor.QUADS.west.clone(),
-      this.constructor.QUADS.south.clone(),
-      this.constructor.QUADS.east.clone(),
-    );
-
-    // Adjust the sides so that they are at the token edge.
-    for ( let i = 0; i < 4; i += 1 ) {
-      this._prototypeFaces.sides[0].points[i].y = -0.5; // North.
-      this._prototypeFaces.sides[1].points[i].x = -0.5; // West.
-      this._prototypeFaces.sides[2].points[i].y = 0.5; // South.
-      this._prototypeFaces.sides[3].points[i].x = 0.5; // East.
-    }
-  }
-
   /**
-   * Create the initial face shapes for this token, using a 0.5 x 0.5 x 0.5 unit cube.
+   * Return a geometry class based on the token shape.
+   * @param {TokenDocument} tokenD
+   * @returns {AbstractTokenGeometry}
    */
-  _initializePrototypeFaces() {
-    const TYPES = this.constructor.SHAPE_TYPES;
-    switch ( this.shapeType ) {
-      case TYPES.SPHERICAL: 
-      case TYPES.ELLIPSOID: // TODO: Implement.
-        this.#initializeSphericalTopFace();
-        return super._initializePrototypeFaces();
-      
-      case TYPES.CUBE: this.#initializeCubeFaces(); break;
-      case TYPES.ELLIPSE: this.#initializeEllipseFaces(); break;
-      case TYPES.HEXAGONAL: this.#initializeHexagonalFaces(); break;
-      default: this.#initializeCubeFaces();
-    }
-   
-    // Confirm orientation against the origin.
-    const ctr = new Point3d();
-    if ( this._prototypeFaces.top.isFacing(ctr) ) console.error(`${this.constructor.name}|Prototype face for ${this.placeable.id} has wrong top orientation.`);
-    if ( this._prototypeFaces.bottom && this._prototypeFaces.bottom.isFacing(ctr) ) console.error(`${this.constructor.name}|Prototype face for ${this.placeable.id} has wrong bottom orientation.`);
-    for ( const side of this._prototypeFaces.sides ) {
-     if ( side.isFacing(ctr) ) console.error(`${this.constructor.name}|Prototype face for ${this.placeable.id} has wrong side orientation.`);
-    }
+  static geometryClassForToken(tokenD) {
+    const TYPES = this.SHAPE_TYPES;
+    switch ( this.shapeTypeForToken(tokenD) ) {
+      case TYPES.ELLIPSOID: console.warn("Ellipsoid not yet implemented."); // TODO: Implement.
+      case TYPES.SPHERICAL:  /* eslint-disable-line no-fallthrough */
+        return TokenSphereGeometry;
 
-    super._initializePrototypeFaces()
+      case TYPES.CUBE: return TokenSquareGeometry;
+      case TYPES.ELLIPSE: return TokenEllipseGeometry;
+      case TYPES.HEXAGONAL: {
+        if ( tokenD.w > 1 || tokenD.w !== tokenD.h ) return TokenPolygonGeometry;
+        return TokenHexagonGeometry;
+      }
+      default: return TokenSquareGeometry;
+    }
   }
 
   /**
@@ -444,15 +402,15 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
 
   /**
    * Determine the token 3d dimensions, in pixel units.
-   * @param {Token} token
+   * @param {TokenDocument} tokenD
    * @returns {object}
    * @prop {number} width       In x direction
    * @prop {number} height      In y direction
    * @prop {number} zHeight     In z direction
    */
-  static tokenDimensions(token) {
-    const { width, height } = token.document; // Multiplier, e.g. 1, 2, or 3.
-    const zHeight = token.topZ - token.bottomZ;
+  static tokenDimensions(tokenD) {
+    const { width, height } = tokenD; // Multiplier, e.g. 1, 2, or 3.
+    const zHeight = tokenD.verticalHeightZ;
     return {
       width: (width * canvas.dimensions.size) - this.SPACER,
       height: (height * canvas.dimensions.size) - this.SPACER,
@@ -462,19 +420,90 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
 
   /**
    * Determine the token center, in pixel units.
-   * @param {Token} token
+   * @param {TokenDocument} tokenD
    * @returns {Point3d}
    * @prop {number} x       In x direction
    * @prop {number} y      In y direction
    * @prop {number} z     In z direction
    */
-  static tokenCenter(token) {
-    return Point3d.fromTokenCenter(token);
+  static tokenCenter(tokenD) {
+    const { x, y, topZ, bottomZ } = tokenD;
+    const { width, height } = tokenD.getSize();
+    const z = bottomZ + ((topZ - bottomZ) * 0.5);
+    return Point3d.tmp.set(x + (width * 0.5), y + (height * 0.5), z);
   }
 }
 
-/**
- * Track faces for a token constrained border.
- * Not worth tracking AABB, and the model matrix remains the same.
- */
 
+export class TokenSquareGeometry extends TokenGeometry {
+
+  static #prototypeFaces;
+
+  static get prototypeFaces() { return this.#prototypeFaces ||= createUnitCube(); }
+
+}
+
+export class TokenEllipseGeometry extends TokenGeometry {
+
+  static #prototypeFaces;
+
+  static get prototypeFaces() { return this.#prototypeFaces ||= createUnitEllipseCylinder(canvas.scene.dimensions.maxR / 10) };
+
+}
+
+
+export class TokenHexagonGeometry extends TokenGeometry {
+
+  static #prototypeFaces;
+
+  static get prototypeFaces() { return this.#prototypeFaces ||= createUnitHexagonalCylinder(); }
+
+}
+
+export class TokenSphereGeometry extends TokenGeometry {
+
+  static prototypeFaces = new Sphere(undefined, 0.5);
+}
+
+export class TokenPolygonGeometry extends TokenGeometry {
+  // No prototype faces.
+
+  faces = [
+    new Polygon3d(),
+    new Polygon3d(),
+    // Others vary based on polygon shape.
+  ]
+
+
+  _updateFaces() {
+    const tokenD = this.placeableDocument
+    const shapeType = this.shapeTypeForToken(tokenD);
+    let poly2d;
+    const ST = this.SHAPE_TYPES;
+    const size = canvas.grid.size;
+    switch ( shapeType ) {
+      case ST.CUBE:
+        poly2d = new PIXI.Rectangle(tokenD.x, tokenD.y, tokenD.w * size, tokenD.h * size);
+        break;
+      case ST.HEXAGONAl: {
+        const res = getHexagonalShape(tokenD.w, tokenD.h, tokenD.shape, canvas.scene.grid.columns ?? false);
+        poly2d = new PIXI.Polygon(res.points);
+        break;
+      }
+      case ST.ELLIPSE:
+      case ST.ELLIPSOID: console.warn("Ellipsoid not yet implemented.");
+      case ST.SPHERICAL: { /* eslint-disable-line no-fallthrough */
+        const radius = Math.max(tokenD.h * size, tokenD.w * size);
+        const density = PIXI.Circle.approximateVertexDensity(radius);
+        poly2d = new PIXI.Circle(tokenD.x, tokenD.y, radius).toPolygon({ density });
+        break;
+      }
+    }
+
+    this.faces.length = 2;
+    Polygon3d.fromPolygon(poly2d, tokenD.topZ, this.faces[0]);
+    Polygon3d.fromPolygon(poly2d, tokenD.bottomZ, this.faces[1]);
+    this.faces.push(...this.faces[0].buildTopSides(tokenD.bottomZ));
+  }
+
+}

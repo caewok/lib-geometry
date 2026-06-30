@@ -2089,8 +2089,14 @@ export class Polygons3d extends Polygon3d {
   static from3dPolygons(polys, out) {
     const n = polys.length;
     out ??= new this(n);
-    out.polygons.length = n;
-    for ( let i = 0; i < n; i += 1 ) out.polygons[i] = polys[i];
+
+    // Copy over the plane, which must be shared among the polygons.
+    // Polygons3d defaults to making the first polygon the plane.
+    out.polygons[0] = polys[0];
+    for ( let i = 1; i < n; i += 1 ) {
+      if ( !polys[i].plane.almostEqual(out.plane) ) console.warn("Polygon3d.from3dPolygons|Planes are not equivalent.", polys);
+      out.polygons[i] = polys[i];
+    }
     return out;
   }
 

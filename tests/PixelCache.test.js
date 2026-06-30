@@ -4,7 +4,7 @@ PIXI,
 */
 "use strict";
 
-import { LocalCoordinateCache, PixelCache, TrimmedPixelCache, TilePixelCache } from "../PixelCache.js";
+import { LocalCoordinateCache, PixelCache, TrimmedPixelCache, TileDocumentPixelCache } from "../PixelCache.js";
 import { MatrixFloat32 } from "../Matrix.js";
 import { MODULE_ID } from "../../const.js";
 
@@ -633,7 +633,7 @@ describe("Memory & Safety", () => {
 
 
 /**
- * NOTE: Quench Unit Tests for TilePixelCache
+ * NOTE: Quench Unit Tests for TileDocumentPixelCache
  */
 quench.registerBatch(`${MODULE_ID}.libGeometry.tile-pixel-cache`, (context) => {
   const { describe, it, expect, before } = context;
@@ -641,7 +641,7 @@ quench.registerBatch(`${MODULE_ID}.libGeometry.tile-pixel-cache`, (context) => {
 
 
   // ---- NOTE: TilePixelCache ----
-  describe("TilePixelCache", () => {
+  describe("TileDocumentPixelCache", () => {
     let testTile;
 
     before(() => {
@@ -652,7 +652,7 @@ quench.registerBatch(`${MODULE_ID}.libGeometry.tile-pixel-cache`, (context) => {
     // Helper to skip tests if no tile is found
     const tileGuard = function() {
       if (!testTile) {
-        console.warn("TilePixelCache Tests | No tile found on canvas. Skipping test.");
+        console.warn("TileDocumentPixelCache Tests | No tile found on canvas. Skipping test.");
         this.skip();
       }
     };
@@ -662,8 +662,8 @@ quench.registerBatch(`${MODULE_ID}.libGeometry.tile-pixel-cache`, (context) => {
       it("should associate with a Foundry Tile and update transforms", function() {
         tileGuard.call(this);
 
-        const cache = new TilePixelCache(100, 100, {
-          tile: testTile,
+        const cache = new TileDocumentPixelCache(100, 100, {
+          textureDocument: testTile.document,
           pixelsOrClass: new Uint8Array(10000)
         });
 
@@ -680,8 +680,8 @@ quench.registerBatch(`${MODULE_ID}.libGeometry.tile-pixel-cache`, (context) => {
       it("should sync rotation from the tile document", function() {
         tileGuard.call(this);
 
-        const cache = new TilePixelCache(100, 100, {
-          tile: testTile,
+        const cache = new TileDocumentPixelCache(100, 100, {
+          textureDocument: testTile.document,
           pixelsOrClass: new Uint8Array(10000)
         });
 
@@ -701,8 +701,8 @@ quench.registerBatch(`${MODULE_ID}.libGeometry.tile-pixel-cache`, (context) => {
         tileGuard.call(this);
 
 
-        const cache = new TilePixelCache(100, 100, {
-          tile: testTile,
+        const cache = new TileDocumentPixelCache(100, 100, {
+          tileDocument: testTile.document,
           pixelsOrClass: new Uint8Array(10000)
         });
 
@@ -728,8 +728,8 @@ quench.registerBatch(`${MODULE_ID}.libGeometry.tile-pixel-cache`, (context) => {
 
         // Note: Overhead tiles in Foundry often have their alpha data cached already
         try {
-          const cache = TilePixelCache.fromOverheadTileAlpha(testTile, { resolution: 1 });
-          expect(cache).to.be.instanceOf(TilePixelCache);
+          const cache = TileDocumentPixelCache.fromOverheadTileAlpha(testTile, { resolution: 1 });
+          expect(cache).to.be.instanceOf(TileDocumentPixelCache);
           expect(cache.pixels).to.be.instanceOf(Uint8Array);
         } catch (e) {
           console.error("Factory method failed - likely texture not loaded or webgl error", e);
@@ -743,13 +743,13 @@ quench.registerBatch(`${MODULE_ID}.libGeometry.tile-pixel-cache`, (context) => {
         it("should create valid cache from specified tile", function() {
             tileGuard.call(this);
 
-            const cache = TilePixelCache.fromTileChannel(testTile, 4);
-            expect(cache).to.be.instanceOf(TilePixelCache);
+            const cache = TileDocumentPixelCache.fromTileChannel(testTile, { channel: 4 });
+            expect(cache).to.be.instanceOf(TileDocumentPixelCache);
             expect(cache.pixels).to.be.instanceOf(Uint8Array);
 
 
         });
     });
   });
-}, { displayName: "TilePixelCache Integration" });
+}, { displayName: "TileDocumentPixelCache Integration" });
 }

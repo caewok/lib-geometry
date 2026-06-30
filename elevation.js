@@ -6,7 +6,7 @@ CONFIG,
 "use strict";
 
 import { GEOMETRY_CONFIG } from "./const.js";
-import { gridUnitsToPixels, clamp } from "./util.js";
+import { gridUnitsToPixels, pixelsToGridUnits, clamp } from "./util.js";
 import { OTHER_MODULES } from "./const.js";
 
 
@@ -40,12 +40,14 @@ lights can display with varying canvas elevation.
 */
 
 export const PATCHES = {};
-PATCHES.PointSource = { ELEVATION: {} };
-PATCHES.VisionSource = { ELEVATION: {} };
+PATCHES.BaseEffectSource = { ELEVATION: {} };
+PATCHES.PointVisionSource = { ELEVATION: {} };
 PATCHES.PlaceableObject = { ELEVATION: {} };
 PATCHES.Token = { ELEVATION: {} };
 PATCHES.Wall = { ELEVATION: {} };
 PATCHES.Region = { ELEVATION: {} };
+PATCHES.TokenDocument = { ELEVATION: {} };
+PATCHES.WallDocument = { ELEVATION: {} };
 
 GEOMETRY_CONFIG.proneStatusId = "prone";
 GEOMETRY_CONFIG.proneMultiplier = 0.33;
@@ -91,44 +93,22 @@ Token
     --> document.flags.elevatedvision.tokenHeight
 */
 
-// NOTE: PointSource Elevation
-// Abstract base class used by LightSource, VisionSource, SoundSource, MovementSource.
-// Can be attached to a Token.
-// Has data.elevation already but ignoring this for now as it may have unintended consequences.
-// Changes to token elevation appear to update the source elevation automatically.
-function pointSourceElevationE() {
-  return this.object?.elevationE ?? this.document.elevation ?? Number.MAX_SAFE_INTEGER;
-}
 
-// Set VisionSource (but not MovementSource) to the top elevation of the token
-function visionSourceElevationE() {
-  return this.object?.topE ?? this.object?.elevationE ?? this.document.elevation ?? 0;
-}
-
-// NOTE: PlaceableObject Elevation
-function placeableObjectElevationE() { return this.document.elevation; }
 
 // NOTE: Wall Elevation
-function wallTopE() {
+function wallTopZ() {
   // Previously used foundry.utils.getProperty but it is slow.
   const WH = OTHER_MODULES.WALL_HEIGHT;
-  return (WH ? this.document.flags[WH.ID]?.top : undefined)
+  const elev =  (WH ? this.document.flags[WH.ID]?.top : undefined)
     ?? Number.POSITIVE_INFINITY;
+  return gridUnitsToPixels(elev);
 }
 
-function wallBottomE() {
+function wallBottomZ() {
   const WH = OTHER_MODULES.WALL_HEIGHT;
-  return (WH ? this.document.flags[WH.ID]?.bottom : undefined)
+  const elev = (WH ? this.document.flags[WH.ID]?.bottom : undefined)
     ?? Number.NEGATIVE_INFINITY;
-}
-
-// ----- NOTE: Region elevation ----- //
-function regionTopE() {
-  return this.document.elevation.top ?? Number.POSITIVE_INFINITY;
-}
-
-function regionBottomE() {
-  return this.document.elevation.bottom ?? Number.NEGATIVE_INFINITY;
+  return gridUnitsToPixels(elev);
 }
 
 // ----- NOTE: Token elevation ----- //
@@ -138,45 +118,41 @@ function regionBottomE() {
  * Accounts for prone multiplier.
  * @type {number}  Returns the height, at least 1 pixel high.
  */
-function getTokenVerticalHeight() {
+function getTokenVerticalHeightZ() {
   const isProne = this.isProne;
   const heightMult = isProne ? clamp(CONFIG.GeometryLib.CONFIG.proneMultiplier, 0, 1) : 1;
-  return (getTokenHeight(this) * heightMult) || 1; // Force at least 1 pixel high.
+  return gridUnitsToPixels((getTokenHeight(this) * heightMult)) || 1; // Force at least 1 pixel high.
 }
 
 /**
  * Calculated vision height.
  */
-function getTokenVisionHeight() {
-  return Math.max(1, this.verticalHeight * clamp(CONFIG.GeometryLib.CONFIG.visionHeightMultiplier, 0, 1));
+function getTokenVisionHeightZ() {
+  return Math.max(1, this.verticalHeightZ * clamp(CONFIG.GeometryLib.CONFIG.visionHeightMultiplier, 0, 1));
 }
 
-function getTokenVisionE() { return this.bottomE + this.visionHeight; }
-
-function getTokenVisionZ() { return gridUnitsToPixels(this.visionE); }
+function getTokenVisionZ() { return this.bottomZ + this.visionHeightZ; }
 
 /**
  * Top elevation of a token. Accounts for prone status.
  * @returns {number} In grid units.
  */
-function tokenTopE() {
-  return this.bottomE + this.verticalHeight;
-}
+function tokenTopZ() { return this.bottomZ + this.verticalHeightZ; }
 
 /** @type {boolean} */
 function getIsProne() {
   const proneStatusId = CONFIG.GeometryLib.CONFIG.proneStatusId;
   return Boolean((proneStatusId !== "" && this.actor && this.actor.statuses?.has(proneStatusId))
     || (OTHER_MODULES.LEVELS_AUTOCOVER
-    && this.document.flags?.[OTHER_MODULES.LEVELS_AUTOCOVER.ID]?.[OTHER_MODULES.LEVELS_AUTOCOVER.FLAGS.DUCKING]));
+    && this.flags?.[OTHER_MODULES.LEVELS_AUTOCOVER.ID]?.[OTHER_MODULES.LEVELS_AUTOCOVER.FLAGS.DUCKING]));
 }
 
-function getTokenHeight(token) {
+function getTokenHeight(tokenD) {
   // Use || to ignore 0 height values.
   // Previously used foundry.utils.getProperty or getFlag but it is slow.
   const WH = OTHER_MODULES.WALL_HEIGHT;
-  return (WH ? token.document.flags[WH.ID]?.[WH.FLAGS.TOKEN_HEIGHT] : 0)
-    || calculateTokenHeightFromTokenShape(token);
+  return (WH ? tokenD.flags[WH.ID]?.[WH.FLAGS.TOKEN_HEIGHT] : 0)
+    || calculateTokenHeightFromTokenShape(tokenD);
 }
 
 /**
@@ -184,8 +160,8 @@ function getTokenHeight(token) {
  * Comparable to Wall Height method.
  * Does not consider "ducking" here—that is done in tokenVerticalHeight, tokenTopElevation.
  */
-function calculateTokenHeightFromTokenShape(token) {
-  const { width, height, texture } = token.document;
+function calculateTokenHeightFromTokenShape(tokenD) {
+  const { width, height, texture } = tokenD;
   return canvas.scene.dimensions.distance
     * Math.max(width, height)
     * (Math.abs(texture.scaleX) + Math.abs(texture.scaleY))
@@ -207,53 +183,85 @@ function zBottom() { return gridUnitsToPixels(this.bottomE); }
 /**
  * Helper to convert to Z value for an elevationE.
  */
-function zElevation() { return gridUnitsToPixels(this.elevationE); }
+function zElevation() { return gridUnitsToPixels(this.elevation); }
 
 
-// ---- NOTE: PointSource ----- //
-PATCHES.PointSource.ELEVATION.GETTERS = {
-  elevationE: pointSourceElevationE,
-  elevationZ: zElevation
+// Document patches.
+PATCHES.TokenDocument.ELEVATION.GETTERS = {
+  topZ: tokenTopZ,
+  bottomZ: zElevation,
+  isProne: getIsProne,
+  visionZ: getTokenVisionZ,
+  visionHeightZ: getTokenVisionHeightZ,
+  verticalHeightZ: getTokenVerticalHeightZ,
 };
 
+PATCHES.WallDocument.ELEVATION.GETTERS = {
+  topZ: wallTopZ,
+  bottomZ: wallBottomZ,
+};
+
+// ---- NOTE: PointSource ----- //
+PATCHES.BaseEffectSource.ELEVATION.GETTERS = {
+  elevationE: function() { return this.data.elevation || 0; },
+  elevationZ: function() { return gridUnitsToPixels(this.data.elevation || 0); }
+};
+
+// Set VisionSource (but not MovementSource) to the top elevation of the token
+function visionSourceElevationE() {
+  if ( this.object ) return this.object.topE ?? this.object.elevationE ?? (this.data.elevation || 0);
+  else return this.data.elevation || 0;
+}
+
 // ---- NOTE: VisionSource ----- //
-PATCHES.VisionSource.ELEVATION.GETTERS = { elevationE: visionSourceElevationE };
+PATCHES.PointVisionSource.ELEVATION.GETTERS = {
+  elevationE: visionSourceElevationE,
+  elevationZ: function() { return gridUnitsToPixels(this.elevationE); },
+};
+
+
+
+// Deprecated placeable patches.
+
+
+
+
 
 // ---- NOTE: PlaceableObject ----- //
 PATCHES.PlaceableObject.ELEVATION.GETTERS = {
-  elevationE: placeableObjectElevationE,
-  elevationZ: zElevation
+  elevationE: function() { return this.document.elevation || 0; },
+  elevationZ: function() { return gridUnitsToPixels(this.document.elevation || 0); },
 };
 
 // ---- NOTE: Token ----- //
 PATCHES.Token.ELEVATION.GETTERS = {
-  bottomE: placeableObjectElevationE, // Alias
-  bottomZ: zBottom, // Alias
-  topE: tokenTopE,
-  topZ: zTop,
-  verticalHeight: getTokenVerticalHeight,
+  bottomE: function() { return this.document.elevation || 0; },
+  bottomZ: function() { return this.document.bottomZ; },
+  topE: function() { return pixelsToGridUnits(this.document.topZ); },
+  topZ: function() { return this.document.topZ; },
+  verticalHeight: function() { return pixelsToGridUnits(this.document.verticalHeightZ); },
 
   // Prone or "ducking"
-  isProne: getIsProne,
+  isProne: function() { return this.document.isProne; },
 
   // Token vision Height
-  visionE: getTokenVisionE,
-  visionZ: getTokenVisionZ,
-  visionHeight: getTokenVisionHeight
+  visionE: function() { return pixelsToGridUnits(this.document.visionZ); },
+  visionZ: function() { return this.document.visionZ; },
+  visionHeight: function() { return pixelsToGridUnits(this.document.visionHeightZ); },
 };
 
 // ---- NOTE: Wall ----- //
 PATCHES.Wall.ELEVATION.GETTERS = {
-  topE: wallTopE,
-  topZ: zTop,
-  bottomE: wallBottomE,
-  bottomZ: zBottom
+  topE: function() { return pixelsToGridUnits(this.document.topZ); },
+  topZ: function() { return this.document.topZ; },
+  bottomE: function() { return pixelsToGridUnits(this.document.bottomZ); },
+  bottomZ: function() { return this.document.bottomZ; },
 };
 
 // ----- NOTE: Region ----- //
 PATCHES.Region.ELEVATION.GETTERS = {
-  topE: regionTopE,
-  topZ: zTop,
-  bottomE: regionBottomE,
-  bottomZ: zBottom,
+  topE: function() { return this.document.elevation.top; },
+  topZ: function() { return gridUnitsToPixels(this.document.elevation.top); },
+  bottomE: function() { return this.document.elevation.bottom; },
+  bottomZ: function() { return gridUnitsToPixels(this.document.elevation.bottom); },
 };

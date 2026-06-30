@@ -37,6 +37,15 @@ export class Sphere {
     this.#radius = Math.sqrt(value);
   }
 
+  /**
+   * @param {Point3d} [center]
+   * @param {number} [radius = 0]
+   */
+  constructor(center, radius = 0) {
+    if ( center ) this.center.copyFrom(center);
+    if ( radius ) this.radius = radius;
+  }
+
   /** @type {Point3d} */
   center = new Point3d();
 
@@ -522,7 +531,7 @@ export class Sphere {
     return out;
   }
   */
-  
+
   pointsLattice({ spacing = CONFIG[GEOMETRY_LIB_ID].CONFIG.perPixelSpacing || 10 } = {}) {
     // Estimated number of points:
     // Consider each point sitting inside the center of a hexagon (or circle) with a given diameter.

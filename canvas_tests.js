@@ -4,11 +4,12 @@ CONFIG,
 */
 "use strict";
 
-import { GEOMETRY_LIB_ID, GEOMETRY_ID } from "./const.js";
+import { GEOMETRY_LIB_ID } from "./const.js";
 import { Draw } from "./Draw.js";
 import { Point3d } from "./3d/Point3d.js";
 import { Triangle3d } from "./3d/Polygon3d.js";
 import { ElevatedPoint } from "./3d/ElevatedPoint.js";
+import { TokenSquareGeometry } from "./placeable_geometry/TokenGeometry.js";
 
 // Testing functions that require a loaded canvas.
 
@@ -32,6 +33,28 @@ canvasTests.drawConstrainedTokenBorder()
 canvasTests.drawWallGeometries()
 canvasTests.drawTokenGeometries()
 canvasTests.drawTileGeometries()
+canvasTests.drawTileGeometries({ faces: "alphaBoundingBox" })
+canvasTests.drawTileGeometries({ faces: "alphaBoundingPolygon" })
+canvasTests.drawTileGeometries({ faces: "alphaThresholdPolygons" })
+canvasTests.drawTileGeometries({ faces: "alphaThresholdTriangles" })
+canvasTests.drawLevelBackgroundGeometries()
+
+
+Original canvas: 1500 x 1500
+
+anchor: 0.5, 0.5
+offset: -675, 150
+scale: 0.5, 0.5
+
+level = canvas.scene.levels.get("defaultLevel0000")
+geom = CONFIG.GeometryLib.geometryManager.backgroundLevels.geomForDocument(level)
+cache = geom.pixelCache
+
+cache._toCanvasCoordinates(0, 0)
+cache._toCanvasCoordinates(750, 750)
+cache._toCanvasCoordinates(1500, 1500)
+
+
 canvasTests.drawRegionGeometries()
 
 incorrectProtoTokens = canvasTests.testTokenPrototypeGeometryContainment()
@@ -49,6 +72,10 @@ canvasTests.drawRegionVertices()
 
 canvasTests.testTokenVertices()
 canvasTests.testRegionVertices()
+
+calc = _token.tokenvisibility.visibility.losViewer.calculator
+ot = calc.occlusionTester
+
 
 
 */
@@ -129,15 +156,19 @@ export function drawTokenSoundBorder({ tokens, ...drawingOpts } = {}) {
  * @param {boolean} [opts.aabb=false]           If true, draw the bounding box
  * @param {*} [opts]                            Other opts passed to drawing
  */
-function drawPlaceableGeometry(placeable, placeableColor, { face = "top", aabb = false, ...drawingOpts } = {}) {
-  const geom = placeable[GEOMETRY_LIB_ID][GEOMETRY_ID];
+export function drawPlaceableGeometry(placeableDocument, placeableColor, opts) {
+  if ( placeableDocument.document ) placeableDocument = placeableDocument.document;
+  const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.geomForDocument(placeableDocument);
   if ( !geom ) {
     console.error(`${placeable.constructor.name} ${placeable.id} has no geometry.`);
     return;
   }
+  drawGeometry(geom, placeableColor, opts);
+}
 
+export function drawGeometry(geom,  placeableColor, { aabb = false, faces = "faces", ...drawingOpts } = {}) {
   let color = Draw.COLORS[placeableColor];
-  geom.faces[face].draw2d({ color, ...drawingOpts });
+  geom[faces][0].draw2d({ color, ...drawingOpts });
   if ( aabb ) {
     let color = Draw.COLORS[`light${placeableColor}`];
     Draw.shape(geom.aabb.toRectangle(), { color, ...drawingOpts });
@@ -155,14 +186,10 @@ function drawPlaceableGeometry(placeable, placeableColor, { face = "top", aabb =
 export function drawWallGeometries({ walls, ...drawingOpts } = {}) {
   walls ??= canvas.walls.placeables;
   for ( const wall of walls ) {
+    const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.walls.geomForPlaceable(wall);
     let color = "blue";
-    let face = "top"
-    if ( wall.edge.direction ) {
-      const geom = wall[GEOMETRY_LIB_ID][GEOMETRY_ID];
-      face = geom.faces.top ? "top" : "bottom";
-      color = geom.faces.top ? "green": "red";
-    }
-    drawPlaceableGeometry(wall, color, { face, ...drawingOpts });
+    if ( geom.constructor.isDirectional(wall) ) color = wall.dir == 1 ? "green": "red";
+    drawPlaceableGeometry(wall, color, drawingOpts);
   }
 }
 
@@ -205,13 +232,35 @@ export function drawRegionGeometries({ regions, ...drawingOpts } = {}) {
   for ( const region of regions ) drawPlaceableGeometry(region, "green", drawingOpts);
 }
 
+export function drawLevelBackgroundGeometries({ levels, ...drawingOpts } = {}) {
+  levels ??= canvas.scene.levels;
+  const mgr = CONFIG[GEOMETRY_LIB_ID].geometryManager.levels.background;
+
+  for ( const level of levels ) {
+    const geom = mgr.geomForDocument(level);
+    drawGeometry(geom, "green", drawingOpts);
+  }
+}
+
+export function drawLevelForegroundGeometries({ levels, ...drawingOpts } = {}) {
+  levels ??= canvas.scene.levels;
+  const mgr = CONFIG[GEOMETRY_LIB_ID].geometryManager.levels.foreground;
+
+  for ( const level of levels ) {
+    const geom = mgr.geomForDocument(level);
+    drawGeometry(geom, "blue", drawingOpts);
+  }
+}
+
+
 /**
  * Test tokens for containment.
  */
 export function testTokenGeometryContainment() {
   let incorrectTokens = new Set();
+  const mgr = CONFIG.GeometryLib.geometryManager;
   for ( const token of canvas.tokens.placeables ) {
-    const geom = token.GeometryLib.geometry;
+    const geom = mgr.geomForPlaceable(token);
     using ctr = Point3d.fromTokenCenter(token);
     for ( const face of geom.iterateFaces() ) {
       if ( face.isFacing(ctr) ) incorrectTokens.add(token);
@@ -223,8 +272,9 @@ export function testTokenGeometryContainment() {
 
 export function testTokenPrototypeGeometryContainment() {
   let incorrectTokens = new Set();
+  const mgr = CONFIG.GeometryLib.geometryManager;
   for ( const token of canvas.tokens.placeables ) {
-    const geom = token.GeometryLib.geometry;
+    const geom = mgr.geomForPlaceable(token);
     using ctr = Point3d.tmp.set(0, 0, 0);
     const pf = geom._prototypeFaces;
 
@@ -240,8 +290,9 @@ export function testTokenPrototypeGeometryContainment() {
 
 export function testWallGeometryContainment() {
   let incorrectWalls = new Set();
+  const mgr = CONFIG.GeometryLib.geometryManager;
   for ( const wall of canvas.walls.placeables ) {
-    const geom = wall.GeometryLib.geometry;
+    const geom = mgr.geomForPlaceable(wall);
     using ctr = Point3d.midPoint(wall.edge.a, wall.edge.b);
     using delta2d = wall.edge.b.subtract(wall.edge.a);
     using dirLeft = Point3d.tmp.set(delta2d.y, -delta2d.x, 0);
@@ -263,8 +314,9 @@ export function testWallGeometryContainment() {
 
 export function testTileGeometryContainment() {
   let incorrectTiles = new Set();
+  const mgr = CONFIG.GeometryLib.geometryManager;
   for ( const tile of canvas.tiles.placeables ) {
-    const geom = tile.GeometryLib.geometry;
+    const geom = mgr.geomForPlaceable(tile);
     const ctr2d = tile.center;
     using ptTop = Point3d.tmp.set(ctr2d.x, ctr2d.y, tile.elevationZ + 50);
     using ptBottom = Point3d.tmp.set(ctr2d.x, ctr2d.y, tile.elevationZ - 50);
@@ -278,7 +330,7 @@ export function testTileGeometryContainment() {
 export function testRegionGeometryContainment() {
   let incorrectRegions = new Set();
   for ( const region of canvas.regions.placeables ) {
-    const geom = region.GeometryLib.geometry;
+    const geom = mgr.geomForPlaceable(region);
     if ( !geom.faces.top ) continue;
 
     // Plain circles, ellipses, and rectangles are instanced.
@@ -407,52 +459,12 @@ export function drawTokenVertices({ tokens, type = "all", ...drawingOpts } = {})
  * @param {object} [opts]
  * @param {Token[]} [opts.tokens]                 Walls to draw; otherwise test entire canvas
  */
-export function testTokenVertices({ tokens, type = "all" } = {}) {
-  const TokenInstancedVertices = CONFIG.GeometryLib.lib.placeableVertices.TokenInstancedVertices;
-  const ConstrainedTokenModelVertices = CONFIG.GeometryLib.lib.placeableVertices.ConstrainedTokenModelVertices;
-  const LitTokenModelVertices = CONFIG.GeometryLib.lib.placeableVertices.LitTokenModelVertices;
-  const BrightLitTokenModelVertices = CONFIG.GeometryLib.lib.placeableVertices.BrightLitTokenModelVertices;
-
-  tokens ??= canvas.tokens.placeables;
-  using ctr = Point3d.tmp;
-  for ( const token of tokens ) {
-    Point3d.fromTokenCenter(token, ctr);
-    Draw.star(ctr);
-
-    if ( type === "all" || type === "bright" ) {
-        const vToken = new BrightLitTokenModelVertices(token);
-        const vo = vToken.calculateModel();
-        const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
-        for ( const tri of tris ) {
-          if ( tri.orient3d(ctr) > 0 ) console.error(`Token ${token.name} (${token.id}) bright triangle facing wrong direction`);
-        }
-    }
-
-    if ( type === "all" || type === "lit" ) {
-      const vToken = new LitTokenModelVertices(token);
-      const vo = vToken.calculateModel();
-      const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
-      for ( const tri of tris ) {
-        if ( tri.orient3d(ctr) > 0  ) console.error(`Token ${token.name} (${token.id}) lit triangle facing wrong direction`);
-      }
-    }
-
-    if ( type === "all" || type === "constrained" ) {
-      const vToken = new ConstrainedTokenModelVertices(token);
-      const vo = vToken.calculateModel();
-      const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
-      for ( const tri of tris ) {
-        if ( tri.orient3d(ctr) > 0  ) console.error(`Token ${token.name} (${token.id}) constrained triangle facing wrong direction`);
-      }
-    }
-
-    if ( type === "all" || type === "normal" ) {
-      const vo = TokenInstancedVertices.calculateModelForPlaceable(token);
-      const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
-      for ( const tri of tris ) {
-        if ( tri.orient3d(ctr) > 0  ) console.error(`Token ${token.name} (${token.id}) normal triangle facing wrong direction`);
-      }
-    }
+export function testTokenVertices({ tokens } = {}) {
+  const vo = TokenSquareGeometry.instanceVO;
+  const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
+  const ctr = Point3d.tmp.set(0, 0, 0);
+  for ( const tri of tris ) {
+    if ( tri.orient3d(ctr) > 0 ) console.error(`Token ${token.name} (${token.id}) instance triangle facing wrong direction`);
   }
 }
 

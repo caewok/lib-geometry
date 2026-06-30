@@ -466,19 +466,45 @@ function normalizeDegrees(degrees) {
 /**
  * Create a grid of points within this rectangle.
  * @param {object} [opts]
- * @param {number} [opts.spacing = 1]              How many pixels between each point?
+ * @param {number} [opts.spacing = 1]              Minimum spacing, in pixels, between each point.
  * @param {boolean} [opts.startAtEdge = false]     Are points allowed within spacing of the edges? If false, will be at least spacing away.
  * @returns {PIXI.Point[]} Points in order from left to right, top to bottom.
  */
 function pointsLattice({ spacing = 1, startAtEdge = false } = {}) {
-  const { left, right, top, bottom } = this;
-  const pts = [];
-  const startX = startAtEdge ? left : left + spacing;
-  const startY = startAtEdge ? top : top + spacing;
-  const endX = startAtEdge ? right : right - spacing;
-  const endY = startAtEdge ? bottom : bottom - spacing;
-  for ( let x = startX; x <= endX; x += spacing ) {
-    for ( let y = startY; y <= endY; y += spacing ) pts.push(PIXI.Point.tmp.set(x, y))
+  const { left, top, width, height } = this;
+
+  // Determine available span based on edge constraints.
+  const availableWidth = startAtEdge ? width : width - (2 * spacing);
+  const availableHeight = startAtEdge ? height : height - (2 * spacing);
+
+  // Return a single point if we cannot meet the constraints.
+  if ( availableWidth < 0 || availableHeight < 0 ) return [this.center];
+
+  // Calculate the maximum number of spaces/intervals that can fit.
+  const columns = Math.floor(availableWidth / spacing);
+  const rows = Math.floor(availableHeight / spacing);
+
+  // Determine the actual dynamic spacing to center the grid perfectly.
+  // If only 1 point fits, actual spacing defaults to 0 to avoid division by 0.
+  const actualSpacingX = columns > 0 ? availableWidth / columns : 0;
+  const actualSpacingY = rows > 0 ? availableHeight / rows : 0;
+
+  // Calculate starting offsets to establish centering.
+  const startX = startAtEdge ? left
+    : left + spacing + (availableWidth - (columns * actualSpacingX)) * 0.5;
+  const startY = startAtEdge ? top
+    : top + spacing + (availableHeight - (rows * actualSpacingY)) * 0.5;
+
+  // Generate the lattice.
+  // Loop using integers to avoid accumulated floating-point precision drift.
+  const pts = new Array((columns + 1) * (rows + 1));
+  let idx = 0;
+  for ( let i = 0; i <= columns; i += 1 ) {
+    const x = startX + (i * actualSpacingX);
+    for ( let j = 0; j <= rows; j += 1 ) {
+      const y = startY + (j * actualSpacingY);
+      pts[idx++] = PIXI.Point.tmp.set(x, y);
+    }
   }
   return pts;
 }

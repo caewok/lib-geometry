@@ -5,9 +5,9 @@ PIXI,
 "use strict";
 
 import { Point3d } from "./Point3d.js";
-import { almostLessThan } from "../util.js";
+import { almostLessThan, gridUnitsToPixels } from "../util.js";
 import { AABB2d } from "../AABB.js";
-import { Quad3d, Circle3d } from "./Polygon3d.js";
+import { Polygons3d, Quad3d, Circle3d } from "./Polygon3d.js";
 
 const axes = {
   x: new Point3d(1, 0, 0),
@@ -112,8 +112,6 @@ export class AABB3d extends AABB2d {
     return this.fromRectangle(rrect, z, out);
   }
 
-
-
   /**
    * @param {PIXI.Polygon} poly             2d polygon, assumed to be flat on the plane
    * @param {number|number[]} z             Elevation(s) to use
@@ -135,7 +133,10 @@ export class AABB3d extends AABB2d {
    */
   static fromShape(shape, z, out) {
     out ??= new this();
-    super.fromShape(shape, out);
+    if ( shape instanceof AABB3d ) {
+      shape.clone(out);
+      if ( !z ) return out;
+    } else super.fromShape(shape, out);
     z = this.getMinMaxForValues(z);
     out.min.z = z.min;
     out.max.z = z.max;
@@ -154,27 +155,31 @@ export class AABB3d extends AABB2d {
     return out;
   }
 
-  /**
-   * @param {Tile} tile
-   * @returns {AABB3d}
-   */
-  static fromTileAlpha(tile, alphaThreshold, out) {
-    out = super.fromTileAlpha(tile, alphaThreshold, out);
-    const elevZ = tile.elevationZ;
+  static fromTileDocument(tileD, alphaThreshold, out) {
+    out = super.fromTileDocument(tileD, alphaThreshold, out);
+    const elevZ = gridUnitsToPixels(tileD.elevation);
     out.max.z = elevZ;
     out.min.z = elevZ;
     return out;
   }
+
 
   /**
    * @param {Edge} edge
    * @returns {AABB3d}
    */
   static fromWall(wall, out) {
-    const { topZ, bottomZ } = wall;
+    const { topZ, bottomZ } = wall.document;
     out = super.fromWall(wall, out);
-    out.min.z = bottomZ
+    out.min.z = bottomZ;
     out.max.z = topZ;
+    return out;
+  }
+
+  static fromWallDocument(wallD, out) {
+    out = super.fromWallDocument(wallD, out);
+    out.max.z = wallD.topZ;
+    out.min.z = wallD.bottomZ;
     return out;
   }
 
@@ -196,8 +201,20 @@ export class AABB3d extends AABB2d {
    */
   static fromToken(token, out) {
     out = super.fromToken(token, out);
-    out.min.z = token.bottomZ;
-    out.max.z = token.topZ;
+    const { topZ, bottomZ } = token.document;
+    out.min.z = bottomZ;
+    out.max.z = topZ;
+    return out;
+  }
+
+  /**
+   * @param {TokenDocument} tokenD
+   * @returns {AABB3d}
+   */
+  static fromTokenDocument(tokenD, out) {
+    out = super.fromTokenDocument(tokenD, out);
+    out.min.z = tokenD.bottomZ;
+    out.max.z = tokenD.topZ;
     return out;
   }
 
@@ -212,8 +229,6 @@ export class AABB3d extends AABB2d {
     out.max.set(center.x + radius, center.y + radius, center.z + radius);
     return out;
   }
-
-
 
   /**
    * @param {Polygon3d} poly3d
@@ -273,6 +288,17 @@ export class AABB3d extends AABB2d {
   }
 
   /**
+   * Generic overlaps test.
+   * @param {*} shape
+   * @returns {boolean}
+   */
+  overlaps(shape) {
+    if ( shape instanceof AABB2d ) return shape.overlapsAABB(this); // Ignore z axis.
+    if ( shape instanceof AABB3d ) return this.overlapsAABB(shape);
+    return super.overlaps(shape);
+  }
+
+  /**
    * Does this AABB overlap a wall or edge?
    * @param {Wall|Edge} edge
    * @returns {boolean}
@@ -299,6 +325,18 @@ export class AABB3d extends AABB2d {
    */
   overlapsConvexPolygon3d(poly3d) {
     if ( poly3d instanceof Circle3d ) return this.overlapsCircle3d(poly3d);
+    if ( poly3d instanceof Polygons3d ) {
+      // Early exit if polygon is empty
+      if ( !poly3d.polygons.length) return false;
+
+      // Test 1: AABB axes. (Polygon bounding box.)
+      if ( !poly3d.aabb.overlapsAABB(this) ) return false;
+
+      for ( const poly of poly3d.polygons ) {
+        if ( this.overlapsConvexPolygon3d(poly) ) return true;
+      }
+      return false;
+    }
 
     // Early exit if polygon is empty
     if ( !poly3d.points || poly3d.points.length === 0 ) return false;
@@ -445,3 +483,4 @@ function projectPolygon(polygon, axis) {
   });
   return { min, max };
 }
+
