@@ -8,6 +8,7 @@ import { Polygon3d, Circle3d } from "./Polygon3d.js";
 import { Point3d } from "./Point3d.js";
 import { Matrix } from "../Matrix.js";
 import { almostBetween } from "../util.js";
+import * as Delauney from "../d3-delaunay.js";
 
 /* Sphere
 Represent a 3d sphere, with some functions to manipulate it.
@@ -232,6 +233,9 @@ export class Sphere {
 		  : (delta.y > delta.x && delta.y) > delta.z ? "y" : "z"
 		return ixs.map(ix => (ix[maxAxis] - a[maxAxis]) / delta[maxAxis]);
   }
+
+  // Synonym.
+  intersectionT = this.rayIntersectionT;
 
   /**
    * Does a line segment intersect this sphere?
@@ -505,6 +509,36 @@ export class Sphere {
     out.radiusSquared = Point3d.distanceSquaredBetween(this.center, a);
     out.center.set(Dx * invDetA, Dy * invDetA, Dz * invDetA);
     return out;
+  }
+
+  /**
+   * Convert set of 3d points on the sphere's surface into triangles.
+   * @param {Point3d[]} pts
+   * @returns {Triangle3d[]}
+   */
+  static triangulateSphereSurface(pts3d) {
+    // Map the 3d surface points to 2d spherical coordinates (longitude, latitude)
+    const pts2d = pts3d.map(pt => {
+      const lon = Math.atan(p.y, p.x); // Range: -π to π
+      const lat = Math.acos(p.z / Math.sqrt(pt.dot2()));
+      return [lon, lat];
+    });
+
+    // Perform 2d Delaunay Triangulation on the spherical grid.
+    const delaunay = Delaunay.from(points2d);
+    const triangles = delaunay.triangles; // Array of indices pointing to our original array.
+
+    // Construct the final triangles
+    const numTriangles = triangles.length / 3;
+    const tris = Array(numTriangles);
+    for ( let i = 0; i < numTriangles; ) {
+      const a = pts3d[triangles[i++]];
+      const b = pts3d[triangles[i++]];
+      const c = pts3d[triangles[i++]];
+      tris.push(Triangle3d.from3Points(a, b, c));
+    }
+
+    return tris;
   }
 
   /**
