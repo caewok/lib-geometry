@@ -1725,6 +1725,19 @@ export class ModelMatrix2d {
 
   static get BUFFER_LENGTH() { return this.DIM2 * 3; }; // 9 values * 3 matrices.
 
+  constructor(modelBuffer, offset = 0) {
+    /** @type {MatrixFloat32} */
+    const byteLength = Float32Array.BYTES_PER_ELEMENT * 16;
+    modelBuffer ??= new Array(byteLength);
+    if ( !modelBuffer.byteLength === byteLength ) throw Error("ModelMatrix|Buffer byte length is incorrect.");
+
+    this._model = (new MatrixFloat32(
+      this.constructor.DIM,
+      this.constructor.DIM,
+      modelBuffer,
+      offset)).identity();
+  }
+
   /** @type {ArrayBuffer} */
   _matrixBuffer = new ArrayBuffer(Float32Array.BYTES_PER_ELEMENT * this.constructor.BUFFER_LENGTH);
 
@@ -1759,7 +1772,7 @@ export class ModelMatrix2d {
   get scale() { this.#updated ||= true; return this._scale; }
 
   /** @type {MatrixFloat32} */
-  _model = MatrixFloat32.identity(this.constructor.DIM);
+  _model;
 
   get model() {
     if ( this.#updated ) this.update();
