@@ -319,9 +319,6 @@ export const PlaceableModelMatrixMixin = superclass => {
     /** @type {number} */
     #trackerUpdateCounter = -1;
 
-    /** @type {number} */
-    get _trackerUpdateCounter() { return this.#trackerUpdateCounter; }
-
     /**
      * Placeholder to use as the model matrix. Will be updated by modelMatrixCallback.
      * @type {MatrixFloat32}
@@ -365,11 +362,20 @@ export const PlaceableModelMatrixMixin = superclass => {
       this.calculateScaleMatrix();
     }
 
-    calculateTranslationMatrix() { return this.modelMatrix.translation; }
+    calculateTranslationMatrix() {
+      this.constructor.modelMatrixTracker._facetIdUpdated(this.placeableId);
+      return this.modelMatrix.translation;
+    }
 
-    calculateRotationMatrix() { return this.modelMatrix.rotation; }
+    calculateRotationMatrix() {
+      this.constructor.modelMatrixTracker._facetIdUpdated(this.placeableId);
+      return this.modelMatrix.rotation;
+    }
 
-    calculateScaleMatrix() { return this.modelMatrix.scale; }
+    calculateScaleMatrix() {
+     this.constructor.modelMatrixTracker._facetIdUpdated(this.placeableId);
+     return this.modelMatrix.scale;
+    }
 
     initialize() {
       this.constructor.modelMatrixTracker.addFacet({ id: this.placeableId, newValues: identityM.arr });
@@ -392,14 +398,7 @@ export const PlaceableModelMatrixMixin = superclass => {
 
 // ----- NOTE: PlaceableFacesMixin ----- //
 
-/**
- * @typedef {object} Faces
- *
- * Faces of a placeable object.
- * @prop {Polygon3d|null} top
- * @prop {Polygon3d|null} bottom
- * @prop {Polygon3d[]} sides
- */
+
 // All CCW because default GPU test is counter-clockwise
 
 export const QUADS = {
