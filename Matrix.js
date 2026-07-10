@@ -45,6 +45,16 @@ class AbstractMatrix {
     this.arr.length = nrow * ncol;
   }
 
+  /**
+   * Create a new point. Meant to be overridden using pooling, but kept here for testing.
+   * @returns {PointArrayAbstract}
+   */
+  static create(nrow = 0, ncol = 0) {
+    const out = new this(nrow, ncol);
+    out.arr.length = out.size;
+    return out;
+  }
+
   // ----- NOTE: Getters and indexers ---- //
 
   // Backwards compatibility
@@ -67,32 +77,6 @@ class AbstractMatrix {
   getIndex(row, col) { return this.arr[this._idx(row, col)]; }
 
   setIndex(row, col, value) { this.arr[this._idx(row, col)] = value; }
-
-  /**
-   * Return a new matrix with smaller or equal dimensions from this matrix.
-   * @param {object} [opts]
-   * @param {number} [opts.rowStart=0]      First row to keep, indexed from 0
-   * @param {number} [opts.rowEnd]          Last row to keep, inclusive; defaults to last row
-   * @param {number} [opts.colStart=0]      First column to keep, indexed from 0
-   * @param {number} [opts.colEnd]          Last column to keep, inclusive; defaults to last column
-   * @returns {Matrix} New matrix
-   */
-  subset({ rowStart = 0, rowEnd = this.nrow - 1, colStart = 0, colEnd = this.ncol - 1, out } = {}) {
-    rowEnd += 1;
-    colEnd += 1;
-    out ??= this.constructor.tmpMatrix(rowEnd - rowStart, colEnd - colStart)
-
-    // Rows are easy.
-    const rowArr = this.arr.subarray(rowStart * this.nrow, rowEnd * this.nrow);
-    let i = 0;
-    for ( let r = 0, rMax = rowEnd - rowStart; r < rMax; r += 1 ) {
-      const cIdx = r * this.ncol;
-      const newRow = rowArr.subarray(cIdx + colStart, cIdx + colEnd);
-      out.arr.set(newRow, i);
-      i += newRow.length;
-    }
-   return out;
-  }
 
   // ----- NOTE: Iterators ----- //
 
@@ -188,6 +172,150 @@ class AbstractMatrix {
     for ( let r = 0, i = 0; r < nr; r += 1, i += 1 ) this.setIndex(r, col, values[i]);
     return this; // For convenience.
   }
+
+  // ----- NOTE: Subsetting ----- //
+
+  /**
+   * Return a new matrix with smaller or equal dimensions from this matrix.
+   * @param {object} [opts]
+   * @param {number} [opts.rowStart=0]      First row to keep, indexed from 0
+   * @param {number} [opts.rowEnd]          Last row to keep, inclusive; defaults to last row
+   * @param {number} [opts.colStart=0]      First column to keep, indexed from 0
+   * @param {number} [opts.colEnd]          Last column to keep, inclusive; defaults to last column
+   * @returns {Matrix} New matrix
+   */
+  subset({ rowStart = 0, rowEnd = this.nrow - 1, colStart = 0, colEnd = this.ncol - 1, out } = {}) {
+    rowEnd += 1;
+    colEnd += 1;
+    out ||= this.constructor.create(rowEnd - rowStart, colEnd - colStart)
+
+    // Rows are easy.
+    const rowArr = this.arr.subarray(rowStart * this.nrow, rowEnd * this.nrow);
+    let i = 0;
+    for ( let r = 0, rMax = rowEnd - rowStart; r < rMax; r += 1 ) {
+      const cIdx = r * this.ncol;
+      const newRow = rowArr.subarray(cIdx + colStart, cIdx + colEnd);
+      out.arr.set(newRow, i);
+      i += newRow.length;
+    }
+   return out;
+  }
+
+  /**
+   * Return a new matrix that omits a specific row from this matrix.
+   * @param {number} row            Row number to omit
+   * @param {Matrix} out            Out matrix
+   * @returns {Matrix} New matrix
+   */
+  dropRow(row = 0, out) {
+    const { nrow, ncol } = this;
+    out ||= this.constructor.create(nrow - 1, ncol);
+    const a = this.arr;
+    const b = out.arr;
+
+    // Set everything before the row to omit.
+    if ( row > 0 ) {
+      const idx = this._idx(row, 0); // Slice does not include the last index, so add 1 to include row - 1, col - 1.
+      b.set(a.slice(0, idx), 0);
+    }
+
+    // Set everything after the row to omit.
+    if ( row < (nrow - 1) ) {
+      const idx = this._idx(row + 1, 0);
+      const newIdx = out._idx(row, 0);
+      b.set(a.slice(idx), newIdx);
+    }
+
+    return out;
+  }
+
+  /**
+   * Return a new matrix that omits a specific row from this matrix.
+   * @param {number} col            Column number to omit
+   * @param {Matrix} out            Out matrix
+   * @returns {Matrix} New matrix
+   */
+  dropColumn(col = 0, out) {
+    const { nrow, ncol } = this;
+    out ||= this.constructor.create(nrow, ncol - 1);
+
+    // For speed, set as much data linearly as possible; don't use setColumn method repeatedly.
+    // Process each row in turn.
+    const a = this.arr;
+    const b = out.arr;
+    for ( let r = 0; r < nrow; r += 1 ) {
+      const aColIdx = this._idx(r, col);
+      const bColIdx = out._idx(r, col);
+
+      // Set everything for this row before the dropped column.
+      if ( col > 0 ) b.set(a.slice(aColIdx - col, aColIdx), bColIdx - col);
+
+      // Set everything for this row after the dropped column.
+      if ( col < ncol ) b.set(a.slice(aColIdx + 1, aColIdx + ncol - col), bColIdx);
+    }
+    return out;
+  }
+
+  /**
+   * Return a new matrix that adds a specific row to this matrix.
+   * @param {TypedArray|number[]}		Row data to add
+   * @param {number} row            Row number to insert. 0 will insert first, 1 after row 0, ...
+   * @param {Matrix} out            Out matrix
+   * @returns {Matrix} New matrix
+   */
+  addRow(row, data = [], out) {
+    const { nrow, ncol } = this;
+    out ||= this.constructor.create(nrow + 1, ncol);
+    const a = this.arr;
+    const b = out.arr;
+    const aRowIdx = this._idx(row, 0)
+
+    // Set everything before the row to add.
+    if ( row > 0 ) b.set(a.slice(0, aRowIdx), 0);
+
+    // Add the row data.
+    b.set(data, aRowIdx);
+
+    // Set everything after the row to add, bumping each row down one.
+    if ( row < nrow ) {
+      const newIdx = out._idx(row + 1, 0);
+      b.set(a.slice(aRowIdx), newIdx);
+    }
+    return out;
+  }
+
+  /**
+   * Return a new matrix that adds a specific column to this matrix.
+   * @param {TypedArray|number[]}		Column data to add
+   * @param {number} col            Column number to insert
+   * @param {Matrix} out            Out matrix
+   * @returns {Matrix} New matrix
+   */
+  addColumn(col, data = [], out) {
+    const { nrow, ncol } = this;
+    out ||= this.constructor.create(nrow, ncol + 1);
+
+    // For speed, set as much data linearly as possible; don't use setColumn method repeatedly.
+    // Process each row in turn.
+    const a = this.arr;
+    const b = out.arr;
+    for ( let r = 0; r < nrow; r += 1 ) {
+      // Set everything for this row before the new column.
+      const aColIdx = this._idx(r, col);
+      const bColIdx = out._idx(r, col);
+
+      // Add in the new data.
+      if ( col > 0 ) b.set(a.slice(aColIdx - col, aColIdx), bColIdx - col, bColIdx);
+
+      // Add the column data for this row.
+      b[bColIdx] = data[r];
+
+      // Set everything for this row after the new column.
+      if ( col < ncol ) b.set(a.slice(aColIdx, aColIdx - col + ncol), bColIdx + 1);
+    }
+    return out;
+  }
+
 
   // ----- NOTE: Construction from arrays ----- //
 
@@ -1385,7 +1513,7 @@ class AbstractMatrix {
    */
   invert(outMatrix) {
     outMatrix ??= this.constructor.empty(this.nrow, this.ncol);
-    if ( this === outMatrix ) console.error("Must supply a distinct matrix to store the inversion.");
+    if ( this === outMatrix ) throw new Error("Must supply a distinct matrix to store the inversion.");
 
     if ( this.nrow < 2 || this.nrow !== this.ncol ) {
       console.error("Cannot use invert on a non-square matrix.");
@@ -1397,7 +1525,10 @@ class AbstractMatrix {
     const y = Array.fromRange(n);
     const k = {};
     let det = this.constructor.optimizedNDet(n, this, x, y, k);
-    if ( !det ) throw new Error("Matrix is not invertible");
+    if ( !det ) {
+      console.error("Matrix is not invertible");
+      return undefined;
+    }
 
     det = 1 / det;
 
@@ -1786,12 +1917,18 @@ export class ModelMatrix2d {
 
   set updated(value) { this.#updated ||= value; }
 
-  update() {
-    const { rotation, translation, scale } = this;
-    const M = this._model;
-    scale[this.constructor.multiplyName](rotation, M)
-    M[this.constructor.multiplyName](translation, M);
+
+  update(skip = false) {
     this.#updated = false;
+    if ( skip ) return;
+
+    const M = this._model;
+    const multName = this.constructor.multiplyName;
+
+    M.identity();
+    M[multName](this.rotation, M);
+    M[multName](this.scale, M);
+    M[multName](this.translation, M);
   }
 
   clone(out) {
@@ -1819,7 +1956,7 @@ export const ModelCenterMixin = superclass => {
   return class extends superclass {
     static BUFFER_IDX = super.BUFFER_LENGTH / this.DIM2;
 
-    static get BUFFER_LENGTH() { return super.BUFFER_LENGTH + (this.DIM2 * 2); }
+    static get BUFFER_LENGTH() { return super.BUFFER_LENGTH + (this.DIM2 * 2); } // 1 additional translation matrix, plus inverse.
 
     /** @type {MatrixFloat32} */
     #center = (new MatrixFloat32(
@@ -1828,51 +1965,215 @@ export const ModelCenterMixin = superclass => {
       this._matrixBuffer,
       this.constructor.DIM2 * this.constructor.BUFFER_IDX)).identity();
 
-    get modelCenter() { this.updated = true; return this.#center; }
+    /** @type {MatrixFloat32} */
+    #invCenter = (new MatrixFloat32(
+      this.constructor.DIM,
+      this.constructor.DIM,
+      this._matrixBuffer,
+      this.constructor.DIM2 * (this.constructor.BUFFER_IDX + 1))).identity();
 
-    set modelCenter(ctr) {
+    get modelCenter() {
+      return this.#extractTranslationValues(this.#center);
+    }
+
+    set modelCenter(value) {
+      this.#setTranslationValues(value || {}, this.#center, this.#invCenter);
+    }
+
+    /**
+     * Extract the values on the last row for the provided translation matrix. Assumes no scaling or rotation.
+     * @param {MatrixFloat32<3x3|4x4>} txMat
+     * @returns {PIXI.Point|Point3d}
+     */
+    #extractTranslationValues(txMat) {
+      if ( this.DIM === 3 ) {
+        return PIXI.Point.tmp.set(
+          txMat.getIndex(2, 0),
+          txMat.getIndex(2, 1),
+        )
+      } else {
+        return Point3d.tmp.set(
+          txMat.getIndex(3, 0),
+          txMat.getIndex(3, 1),
+          txMat.getIndex(3, 2),
+        )
+      }
+    }
+
+    /**
+     * Define the translation and inverse translation matrices for a given set of translation coordinates.
+     * @param {PIXI.Point|Point3d|object} value
+     * @param {MatrixFloat32<3x3|4x4>} txMat
+     * @param {MatrixFloat32<3x3|4x4>} txInvMat
+     */
+    #setTranslationValues(value, txMat, txInvMat) {
+      MatrixFloat32.translation(value.x || 0, value.y || 0, value.z || 0, txMat);
+      MatrixFloat32.translation(-value.x || 0, -value.y || 0, -value.z || 0, txInvMat);
       this.updated = true;
-      const is3d = this.constructor.DIM === 4;
-      MatrixFloat32.translation(-ctr.x, -ctr.y, is3d ? -ctr.z : undefined, this.#center);
     }
 
     update() {
       // Create a translation matrix to uncenter after applying the model matrix.
-      // Must consider scaling when un-centering.
-      // Do before the update so as not to trigger another.
-      // E.g. Local center 5, 5. Scaled by x10.
-      // Move -5, -5 using this.#center. TL is -5, -5; center is 0, 0.
-      // Scale x10: TL is -50, -50.
-      // Move 50, 50 using uncenter.
-      const centerMat = this.#center;
-      const is3d = this.constructor.DIM === 4;
-      const r = this.constructor.DIM - 1; // 3d: 3, 2d: 2.
-      const uncenterPt = is3d ? Point3d.tmp : PIXI.Point.tmp;
-      uncenterPt.x = centerMat.getIndex(r, 0);
-      uncenterPt.y = centerMat.getIndex(r, 1);
-      if ( is3d ) {
-        uncenterPt.z = centerMat.getIndex(r, 2);
-        this.scale.multiplyPoint3d(uncenterPt, uncenterPt);
-      } else this.scale.multiplyPoint2d(uncenterPt, uncenterPt)
-      uncenterPt.multiplyScalar(-1, uncenterPt); // Reverse translation direction.
-
-      // Set the uncenter matrix.
-      const uncenter = centerMat.clone();
-      uncenter.setIndex(r, 0, uncenterPt.x);
-      uncenter.setIndex(r, 1, uncenterPt.y);
-      if ( is3d ) uncenter.setIndex(r, 2, uncenterPt.z);
-
       // Update the model matrix.
       super.update();
 
+      const M = this._model;
+      const multName = this.constructor.multiplyName;
+
       // Center prior to applying the model matrix.
-      centerMat[this.constructor.multiplyName](this._model, this._model);
+      this.#center[multName](M, M);
 
       // Undo the centering after.
-      this._model[this.constructor.multiplyName](uncenter, this._model);
+      M[multName](this.#invCenter, M);
     }
-  }
-}
+
+    clone(out) {
+      out = super.clone(out);
+      out.modelCenter = this.modelCenter;
+      return out;
+    }
+  };
+};
+
+/**
+ * Define separate centers for translation, scaling, and rotation.
+ * Example: regions define x,y as well as a shape center.
+ * To scale a unit shape requires the shape center, but they rotate and translate from x,y.
+ */
+export const ModelMultipleCentersMixin = superclass => {
+  return class extends superclass {
+
+    static get BUFFER_LENGTH() { return super.BUFFER_LENGTH + (this.DIM2 * 6); } // 3 additional translation matrices, plus inverses.
+
+    static BUFFER_IDX = super.BUFFER_LENGTH / this.DIM2;
+
+    /** @type {MatrixFloat32} */
+    #txTranslationMat = (new MatrixFloat32(
+      this.constructor.DIM,
+      this.constructor.DIM,
+      this._matrixBuffer,
+      this.constructor.DIM2 * this.constructor.BUFFER_IDX)).identity();
+
+    /** @type {MatrixFloat32} */
+    #txRotationMat = (new MatrixFloat32(
+      this.constructor.DIM,
+      this.constructor.DIM,
+      this._matrixBuffer,
+      this.constructor.DIM2 * (this.constructor.BUFFER_IDX + 1))).identity();
+
+    /** @type {MatrixFloat32} */
+    #txScaleMat = (new MatrixFloat32(
+      this.constructor.DIM,
+      this.constructor.DIM,
+      this._matrixBuffer,
+      this.constructor.DIM2 * (this.constructor.BUFFER_IDX + 2))).identity();
+
+    /** @type {MatrixFloat32} */
+    #txInvTranslationMat = (new MatrixFloat32(
+      this.constructor.DIM,
+      this.constructor.DIM,
+      this._matrixBuffer,
+      this.constructor.DIM2 * (this.constructor.BUFFER_IDX + 3))).identity();
+
+    /** @type {MatrixFloat32} */
+    #txInvRotationMat = (new MatrixFloat32(
+      this.constructor.DIM,
+      this.constructor.DIM,
+      this._matrixBuffer,
+      this.constructor.DIM2 * (this.constructor.BUFFER_IDX + 4))).identity();
+
+    /** @type {MatrixFloat32} */
+    #txInvScaleMat = (new MatrixFloat32(
+      this.constructor.DIM,
+      this.constructor.DIM,
+      this._matrixBuffer,
+      this.constructor.DIM2 * (this.constructor.BUFFER_IDX + 5))).identity();
+
+    /** @type {PIXI.Point|Point3d} */
+    get translationCenter() { return this.#extractTranslationValues(this.#txTranslationMat); }
+
+    /** @type {PIXI.Point|Point3d} */
+    get scaleCenter() { return this.#extractTranslationValues(this.#txScaleMat); }
+
+    /** @type {PIXI.Point|Point3d} */
+    get rotationCenter() { return this.#extractTranslationValues(this.#txRotationMat); }
+
+    /**
+     * Extract the values on the last row for the provided translation matrix. Assumes no scaling or rotation.
+     * @param {MatrixFloat32<3x3|4x4>} txMat
+     * @returns {PIXI.Point|Point3d}
+     */
+    #extractTranslationValues(txMat) {
+      if ( this.DIM === 3 ) {
+        return PIXI.Point.tmp.set(
+          txMat.getIndex(2, 0),
+          txMat.getIndex(2, 1),
+        )
+      } else {
+        return Point3d.tmp.set(
+          txMat.getIndex(3, 0),
+          txMat.getIndex(3, 1),
+          txMat.getIndex(3, 2),
+        )
+      }
+    }
+
+    set translationCenter(value) {
+      this.#setTranslationValues(value || {}, this.#txTranslationMat, this.#txInvTranslationMat);
+    }
+
+    set scaleCenter(value) {
+      this.#setTranslationValues(value || {}, this.#txScaleMat, this.#txInvScaleMat);
+    }
+
+    set rotationCenter(value) {
+      this.#setTranslationValues(value || {}, this.#txRotationMat, this.#txInvRotationMat);
+    }
+
+    /**
+     * Define the translation and inverse translation matrices for a given set of translation coordinates.
+     * @param {PIXI.Point|Point3d|object} value
+     * @param {MatrixFloat32<3x3|4x4>} txMat
+     * @param {MatrixFloat32<3x3|4x4>} txInvMat
+     */
+    #setTranslationValues(value, txMat, txInvMat) {
+      MatrixFloat32.translation(value.x || 0, value.y || 0, value.z || 0, txMat);
+      MatrixFloat32.translation(-value.x || 0, -value.y || 0, -value.z || 0, txInvMat);
+      this.updated = true;
+    }
+
+    update() {
+      // Use multiple matrices to translate before applying scale, rotation, translate.
+      // Undo each in turn.
+      const M = this._model;
+      const multName = this.constructor.multiplyName;
+
+      M.identity();
+      M[multName](this.#txInvScaleMat, M);
+      M[multName](this.scale, M);
+      M[multName](this.#txScaleMat, M);
+
+      M[multName](this.#txInvRotationMat, M);
+      M[multName](this.rotation, M);
+      M[multName](this.#txRotationMat, M);
+
+      M[multName](this.#txInvTranslationMat, M);
+      M[multName](this.translation, M);
+      M[multName](this.#txTranslationMat, M);
+
+      super.update(true);
+    }
+
+    clone(out) {
+      out = super.clone(out);
+      out.translationCenter = this.translationCenter;
+      out.scaleCenter = this.scaleCenter;
+      out.rotationCenter = this.rotationCenter;
+      return out;
+    }
+  };
+};
+
 
 
 /**
@@ -1892,8 +2193,8 @@ export const ModelInverseMixin = superclass => {
       super.update();
       this._model.invert(this.#inverse);
     }
-  }
-}
+  };
+};
 
 export class ModelMatrix2dInverse extends mix(ModelMatrix2d).with(ModelInverseMixin) {}
 
@@ -1906,6 +2207,8 @@ export class ModelMatrixInverse extends mix(ModelMatrix).with(ModelInverseMixin)
 export class ModelMatrixCenter extends mix(ModelMatrix).with(ModelCenterMixin) {}
 
 export class ModelMatrixCenterInverse extends mix(ModelMatrix).with(ModelCenterMixin, ModelInverseMixin) {}
+
+export class ModelMatrixMultipleCenters extends mix(ModelMatrix).with(ModelMultipleCentersMixin) {}
 
 /* Tests
 Matrix = CONFIG.GeometryLib.Matrix

@@ -25,8 +25,6 @@ export class CanvasGeometryManager {
   /** @type { PlaceableGeometry } */
   static geometryClass = null;
 
-  static geometryClassForDocument(_doc) { return this.geometryClass; }
-
   /** @type {object<Map<UUID, PlaceableGeometry>>} */
   geometryMap = new Map();
 
@@ -81,8 +79,7 @@ export class CanvasGeometryManager {
     if ( this.geometryMap.has(doc.uuid) ) return;
 
     // Create the correct geometry type for this document.
-    const cl = this.constructor.geometryClassForDocument(doc);
-    const geom = new cl(doc);
+    const geom = new this.constructor.geometryClass(doc);
     geom.initialize();
     this.geometryMap.set(doc.uuid, geom);
 
@@ -193,36 +190,6 @@ export class TokenGeometryManager extends CanvasGeometryManager {
 
   /** @type {PlaceableGeometry} */
   static geometryClass = TokenGeometry;
-
-  /**
-   * @param {TokenDocument} tokenD
-   * @returns {TokenGeometry} The correct child class
-   */
-  static geometryClassForDocument(tokenD) {
-    return TokenGeometry.geometryClassForToken(tokenD);
-  }
-
-  /**
-   * Update the geometry for this document.
-   * @param {CanvasDocument} doc        A document instance, e.g., TokenDocument, WallDocument, etc.
-   * @param {Set<string>} updateKeys       Flattened set of properties that changed
-   */
-  update(doc, updateKeys) {
-    const geom = this.geometryMap.get(doc.uuid);
-    if ( !geom ) return;
-
-    if ( this.constructor.geometryClassForDocument(doc) !== geom.constructor ) {
-      // Change the token geometry class if necessary.
-      this.delete(doc);
-      this.create(doc);
-      return;
-
-    } else {
-      // Otherwise do the update as normal.
-      geom.update(updateKeys);
-      this.quadtree.update({ t: geom, r: geom.aabb });
-    }
-  }
 }
 
 export class LevelBackgroundGeometryManager extends CanvasGeometryManager {

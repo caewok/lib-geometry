@@ -1,5 +1,4 @@
 /* globals
-canvas,
 CONFIG,
 foundry,
 PIXI,
@@ -9,25 +8,15 @@ PIXI,
 
 // Mixing
 import { mix } from "../mixwith.js";
-import {
-  PlaceableGeometry,
-  PlaceableAABBMixin,
-  PlaceableModelMatrixMixin,
-  PlaceableFacesMixin,
-  PlaceableVerticesMixin,
-  QUADS,
-} from "./PlaceableGeometry.js";
 
-// Vertices
-import { BasicVertices } from "../placeable_vertices/BasicVertices.js";
-import { VerticesIndicesFixedLengthTrackingBuffer } from "../../geometry/placeable_tracking/TrackingBuffer.js";
-
+// Geometry
+import { PlaceableGeometry } from "./PlaceableGeometry.js";
+import { QuadPrimitive } from "./InstancedGeometricPrimitive.js";
 
 // LibGeometry
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { gridUnitsToPixels } from "../util.js";
 import { AABB3d } from "../3d/AABB3d.js";
-import { MatrixFloat32 } from "../Matrix.js";
 import { Point3d } from "../3d/Point3d.js";
 import { Quad3d, Polygon3d, Polygons3d, Triangle3d } from "../3d/Polygon3d.js";
 
@@ -85,15 +74,9 @@ const TileAlphaBoundingBoxMixin = superclass => class extends superclass {
   /** @type {boolean} */
   #needsUpdate = true;
 
-	update(updateKeys) {
-		super.update(updateKeys);
-		const KEYS = this.constructor.UPDATE_KEYS;
-		this.#needsUpdate ||= updateKeys.some(key => KEYS.texture.has(key));
-	}
-
-  shapeUpdated() {
-    this.#needsUpdate = true;
-    super.shapeUpdated();
+  _update() {
+    this.#needsUpdate ||= this._updateFlags.properties;
+    super._update();
   }
 
   get alphaBoundingBox() {
@@ -145,15 +128,9 @@ const TileAlphaBoundingPolygonMixin = superclass => class extends superclass {
   /** @type {boolean} */
   #needsUpdate = true;
 
-	update(updateKeys) {
-		super.update(updateKeys);
-		const KEYS = this.constructor.UPDATE_KEYS;
-		this.#needsUpdate ||= updateKeys.some(key => KEYS.texture.has(key));
-	}
-
-  shapeUpdated() {
-    this.#needsUpdate = true;
-    super.shapeUpdated();
+	_update() {
+    this.#needsUpdate ||= this._updateFlags.properties;
+    super._update();
   }
 
   get alphaBoundingPolygon() {
@@ -204,11 +181,6 @@ const TileAlphaPolygonsMixin = superclass => class extends superclass {
   /** @type {boolean} */
   #needsUpdate = true;
 
-  shapeUpdated() {
-    this.#needsUpdate = true;
-    super.shapeUpdated();
-  }
-
   get alphaThresholdPolygons() {
     this.#updateCachedValues();
     return this.#alphaThresholdPolygons;
@@ -220,11 +192,10 @@ const TileAlphaPolygonsMixin = superclass => class extends superclass {
     this.#needsUpdate = false;
   }
 
-	update(updateKeys) {
-		super.update(updateKeys);
-		const KEYS = this.constructor.UPDATE_KEYS;
-		this.#needsUpdate ||= updateKeys.some(key => KEYS.texture.has(key));
-	}
+	_update() {
+    this.#needsUpdate ||= this._updateFlags.properties;
+    super._update();
+  }
 
   /**
    * Convert clipper paths representing a tile shape to top and bottom faces.
@@ -261,11 +232,6 @@ const TileAlphaTrianglesMixin = superclass => class extends superclass {
   /** @type {boolean} */
   #needsUpdate = true;
 
-  shapeUpdated() {
-    this.#needsUpdate = true;
-    super.shapeUpdated();
-  }
-
   get alphaThresholdTriangles() {
     this.#updateCachedValues();
     return this.#alphaThresholdTriangles;
@@ -277,11 +243,10 @@ const TileAlphaTrianglesMixin = superclass => class extends superclass {
     this.#needsUpdate = false;
   }
 
-	update(updateKeys) {
-		super.update(updateKeys);
-		const KEYS = this.constructor.UPDATE_KEYS;
-		this.#needsUpdate ||= updateKeys.some(key => KEYS.texture.has(key));
-	}
+	_update() {
+    this.#needsUpdate ||= this._updateFlags.properties;
+    super._update();
+  }
 
   /**
    * Triangulate an array of polygons or clipper paths, then convert into 3d face triangles.
@@ -331,7 +296,6 @@ const TileAlphaTrianglesMixin = superclass => class extends superclass {
  * TileGeometryTracker -> PlaceableFacesMixin -> PlaceableMatricesMixin -> PlaceableAABBMixin -> PlaceableGeometry
  */
 export class TileGeometry extends mix(PlaceableGeometry).with(
-  PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin, PlaceableVerticesMixin,
   TileAlphaBoundingBoxMixin, TileAlphaBoundingPolygonMixin, TileAlphaPolygonsMixin, TileAlphaTrianglesMixin) {
 
   /** @type {string} */
@@ -362,9 +326,42 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
 
   static get cacheManager() { return CONFIG[GEOMETRY_LIB_ID].tilePixelCache; }
 
+  get shape() { return this.shapes[0]; } // Tiles currently always only using a single shape.
+
   initialize() {
     this.constructor.cacheManager.cacheDocument(this.placeableDocument); // Async.
+    this.createShapes();
     super.initialize();
+  }
+
+  createShapes() {
+    this.shapes.forEach(shape => shape.destroy());
+    this.shapes.length = 0;
+    this.shapes.push(new QuadPrimitive(this.placeableId));
+  }
+
+  // ----- NOTE: Update ----- //
+
+  _update() {
+    // No changes required if properties (texture) is updated. But see mixin classes.
+
+    // No changes required if level is updated.
+
+    if ( this._updateFlags.positionXY || this._updateFlags.elevation ) {
+      const ctr = this.constructor.tileCenter(this.placeableDocument);
+      this.shape.setPosition(ctr);
+    }
+
+    if ( this._updateFlags.rotation ) {
+      const angles = this.constructor.tileRotation(this.placeableDocument);
+      this.shape.setScale(angles);
+    }
+
+    if ( this._updateFlags.scale ) {
+      const dims = this.constructor.tileDimensions(this.placeableDocument);
+      this.shape.setScale(dims);
+    }
+
   }
 
   // ----- NOTE: AABB ----- //
@@ -379,51 +376,7 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
     } else AABB3d.fromTileDocument(this.placeableDocument, this.aabb);
   }
 
-  // ----- NOTE: Matrices ----- //
-
-  calculateTranslationMatrix() {
-    const mat = super.calculateTranslationMatrix();
-    const ctr = this.constructor.tileCenter(this.placeableDocument);
-    return MatrixFloat32.translation(ctr.x, ctr.y, this.elevationZ, mat);
-  }
-
-  calculateRotationMatrix() {
-    const mat = super.calculateRotationMatrix();
-    const rot = this.constructor.tileRotation(this.placeableDocument)
-    return MatrixFloat32.rotationZ(rot, true, mat);
-  }
-
-  calculateScaleMatrix() {
-    const mat = super.calculateScaleMatrix();
-    const { width, height } = this.constructor.tileDimensions(this.placeableDocument);
-    return MatrixFloat32.scale(width, height, 1.0, mat);
-  }
-
-  // ----- NOTE: Polygon3d ---- //
-
-  /** @type {Faces} */
-  static prototypeFaces = [QUADS.up.clone(), QUADS.down.clone()];
-
-  /**
-   * Update the faces for this tile.
-   * Either use pixelCache or for a basic tile, use the modelMatrix.
-   */
-  _updateFaces() {
-    super._updateFaces();
-    const top = this.faces[0];
-    const bottom = this.faces[1];
-
-    // Confirm orientation.
-    const ctr = this.constructor.tileCenter(this.placeableDocument);
-    const ctrTop = Point3d.tmp.set(ctr.x, ctr.y, this.elevationZ + 100);
-    if ( !top.isFacing(ctrTop) ) top.reverseOrientation();
-
-    // Create the bottom as a mirror of the top.
-    top.clone(bottom);
-    bottom.reverseOrientation();
-
-    this.#updateModelVertices();
-  }
+  // ----- NOTE: Faces ---- //
 
   /**
    * Determine where a ray hits this object in 3d.
@@ -436,11 +389,11 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
    * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
    * @returns {number|null} The distance along the ray, as a multiple of rayDirection
    */
-  static rayIntersectionForFace(face, rayOrigin, rayDirection, { alphaThreshold, ...opts } = {}) {
-    const t = super.rayIntersectionForFace(face, rayOrigin, rayDirection, opts);
+  rayIntersection(rayOrigin, rayDirection, { alphaThreshold, ...opts } = {}) {
+    const t = super.rayIntersection(rayOrigin, rayDirection, opts);
     if ( t === null ) return null;
 
-    // Hits the tile border.
+    // Hits the tile border; does it hit a solid pixel?
     const pixelCache = this.pixelCache;
     alphaThreshold ??= this.alphaThreshold;
     if ( !(alphaThreshold && pixelCache) ) return t;
@@ -454,102 +407,16 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
     return null;
   }
 
-  // ----- NOTE: Vertices ----- //
-
-  /**
-   * Update instance vertices.
-   * Add in the UVs for the tile.
-   */
-  static updateInstanceVertices() {
-    const vo = super.updateInstanceVertices();
-
-    // Add UVs.
-    if ( vo.indices ) vo.expand(vo);
-    vo.vertices = BasicVertices.appendUVs(vo.vertices, { stride: vo.stride, uvsOffset: 6 })
-    vo.hasUVs = true;
-    vo.condense(vo);
-    return vo;
-  }
-
-  /**
-   * Store the vertices for every tile.
-   */
-  static _viTracker;
-
-  static get viTracker()  {
-    if ( !this._viTracker ) {
-      const stride = 8; // Stride = position + normals + uv
-      const initialMaxFacets = canvas.scene.tiles.size;
-
-      // For tiles, the instance vertices and indices match the model.
-      const vo = this.instanceVO;
-      const verticesFacetLengths = vo.vertices.length;
-      const indicesFacetLengths = vo.indices.length;
-      this._viTracker = new VerticesIndicesFixedLengthTrackingBuffer({
-        stride,
-        numFacets: 0,
-        verticesFacetLengths,
-        indicesFacetLengths,
-        initialMaxFacets
-      });
-    }
-    return this._viTracker;
-  }
-
-  /**
-   * Vertices with normals and indices.
-   * @type {object<VertexObject>}
-   */
-  _modelVO;
-
-  get modelVO() {
-    const vo = this._modelVO ||= this.#createModelVO();
-
-    // Update the vertices and indices.
-    // Must do this each time b/c additions or subtractions may have modified the tracker buffer.
-    const { vertices, indices } = this.constructor.viTracker.viewFacetById(this.placeableId);
-    vo.vertices = vertices;
-    vo.indices = indices;
-    return vo;
-  }
-
-  /**
-   * Create the model VO.
-   * Basic tiles are all the same shape: quad.
-   */
-  #createModelVO() {
-    // Basic tiles can be instanced, so can just transform the instanceVO to a modelVO.
-    const vo = this.constructor.instanceVO.transformToModel(this.modelMatrix.model);
-    this.constructor.viTracker.addFacet({ id: this.placeableId, newVertices: vo.vertices, newIndices: vo.indices } );
-    return vo;
-  }
-
-  /**
-   * Update the model vertices for this placeable.
-   * Default approach transforms them using the model matrix.
-   * Alternatively, could use the faces.
-   */
-  #updateModelVertices() {
-    // Uses the existing instance vertices and the model matrix.
-    // Just like transforming prototype faces to model faces.
-    this.constructor.instanceVO.transformToModel(this.modelMatrix.model, this.modelVO);
-  }
-
-  destroy() {
-    this.constructor.viTracker.deleteFacet(this.placeableId);
-    this._modelVO = null;
-    this.modelMatrix = null;
-    super.destroy();
-  }
-
   // ----- NOTE: Tile characteristics ----- //
 
   /**
    * Determine the tile rotation.
    * @param {TileDocument} tileD
-   * @returns {number}    Rotation, in radians.
+   * @returns {Point3d}    Rotation, in radians, along the z axis.
    */
-  static tileRotation(tileD) { return Math.toRadians(tileD.rotation); }
+  static tileRotation(tileD) {
+    return Point3d.tmp.set(0, 0, Math.toRadians(tileD.rotation || 0));
+  }
 
   /**
    * Determine the center of the tile, in pixel units.
@@ -557,18 +424,24 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
    * @returns {Point3d}
    */
   static tileCenter(tileD) {
-    const { x, y, width, height, texture } = tileD;
+    const { x, y, width, height, texture, elevationZ } = tileD;
     const anchorX = texture?.anchorX ?? 0.5;
     const anchorY = texture?.anchorY ?? 0.5;
 
     // Shift TL by the difference between the center (0.5) and the anchor position.
-    return PIXI.Point.tmp.set(
+    return Point3d.tmp.set(
       x + (width * (0.5 - anchorX)),
       y + (height * (0.5 - anchorY)),
+      elevationZ,
     );
   }
 
+  /**
+   * Determine the tile 3d dimensions, in pixel units.
+   * @param {TileDocument} tileD
+   * @returns {Point3d} x: width, y: height, z: zHeight
+   */
   static tileDimensions(tileD) {
-    return { width: tileD.width, height: tileD.height };
+    return Point3d.tmp.set(tileD.width, tileD.height, 1);
   }
 }

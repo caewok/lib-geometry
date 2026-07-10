@@ -1,14 +1,16 @@
-	/* globals
+/* globals
+CONFIG,
 foundry,
 PIXI,
 */
 "use strict";
 
-import { Polygon3d, Circle3d } from "./Polygon3d.js";
+import { GEOMETRY_LIB_ID } from "../const.js";
+import { Polygon3d, Circle3d, Ellipse3d, Triangle3d } from "./Polygon3d.js";
 import { Point3d } from "./Point3d.js";
-import { Matrix } from "../Matrix.js";
+import { Matrix, MatrixFloat32 } from "../Matrix.js";
 import { almostBetween } from "../util.js";
-import * as Delauney from "../d3-delaunay.js";
+import * as Delaunay from "../d3-delaunay.js";
 
 /* Sphere
 Represent a 3d sphere, with some functions to manipulate it.
@@ -47,6 +49,27 @@ export class Sphere {
     if ( radius ) this.radius = radius;
   }
 
+  /**
+   * Which side of the sphere does this point fall on?
+   * @param {Point3d} p
+   * @returns {number} Positive if outside the sphere, negative if inside, 0 at sphere radius.
+   *   The value is related to the signed distance squared:
+   *   (d - r)^2 = (d - r) * (d - r) = d^2 - 2dr + r^2
+   *   vs d^2 - r^2
+   *
+   */
+  whichSide(p) {
+    const dist2 = Point3d.distanceSquaredBetween(p, this.center);
+    return dist2 - this.radiusSquared;
+  }
+
+  /**
+   * Does this sphere face a given point?
+   * @param {Point3d} p
+   * @returns {boolean} True if point is outside the sphere.
+   */
+  isFacing(p) { return this.whichSide(p) > 0; }
+
   /** @type {Point3d} */
   center = new Point3d();
 
@@ -72,30 +95,6 @@ export class Sphere {
 
   contains(pt, epsilon = 1e-06) {
     return Point3d.distanceSquaredBetween(pt, this.center) < (this.radiusSquared + epsilon);
-  }
-
-  /**
-   * Transform the sphere using a transform matrix.
-   * Scales according to the largest axis to avoid transforming into an ellipsoid.
-   * @param {Matrix<4x4>} M         Transformation matrix
-   * @param {Sphere} out            A sphere to store the transformed values
-   * @returns {Sphere} The modified sphere.
-   */
-  transform(M, out) {
-    out ??= new this.constructor();
-    this.clone(out);
-
-    // Translate.
-    out.center = M.multiplyPoint3d(this.center);
-
-    // Scale. Extract length of the basis vectors (rows)
-    const sx = Math.hypot(M.arr[0], M.arr[1], M.arr[2]);
-    const sy = Math.hypot(M.arr[4], M.arr[5], M.arr[6]);
-    const sz = Math.hypot(M.arr[8], M.arr[9], M.arr[10]);
-    out.radius *= Math.max(sx, sy, sz);
-
-    // Rotation is ignored.
-    return out;
   }
 
   toCircle2d() { return new PIXI.Circle(this.center.x, this.center.y, this.radius); }
@@ -332,6 +331,129 @@ export class Sphere {
   }
 
 
+
+  /**
+   * Transform this sphere by a perspective projection.
+   * @param {Matrix} lookAtMatrix
+   * @param {Matrix} perspectiveMatrix
+   * @returns {Ellipse3d|null} Null if camera is within the sphere.
+   */
+  transform(M, out) {
+    /* Dual Quadrics
+    Represent sphere as 4x4 matrix. Transform directly using the matrices and extract 2d ellipse parameters.
+    Sphere can be represented in homogenous coordinates as a 4x4 quadric matrix. Represents the
+    envelope of planes tangent to the sphere (basically a cube).
+
+    In 2d clip space, the dual conic of the ellipse is the 3x3 matrix:
+    Qclip = M•Qworld•Mtransposed.
+    C* is the 3x3 matrix after dropping the z-axis from Q*.
+    Invert C* to get C, which maps to the general conic equation:
+    Ax^2 + Bxy + Cy^2 + Dx + Ey + F = 0. Extract center, axes, and rotation angle of the 2d ellipse.
+    */
+
+
+
+    const { radiusSquared, center } = this;
+
+    // idx col-major, row-major
+    // 0 c00 r00  // 00 is row, column
+    // 1 c10 r01
+    // 2 c20 r02
+    // 3 c30 r03
+    // 4 c01 r10
+    // 5 c11 r11
+    // 6 c21 r12
+    // 7 c31 r13
+    // 8 c02 r20
+    // 9 c12 r21
+    // 10 c22 r22
+    // 11 c32 r23
+    // 12 c03 r30
+    // 13 c13 r31
+    // 14 c23 r32
+    // 15 c33 r33
+
+    // Build the dual quadric of the sphere in World Space.
+    const Qws = MatrixFloat32.fromColumnMajorArray([
+      radiusSquared - (center.x * center.x),  -center.x * center.y,                   -center.x * center.z,                   -center.x,
+      -center.y * center.x,                   radiusSquared - (center.y * center.y),  -center.y * center.z,                   -center.y,
+      -center.z * center.x,                   -center.z * center.y,                   radiusSquared - (center.z * center.z),  -center.z,
+      -center.x,                              -center.y,                              -center.z,                              -1,
+    ], 4, 4);
+
+    // Transform to Clip Space: Q_clip = VP * Qws * VP^T. M = VP in this scenario.
+    // TODO: Is this correct order for row-major?
+    const VPT = M.transpose();
+    const Qcs = VPT.multiply4x4(Qws).multiply4x4(M);
+
+    // Extract the 3x3 dual conic. (Drop z row and column.)
+    const Cstar = Qcs.dropColumn(2).dropRow(2); // Index from 0; drop z column and row.
+
+    // Invert the 3x3 dual conic to get the primal conic C.
+    const Cmat = Cstar.invert();
+    if ( !Cmat ) return null;
+
+    // Map to the conic equation.
+    // Ax^2 + Bxy + Cy^2 + Dx + Ey + F = 0
+    // idx col-major, row-major
+    // 0 c00 r00  // 00 is row, column
+    // 1 c10 r01
+    // 2 c20 r02
+    // 3 c01 r10
+    // 4 c11 r11
+    // 5 c21 r12
+    // 6 c02 r20
+    // 7 c12 r21
+    // 8 c22 r22
+
+    const A = Cmat.getIndex(0, 0);
+    const B = 2 * Cmat.getIndex(1, 0); // C3 === C1 b/c symmetric
+    const C = Cmat.getIndex(1, 1);
+    const D = 2 * Cmat.getIndex(2, 0); // C6 === C2
+    const E = 2 * Cmat.getIndex(2, 1); // C7 === C5
+    const F = Cmat.getIndex(2, 2);
+
+    // Extract ellipse parameters.
+    const den = (4 * A * C) - (B ** 2);
+    if ( den.almostEqual(0) ) return null;
+
+    // Center point in NDC.
+    const ndcCenter = PIXI.Point.tmp.set(
+      ((B * E) - (2 * C * D)) / den,
+      ((B * D) - (2 * A * E)) / den,
+    );
+
+    // Rotation angle.
+    const angle = 0.5 * Math.atan2(B, A - C);
+
+    // Semi-major and semi-minor axes.
+    const Fprime = F + 0.5 * ((D * ndcCenter.x) + (E * ndcCenter.y));
+    if ( Fprime.almostEqual(0) ) return null;
+
+    const aPrime = -A / Fprime;
+    const bPrime = -B / Fprime;
+    const cPrime = -C / Fprime;
+
+    const trace = aPrime + cPrime;
+    const detPrime = (aPrime * cPrime) - ((bPrime / 2) ** 2);
+    const discriminant = Math.sqrt(Math.max(0, (trace ** 2) - (4 * detPrime)));
+
+    const lambda1 = (trace + discriminant) / 2;
+    const lambda2 = (trace - discriminant) / 2;
+
+    const radius = PIXI.Point.tmp.set(
+      1.0 / Math.sqrt(Math.abs(lambda1)),
+      1.0 / Math.sqrt(Math.abs(lambda2)),
+    );
+
+    out ??= radius.x.almostEqual(radius.y) ? new Ellipse3d() : new Circle3d();
+    out.center = center;
+    out.radius = radius;
+    out.angle = angle;
+    return out;
+  }
+
+
   /**
    * Uses Welzl's algorithm to find the smallest enclosing sphere.
    */
@@ -519,13 +641,13 @@ export class Sphere {
   static triangulateSphereSurface(pts3d) {
     // Map the 3d surface points to 2d spherical coordinates (longitude, latitude)
     const pts2d = pts3d.map(pt => {
-      const lon = Math.atan(p.y, p.x); // Range: -π to π
-      const lat = Math.acos(p.z / Math.sqrt(pt.dot2()));
+      const lon = Math.atan(pt.y, pt.x); // Range: -π to π
+      const lat = Math.acos(pt.z / Math.sqrt(pt.dot2()));
       return [lon, lat];
     });
 
     // Perform 2d Delaunay Triangulation on the spherical grid.
-    const delaunay = Delaunay.from(points2d);
+    const delaunay = Delaunay.from(pts2d);
     const triangles = delaunay.triangles; // Array of indices pointing to our original array.
 
     // Construct the final triangles
@@ -540,6 +662,8 @@ export class Sphere {
 
     return tris;
   }
+
+  // ----- NOTE: Points ----- //
 
   /**
    * Distribute points evenly around a sphere.
@@ -566,15 +690,22 @@ export class Sphere {
   }
   */
 
-  pointsLattice({ spacing = CONFIG[GEOMETRY_LIB_ID].CONFIG.perPixelSpacing || 10 } = {}) {
+  pointsLattice({ count, spacing = CONFIG[GEOMETRY_LIB_ID].CONFIG.perPixelSpacing || 10 } = {}) {
     // Estimated number of points:
     // Consider each point sitting inside the center of a hexagon (or circle) with a given diameter.
     // Area covered by a single point in a dense packing is approx. Ap ~ (√3/2) * d^2
     // Total surface area / area required per point gives us N.
     // R = radius; d = spacing; N = count
     // N ~ 4πR^2 /(√3/2)*d^2 ~ 8πR^2 / √3*d^2 ~ 7.255 * (R/d)^2
-    const count = 7.255 * ((this.radius/spacing) ** 2); // Increase 7.255 to increase coverage; gets wider at equator.
-    return this.constructor.pointsLattice(Math.floor(count));
+    const radius = this.radius;
+    count ??= 7.255 * ((radius/spacing) ** 2); // Increase 7.255 to increase coverage; gets wider at equator.
+    const pts = this.constructor.pointsLattice(Math.floor(count));
+
+    const ctr = this.center;
+    const txMat = MatrixFloat32.translation(ctr.x, ctr.y, ctr.z);
+    const scaleMat = MatrixFloat32.scale(radius, radius, radius);
+    const M = txMat.multiply4x4(scaleMat);
+    return pts.map(pt => pt.transform(M, pt));
   }
 
   static pointsLattice(count, ...args) {

@@ -1,6 +1,7 @@
 /* globals
 canvas,
 CONFIG,
+Hooks,
 PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
@@ -10,7 +11,7 @@ import { TileGeometry } from "./TileGeometry.js";
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { gridUnitsToPixels, NULL_SET } from "../util.js";
 import { AABB3d } from "../3d/AABB3d.js";
-import { MatrixFloat32 } from "../Matrix.js";
+import { Point3d } from "../3d/Point3d.js";
 
 const TRACKER_TYPES = {
   background: [
@@ -132,30 +133,11 @@ export class LevelBackgroundGeometry extends TileGeometry {
     }
   }
 
-  // ----- NOTE: Matrices ----- //
-
-  calculateTranslationMatrix() {
-    // Calculate the matrix first to avoid recalculating after the reload is done.
-    const mat = super.calculateTranslationMatrix();
-    const ctr = this.constructor.tileCenter(this.placeableDocument);
-    return MatrixFloat32.translation(ctr.x, ctr.y, this.elevationZ, mat);
-  }
-
-  calculateRotationMatrix() {
-    const mat = super.calculateRotationMatrix();
-    const rot = this.constructor.tileRotation(this.placeableDocument)
-    return MatrixFloat32.rotationZ(rot, true, mat);
-  }
-
-  calculateScaleMatrix() {
-    const mat = super.calculateScaleMatrix();
-    const { width, height } = this.constructor.tileDimensions(this.placeableDocument);
-    return MatrixFloat32.scale(width, height, 1.0, mat);
-  }
-
   // ----- NOTE: Scene texture characteristics ----- //
 
-  static tileRotation(levelD) { return Math.toRadians(levelD.textures.rotation || 0); }
+  static tileRotation(levelD) {
+    return Point3d.tmp.set(0, 0, Math.toRadians(levelD.textures.rotation || 0));
+  }
 
   /**
    * Determine the center of the tile, in pixel units.
@@ -168,14 +150,15 @@ export class LevelBackgroundGeometry extends TileGeometry {
     const { width, height } = cache;
     using TL = cache._toCanvasCoordinates(0, 0);
     using BR = cache._toCanvasCoordinates(width, height);
-    return PIXI.Point.midPoint(TL, BR);
+    using mid = PIXI.Point.midPoint(TL, BR);
+    return Point3d.tmp.set(mid.x, mid.y, gridUnitsToPixels(levelD.elevation.base));
   }
 
   static tileDimensions(levelD) {
     const cache = this.cacheManager.pixelCacheForDocument(levelD);
     if ( !cache ) {
       const { width, height } = canvas.scene;
-      return { width, height };
+      return Point3d.tmp.set(width, height, 1);
     }
 
     const { width, height } = cache;
@@ -183,10 +166,11 @@ export class LevelBackgroundGeometry extends TileGeometry {
     using BL = cache._toCanvasCoordinates(0, height);
     using TR = cache._toCanvasCoordinates(width, 0);
 
-    return {
-      width: PIXI.Point.distanceBetween(TL, TR),
-      height: PIXI.Point.distanceBetween(TL, BL),
-    };
+    return Point3d.tmp.set(
+      PIXI.Point.distanceBetween(TL, TR),
+      PIXI.Point.distanceBetween(TL, BL),
+      1,
+    );
   }
 
 }

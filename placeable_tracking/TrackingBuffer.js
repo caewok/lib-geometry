@@ -205,10 +205,10 @@ export class VariableLengthAbstractBuffer {
 
   // ----- NOTE: Facet tracking ----- //
 
-  /** @type {Map<string, number>} */
+  /** @type {Map<string(), number>} */
   facetIdMap = new IndexMap();
 
-  /** @type {Map<string, number>} */
+  /** @type {Map<number, number>} */
   facetChangeTracker = new Map();
 
   setFacetId(id, idx) {

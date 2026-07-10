@@ -1,26 +1,16 @@
 /* globals
-canvas,
-CONFIG,
-CONST,
 Hooks,
-PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { FixedLengthTrackingBuffer } from "../placeable_tracking/TrackingBuffer.js";
-
+// Geometry
+import { GeometricPrimitive } from "./GeometricPrimitive.js";
 
 // LibGeometry
-import { GEOMETRY_LIB_ID } from "../const.js";
-import { MatrixFloat32, ModelMatrix } from "../Matrix.js";
 import { AABB3d } from "../3d/AABB3d.js";
-import { Quad3d, Ellipse3d, Polygon3d } from "../3d/Polygon3d.js";
-import { almostBetween } from "../util.js";
-import { Point3d } from "../3d/Point3d.js";
-import { VertexObject } from "../placeable_vertices/VertexObject.js";
-import { combineTypedArrays, NULL_SET } from "../util.js";
-import { getHexagonalShape } from "../placeable_vertices/BasicVertices.js";
+import { NULL_SET } from "../util.js";
+
 
 /* Store key geometry information for each placeable, in 3d.
 - AABB
@@ -53,6 +43,10 @@ Hooks.on("updateLevel", function(_level, _changes, _opts, _id) {
   LEVEL_SEGMENTS = PlaceableGeometry.segmentLevels();
 });
 
+Hooks.on("canvasReady", function(canvas) {
+  LEVEL_SEGMENTS = PlaceableGeometry.segmentLevels();
+});
+
 
 export class PlaceableGeometry {
 
@@ -70,7 +64,20 @@ export class PlaceableGeometry {
 
   static _registerHooks() { }
 
-    /**
+  // ----- NOTE: Levels ----- //
+
+  /**
+   * Reorganize and split level intervals to cover the low to high range with no overlaps.
+   * Add gap intervals as necessary.
+   * @param {Level[]} levels
+   * @returns {object[]} The intervals
+   *  - @prop {number} bottom       Bottom elevation value
+   *  - @prop {number} top          Top elevation value
+   *  - @prop {string[]} id[]       Id of the levels encountered in this interval
+   */
+  static get levelSegments() { return LEVEL_SEGMENTS; }
+
+  /**
    * Reorganize and split level intervals to cover the low to high range with no overlaps.
    * Add gap intervals as necessary.
    * @param {number[]} elevations     Elevations to add in addition to the scene levels
@@ -141,13 +148,13 @@ export class PlaceableGeometry {
    */
   constructor(placeableDocument) { this.placeableDocument = placeableDocument; }
 
-  initialize() { }
+  // ----- NOTE: Updating ----- //
 
   static UPDATE_KEYS = {
     properties: NULL_SET,
     level: NULL_SET,
-    position2d: NULL_SET,
-    elevation: NULL_SET,
+    positionXY: new Set(["x", "y"]),
+    elevation: new Set(["elevation"]),
     scale: NULL_SET,
     rotation: NULL_SET,
   };
@@ -156,7 +163,7 @@ export class PlaceableGeometry {
   _updateFlags = {
     properties: false,
     level: false,
-    position2d: false,
+    positionXY: false,
     elevation: false,
     scale: false,
     rotation: false,
@@ -174,343 +181,87 @@ export class PlaceableGeometry {
     const updateFlags = this._updateFlags;
     Object.keys(updateFlags).forEach(key => updateFlags[key] = false);
 
-    // Update in order. If any updates, update the shape.
     let shapeUpdated = false;
     for ( const [type, s] of Object.entries(this.constructor.UPDATE_KEYS) ) {
-      if ( !s.intersects(updateKeys) ) continue;
-      this[`${type}Updated`]();
-      updateFlags[type] = true;
+      updateFlags[type] = s.intersects(updateKeys);
       shapeUpdated ||= true;
     }
-    if ( shapeUpdated ) {
-      this.shapeUpdated();
-      this.updateCount += 1;
-    }
+    if ( !shapeUpdated ) return;
+    this._update();
   }
 
   forceUpdate() {
-    const updateFlags = this._updateFlags;
-    Object.keys(updateFlags).forEach(key => updateFlags[key] = false);
-    for ( const type of Object.keys(this.constructor.UPDATE_KEYS) ) {
-      this[`${type}Updated`]();
-      updateFlags[type] = true;
-    }
-    this.shapeUpdated();
+    Object.keys(this._updateFlags).forEach(key => this._updateFlags[key] = true);
+    this._update();
+  }
+
+  // Triggered second.
+  _update() {
+    this.calculateAABB();
     this.updateCount += 1;
   }
 
-  // Triggered first for defined properties.
-  propertiesUpdated() { }
 
-  // Triggered second.
-  levelUpdated() { }
+  // ----- NOTE: Geometric shapes ----- //
 
-  position2dUpdated() { }
-
-  elevationUpdated() { }
-
-  scaleUpdated() { }
-
-  rotationUpdated() { }
-
-  // Triggered last, if any properties are updated.
-  shapeUpdated() { }
-
-  destroy() { }
-}
-
-// ----- NOTE: Placeable Mixins ----- //
-
-/*
-Each mixin has a basic calculation method that may be extended by subclasses.
-Each relies on 1+ update methods.
-
-Changes to placeable dimensions:
-- position
-- scale
-- rotation
-- shape (called when any of position/scale/rotation) triggered
-
-Changes to other placeable characteristics that result in full reset, such as token shape
-- placeableProperties
-
-Other updates may be defined by subclasses but those must
-
-
-*/
-
-// ----- NOTE: PlaceableAABBMixin ----- //
-
-/**
- * @typedef {function} PlaceableAABBMixin
- *
- * Add a bounding box for this placeable class.
- * @param {function} superclass
- * @returns {function} A subclass of `superclass.`
- */
-export const PlaceableAABBMixin = superclass => class extends superclass {
-  aabb = new AABB3d(); // Allow non-private access so update can be called separately first.
+  shapes = [];
 
   initialize() {
-    super.initialize();
+    this.shapes.forEach(shape => shape.initialize());
     this.calculateAABB();
   }
 
-  // AABB is fairly basic, so no need to handle position/rotation/scale separately.
-  shapeUpdated() { super.shapeUpdated(); this.calculateAABB(); }
-
-  calculateAABB() { console.error(`${this.constructor.name} must implement calculateAABB method.`); }
-}
-
-// ----- NOTE: PlaceableModelMatrixMixin ----- //
-
-/** @type {Matrix<4,4>} */
-const identityM = MatrixFloat32.identity(4, 4);
-Object.freeze(identityM);
-
-/**
- * Matrix model that uses a provided callback to access the model matrix buffer.
- */
-export class PlaceableModelMatrix extends ModelMatrix {
-
-  /** @type {function} */
-  #modelMatrixCallback;
-
-  get _model() { return this.#modelMatrixCallback(); }
-
-  get model() { return super.model; }
-
-  constructor(modelMatrixCallback) {
-    super();
-    delete this._model;
-    this.#modelMatrixCallback = modelMatrixCallback;
+  destroy() {
+    this.shapes.forEach(shape => shape.destroy());
   }
-}
 
-/**
- * @typedef {function} PlaceableModelMatrixMixin
- *
- * Adds a model matrix for this placeable.
- * Includes separate rotation, translation, and scale sub-matrices.
- * @param {function} superclass
- * @returns {function} A subclass of `superclass.`
- */
-export const PlaceableModelMatrixMixin = superclass => {
+  // ----- NOTE: Levels ----- //
 
-  // Must define some objects here so they are not repeated between classes.
-  let trackerCounter = 0;
+  /**
+   * Does this geometry currently block a given sense type?
+   * @param {CONST.WALL_RESTRICTION_TYPES} [senseType="sight"]
+   * @returns {boolean}
+   */
+  blocksSense(_senseType = "sight") { return true; }
 
-  return class extends superclass {
-    /**
-     * Store the entire model matrix as a single typed array.
-     * Each 16-element matrix (per placeable) is accessed using an id.
-     * @type {FixedLengthTrackingBuffer}
-     */
-    static modelMatrixTracker = new FixedLengthTrackingBuffer( { facetLengths: 16, numFacets: 0, type: Float32Array });
+  /**
+   * Does this geometry currently block, from the view of a given level?
+   * Must all check if it blocks the given sense type.
+   * @param {string} levelId
+   * @returns {boolean}
+   */
+  blocksFromLevel(_levelId) { return true; }
 
-    /**
-     * Indicate that the underlying model matrix tracker may have changed, due to
-     * a placeable getting added or removed.
-     */
-    static _incrementTrackerCounter() { trackerCounter += 1; }
+  // ----- NOTE: AABB ----- //
 
-    static get _trackerCounter() { return trackerCounter; }
+  /** @type {AABB3d} */
+  aabb = new AABB3d();
 
-    /** @type {number} */
-    #trackerUpdateCounter = -1;
-
-    /**
-     * Placeholder to use as the model matrix. Will be updated by modelMatrixCallback.
-     * @type {MatrixFloat32}
-     */
-    #modelMatrixData = MatrixFloat32.empty(4, 4);
-
-    /** @type {function} */
-    #modelMatrixCallback() {
-      if ( this.#trackerUpdateCounter < this.constructor._trackerCounter ) {
-        this.#modelMatrixData.arr = this.constructor.modelMatrixTracker.viewFacetById(this.placeableId);
-        this.#trackerUpdateCounter = this.constructor._trackerCounter;
-      }
-      return this.#modelMatrixData;
-    }
-
-    /** @type {PlaceableModelMatrix} */
-    modelMatrix = new PlaceableModelMatrix(this.#modelMatrixCallback.bind(this));
-
-    /**
-     * Create an id used for the model matrix tracking.
-     * @type {string}
-     */
-    get placeableId() { return this.placeableDocument.uuid; }
-
-    position2dUpdated() {
-      super.position2dUpdated();
-      this.calculateTranslationMatrix();
-    }
-
-    elevationUpdated() {
-      if ( !this._updateFlags.position2d ) this.calculateTranslationMatrix();
-    }
-
-    rotationUpdated() {
-      super.rotationUpdated();
-      this.calculateRotationMatrix();
-    }
-
-    scaleUpdated() {
-      super.scaleUpdated();
-      this.calculateScaleMatrix();
-    }
-
-    calculateTranslationMatrix() {
-      this.constructor.modelMatrixTracker._facetIdUpdated(this.placeableId);
-      return this.modelMatrix.translation;
-    }
-
-    calculateRotationMatrix() {
-      this.constructor.modelMatrixTracker._facetIdUpdated(this.placeableId);
-      return this.modelMatrix.rotation;
-    }
-
-    calculateScaleMatrix() {
-     this.constructor.modelMatrixTracker._facetIdUpdated(this.placeableId);
-     return this.modelMatrix.scale;
-    }
-
-    initialize() {
-      this.constructor.modelMatrixTracker.addFacet({ id: this.placeableId, newValues: identityM.arr });
-      this.constructor._incrementTrackerCounter();
-      const mm = this.modelMatrix;
-      this.calculateTranslationMatrix(mm.translation);
-      this.calculateRotationMatrix(mm.rotation);
-      this.calculateScaleMatrix(mm.scale);
-      super.initialize();
-    }
-
-    destroy() {
-      this.constructor.modelMatrixTracker.deleteFacet(this.placeableId);
-      this.constructor._incrementTrackerCounter();
-      this.modelMatrix = null;
-      super.destroy();
-    }
+  calculateAABB() {
+    AABB3d.union(this.shapes.map(shape => shape.aabb), this.aabb);
   }
-}
 
-// ----- NOTE: PlaceableFacesMixin ----- //
-
-
-// All CCW because default GPU test is counter-clockwise
-
-export const QUADS = {
-  up: Quad3d.from4Points(
-    Point3d.tmp.set(-0.5, -0.5, 0),
-    Point3d.tmp.set(-0.5, 0.5, 0),
-    Point3d.tmp.set(0.5, 0.5, 0),
-    Point3d.tmp.set(0.5, -0.5, 0),
-  ),
-  down: Quad3d.from4Points(
-    Point3d.tmp.set(0.5, -0.5, 0),
-    Point3d.tmp.set(0.5, 0.5, 0),
-    Point3d.tmp.set(-0.5, 0.5, 0),
-    Point3d.tmp.set(-0.5, -0.5, 0),
-  ),
-  south: Quad3d.from4Points( // E.g., wall facing south.
-    Point3d.tmp.set(-0.5, 0, 0.5),
-    Point3d.tmp.set(-0.5, 0, -0.5),
-    Point3d.tmp.set(0.5, 0, -0.5),
-    Point3d.tmp.set(0.5, 0, 0.5),
-  ),
-  north: Quad3d.from4Points(
-    Point3d.tmp.set(0.5, 0, 0.5),
-    Point3d.tmp.set(0.5, 0, -0.5),
-    Point3d.tmp.set(-0.5, 0, -0.5),
-    Point3d.tmp.set(-0.5, 0, 0.5),
-  ),
-  west: Quad3d.from4Points( // E.g., wall facing west.
-    Point3d.tmp.set(0, -0.5, 0.5),
-    Point3d.tmp.set(0, -0.5, -0.5),
-    Point3d.tmp.set(0, 0.5, -0.5),
-    Point3d.tmp.set(0, 0.5, 0.5),
-  ),
-  east: Quad3d.from4Points(
-    Point3d.tmp.set(0, 0.5, 0.5),
-    Point3d.tmp.set(0, 0.5, -0.5),
-    Point3d.tmp.set(0, -0.5, -0.5),
-    Point3d.tmp.set(0, -0.5, 0.5),
-  ),
-};
-
-/* Cannot use reverseOrientation b/c methods not fully defined on initial load.
-QUADS.down = QUADS.up.clone().reverseOrientation();
-QUADS.north = QUADS.south.clone().reverseOrientation();
-QUADS.east = QUADS.west.clone().reverseOrientation();
-*/
-
-
-/**
- * @typedef {function} PlaceableFacesMixin
- *
- * Add faces for this placeable class.
- * Also adds rayIntersection testing method.
- * Requires matrices.
- * @param {function} superclass
- * @returns {function} A subclass of `superclass.`
- */
-export const PlaceableFacesMixin = superclass => class extends superclass {
+  // ----- NOTE: Faces ----- //
 
   /**
-   * Reorganize and split level intervals to cover the low to high range with no overlaps.
-   * Add gap intervals as necessary.
-   * @param {Level[]} levels
-   * @returns {object[]} The intervals
-   *  - @prop {number} bottom       Bottom elevation value
-   *  - @prop {number} top          Top elevation value
-   *  - @prop {string[]} id[]       Id of the levels encountered in this interval
+   * Iterate over the shapes.
+   * @param {object} [opts]
+   * @param {CONST.WALL_RESTRICTION_TYPES} [opts.senseType]   If provided, will return early if geometry does not block this sense type.
+   * @param {string} [opts.levelId]                           If provided, will return early if geometry does not affect this level.
+   * @yields {GeometricPrimitive}
    */
-  static get levelSegments() { return LEVEL_SEGMENTS; }
-
-  /**
-   * @typedef {Polygon3d} Face
-   *
-   * Face of a placeable object, meaning a 3d planar object.
-   */
-
-  /** @type {Face[]} */
-  static prototypeFaces = [];
-
-  /** @type {Face[]} */
-  faces = [];
-
-  /**
-   * Iterate over the faces.
-   * @param {object} [_opts]        Used by child classes, like WallGeometry
-   * @yields {Face}
-   */
-  *iterateFaces(_opts) { yield* this.faces.values(); }
-
-  /**
-   * Construct the prototype faces.
-   */
-  initialize() {
-    LEVEL_SEGMENTS ??= PlaceableGeometry.segmentLevels();
-    this.constructor.prototypeFaces.forEach(f => this.faces.push(f.clone()));
-    super.initialize();
-    this._updateFaces();
+  *iterateShapes({ senseType, levelId } = {}) {
+    if ( senseType && !this.blocksSense(senseType) ) return;
+    if ( levelId && !this.blocksFromLevel(levelId) ) return;
+    yield* this.shapes;
   }
 
   /**
-   * Update the faces for this placeable.
-   * Always updates using the model matrix.
+   * Iterate over the shapes' faces.
+   * @yields {Polygon3d}
    */
-  _updateFaces() {
-    const M = this.modelMatrix.model;
-    const numSides = this.constructor.prototypeFaces.length;
-    for ( let i = 0; i < numSides; i += 1 ) this.constructor.prototypeFaces[i].transform(M, this.faces[i]);
-  }
-
-  shapeUpdated() {
-    super.shapeUpdated();
-    this._updateFaces();
+  *iterateFaces(opts = {}) {
+    for ( const shape of this.iterateShapes(opts) ) yield* shape.faces;
   }
 
   /**
@@ -520,218 +271,35 @@ export const PlaceableFacesMixin = superclass => class extends superclass {
    * @param {Point3d} rayOrigin
    * @param {Point3d} rayDirection
    * @param {object} [opts]
+   * @param {string} [opts.levelId]       Level to
    * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
    * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
    * @returns {number|null} The distance along the ray, as a multiple of rayDirection
    */
-  rayIntersection(rayOrigin, rayDirection, opts) {
-    for ( const face of this.iterateFaces(opts) ) {
-      const t = this.constructor.rayIntersectionForFace(face, rayOrigin, rayDirection, opts);
+  rayIntersection(rayOrigin, rayDirection, opts = {}) {
+    for ( const shape of this.iterateShapes(opts) ) {
+      const t = shape.rayIntersection(rayOrigin, rayDirection, opts);
       if ( t !== null ) return t;
     }
     return null;
   }
 
-  static rayIntersectionForFace(face, rayOrigin, rayDirection, { minT = 0, maxT = 1 } = {}) {
-    if ( !face.isFacing(rayOrigin) ) return null;
-    const t = face.intersectionT(rayOrigin, rayDirection);
-    if ( t !== null && almostBetween(t, minT, maxT) ) return t;
-    return null;
-  }
-
-  // ----- NOTE: Polygon3d unit shapes ----- //
-  /**
-   * 0.5 x 0.5 x 0.5 Quads facing different directions.
-   */
-  static QUADS = QUADS;
-
-  static RECT_SIDES = {
-    north: 0,
-    west: 1,
-    south: 2,
-    east: 3,
-  };
-
-  // ----- NOTE: Debug ----- //
-
-  /**
-   * Draw face, omitting an axis.
-   */
   draw2d(opts) {
-    for ( const face of this.iterateFaces(opts) ) face.draw2d(opts);
-  }
-}
-
-/**
- * @typedef {function} PlaceableFacePointsMixin
- *
- * Add face points for this placeable class.
- * Requires matrices, PlaceableFacesMixin..
- * @param {function} superclass
- * @returns {function} A subclass of `superclass.`
- */
-
-/**
- * @typedef FacePoints
- *
- * Faces of a placeable object.
- * @prop {Point3d[]|null} top
- * @prop {Point3d[]|null} bottom
- * @prop {Point3d[][]} sides
- */
-
-export const PlaceableFacePointsMixin = superclass => class extends superclass {
-
-  /** @typedef {FacePoints} */
-  facePoints = [];
-
-  _updateFaces() {
-    super._updateFaces();
-    this._generateFacePoints();
+    for ( const shape of this.shapes ) shape.draw2d(opts);
   }
 
-  /**
-   * For each face, generate points encompassed by its surface.
-   */
-  _generateFacePoints() {
-    if ( !this.faces ) return; // Requires the FacesMixin.
+  // ----- NOTE: Face points ----- //
 
-    const opts = { spacing: CONFIG[GEOMETRY_LIB_ID].CONFIG.perPixelSpacing || 10, startAtEdge: false };
-    const numSides = this.faces.length;
-    for ( let i = 0; i < numSides; i += 1 ) this.facePoints[i] = this.faces[i].pointsLattice(opts);
-  }
-}
+  get facePoints() { return this.shapes.flatMap(shape => shape.facePoints); }
 
-/**
- * @typedef {function} PlaceableVerticesMixin
- *
- * Create vertices for the placeable faces.
- * Requires PlaceableFacesMixin.
- * @param {function} superclass
- * @returns {function} A subclass of `superclass.`
- */
-export const PlaceableVerticesMixin = superclass => class extends superclass {
+  // ----- NOTE: Internal points ----- //
 
-  // Most placeables only need the instance vertices with normals.
+  static POINT_INDICES = GeometricPrimitive.POINT_INDICES;
 
-  /**
-   * Vertices with normals and indices.
-   * @type {object<VertexObject>}
-   */
-  static _instanceVO;
-
-  static get instanceVO() {
-    return (this._instanceVO ||= this.updateInstanceVertices());
+  getInternalPoints() {
+    return this.shapes.map(shape => shape.getInternalPoints());
   }
 
-  /**
-   * Update instance vertices.
-   * Default approach uses the prototype faces.
-   */
-  static updateInstanceVertices() {
-    // Add vertices from faces.
-    const vo = this._instanceVO || new VertexObject();
-    const vertices = this.verticesFromFaces(this.prototypeFaces, true);
-    vo.hasNormals = true;
-    vo.hasUVs = false;
-    this.updateVertexObject(vo, vertices);
-    return vo;
-  }
+  // ----- NOTE: Vertices ----- //
 
-  /**
-   * Create vertices for this placeable using its faces.
-   * @param {Polygon3d[]} faces
-   * @param {boolean} [addNormals=false]
-   * @returns {Float32Array} The vertices
-   */
-  static verticesFromFaces(faces, addNormals = true) {
-    // Store each Float32 array for each face separately.
-    const vertices = [];
-    for ( const face of faces ) vertices.push(face.toVertices({ addNormals }));
-
-    // Combine.
-    return combineTypedArrays(vertices);
-  }
-
-  /**
-   * Update a vertex object in place with vertices.
-   * @param {VertexObject} vo
-   * @param {Float32Array} vertices
-   * @returns {VertexObject} The object, for convenience
-   */
-  static updateVertexObject(vo, vertices) {
-    vo.indices = null;
-    vo.vertices = vertices;
-    vo.condense(vo);
-    return vo;
-  }
-}
-
-/**
- * Create the instance face shapes for a unit cube.
- * 1 x 1 x 1 centered at 0,0,0.
- * @returns {Face[]}
- */
-export function createUnitCube() {
-  const faces = [
-    QUADS.up.clone(),
-    QUADS.down.clone(),
-    QUADS.north.clone(),
-    QUADS.west.clone(),
-    QUADS.south.clone(),
-    QUADS.east.clone(),
-  ];
-
-  faces[0].setZ(0.5);
-  faces[1].setZ(-0.5);
-
-  // Adjust the sides so that they are at the region edge.
-  for ( let i = 0; i < 4; i += 1 ) {
-    faces[2].points[i].y = -0.5; // North.
-    faces[3].points[i].x = -0.5; // West.
-    faces[4].points[i].y = 0.5; // South.
-    faces[5].points[i].x = 0.5; // East.
-  }
-  return faces;
-}
-
-/**
- * Create the instance face shapes for an unit ellipse cylinder.
- * Uses 1 x 1 x 0.5 b/c the scale matrix is set using the half-radii.
- * Have to guess at the likely radius for the vertex density.
- * @param {number} densityRadius      How dense to make the ellipse polygon edges.
- * @returns {Face[]}
- */
-export function createUnitEllipseCylinder(densityRadius = 100) {
-  const top = new Ellipse3d();
-  const bottom = new Ellipse3d();
-
-  top.radiusX = 1;
-  top.radiusY = 1;
-  top.clone(bottom);
-  bottom.reverseOrientation();
-  top.setZ(0.5);
-  bottom.setZ(-0.5);
-
-  const density = PIXI.Circle.approximateVertexDensity(densityRadius);
-  return [top, bottom, ...top.buildTopSides(-0.5, { density })];
-}
-
-/**
- * Create the instance face shapes for an unit hexagon cylinder.
- * @returns {Face[]}
- */
-export function createUnitHexagonalCylinder() {
-  const res = getHexagonalShape(1, 1, CONST.TOKEN_SHAPES.TRAPEZOID_1, canvas.scene.grid.columns || false);
-  let poly = new PIXI.Polygon(res.points);
-  poly = poly.translate(-res.center.x, -res.center.y);
-  const bounds = poly.getBounds();
-  poly = poly.scale(1/bounds.width, 1/bounds.height);
-  if ( poly.isPositive ) poly.reverseOrientation();
-  const top = Polygon3d.fromPolygon(poly, 0.5);
-  const bottom = top.clone();
-  bottom.reverseOrientation();
-  top.setZ(0.5);
-  bottom.setZ(-0.5);
-  return [top, bottom, ...top.buildTopSides(-0.5)];
 }

@@ -37,6 +37,7 @@ export class Frustum {
 
   setAABB() { AABB3d.union([this.floor.aabb, this.top.aabb], this.aabb); }
 
+
   /**
    * Determine the 3d (volumetric) center of the pyramid.
    * @type {Point3d}

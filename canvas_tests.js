@@ -9,7 +9,6 @@ import { Draw } from "./Draw.js";
 import { Point3d } from "./3d/Point3d.js";
 import { Triangle3d } from "./3d/Polygon3d.js";
 import { ElevatedPoint } from "./3d/ElevatedPoint.js";
-import { TokenSquareGeometry } from "./placeable_geometry/TokenGeometry.js";
 
 // Testing functions that require a loaded canvas.
 
@@ -160,7 +159,7 @@ export function drawPlaceableGeometry(placeableDocument, placeableColor, opts) {
   if ( placeableDocument.document ) placeableDocument = placeableDocument.document;
   const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.geomForDocument(placeableDocument);
   if ( !geom ) {
-    console.error(`${placeable.constructor.name} ${placeable.id} has no geometry.`);
+    console.error(`${placeableDocument.constructor.name} ${placeableDocument.id} has no geometry.`);
     return;
   }
   drawGeometry(geom, placeableColor, opts);
@@ -329,6 +328,7 @@ export function testTileGeometryContainment() {
 
 export function testRegionGeometryContainment() {
   let incorrectRegions = new Set();
+  const mgr = CONFIG.GeometryLib.geometryManager;
   for ( const region of canvas.regions.placeables ) {
     const geom = mgr.geomForPlaceable(region);
     if ( !geom.faces.top ) continue;
@@ -459,6 +459,7 @@ export function drawTokenVertices({ tokens, type = "all", ...drawingOpts } = {})
  * @param {object} [opts]
  * @param {Token[]} [opts.tokens]                 Walls to draw; otherwise test entire canvas
  */
+/*
 export function testTokenVertices({ tokens } = {}) {
   const vo = TokenSquareGeometry.instanceVO;
   const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
@@ -467,6 +468,7 @@ export function testTokenVertices({ tokens } = {}) {
     if ( tri.orient3d(ctr) > 0 ) console.error(`Token ${token.name} (${token.id}) instance triangle facing wrong direction`);
   }
 }
+*/
 
 /**
  * Draw 2d tiles based on top geometry face.

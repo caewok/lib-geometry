@@ -31,6 +31,8 @@ export class AABB3d extends AABB2d {
   /** @type {Point3d} */
   max = new this.constructor.POINT_CLASS(Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY);
 
+  get zHeight() { return this.max.z - this.min.z; }
+
   /**
    * Determine the min/max for a number or array of numbers.
    * Default to [-∞, ∞]

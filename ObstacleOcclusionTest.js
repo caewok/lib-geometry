@@ -11,6 +11,7 @@ import { NULL_SET } from "./util.js";
 import { OTHER_MODULES, GEOMETRY_LIB_ID } from "./const.js";
 import { AABB3d } from "./3d/AABB3d.js";
 import { Draw } from "./Draw.js";
+import { TokenGeometry } from "./placeable_geometry/TokenGeometry.js";
 
 /**
  * An instance that, for a given configuration, tracks potential obstacles.
@@ -30,6 +31,57 @@ export class ObstacleOcclusionTest {
     foregroundLevels: NULL_SET,
     backgroundLevels: NULL_SET,
   };
+
+  static OBSTACLE_KEYS = new Set([
+    "tiles",
+    "tokens",
+    "regions",
+    "walls",
+    "terrainWalls",
+    "proximateWalls",
+    "reverseProximateWalls",
+    "foregroundLevels",
+    "backgroundLevels",
+  ]);
+
+  /**
+   * @param {object} [opts]
+   * @param {CONST.WALL_RESTRICTION_TYPES} [opts.senseType]   If provided, will return early if geometry does not block this sense type.
+   * @param {string} [opts.levelId]                           If provided, will return early if geometry does not affect this level.
+   * @yields {GeometricPrimitive}
+   */
+  *iterateObstacleShapes(opts) {
+    for ( const geom of this.iterateObstacleGeoms(opt) ) yield* geom.iterateShapes();
+  }
+
+  /**
+   * @param {object} [opts]
+   * @param {CONST.WALL_RESTRICTION_TYPES} [opts.senseType]   If provided, will return early if geometry does not block this sense type.
+   * @param {string} [opts.levelId]                           If provided, will return early if geometry does not affect this level.
+   * @yields {Polygon3d}
+   */
+  *iterateObstacleFaces(opts) {
+    for ( const geom of this.iterateObstacleGeoms(opt) ) yield* geom.iterateFaces();
+  }
+
+  /**
+   * @param {object} [opts]
+   * @param {CONST.WALL_RESTRICTION_TYPES} [opts.senseType]   If provided, will return early if geometry does not block this sense type.
+   * @param {string} [opts.levelId]                           If provided, will return early if geometry does not affect this level.
+   * @yields {PlaceableGeometry}
+   */
+  *iterateObstacleGeoms({ includeObstacles = this.constructor.OBSTACLE_KEYS, senseType, levelId } = {}) {
+    senseType ??= this.senseType;
+    levelId ??= this.levelId;
+    for ( const key of includeObstacles ) {
+      const geoms = this.obstacleGeometries[key] || [];
+      for ( const geom of geoms ) {
+        if ( !geom.blocksSense(senseType) ) continue;
+        if ( !geom.blocksFromLevel(levelId) ) continue;
+        yield geom;
+      }
+    }
+  }
 
   /**
    * Further restrict the universe of placeables to test.
@@ -195,9 +247,21 @@ export class ObstacleOcclusionTest {
    * @param {Point3d} rayDirection    Direction of the ray
    * @returns {boolean} True if collision occurs
    */
-  rayIsOccluded(rayOrigin, rayDirection, levelId) {
-    if ( levelId ) this.levelId = levelId;
-    return this.obstacleTester.call(this, rayOrigin, rayDirection, { });
+  rayIsOccluded(rayOrigin, rayDirection) {
+    return this.obstacleTester.call(this, rayOrigin, rayDirection);
+  }
+
+  /**
+   * Helper to test if a segment is occluded.
+   * @param {Point3d} rayOrigin       Start of the ray
+   * @param {Point3d} rayEnd          End of the ray
+   * @returns {boolean} True if collision occurs
+   */
+  #rayDirection = new Point3d();
+
+  segmentIsOccluded(rayOrigin, rayEnd) {
+    rayEnd.subtract(rayOrigin, this.#rayDirection);
+    return this.rayIsOccluded(rayOrigin, this.#rayDirection);
   }
 
   update() {
@@ -314,43 +378,12 @@ export class ObstacleOcclusionTest {
    * @param {TokenBlockingConfig} blockingCfg
    * @returns {boolean}
    */
-  static tokenBlocks(tokenD, subjectTokenD, blockingCfg = {}) {
-    if ( tokenD.document ) tokenD = tokenD.document;
-    if ( subjectTokenD.document ) subjectTokenD = subjectTokenD.document;
 
-    // Hidden tokens don't block.
-    if ( tokenD.hidden ) return false;
 
-    // Don't block self. Note this is ignored if no subject token.
-    if ( subjectTokenD === tokenD ) return false;
+  static tokenBlocks = TokenGeometry.tokenBlocks;
 
-    // Exclude certain token statuses.
-    blockingCfg.excludedStatuses ??= NULL_SET;
-    if ( tokenD.actor
-      && tokenD.actor.statuses.intersects(blockingCfg.excludedStatuses) ) return false;
+  static includeToken = TokenGeometry.includeToken;
 
-    // Tests for dead tokens.
-    if ( !blockingCfg.dead && CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsDead(tokenD) ) return false;
-
-    // Tests for live tokens.
-    if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsAlive(tokenD) ) {
-      if ( !blockingCfg.live ) return false;
-      if ( !blockingCfg.prone && tokenD.isProne ) return false;
-
-      // Compare disposition to subject token.
-      if ( subjectTokenD ) {
-        if ( !blockingCfg.enemies && CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsEnemy(subjectTokenD, tokenD) ) return false;
-        if ( !blockingCfg.allies && CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsAlly(subjectTokenD, tokenD) ) return false;
-      }
-    }
-    return true;
-  }
-
-  static includeToken(tokenD, { blockingCfg = {}, subjectToken, tokensToExclude = NULL_SET }) {
-    if ( subjectToken && subjectToken.document ) subjectToken = subjectToken.document;
-    if ( tokenD === subjectToken || tokensToExclude.has(tokenD) ) return false;
-    return this.tokenBlocks(tokenD, subjectToken, blockingCfg);
-  }
 
   includeToken(tokenD) {
     return this.constructor.includeToken(tokenD, {
