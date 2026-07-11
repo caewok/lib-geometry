@@ -7,8 +7,6 @@ PIXI,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { ConstrainedTokenBorder } from "../ConstrainedTokenBorder.js";
-
 // Mixing
 import { mix } from "../mixwith.js";
 
@@ -25,22 +23,8 @@ import { ExtrudedPolygonPrimitive } from "./ModelGeometricPrimitive.js";
 // LibGeometry
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { NULL_SET } from "../util.js";
-import { Polygon3d } from "../3d/Polygon3d.js";
 import { Point3d } from "../3d/Point3d.js";
-import { VertexObject } from "../placeable_vertices/VertexObject.js";
 import { getHexagonalShape } from "../placeable_vertices/BasicVertices.js";
-
-/**
- * Build a polygon cube for a token.
- */
-function buildPolygonCube(poly2d, topZ, bottomZ, faces) {
-  faces.length = 2;
-  const [top, bottom] = faces;
-  Polygon3d.fromPolygon(poly2d, topZ, top);
-  Polygon3d.fromPolygon(poly2d, bottomZ, bottom).reverseOrientation();
-  faces.push(...top.buildTopSides(bottomZ));
-  return faces;
-}
 
 const TRACKER_TYPES = {
   shape: [
@@ -71,16 +55,13 @@ const TRACKER_TYPES = {
  */
 const TokenConstrainedFacesMixin = superclass => class extends superclass {
 
-  #wallsID = -1;
+  // #wallsID = -1;
 
   get isConstrained() { return this.token.isConstrainedTokenBorder; }
 
-  _constrainedFaces = [
-    new Polygon3d(),
-    new Polygon3d(),
-    // Sides to be added later.
-  ];
+  constrainedShapes = [];
 
+  /*
   get constrainedFaces() {
     if ( this.isConstrained ) {
       if ( this.#wallsID < ConstrainedTokenBorder._wallsID ) this.updateConstrainedFaces();
@@ -88,38 +69,46 @@ const TokenConstrainedFacesMixin = superclass => class extends superclass {
     }
     return this.faces;
   }
+  */
 
   /**
-   * Iterate over the faces.
+   * Iterate over the shapes.
+   * @param {object} [opts]
+   * @param {CONST.WALL_RESTRICTION_TYPES} [opts.senseType]   If provided, will return early if geometry does not block this sense type.
+   * @param {string} [opts.levelId]                           If provided, will return early if geometry does not affect this level.
+   * @yields {GeometricPrimitive}
    */
-  *iterateConstrainedFaces() { yield* this.constrainedFaces.values(); }
+  *iterateConstrainedShapes({ senseType, levelId } = {}) {
+    if ( !this.isConstrained ) return yield* this.iterateShapes();
 
-  _updateFaces() {
-    this.updateConstrainedFaces();
-    super._updateFaces();
+    // TODO: Cache updating.
+    /*
+    if ( this.#wallsID < ConstrainedTokenBorder._wallsID
+        || this.#lightsID < ConstrainedTokenBorder._lightsID  ) this.updateConstrainedLitFaces();
+    */
+    this.updateConstrainedShapes();
+
+    if ( senseType && !this.blocksSense(senseType) ) return;
+    if ( levelId && !this.blocksFromLevel(levelId) ) return;
+    yield* this.constrainedShapes;
   }
-
-  updateConstrainedFaces() {
-    if ( !this.isConstrained ) return;
-    const SPACER = this.constructor.SPACER;
-    const token = this.token;
-    const poly = token.constrainedTokenBorder.toPolygon();
-    buildPolygonCube(poly, token.topZ - SPACER, token.bottomZ + SPACER, this._constrainedFaces);
-    this.#wallsID = ConstrainedTokenBorder._wallsID;
-  }
-
-  // ----- NOTE: Vertices -----
 
   /**
-   * Vertices with normals and indices.
-   * @type {object<VertexObject>}
+   * Iterate over the shapes' faces.
+   * @yields {Polygon3d}
    */
-  constrainedVO = new VertexObject();
+  *iterateConstrainedFaces(opts = {}) {
+    for ( const shape of this.iterateConstrainedShapes(opts) ) yield* shape.faces;
+  }
 
-  _updateModelVertices() {
-    // Update using faces.
-    const vertices = this.constructor.verticesFromFaces(this._constrainedFaces, true);
-    this.constructor.updateVertexObject(this.constrainedVO, vertices);
+  updateConstrainedShapes() {
+    if ( !this.isConstrained || !this.token ) return;
+
+    this.shapes.forEach(shape => shape.destroy());
+    this.shapes.length = 0;
+
+    const poly = this.token.constrainedTokenBorder.toPolygon();
+    this.shapes.push(new ExtrudedPolygonPrimitive.fromPolygon(`${this.placeableId}_constrained`, poly, this.constructor.tokenElevationZ));
   }
 }
 
@@ -138,16 +127,15 @@ const TokenConstrainedLitFacesMixin = superclass => class extends superclass {
 
   get isConstrainedLit() { return !this.token.constrainedTokenBorder.equals(this.token.litTokenBorder); }
 
+  /*
   #wallsID = -1;
 
   #lightsID = -1;
+  */
 
-  _constrainedLitFaces = [
-    new Polygon3d(),
-    new Polygon3d(),
-    // Sides to be added later.
-  ];
+  constrainedLitShapes = [];
 
+  /*
   get constrainedLitFaces() {
     if ( this.isConstrainedLit ) {
       if ( this.#wallsID < ConstrainedTokenBorder._wallsID
@@ -156,41 +144,55 @@ const TokenConstrainedLitFacesMixin = superclass => class extends superclass {
     }
     return this.faces;
   }
+  */
 
   /**
-   * Iterate over the faces.
+   * Iterate over the shapes.
+   * @param {object} [opts]
+   * @param {CONST.WALL_RESTRICTION_TYPES} [opts.senseType]   If provided, will return early if geometry does not block this sense type.
+   * @param {string} [opts.levelId]                           If provided, will return early if geometry does not affect this level.
+   * @yields {GeometricPrimitive}
    */
-  *iterateConstrainedLitFaces() {
-    yield* this.constrainedLitFaces.values();
+  *iterateConstrainedLitShapes({ senseType, levelId } = {}) {
+    if ( !this.isConstrainedLit ) return yield* this.iterateShapes();
+
+    // TODO: Cache updating.
+    /*
+    if ( this.#wallsID < ConstrainedTokenBorder._wallsID
+        || this.#lightsID < ConstrainedTokenBorder._lightsID  ) this.updateConstrainedLitFaces();
+    */
+    this.updateConstrainedLitShapes();
+
+    if ( senseType && !this.blocksSense(senseType) ) return;
+    if ( levelId && !this.blocksFromLevel(levelId) ) return;
+    yield* this.constrainedLitShapes;
   }
 
-  _updateFaces() {
-    super._updateFaces();
-    this.updateConstrainedLitFaces();
+  /**
+   * Iterate over the shapes' faces.
+   * @yields {Polygon3d}
+   */
+  *iterateConstrainedLitFaces(opts = {}) {
+    for ( const shape of this.iterateConstrainedLitShapes(opts) ) yield* shape.faces;
   }
 
-  updateConstrainedLitFaces() {
-    if ( !this.isLit ) return;
+  updateConstrainedLitShapes() {
+    if ( !this.isLit || !this.token ) return;
+
+    this.shapes.forEach(shape => shape.destroy());
+    this.shapes.length = 0;
+
+    const poly = this.token.litTokenBorder.toPolygon();
+    this.shapes.push(new ExtrudedPolygonPrimitive.fromPolygon(`${this.placeableId}_lit`, poly, this.constructor.tokenElevationZ));
+
+    /*
     const SPACER = this.constructor.SPACER;
     const token = this.token;
     const poly = token.litTokenBorder.toPolygon();
     buildPolygonCube(poly, token.topZ - SPACER, token.bottomZ + SPACER, this._constrainedLitFaces);
     this.#wallsID = ConstrainedTokenBorder._wallsID;
     this.#lightsID = ConstrainedTokenBorder._lightsID;
-  }
-
-  // ----- NOTE: Vertices -----
-
-  /**
-   * Vertices with normals and indices.
-   * @type {object<VertexObject>}
-   */
-  constrainedLitVO = new VertexObject();
-
-  _updateModelVertices() {
-    // Update using faces.
-    const vertices = this.constructor.verticesFromFaces(this._constrainedLitFaces, true);
-    this.constructor.updateVertexObject(this.constrainedLitVO, vertices);
+    */
   }
 }
 
@@ -208,16 +210,15 @@ const TokenConstrainedBrightLitFacesMixin = superclass => class extends supercla
 
   get isConstrainedBrightLit() { return !this.token.constrainedTokenBorder.equals(this.token.brightLitTokenBorder); }
 
+  /*
   #wallsID = -1;
 
   #lightsID = -1;
+  */
 
-  _constrainedBrightLitFaces = [
-    new Polygon3d(),
-    new Polygon3d(),
-    // Sides to be added later.
-  ];
+  constrainedBrightLitShapes = [];
 
+  /*
   get constrainedBrightLitFaces() {
     if ( this.isConstrainedBrightLit ) {
       if ( this.#wallsID < ConstrainedTokenBorder._wallsID
@@ -226,39 +227,56 @@ const TokenConstrainedBrightLitFacesMixin = superclass => class extends supercla
     }
     return this.faces;
   }
+  */
+
 
   /**
-   * Iterate over the faces.
+   * Iterate over the shapes.
+   * @param {object} [opts]
+   * @param {CONST.WALL_RESTRICTION_TYPES} [opts.senseType]   If provided, will return early if geometry does not block this sense type.
+   * @param {string} [opts.levelId]                           If provided, will return early if geometry does not affect this level.
+   * @yields {GeometricPrimitive}
    */
-  *iterateConstrainedBrightLitFaces() { yield* this.constrainedBrightLitFaces.values(); }
+  *iterateConstrainedBrightLitShapes({ senseType, levelId } = {}) {
+    if ( !this.isConstrainedBrightLit ) return yield* this.iterateShapes();
 
-  _updateFaces() {
-    super._updateFaces();
-    this.updateConstrainedBrightLitFaces();
+    // TODO: Cache updating.
+    /*
+    if ( this.#wallsID < ConstrainedTokenBorder._wallsID
+        || this.#lightsID < ConstrainedTokenBorder._lightsID  ) this.updateConstrainedLitFaces();
+    */
+    this.updateConstrainedBrightLitShapes();
+
+    if ( senseType && !this.blocksSense(senseType) ) return;
+    if ( levelId && !this.blocksFromLevel(levelId) ) return;
+    yield* this.constrainedBrightLitShapes;
   }
 
-  updateConstrainedBrightLitFaces() {
-    if ( !this.isBrightLit ) return;
+  /**
+   * Iterate over the shapes' faces.
+   * @yields {Polygon3d}
+   */
+  *iterateConstrainedBrightLitFaces(opts = {}) {
+    for ( const shape of this.iterateConstrainedBrightLitShapes(opts) ) yield* shape.faces;
+  }
+
+  updateConstrainedBrightLitShapes() {
+    if ( !this.isBrightLit || !this.token ) return;
+
+    this.shapes.forEach(shape => shape.destroy());
+    this.shapes.length = 0;
+
+    const poly = this.token.brightLitTokenBorder.toPolygon();
+    this.shapes.push(new ExtrudedPolygonPrimitive.fromPolygon(`${this.placeableId}_brightLit`, poly, this.constructor.tokenElevationZ));
+
+    /*
     const SPACER = this.constructor.SPACER;
     const token = this.token;
-    const poly = token.brightLitTokenBorder.toPolygon();
-    buildPolygonCube(poly, token.topZ - SPACER, token.bottomZ + SPACER, this._constrainedBrightLitFaces);
+    const poly = token.litTokenBorder.toPolygon();
+    buildPolygonCube(poly, token.topZ - SPACER, token.bottomZ + SPACER, this._constrainedLitFaces);
     this.#wallsID = ConstrainedTokenBorder._wallsID;
     this.#lightsID = ConstrainedTokenBorder._lightsID;
-  }
-
-  // ----- NOTE: Vertices -----
-
-  /**
-   * Vertices with normals and indices.
-   * @type {object<VertexObject>}
-   */
-  constrainedBrightLitVO = new VertexObject();
-
-  _updateModelVertices() {
-    // Update using faces.
-    const vertices = this.constructor.verticesFromFaces(this._constrainedLitFaces, true);
-    this.constructor.updateVertexObject(this.constrainedBrightLitVO, vertices);
+    */
   }
 }
 
@@ -341,6 +359,7 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
   }
 
   createShapes() {
+    // TODO: Don't destroy unless the shape type has changed. Must account for changes in hex shapes.
     this.shapes.forEach(shape => shape.destroy());
     this.shapes.length = 0;
 
@@ -377,11 +396,11 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
     }
 
     // No changes required if token rotates.
-
+    super._update();
   }
 
   propertiesUpdated() {
-    const primitiveCl = this.constructor.primitiveForToken(this.placeableDocument);
+    const primitiveCl = this.constructor.primitiveClassForToken(this.placeableDocument);
     if ( this.shape instanceof primitiveCl ) return;
     this.createShapes();
   }

@@ -69,20 +69,20 @@ export class RegionGeometry extends PlaceableGeometry {
   get topZ() { return this.placeable.topZ; }
 
   initialize() {
-    this.#buildRegionShapes();
+    this._buildRegionShapes();
     super.initialize();
   }
 
-  #buildRegionShapes() {
+  _buildRegionShapes() {
     this.shapes.forEach(shape => shape.destroy());
     const regionShapes = this.regionShapes;
-
-    // If there are holes, use the model polygon shape for the entire region.
     const opts = this.constructor.regionElevation(this.placeableDocument); // topZ, bottomZ.
 
+    // If there are holes, use the model polygon shape for the entire region.
     if ( regionShapes.some(regionShape => regionShape.hole) ) {
       // TODO: Need correct handling of center/dims/angles for these polygons vs individual shapes.
       this.shapes.push(ExtrudedPolygonPrimitive.fromPolygons(this.placeableId, this.regionPolygons, opts));
+      return;
     }
 
     // If gridBased shape, use the model polygon shape.
@@ -105,6 +105,7 @@ export class RegionGeometry extends PlaceableGeometry {
           shape = new CubeTransformPrimitive(id);
 
           // Use TL as the translation and rotation center.
+          shape.initialize(); // So we can set the model matrix.
           shape.modelMatrix.translationCenter = { x: -0.5, y: -0.5, z: 0.0 };
           shape.modelMatrix.rotationCenter = { x: -0.5, y: -0.5, z: 0.0 };
           break;
@@ -113,10 +114,12 @@ export class RegionGeometry extends PlaceableGeometry {
         case "ring": // Use the polygon(s) b/c of the hole.
         case "polygon": // Obv. use the polygon.
         case "cone": // Use the polygon b/c no unit cone shape b/c angle varies.
+
         case "grid": // Unclear what this is.
         case "token": // Unclear what this is.
         default: shape = ExtrudedPolygonPrimitive.fromPolygons(id, regionShape.polygons, opts);
       }
+      this.shapes.push(shape);
     }
   }
 
@@ -128,10 +131,11 @@ export class RegionGeometry extends PlaceableGeometry {
     // Rebuild the shapes if any update occurs.
     // TODO: Could handle region elevation changes separately.
     // TODO: Could cache shape properties and then handle changes more discretely.
-    if ( this._updateFlags.values().some(value => Boolean(value)) ) {
-      this.#buildRegionShapes();
+    if ( Object.values(this._updateFlags).some(value => Boolean(value)) ) {
+      this.initialize();
       this.#updateShapeModel();
     }
+    super._update();
   }
 
   #updateShapeModel() {

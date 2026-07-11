@@ -57,6 +57,17 @@ Instanced Registry: 1 per geometric primitive, storing model
 
 export class GeometricPrimitive {
 
+  static DIRTY = {
+    NONE:             0,
+    FACES:            1 << 0, // 1
+    AABB:             1 << 1, // 2
+    FACE_POINTS:      1 << 2, // 4
+    INTERNAL_POINTS:  1 << 3, // 8
+    VERTICES:         1 << 4, // 16
+    ALL:              ~0,     // All bits set
+  };
+
+
   /** @type {string} */
   id;
 
@@ -69,7 +80,6 @@ export class GeometricPrimitive {
    */
   constructor(id) {
     this.id = id;
-    this.initialize();
   }
 
   #initialized = false;
@@ -90,13 +100,16 @@ export class GeometricPrimitive {
     if ( this.#initialized ) this.destroy();
     this._initializeModel();
     this._initializeFaces();
-    this.#dirty = true;
+    this.dirty = this.constructor.DIRTY.ALL;
+    this.#initialized = true;
   }
 
   _initializeModel() {}
 
   _initializeFaces() {
-    this.constructor.prototypeFaces.forEach(f => this.faces.push(f.clone()));
+    this.#faces.length = 0;
+    this.constructor.prototypeFaces.forEach(f => this.#faces.push(f.clone()));
+    this.dirty = this.constructor.DIRTY.FACES;
   }
 
   /**
@@ -118,18 +131,22 @@ export class GeometricPrimitive {
   // would need to also get triggered? Maybe use a forceUpdate function to handle.
 
   /** @type {boolean} */
-  #dirty = true;
+  #dirtyFlags = this.constructor.DIRTY.ALL;
 
-  get dirty() { return this.#dirty; }
+  get dirty() { return this.#dirtyFlags; }
 
-  set dirty(value) { this.#dirty ||= value; }
+  set dirty(flag) { this.#dirtyFlags |= flag; }
+
+  isDirty(flag) { return this.#dirtyFlags & flag; }
+
+  _clearDirty(flag) { this.#dirtyFlags &= ~flag; }
 
   /**
    * @type {Point3d|object} center
    */
   setPosition(center) {
     MatrixFloat32.translation(center.x, center.y, center.z, this.modelMatrix.translation);
-    this.#dirty = true;
+    this.dirty = this.constructor.DIRTY.ALL;
   }
 
   /**
@@ -137,7 +154,7 @@ export class GeometricPrimitive {
    */
   setRotation(angles) {
     MatrixFloat32.rotationXYZ(angles.x, angles.y, angles.z, true, this.modelMatrix.rotation);
-    this.#dirty = true;
+    this.dirty = this.constructor.DIRTY.ALL;
   }
 
   /**
@@ -145,32 +162,27 @@ export class GeometricPrimitive {
    */
   setScale(dims) {
     MatrixFloat32.scale(dims.x, dims.y, dims.z, this.modelMatrix.scale);
-    this.#dirty = true;
-  }
-
-
-  /**
-   * Update to the shape position, rotation, or scale.
-   */
-  update() {
-    if ( !this.#dirty ) return;
-    this.updateFaces();
-    this.generateFacePoints();
-    this.generateInternalPoints();
-    this.calculateAABB();
-    this.#dirty = false;
+    this.dirty = this.constructor.DIRTY.ALL;
   }
 
   // ----- NOTE: AABB ----- //
 
   /** @type {AABB3d} */
-  aabb = new AABB3d();
+  #aabb = new AABB3d();
+
+  get aabb() {
+    if ( this.isDirty(this.constructor.DIRTY.AABB) ) this.calculateAABB();
+    return this.#aabb;
+  }
 
   /**
    * Method for child class to define how the AABB is defined.
    * Defaults to union of all model faces AABB.
    */
-  calculateAABB() { AABB3d.union(this.faces.map(face => face.aabb), this.aabb); }
+  calculateAABB() {
+    AABB3d.union(this.faces.map(face => face.aabb), this.#aabb);
+    this._clearDirty(this.constructor.DIRTY.AABB);
+  }
 
   // ----- NOTE: Faces ----- //
 
@@ -178,13 +190,20 @@ export class GeometricPrimitive {
   static prototypeFaces = [];
 
   /** @type {Polygon3d[]} */
-  faces = [];
+  #faces = [];
+
+  get faces() {
+    if ( this.isDirty(this.constructor.DIRTY.FACES) ) this.updateFaces();
+    return this.#faces;
+  }
 
   /**
    * Iterate over the faces.
    * @yields {Polygon3d}
    */
-  *iterateFaces() { yield *this.faces.values(); }
+  *iterateFaces() {
+    yield *this.faces.values();
+  }
 
   /**
    * Update the faces for this primitive.
@@ -193,7 +212,8 @@ export class GeometricPrimitive {
   updateFaces() {
     const M = this.modelMatrix.model;
     const numSides = this.constructor.prototypeFaces.length;
-    for ( let i = 0; i < numSides; i += 1 ) this.constructor.prototypeFaces[i].transform(M, this.faces[i]);
+    for ( let i = 0; i < numSides; i += 1 ) this.constructor.prototypeFaces[i].transform(M, this.#faces[i]);
+    this._clearDirty(this.constructor.DIRTY.FACES);
   }
 
   // ----- NOTE: Intersection testing ----- //
@@ -286,16 +306,22 @@ export class GeometricPrimitive {
   // ----- NOTE: Face points ----- //
 
   /** @typedef {Point3d[]} */
-  facePoints = [];
+  #facePoints = [];
+
+  get facePoints() {
+    if ( this.isDirty(this.constructor.DIRTY.FACE_POINTS) ) this.generateFacePoints();
+    return this.#facePoints;
+  }
 
   /**
    * For each face, generate points encompassed by its surface.
    */
   generateFacePoints() {
     const opts = { spacing: CONFIG[GEOMETRY_LIB_ID].CONFIG.perPixelSpacing || 10, startAtEdge: false };
-    const numSides = this.faces.length;
+    const faces = this.faces;
+    const numSides = faces.length;
     this.facePoints.length = numSides;
-    for ( let i = 0; i < numSides; i += 1 ) this.facePoints[i] = this.faces[i].pointsLattice(opts);
+    for ( let i = 0; i < numSides; i += 1 ) this.#facePoints[i] = faces[i].pointsLattice(opts);
   }
 
   // ----- NOTE: Internal points ----- //
@@ -353,9 +379,17 @@ export class GeometricPrimitive {
    *    - @prop {Point3d[]} mids
    */
   /** @typedef {InternalPoints} */
-  internalPoints = {};
+  #internalPoints = {};
 
-  generateInternalPoints() { this.internalPoints = this.getInternalPoints(); }
+  get internalPoints() {
+    if ( this.isDirty(this.constructor.INTERNAL_POINTS) ) this.generateInternalPoints();
+    return this.#internalPoints;
+  }
+
+  generateInternalPoints() {
+    this.#internalPoints = this.getInternalPoints();
+    this._clearDirty(this.constructor.INTERNAL_POINTS);
+  }
 
   /**
    * Calculate internal points for bottom, middle, and top elevations.

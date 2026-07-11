@@ -74,7 +74,10 @@ const TrackerMixin = superclass => {
     id;
 
     /** @type {number} */
-    offset = 0;
+    layoutVersion = 0;
+
+    /** @type {VariableLengthAbstractBuffer} */
+    tracker;
 
     constructor(id, tracker) {
       tracker.addFacet({ id, newValues: IDENTITY_MATRIX.arr });
@@ -83,18 +86,18 @@ const TrackerMixin = superclass => {
       super(buffer, offset);
 
       this.id = id;
-      this.offset = offset;
+      this.tracker = tracker;
     }
 
     update() {
       // Confirm the offset has not changed.
-      const newOffset = this.tracker.facetOffsetAtId(this.id);
-      if ( newOffset !== this.offset ) {
+      if ( this.layoutVersion !== this.tracker.layoutVersion ) {
         this._model = (new MatrixFloat32(
           this.constructor.DIM,
           this.constructor.DIM,
           this.tracker.buffer,
-          newOffset)).identity();
+          this.tracker.facetOffsetAtId(this.id)));
+        this.layoutVersion = this.tracker.layoutVersion;
       }
       super.update();
 
@@ -534,7 +537,6 @@ export class WedgeRectangularBasePrimitive extends InstancedGeometricPrimitive {
     translateM
       .multiply4x4(scaleM, transformM)
       .multiply4x4(invTranslateM, transformM);
-    this.update();
   }
 }
 

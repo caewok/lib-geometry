@@ -49,11 +49,7 @@ class AbstractMatrix {
    * Create a new point. Meant to be overridden using pooling, but kept here for testing.
    * @returns {PointArrayAbstract}
    */
-  static create(nrow = 0, ncol = 0) {
-    const out = new this(nrow, ncol);
-    out.arr.length = out.size;
-    return out;
-  }
+  static create(nrow = 0, ncol = 0) { return new this(nrow, ncol); }
 
   // ----- NOTE: Getters and indexers ---- //
 

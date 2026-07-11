@@ -208,13 +208,38 @@ export class VariableLengthAbstractBuffer {
   /** @type {Map<string(), number>} */
   facetIdMap = new IndexMap();
 
-  /** @type {Map<number, number>} */
-  facetChangeTracker = new Map();
-
   setFacetId(id, idx) {
     if ( idx < 0 || idx > (this.numFacets - 1) ) console.warn(`idx ${idx} is out of bounds.`);
     this.facetIdMap.set(id, idx);
   }
+
+  /**
+   * Track facet ids and whether they have changed.
+   * By tracking ids, not indices, we can see when the id's index has moved.
+   * @type {Map<string, number>}
+   */
+  facetChangeTracker = new Map();
+
+  _facetIdUpdated(id) {
+    const curr = this.facetChangeTracker.get(id) || 0;
+    this.facetChangeTracker.set(id, curr + 1);
+    this.dataVersion++;
+  }
+
+  _facetIndexUpdated(idx) {
+    const id = this.facetIdMap.getKeyAtIndex(idx);
+    if ( id ) this._facetIdUpdated(id);
+  }
+
+  /**
+   * Increment whenever any data is written.
+   */
+  dataVersion = 0;
+
+  /**
+   * Increment whenever the buffer is resized or defragmented.
+   */
+  layoutVersion = 0;
 
   /**
    * Add a facet to any spot in the array that has sufficient space.
@@ -271,7 +296,6 @@ export class VariableLengthAbstractBuffer {
   deleteFacet(id) {
     if ( !this.facetIdMap.has(id) ) return false;
     const idx = this.facetIdMap.get(id);
-    this.facetIdMap.delete(id);
     return this._deleteFacetAtIndex(idx);
   }
 
@@ -313,26 +337,16 @@ export class VariableLengthAbstractBuffer {
     this._facetIndexUpdated(idx);
   }
 
-  _facetIdUpdated(id) {
-    if ( !this.facetIdMap.has(id) ) return;
-    const idx = this.facetIdMap.get(id);
-    this._facetIndexUpdated(idx);
-  }
-
-  _facetIndexUpdated(idx) {
-    const curr = this.facetChangeTracker.get(idx) || 0;
-    this.facetChangeTracker.set(idx, curr + 1);
-  }
-
   /**
    * Delete a facet at the provided index.
    * @param {number} idx      The index being deleted.
    * @returns {boolean} True if actually deleted.
    */
   _deleteFacetAtIndex(idx) {
-    if ( !this.viewFacetAtIndex.has(idx) ) return false;
-    this.viewFacetAtIndex.delete(idx);
-    this.facetChangeTracker.delete(idx);
+    const id = this.facetIdMap.getKeyAtIndex(idx);
+    if ( !id ) return false;
+    this._facetIndexUpdated(idx);
+    this.facetIdMap.delete(id);
     this.calculateOffsets();
     return true;
   }
@@ -372,6 +386,9 @@ export class VariableLengthAbstractBuffer {
         // Update lengths.
         this.#facetLengths[writeIdx] = hangingLength;
         this.#facetLengths[readIdx] = 0;
+
+        // Mark this specific id as having changed b/c its offset moved.
+        this._facetIdUpdated(id);
       }
       writeIdx += 1;
     }
@@ -379,6 +396,7 @@ export class VariableLengthAbstractBuffer {
     if ( bufferModified ) {
       this.#facetLengths.length = writeIdx; // Truncate the array of lengths.
       this.calculateOffsets(); // Recalculate all cumulative offsets cleanly.
+      this.layoutVersion++; // Invalidate external offset caches.
     }
     return bufferModified;
   }
@@ -392,6 +410,7 @@ export class VariableLengthAbstractBuffer {
     this.#maxLength ||= 1; // So we are not multiplying by 0.
     minLength ||= this.arrayLength;
     while ( this.#maxLength < minLength ) this.#maxLength *= this.constructor.RESIZE_MULTIPLIER;
+    this.layoutVersion++; // Invalidate external offset caches.
   }
 
   // ----- NOTE: Views ----- //

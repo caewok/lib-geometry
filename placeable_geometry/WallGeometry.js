@@ -179,14 +179,19 @@ export class WallGeometry extends PlaceableGeometry {
   wallSegments = [];
 
   initialize() {
-    this.#buildWallShapes();
+    this._buildWallShapes();
     super.initialize();
+
+    // After initializing, the shapes are initialized and their positions/directions can be updated.
+    this._updateShapePositions();
+    this._updateShapeDirections();
   }
 
-  #buildWallShapes() {
+  _buildWallShapes() {
     // Reset the wall shapes.
     // Walls are made up of multiple vertical quads, spanning the defined wall segments.
     this.shapes.forEach(shape => shape.destroy());
+    this.wallSegments ??= [];
     this.wallSegments.length = 0;
 
     // Determine how many wall segments to construct.
@@ -194,12 +199,10 @@ export class WallGeometry extends PlaceableGeometry {
     this.wallSegments.push(...this.constructor.wallLevelSegments.segments) ;
     const numSegments = this.wallSegments.length;
     this.shapes.length = numSegments;
-    for ( let i = 0; i < numSegments; i += 1 ) this.shapes[i] = new VerticalQuadPrimitive();
-    this.#updateShapePositions();
-    this.#updateShapeDirections();
+    for ( let i = 0; i < numSegments; i += 1 ) this.shapes[i] = new VerticalQuadPrimitive(`${this.placeableId}_${i}`);
   }
 
-  #updateShapePositions() {
+  _updateShapePositions() {
     // Wall properties
     const wallD = this.placeableDocument;
     using ctr2d = this.constructor.wallCenter(wallD);
@@ -219,7 +222,7 @@ export class WallGeometry extends PlaceableGeometry {
     }
   }
 
-  #updateShapeDirections() {
+  _updateShapeDirections() {
     const dir = this.placeableDocument.dir;
     this.shapes.forEach(shape => shape.direction = dir);
   }
@@ -236,8 +239,9 @@ export class WallGeometry extends PlaceableGeometry {
       return;
     }
 
-    if ( this._updateFlags.positionXY ) this.#updateShapePositions();
-    if ( this._updateFlags.properties ) this.#updateShapeDirections();
+    if ( this._updateFlags.positionXY ) this._updateShapePositions();
+    if ( this._updateFlags.properties ) this._updateShapeDirections();
+    super._update();
   }
 
   // ----- NOTE: Levels ----- //

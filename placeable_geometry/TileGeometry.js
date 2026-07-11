@@ -11,7 +11,7 @@ import { mix } from "../mixwith.js";
 
 // Geometry
 import { PlaceableGeometry } from "./PlaceableGeometry.js";
-import { QuadPrimitive } from "./InstancedGeometricPrimitive.js";
+import { TexturedQuadPrimitive } from "./InstancedGeometricPrimitive.js";
 
 // LibGeometry
 import { GEOMETRY_LIB_ID } from "../const.js";
@@ -337,7 +337,7 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
   createShapes() {
     this.shapes.forEach(shape => shape.destroy());
     this.shapes.length = 0;
-    this.shapes.push(new QuadPrimitive(this.placeableId));
+    this.shapes.push(new TexturedQuadPrimitive(this.placeableId));
   }
 
   // ----- NOTE: Update ----- //
@@ -361,7 +361,7 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
       const dims = this.constructor.tileDimensions(this.placeableDocument);
       this.shape.setScale(dims);
     }
-
+    super._update();
   }
 
   // ----- NOTE: AABB ----- //

@@ -54,16 +54,6 @@ export class PlaceableGeometry {
 
   static get PLACEABLE_LABEL_PLURAL() { return this.PLACEABLE_NAME.toLowerCase().concat("s"); }
 
-  static hooksInitialized = false;
-
-  static registerHooks() {
-    if ( this.hooksInitialized ) return;
-    this._registerHooks();
-    this.hooksInitialized = true;
-  }
-
-  static _registerHooks() { }
-
   // ----- NOTE: Levels ----- //
 
   /**
@@ -144,9 +134,25 @@ export class PlaceableGeometry {
   placeableDocument;
 
   /**
+   * Create an id used for the model matrix tracking.
+   * @type {string}
+   */
+  get placeableId() { return `${this.placeableDocument.uuid}`; }
+
+  /**
    * @param {CanvasDocument} placeable
    */
-  constructor(placeableDocument) { this.placeableDocument = placeableDocument; }
+  constructor(placeableDocument) {
+    this.placeableDocument = placeableDocument;
+  }
+
+  initialize() {
+    this.shapes.forEach(shape => shape.initialize());
+  }
+
+  destroy() {
+    this.shapes.forEach(shape => shape.destroy());
+  }
 
   // ----- NOTE: Updating ----- //
 
@@ -202,19 +208,6 @@ export class PlaceableGeometry {
   }
 
 
-  // ----- NOTE: Geometric shapes ----- //
-
-  shapes = [];
-
-  initialize() {
-    this.shapes.forEach(shape => shape.initialize());
-    this.calculateAABB();
-  }
-
-  destroy() {
-    this.shapes.forEach(shape => shape.destroy());
-  }
-
   // ----- NOTE: Levels ----- //
 
   /**
@@ -241,7 +234,9 @@ export class PlaceableGeometry {
     AABB3d.union(this.shapes.map(shape => shape.aabb), this.aabb);
   }
 
-  // ----- NOTE: Faces ----- //
+  // ----- NOTE: Geometric shapes and faces ----- //
+
+  shapes = [];
 
   /**
    * Iterate over the shapes.
@@ -299,7 +294,4 @@ export class PlaceableGeometry {
   getInternalPoints() {
     return this.shapes.map(shape => shape.getInternalPoints());
   }
-
-  // ----- NOTE: Vertices ----- //
-
 }

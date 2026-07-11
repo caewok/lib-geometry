@@ -1226,7 +1226,7 @@ export class Ellipse3d extends Polygon3d {
     using vLocal = Point3d.tmp.set(radiusY * -sinA, radiusY * cosA, 0);
 
     // Convert local 2d axes to 3d world vectors (ignore translation).
-    const invM2d = this.plane.conversion2dMatrixzinverse;
+    const invM2d = this.plane.conversion2dMatrix.invert();
     using origin3d = invM2d.multiplyPoint3d(Point3d.tmp.set(0, 0, 0));
     using U = invM2d.multiplyPoint3d(uLocal, tmp).subtract(origin3d);
     using V = invM2d.multiplyPoint3d(vLocal, tmp).subtract(origin3d);

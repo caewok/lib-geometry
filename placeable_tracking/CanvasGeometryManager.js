@@ -81,6 +81,7 @@ export class CanvasGeometryManager {
     // Create the correct geometry type for this document.
     const geom = new this.constructor.geometryClass(doc);
     geom.initialize();
+    geom.forceUpdate();
     this.geometryMap.set(doc.uuid, geom);
 
     // Add to the respective quadtree.
@@ -133,7 +134,7 @@ export class CanvasGeometryManager {
    * Register hooks to track the geometries as documents change.
    */
   registerHooks() {
-    if ( this.#initialized ) return;
+    if ( this.#initialized ) return false;
 
     const docName = this.constructor.geometryClass.PLACEABLE_NAME;
     Hooks.on("canvasReady", () => this.initializeScene());
@@ -145,9 +146,8 @@ export class CanvasGeometryManager {
     });
     Hooks.on(`delete${docName}`, docId => this.delete(docId));
 
-    this.constructor.geometryClass.registerHooks();
-
     this.#initialized = true;
+    return true;
   }
 
 }
@@ -190,6 +190,38 @@ export class TokenGeometryManager extends CanvasGeometryManager {
 
   /** @type {PlaceableGeometry} */
   static geometryClass = TokenGeometry;
+
+  registerHooks() {
+    if ( !super.registerHooks() ) return;
+
+    // When tokens are dragged, the update hook provides the correct changes, which correspond
+    // to the token.document._source but not necessarily to the token.document.x, .y, etc.
+    // Tokens refresh along their move and the document is updated.
+    // To keep the shape aligned with current token position (may be important for visibility),
+    // need to update on the refresh hook.
+    Hooks.on("refreshToken", (token, flags) => {
+      /* Potential flags are at Token.RENDER_FLAGS. Key flags:
+      refreshPosition
+      refreshSize
+      refreshElevation
+      refreshShape
+      */
+      if ( token.isPreview ) return;
+      const needsUpdate = flags.refreshPosition || flags.refreshSize || flags.refreshElevation || flags.refreshShape;
+      if ( !needsUpdate ) return;
+      const geom = this.geometryMap.get(token.document.uuid);
+      if ( !geom ) return;
+
+      // Set the geometry update flags manually based on the refresh flags.
+      const updateFlags = geom._updateFlags;
+      Object.keys(updateFlags).forEach(key => updateFlags[key] = false);
+      updateFlags.properties = flags.refreshShape;
+      updateFlags.positionXY = flags.refreshPosition;
+      updateFlags.scale = flags.refreshSize;
+      updateFlags.elevation = flags.refreshElevation;
+      geom._update();
+    });
+  }
 }
 
 export class LevelBackgroundGeometryManager extends CanvasGeometryManager {

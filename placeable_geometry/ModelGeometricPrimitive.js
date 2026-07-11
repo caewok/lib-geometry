@@ -14,6 +14,8 @@ import { ModelMatrix } from "../Matrix.js";
 /**
  * ModelGeometricPrimitives are one-offs.
  * They are not updated; instead they would get destroyed and rebuilt.
+ * To facilitate re-use, the prototype faces can be provided or
+ * calculated using fromCanvasFaces. Then the model matrix can modify the resulting faces.
  */
 export class ModelGeometricPrimitive extends GeometricPrimitive {
 
@@ -25,6 +27,7 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
     if ( angles ) this.setRotation(angles);
     if ( dims ) this.setScale(dims);
     super.initialize();
+    this.updateInstanceVertices();
   }
 
   // ----- NOTE: Update ----- //
@@ -40,16 +43,7 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
     vo.hasNormals = true;
     vo.hasUVs = false;
     this.constructor.updateVertexObject(vo, vertices);
-    this.dirty = true;
-  }
-
-  /**
-   * Update the vertices when updating the rest.
-   */
-  update() {
-    if ( !this.dirty ) return;
-    super.update();
-    this.updateModelVO();
+    this.dirty = this.constructor.DIRTY.VERTICES;
   }
 
   // ----- NOTE: Factory functions ----- //
@@ -68,6 +62,7 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
     // Use the inverse to construct the prototype faces.
     const invM = out.modelMatrix.model.invert();
     out.prototypeFaces = faces.map(face => face.transform(invM));
+    out.initialize();
     return out;
   }
 
@@ -80,9 +75,8 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
 
   set prototypeFaces(value) {
     if ( !Array.isArray(value) ) value = [value];
-    if ( this.initialized ) this.destroy();
     this.#prototypeFaces = value;
-    this.updateInstanceVertices(); // Will set dirty flag here.
+    this.dirty = this.constructor.DIRTY.ALL;
   }
 
   // ----- NOTE: Vertices ----- //
@@ -97,7 +91,12 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
   instanceVO = new VertexObject();
 
   /** @type {VertexObject} */
-  modelVO = new VertexObject();
+  #modelVO = new VertexObject();
+
+  get modelVO() {
+    if ( this.isDirty(this.constructor.VERTICES) ) this.updateModelVO();
+    return this.#modelVO;
+  }
 
   /**
    * Defaults to using the model faces to construct the vertices.
@@ -109,6 +108,7 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
     vo.hasUVs = false;
     this.constructor.updateVertexObject(vo, vertices);
     this.constructor.viTracker.updateFacet({ id: this.id, newVertices: vo.vertices, newIndices: vo.indices });
+    this._clearDirty(this.constructor.VERTICES);
   }
 
   destroy() {
