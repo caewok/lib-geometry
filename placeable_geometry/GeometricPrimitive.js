@@ -161,7 +161,7 @@ export class GeometricPrimitive {
    * @type {Point3d|object} dims
    */
   setScale(dims) {
-    MatrixFloat32.scale(dims.x, dims.y, dims.z, this.modelMatrix.scale);
+    MatrixFloat32.scale(dims.x || 1, dims.y || 1, dims.z || 1, this.modelMatrix.scale);
     this.dirty = this.constructor.DIRTY.ALL;
   }
 

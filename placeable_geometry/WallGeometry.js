@@ -14,7 +14,7 @@ import { VerticalQuadPrimitive } from "./InstancedGeometricPrimitive.js";
 // LibGeometry
 import { Point3d } from "../3d/Point3d.js";
 import { Segment } from "../Segment.js";
-import { pixelsToGridUnits } from "../util.js";
+import { pixelsToGridUnits, gridUnitsToPixels } from "../util.js";
 
 const TRACKER_TYPES = {
   position2d: [
@@ -131,12 +131,12 @@ export class WallGeometry extends PlaceableGeometry {
    */
   static defineWallLevelSegments() {
     // Find all defined elevations for walls.
-    const maxE = pixelsToGridUnits(1e06)
+    const maxE = pixelsToGridUnits(1e06);
     const elevations = new Set([maxE, -maxE]);
     for ( const wallD of canvas.scene.walls ) {
-      const { topZ, bottomZ } = wallD;
-      if ( isFinite(topZ) ) elevations.add(topZ);
-      if ( isFinite(bottomZ) ) elevations.add(bottomZ);
+      const { topZ, bottomZ } = this.wallElevation(wallD);
+      elevations.add(pixelsToGridUnits(topZ));
+      elevations.add(pixelsToGridUnits(bottomZ));
     }
     this.wallLevelSegments = this.segmentLevels([...elevations]);
 
@@ -208,17 +208,20 @@ export class WallGeometry extends PlaceableGeometry {
     using ctr2d = this.constructor.wallCenter(wallD);
     const rotZ = this.constructor.wallAngle(wallD)
     const lengthXY = this.constructor.wallLength(wallD);
+
     using center3d = Point3d.tmp.set(ctr2d.x, ctr2d.y, 0);
     using angles = Point3d.tmp.set(0, 0, rotZ);
-    using dims = Point3d.tmp.set(lengthXY / 2, 1, 1);
+
     for ( let i = 0, iMax = this.shapes.length; i < iMax; i += 1 ) {
       const shape = this.shapes[i];
       const segmentData = this.wallSegments[i];
-      const zHeight = segmentData.top - segmentData.bottom;
-      center3d.z = segmentData.bottom + (zHeight / 2);
+      const zHeight = gridUnitsToPixels(segmentData.top - segmentData.bottom);
+
+      center3d.z = gridUnitsToPixels(segmentData.bottom) + (zHeight / 2);
+
       shape.setPosition(center3d);
       shape.setRotation(angles);
-      shape.setDims(dims);
+      shape.setDims({ lengthXY, zHeight });
     }
   }
 

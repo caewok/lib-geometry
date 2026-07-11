@@ -18,14 +18,6 @@ Draw.clearDrawings()
 canvasTests = CONFIG.GeometryLib.lib.canvasTests
 Triangle3d = CONFIG.GeometryLib.lib.threeD.Triangle3d
 Point3d = CONFIG.GeometryLib.lib.threeD.Point3d
-let {
-  BasicVertices,
-  HorizontalQuadVertices,
-  VerticalQuadVertices,
-  Rectangle3dVertices,
-  Polygon3dVertices,
-  Ellipse3dVertices,
-  Circle3dVertices } = CONFIG.GeometryLib.lib.placeableVertices.vertices
 
 canvasTests.drawTokenBorder()
 canvasTests.drawConstrainedTokenBorder()
@@ -165,13 +157,18 @@ export function drawPlaceableGeometry(placeableDocument, placeableColor, opts) {
   drawGeometry(geom, placeableColor, opts);
 }
 
-export function drawGeometry(geom,  placeableColor, { aabb = false, faces = "faces", ...drawingOpts } = {}) {
+export function drawGeometry(geom,  placeableColor, { aabb = false, faces = "faces", drawAll = false, ...drawingOpts } = {}) {
   let color = Draw.COLORS[placeableColor];
-  geom[faces][0].draw2d({ color, ...drawingOpts });
   if ( aabb ) {
     let color = Draw.COLORS[`light${placeableColor}`];
     Draw.shape(geom.aabb.toRectangle(), { color, ...drawingOpts });
+    return;
   }
+  if ( drawAll ) {
+    for ( const shape of geom.iterateShapes() ) shape.draw2d({ color, ...drawingOpts });
+    return;
+  }
+  geom.shapes[0].faces[0].draw2d({ color, ...drawingOpts });
 }
 
 /**

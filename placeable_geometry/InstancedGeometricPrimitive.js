@@ -240,16 +240,12 @@ export class VerticalQuadPrimitive extends QuadPrimitive {
 
   // Does not define the modelMatrixTracker so will share parent's.
 
-  setRotation(angles) {
-    // Add 90º to turn the quad vertical (rotate along Y-axis).
-    using tmp = Point3d.tmp.copyFrom(angles);
-    tmp.y += Math.PI_1_2; // 90º
-    super.setRotation(tmp);
-  }
+  static prototypeFaces = [QUADS.north.clone()];
 
   setDims({ lengthXY, zHeight } = {}) {
-    // For the horizontal quad (before rotation), length is the y-axis, height is x-axis.
-    using dims = Point3d.tmp.set(zHeight, lengthXY);
+    // For the horizontal quad (before rotation), length is the x-axis, height is z-axis.
+    // Set y scale to 1 to avoid collapsing the matrix.
+    using dims = Point3d.tmp.set(lengthXY, 1, zHeight);
     this.setScale(dims);
   }
 }

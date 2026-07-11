@@ -1922,8 +1922,8 @@ export class ModelMatrix2d {
     const multName = this.constructor.multiplyName;
 
     M.identity();
-    M[multName](this.rotation, M);
     M[multName](this.scale, M);
+    M[multName](this.rotation, M);
     M[multName](this.translation, M);
   }
 
