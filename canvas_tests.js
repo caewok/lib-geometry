@@ -28,6 +28,7 @@ canvasTests.drawTileGeometries({ faces: "alphaBoundingBox" })
 canvasTests.drawTileGeometries({ faces: "alphaBoundingPolygon" })
 canvasTests.drawTileGeometries({ faces: "alphaThresholdPolygons" })
 canvasTests.drawTileGeometries({ faces: "alphaThresholdTriangles" })
+canvasTests.drawRegionGeometries()
 canvasTests.drawLevelBackgroundGeometries()
 
 

@@ -59,17 +59,14 @@ const TokenConstrainedFacesMixin = superclass => class extends superclass {
 
   get isConstrained() { return this.token.isConstrainedTokenBorder; }
 
-  constrainedShapes = [];
+  #constrainedShapes = [];
 
-  /*
-  get constrainedFaces() {
-    if ( this.isConstrained ) {
-      if ( this.#wallsID < ConstrainedTokenBorder._wallsID ) this.updateConstrainedFaces();
-      return this._constrainedFaces;
-    }
-    return this.faces;
+  get constrainedShapes() {
+    // TODO: Cache updating.
+    this.updateConstrainedShapes();
+    return this.#constrainedShapes;
   }
-  */
+
 
   /**
    * Iterate over the shapes.
@@ -80,14 +77,6 @@ const TokenConstrainedFacesMixin = superclass => class extends superclass {
    */
   *iterateConstrainedShapes({ senseType, levelId } = {}) {
     if ( !this.isConstrained ) return yield* this.iterateShapes();
-
-    // TODO: Cache updating.
-    /*
-    if ( this.#wallsID < ConstrainedTokenBorder._wallsID
-        || this.#lightsID < ConstrainedTokenBorder._lightsID  ) this.updateConstrainedLitFaces();
-    */
-    this.updateConstrainedShapes();
-
     if ( senseType && !this.blocksSense(senseType) ) return;
     if ( levelId && !this.blocksFromLevel(levelId) ) return;
     yield* this.constrainedShapes;
@@ -104,11 +93,11 @@ const TokenConstrainedFacesMixin = superclass => class extends superclass {
   updateConstrainedShapes() {
     if ( !this.isConstrained || !this.token ) return;
 
-    this.shapes.forEach(shape => shape.destroy());
-    this.shapes.length = 0;
+    this.#constrainedShapes.forEach(shape => shape.destroy());
+    this.#constrainedShapes.length = 0;
 
     const poly = this.token.constrainedTokenBorder.toPolygon();
-    this.shapes.push(new ExtrudedPolygonPrimitive.fromPolygon(`${this.placeableId}_constrained`, poly, this.constructor.tokenElevationZ));
+    this.#constrainedShapes.push(new ExtrudedPolygonPrimitive.fromPolygon(`${this.placeableId}_constrained`, poly, this.constructor.tokenElevationZ));
   }
 }
 
@@ -133,18 +122,14 @@ const TokenConstrainedLitFacesMixin = superclass => class extends superclass {
   #lightsID = -1;
   */
 
-  constrainedLitShapes = [];
+  #constrainedLitShapes = [];
 
-  /*
-  get constrainedLitFaces() {
-    if ( this.isConstrainedLit ) {
-      if ( this.#wallsID < ConstrainedTokenBorder._wallsID
-        || this.#lightsID < ConstrainedTokenBorder._lightsID  ) this.updateConstrainedLitFaces();
-      return this._constrainedLitFaces;
-    }
-    return this.faces;
+  get constrainedLitShapes() {
+    // TODO: Cache updating.
+    this.updateConstrainedLitShapes();
+    return this.#constrainedLitShapes;
   }
-  */
+
 
   /**
    * Iterate over the shapes.
@@ -155,14 +140,6 @@ const TokenConstrainedLitFacesMixin = superclass => class extends superclass {
    */
   *iterateConstrainedLitShapes({ senseType, levelId } = {}) {
     if ( !this.isConstrainedLit ) return yield* this.iterateShapes();
-
-    // TODO: Cache updating.
-    /*
-    if ( this.#wallsID < ConstrainedTokenBorder._wallsID
-        || this.#lightsID < ConstrainedTokenBorder._lightsID  ) this.updateConstrainedLitFaces();
-    */
-    this.updateConstrainedLitShapes();
-
     if ( senseType && !this.blocksSense(senseType) ) return;
     if ( levelId && !this.blocksFromLevel(levelId) ) return;
     yield* this.constrainedLitShapes;
@@ -179,11 +156,11 @@ const TokenConstrainedLitFacesMixin = superclass => class extends superclass {
   updateConstrainedLitShapes() {
     if ( !this.isLit || !this.token ) return;
 
-    this.shapes.forEach(shape => shape.destroy());
-    this.shapes.length = 0;
+    this.#constrainedLitShapes.forEach(shape => shape.destroy());
+    this.#constrainedLitShapes.length = 0;
 
     const poly = this.token.litTokenBorder.toPolygon();
-    this.shapes.push(new ExtrudedPolygonPrimitive.fromPolygon(`${this.placeableId}_lit`, poly, this.constructor.tokenElevationZ));
+    this.#constrainedLitShapes.push(new ExtrudedPolygonPrimitive.fromPolygon(`${this.placeableId}_lit`, poly, this.constructor.tokenElevationZ));
 
     /*
     const SPACER = this.constructor.SPACER;
@@ -216,19 +193,13 @@ const TokenConstrainedBrightLitFacesMixin = superclass => class extends supercla
   #lightsID = -1;
   */
 
-  constrainedBrightLitShapes = [];
+  #constrainedBrightLitShapes = [];
 
-  /*
-  get constrainedBrightLitFaces() {
-    if ( this.isConstrainedBrightLit ) {
-      if ( this.#wallsID < ConstrainedTokenBorder._wallsID
-        || this.#lightsID < ConstrainedTokenBorder._lightsID  ) this.updateConstrainedBrightLitFaces();
-      return this._constrainedBrightLitFaces;
-    }
-    return this.faces;
+  get constrainedBrightLitShapes() {
+    // TODO: Cache updating.
+    this.updateConstrainedBrightLitShapes();
+    return this.#constrainedBrightLitShapes;
   }
-  */
-
 
   /**
    * Iterate over the shapes.
@@ -239,14 +210,6 @@ const TokenConstrainedBrightLitFacesMixin = superclass => class extends supercla
    */
   *iterateConstrainedBrightLitShapes({ senseType, levelId } = {}) {
     if ( !this.isConstrainedBrightLit ) return yield* this.iterateShapes();
-
-    // TODO: Cache updating.
-    /*
-    if ( this.#wallsID < ConstrainedTokenBorder._wallsID
-        || this.#lightsID < ConstrainedTokenBorder._lightsID  ) this.updateConstrainedLitFaces();
-    */
-    this.updateConstrainedBrightLitShapes();
-
     if ( senseType && !this.blocksSense(senseType) ) return;
     if ( levelId && !this.blocksFromLevel(levelId) ) return;
     yield* this.constrainedBrightLitShapes;
@@ -263,11 +226,11 @@ const TokenConstrainedBrightLitFacesMixin = superclass => class extends supercla
   updateConstrainedBrightLitShapes() {
     if ( !this.isBrightLit || !this.token ) return;
 
-    this.shapes.forEach(shape => shape.destroy());
-    this.shapes.length = 0;
+    this.#constrainedBrightLitShapes.forEach(shape => shape.destroy());
+    this.#constrainedBrightLitShapes.length = 0;
 
     const poly = this.token.brightLitTokenBorder.toPolygon();
-    this.shapes.push(new ExtrudedPolygonPrimitive.fromPolygon(`${this.placeableId}_brightLit`, poly, this.constructor.tokenElevationZ));
+    this.#constrainedBrightLitShapes.push(new ExtrudedPolygonPrimitive.fromPolygon(`${this.placeableId}_brightLit`, poly, this.constructor.tokenElevationZ));
 
     /*
     const SPACER = this.constructor.SPACER;
