@@ -1183,7 +1183,7 @@ export class PixelCache extends LocalCoordinateCache {
 
     // Catch the type error if clearing from the constructor.
     try { this._clearCanvasThresholdBoundingBoxes(); }
-    catch ( _err ) { /* empty */ }
+    catch ( _err ) { /* eslint-disable-line no-unused-vars */ }
   }
 
   /**
@@ -3002,6 +3002,15 @@ export class TextureDocumentPixelCache extends TexturePixelCache {
    */
   clearTransforms() { this.updateTransforms(); }
 
+  get translationDims() {
+    return this.textureDocument ?? { x: 0, y: 0 };
+  }
+
+  get scaleDims() {
+    const { scaleX: x, scaleY: y } = this.textureSpecs;
+    return { x, y };
+  }
+
   _setModelAnchor() {
     // Center on the texture anchor.
     // Anchor is in local coordinates.
@@ -3011,13 +3020,11 @@ export class TextureDocumentPixelCache extends TexturePixelCache {
   }
 
   _setTranslation() {
-    const dims = this.textureDocument ?? { x: 0, y: 0 };
-    super._setTranslation(dims);
+    super._setTranslation(this.translationDims);
   }
 
   _setScale() {
-    const { scaleX: x, scaleY: y } = this.textureSpecs;
-    super._setScale({ x, y });
+    super._setScale(this.scaleDims);
   }
 
   _setRotationZ() {
@@ -3093,13 +3100,22 @@ export class LevelBackgroundPixelCache extends TextureDocumentPixelCache {
 
   get rotationRadians() { return Math.toRadians(this.textureSpecs?.rotation || 0); }
 
-  _setScale() {
+  get translationDims() {
+    const sceneCenter = canvas.scene.dimensions.sceneRect.center;
+    const { offsetX, offsetY } = this.textureSpecs;
+    return {
+      x: sceneCenter.x + offsetX,
+      y: sceneCenter.y + offsetY
+    };
+  }
+
+  get scaleDims() {
     const { scaleX, scaleY } = this.textureSpecs;
     const fitScale = this._fitScale;
-    super._setScale({
+    return {
       x: scaleX * fitScale.x,
       y: scaleY * fitScale.y,
-    });
+    };
   }
 
   /**
