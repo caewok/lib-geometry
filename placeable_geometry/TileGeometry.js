@@ -11,14 +11,16 @@ import { mix } from "../mixwith.js";
 
 // Geometry
 import { PlaceableGeometry } from "./PlaceableGeometry.js";
-import { TexturedQuadPrimitive } from "./InstancedGeometricPrimitive.js";
+import { QuadPrimitive, TexturedQuadPrimitive } from "./InstancedGeometricPrimitive.js";
+import { PlanarPolygonPrimitive } from "./ModelGeometricPrimitive.js";
 
 // LibGeometry
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { gridUnitsToPixels } from "../util.js";
 import { AABB3d } from "../3d/AABB3d.js";
 import { Point3d } from "../3d/Point3d.js";
-import { Quad3d, Polygon3d, Polygons3d, Triangle3d } from "../3d/Polygon3d.js";
+import { Segment } from "../Segment.js";
+import { Polygon3d, Polygons3d, Triangle3d } from "../3d/Polygon3d.js";
 
 // Tile alpha bounds
 import { Polygon3dVertices } from "../placeable_vertices/BasicVertices.js";
@@ -65,31 +67,29 @@ const TRACKER_TYPES = {
 // NOTE: TileAlphaBoundingBoxMixin
 const TileAlphaBoundingBoxMixin = superclass => class extends superclass {
 
-  /** @type {object<Quad3d>} */
-  #alphaBoundingBox = [
-    new Quad3d(),
-    new Quad3d(),
-  ];
+  /** @type {object<GeometricPrimitive[]>} */
+  #alphaBoundingBoxShapes = [];
 
   /** @type {boolean} */
   #needsUpdate = true;
 
   _update() {
-    this.#needsUpdate ||= this._updateFlags.properties;
+    this.#needsUpdate ||= Object.values(this._updateFlags).some(value => Boolean(value));
     super._update();
   }
 
-  get alphaBoundingBox() {
+  get alphaBoundingBoxShapes() {
     this.#updateCachedValues()
-    return this.#alphaBoundingBox;
+    return this.#alphaBoundingBoxShapes;
   }
+
+  get alphaBoundingBoxShape() { return this.alphaBoundingBoxShapes()[0]; }
 
   #updateCachedValues() {
     if ( !this.#needsUpdate ) return
     this._updateAlphaBoundingBox();
     this.#needsUpdate = false;
   }
-
 
   /**
    * Convert polygon or rectangle representing a tile shape to top and bottom faces.
@@ -99,13 +99,37 @@ const TileAlphaBoundingBoxMixin = superclass => class extends superclass {
     const cache = this.pixelCache;
     if ( !cache ) return;
 
-    const rectOrPoly = cache.getThresholdCanvasBoundingBox(this.alphaThreshold).toPolygon();
-    const bb = this.#alphaBoundingBox;
-    const elevationZ = this.elevationZ;
+    // TODO: Cache updating.
+    this.#alphaBoundingBoxShapes.forEach(shape => shape.destroy());
+    this.#alphaBoundingBoxShapes.length = 0;
 
-		Quad3d.fromPolygon(rectOrPoly, elevationZ, bb[0]);
-		Quad3d.fromPolygon(rectOrPoly, elevationZ, bb[1]);
-    bb[1].reverseOrientation(); // Bottom.
+    const rectOrPoly = cache.getThresholdCanvasBoundingBox(this.alphaThreshold);
+    const elevationZ = this.elevationZ;
+    const center2d = rectOrPoly.center;
+
+    const shape = new QuadPrimitive(`${this.placeableId}_alphaBoundingBox`);
+    shape.initialize();
+    using ctr = Point3d.tmp.set(
+      center2d.x,
+      center2d.y,
+      elevationZ,
+    );
+    shape.setPosition(ctr);
+
+    if ( rectOrPoly instanceof PIXI.Polygon ) {
+      // Determine the rotation angle of the box.
+      const iter = rectOrPoly.iteratePoints();
+      const a = iter.next().value;
+      const b = iter.next().value;
+      const c = iter.next().value;
+      using s0 = new Segment(a, b);
+      using s1 = new Segment(b, c);
+      shape.setRotation({ x: 0, y: 0, z: s0.angleXY });
+      shape.setScale({ x: s0.length, y: s1.length, z: 1 });
+    } else { // Rectangle; no rotation.
+      shape.setScale({ x: rectOrPoly.width, y: rectOrPoly.height, z: 1 });
+    }
+    this.#alphaBoundingBoxShapes.push(shape);
   }
 }
 
@@ -119,23 +143,20 @@ const TileAlphaBoundingBoxMixin = superclass => class extends superclass {
 // NOTE: TileAlphaBoundingPolygonMixin
 const TileAlphaBoundingPolygonMixin = superclass => class extends superclass {
 
-  /** @type {Polygon3d[]} */
-  #alphaBoundingPolygon = [
-    new Polygon3d(),
-    new Polygon3d(),
-  ];
+  /** @type {object<GeometricPrimitive[]>} */
+  #alphaBoundingPolygonShapes = [];
 
   /** @type {boolean} */
   #needsUpdate = true;
 
 	_update() {
-    this.#needsUpdate ||= this._updateFlags.properties;
+    this.#needsUpdate ||= Object.values(this._updateFlags).some(value => Boolean(value));
     super._update();
   }
 
-  get alphaBoundingPolygon() {
+  get alphaBoundingPolygonShapes() {
     this.#updateCachedValues()
-    return this.#alphaBoundingPolygon;
+    return this.#alphaBoundingPolygonShapes;
   }
 
   #updateCachedValues() {
@@ -153,12 +174,11 @@ const TileAlphaBoundingPolygonMixin = superclass => class extends superclass {
     if ( !cache ) return;
 
     const poly = cache.getThresholdCanvasBoundingPolygon(this.alphaThreshold);
-    const bp = this.#alphaBoundingPolygon;
     const elevationZ = this.elevationZ;
 
-    Polygon3d.fromPolygon(poly, elevationZ, bp[0]);
-    Polygon3d.fromPolygon(poly, elevationZ, bp[1]);
-    bp[1].reverseOrientation(); // Bottom.
+    const poly3d = Polygon3d.fromPolygon(poly, elevationZ);
+    const shape = PlanarPolygonPrimitive.fromPolygon3d(`${this.placeableId}_alphaBoundingPolygon`, poly3d);
+    this.#alphaBoundingPolygonShapes.push(shape);
   }
 }
 
@@ -172,18 +192,20 @@ const TileAlphaBoundingPolygonMixin = superclass => class extends superclass {
 // NOTE: TileAlphaPolygonsMixin
 const TileAlphaPolygonsMixin = superclass => class extends superclass {
 
-  /** @type {Polygons3d[]} */
-  #alphaThresholdPolygons = [
-    new Polygons3d(),
-    new Polygons3d(),
-  ];
+  /** @type {object<GeometricPrimitive[]>} */
+  #alphaThresholdPolygonShapes = [];
 
   /** @type {boolean} */
   #needsUpdate = true;
 
-  get alphaThresholdPolygons() {
+	_update() {
+    this.#needsUpdate ||= Object.values(this._updateFlags).some(value => Boolean(value));
+    super._update();
+  }
+
+  get alphaThresholdPolygonShapes() {
     this.#updateCachedValues();
-    return this.#alphaThresholdPolygons;
+    return this.#alphaThresholdPolygonShapes;
   }
 
   #updateCachedValues() {
@@ -192,10 +214,7 @@ const TileAlphaPolygonsMixin = superclass => class extends superclass {
     this.#needsUpdate = false;
   }
 
-	_update() {
-    this.#needsUpdate ||= this._updateFlags.properties;
-    super._update();
-  }
+
 
   /**
    * Convert clipper paths representing a tile shape to top and bottom faces.
@@ -208,8 +227,9 @@ const TileAlphaPolygonsMixin = superclass => class extends superclass {
     const polys = cache.getCanvasAlphaISOBands(this.alphaThreshold);
     if ( !polys ) return;
 
-    Polygons3d.fromPolygons(polys, this.elevationZ, this.#alphaThresholdPolygons[0]);
-    this.#alphaThresholdPolygons[0].clone(this.#alphaThresholdPolygons[1]).reverseOrientation(); // Reverse orientation but keep the hole designations.
+    const polys3d = Polygons3d.fromPolygons(polys, this.elevationZ);
+    const shape = PlanarPolygonPrimitive.fromPolygon3d(`${this.placeableId}_alphaThresholdPolygons`, polys3d);
+    this.#alphaThresholdPolygonShapes.push(shape);
   }
 }
 
@@ -224,17 +244,14 @@ const TileAlphaPolygonsMixin = superclass => class extends superclass {
 const TileAlphaTrianglesMixin = superclass => class extends superclass {
 
   /** @type {Polygons3d[]} */
-  #alphaThresholdTriangles = [
-    new Polygons3d(),
-    new Polygons3d(),
-  ];
+  #alphaThresholdTriangleShapes = [];
 
   /** @type {boolean} */
   #needsUpdate = true;
 
-  get alphaThresholdTriangles() {
+  get alphaThresholdTriangleShapes() {
     this.#updateCachedValues();
-    return this.#alphaThresholdTriangles;
+    return this.#alphaThresholdTriangleShapes;
   }
 
   #updateCachedValues() {
@@ -244,7 +261,7 @@ const TileAlphaTrianglesMixin = superclass => class extends superclass {
   }
 
 	_update() {
-    this.#needsUpdate ||= this._updateFlags.properties;
+    this.#needsUpdate ||= Object.values(this._updateFlags).some(value => Boolean(value));
     super._update();
   }
 
@@ -255,7 +272,7 @@ const TileAlphaTrianglesMixin = superclass => class extends superclass {
    * @returns {Triangle3d[]}
    */
   _updatePathsToFaceTriangles() {
-    // TODO: Fix. Need to convert multiply polygons with holes to triangles.
+    // TODO: Fix. Need to convert multiple polygons with holes to triangles.
     console.error("Not yet implemented.")
     const cache = this.pixelCache;
     if ( !cache ) return;
@@ -268,26 +285,18 @@ const TileAlphaTrianglesMixin = superclass => class extends superclass {
     // Trickier than leaving as polygons but can dramatically cut down the number of polys
     // for more complex shapes.
     const elev = this.elevationZ;
-    const { top, bottom } = Polygon3dVertices.polygonTopBottomFaces(polys, { topZ: elev, bottomZ: elev });
+    const { top } = Polygon3dVertices.polygonTopBottomFaces(polys, { topZ: elev, bottomZ: elev });
 
     // Trim the UVs and Normals.
     const topTrimmed = Polygon3dVertices.cutVertexData(top, { startingOffset: 3, deletionLength: 5, stride: 8 });
-    const bottomTrimmed = Polygon3dVertices.cutVertexData(bottom, { startingOffset: 3, deletionLength: 5, stride: 8 });
 
     // Drop any triangles that are nearly collinear or have very small areas.
     // Note: This works b/c the triangles all have z values of 0, which can be safely ignored.
     const triTop = Triangle3d
       .fromVertices(topTrimmed)
       .filter(tri => !foundry.utils.orient2dFast(tri.a, tri.b, tri.c).almostEqual(0, 1e-06));
-    Polygons3d.from3dPolygons(triTop, this.#alphaThresholdTriangles[0]);
-
-    const triBottom = Triangle3d
-      .fromVertices(bottomTrimmed)
-      .filter(tri => !foundry.utils.orient2dFast(tri.a, tri.b, tri.c).almostEqual(0, 1e-06));
-    Polygons3d.from3dPolygons(triBottom, this.#alphaThresholdTriangles[1]);
-
-    this.#alphaThresholdTriangles[0].setZ(this.elevationZ);
-    this.#alphaThresholdTriangles[1].setZ(this.elevationZ);
+    const shape = PlanarPolygonPrimitive.fromPolygon3d(`${this.placeableId}_alphaThresholdTriangles`, triTop);
+    this.#alphaThresholdTriangleShapes.push(shape);
   }
 }
 

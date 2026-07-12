@@ -118,6 +118,23 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
 }
 
 /**
+ * Planar polygon. Use for some polygon alpha shapes.
+ */
+export class PlanarPolygonPrimitive extends ModelGeometricPrimitive {
+
+  /**
+   * Build a shape from a 3d polygon.
+   * @param {string} id           Identifier for this shape
+   * @param {Polygon3d} poly3d    3d planar polygon to use
+   * @returns {PlanarPolygonPrimitive}
+   */
+  static fromPolygon3d(id, poly3d) {
+    const center = poly3d.center;
+    return this.fromCanvasFaces([poly3d], id, { center });
+  }
+}
+
+/**
  * Extruded polygon primitive.
  * A planar polygon that is extruded along the z axis, with vertical sides.
  * Typical for regions.
