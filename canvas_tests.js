@@ -14,6 +14,25 @@ import { ElevatedPoint } from "./3d/ElevatedPoint.js";
 
 /*
 Draw = CONFIG.GeometryLib.lib.Draw
+tile = canvas.tiles.controlled[0]
+geom = CONFIG.GeometryLib.geometryManager.geomForPlaceable(tile)
+cache = geom.pixelCache
+
+level = canvas.level
+geom = CONFIG.GeometryLib.geometryManager.geomForDocument(level, "background")
+cache = geom.pixelCache
+
+
+bb = cache.getThresholdCanvasBoundingBox(-1)
+bbThreshold = cache.getThresholdCanvasBoundingBox(0.75)
+bbPoly = cache.getThresholdCanvasBoundingPolygon(0.75)
+
+Draw.shape(bb, { color: Draw.COLORS.blue })
+Draw.shape(bbThreshold, { color: Draw.COLORS.orange })
+Draw.shape(bbPoly, { color: Draw.COLORS.red })
+
+
+Draw = CONFIG.GeometryLib.lib.Draw
 Draw.clearDrawings()
 canvasTests = CONFIG.GeometryLib.lib.canvasTests
 Triangle3d = CONFIG.GeometryLib.lib.threeD.Triangle3d
@@ -34,9 +53,19 @@ canvasTests.drawLevelBackgroundGeometries()
 
 Original canvas: 1500 x 1500
 
+ground:
 anchor: 0.5, 0.5
 offset: -675, 150
 scale: 0.5, 0.5
+rotation: 0
+fit: contain
+
+basement:
+anchor: 0.5, 0.5
+offset: -400, 320
+scale: 0.5, 0.5
+rotation: 90
+fit: contain
 
 level = canvas.scene.levels.get("defaultLevel0000")
 geom = CONFIG.GeometryLib.geometryManager.backgroundLevels.geomForDocument(level)
