@@ -12,7 +12,8 @@ import { GEOMETRY_LIB_ID } from "./const.js";
 import { extractPixels } from "./extract-pixels.js";
 import { roundFastPositive, bresenhamLine, bresenhamLineIterator, trimLineSegmentToPixelRectangle, clamp } from "./util.js";
 import { Draw } from "./Draw.js";
-import { MatrixFloat32, ModelMatrix2dAnchorInverse } from "./Matrix.js";
+import { MatrixFloat32 } from "./Matrix.js";
+import { ModelMatrix2dAnchorInverse } from "./ModelMatrix.js";
 import { AABB2d } from "./AABB.js";
 import * as MarchingSquares from "./marchingsquares-esm.js";
 

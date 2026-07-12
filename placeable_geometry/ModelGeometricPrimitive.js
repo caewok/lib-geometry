@@ -9,7 +9,7 @@ import { VertexObject } from "../placeable_vertices/VertexObject.js";
 import { Point3d } from "../3d/Point3d.js";
 import { Polygon3d, Quad3d  } from "../3d/Polygon3d.js";
 import { AABB2d } from "../AABB.js";
-import { ModelMatrix } from "../Matrix.js";
+import { ModelMatrix } from "../ModelMatrix.js";
 
 /**
  * ModelGeometricPrimitives are one-offs.

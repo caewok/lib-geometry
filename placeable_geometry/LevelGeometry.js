@@ -140,8 +140,8 @@ export class LevelBackgroundGeometry extends TileGeometry {
   }
 
   /**
-   * Determine the center of the tile, in pixel units.
-   * @param {Tile} tile
+   * Determine the center of the level, in pixel units.
+   * @param {Level} levelD
    * @returns {Point3d}
    */
   static tileCenter(levelD) {
@@ -154,6 +154,11 @@ export class LevelBackgroundGeometry extends TileGeometry {
     return Point3d.tmp.set(mid.x, mid.y, gridUnitsToPixels(levelD.elevation.base));
   }
 
+  /**
+   * Determine the level 3d dimensions, in pixel units.
+   * @param {Level} levelD
+   * @returns {Point3d} x: width, y: height, z: zHeight
+   */
   static tileDimensions(levelD) {
     const cache = this.cacheManager.pixelCacheForDocument(levelD);
     if ( !cache ) {

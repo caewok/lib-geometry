@@ -7,7 +7,8 @@ PIXI,
 "use strict";
 
 import { GeometricPrimitive } from "./GeometricPrimitive.js";
-import { MatrixFloat32, ModelMatrix, ModelMatrixMultipleCenters } from "../Matrix.js";
+import { MatrixFloat32 } from "../Matrix.js";
+import { ModelMatrix, ModelMatrixMultipleCenters } from "../ModelMatrix.js";
 import { FixedLengthTrackingBuffer } from "../placeable_tracking/TrackingBuffer.js";
 import { almostBetween } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
