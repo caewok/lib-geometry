@@ -90,7 +90,7 @@ export class GeometricPrimitive {
 
   get center() {
     // Multiply the origin (0, 0, 0) by the translation to find the new center.
-    return this.modelMatrix.translation.multiplyPoint3d(this.#center);
+    return this.modelMatrix._translation.multiplyPoint3d(this.#center);
   }
 
   /**
@@ -130,14 +130,14 @@ export class GeometricPrimitive {
   // TODO: Use dirty flags to limit the updating. Is this possible with the vertices, which
   // would need to also get triggered? Maybe use a forceUpdate function to handle.
 
-  /** @type {boolean} */
+  /** @type {DIRTY} */
   #dirtyFlags = this.constructor.DIRTY.ALL;
 
   get dirty() { return this.#dirtyFlags; }
 
   set dirty(flag) { this.#dirtyFlags |= flag; }
 
-  isDirty(flag) { return this.#dirtyFlags & flag; }
+  isDirty(flag = this.constructor.DIRTY.ALL) { return this.#dirtyFlags & flag; }
 
   _clearDirty(flag) { this.#dirtyFlags &= ~flag; }
 
@@ -145,7 +145,7 @@ export class GeometricPrimitive {
    * @type {Point3d|object} center
    */
   setPosition(center) {
-    MatrixFloat32.translation(center.x, center.y, center.z, this.modelMatrix.translation);
+    this.modelMatrix.translation = center;
     this.dirty = this.constructor.DIRTY.ALL;
   }
 
@@ -153,7 +153,7 @@ export class GeometricPrimitive {
    * @type {Point3d|object} angles
    */
   setRotation(angles) {
-    MatrixFloat32.rotationXYZ(angles.x, angles.y, angles.z, true, this.modelMatrix.rotation);
+    this.modelMatrix.rotation = angles;
     this.dirty = this.constructor.DIRTY.ALL;
   }
 
@@ -161,7 +161,7 @@ export class GeometricPrimitive {
    * @type {Point3d|object} dims
    */
   setScale(dims) {
-    MatrixFloat32.scale(dims.x || 1, dims.y || 1, dims.z || 1, this.modelMatrix.scale);
+    this.modelMatrix.scale = dims;
     this.dirty = this.constructor.DIRTY.ALL;
   }
 

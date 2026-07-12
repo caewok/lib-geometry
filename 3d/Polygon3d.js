@@ -1292,7 +1292,7 @@ export class Ellipse3d extends Polygon3d {
   }
 
   scale({ x = 1, y = 1, z = 1 } = {}, ellipse3d) {
-    using scaleM = Matrix.scale(x, y, z);
+    using scaleM = Matrix.scale({ x, y, z }, { d3: true });
     return this.transform(scaleM, ellipse3d);
   }
 

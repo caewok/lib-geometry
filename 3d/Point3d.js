@@ -264,13 +264,14 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
 
     // Rotate points to match tile rotation.
     if ( rotation ) {
-      const rotZ = Matrix.rotationZ(Math.toRadians(rotation));
+      const rotZ = Matrix.rotationZ(Math.toRadians(rotation), { d3: true });
       pts.forEach(pt => rotZ.multiplyPoint3d(pt, pt));
     }
 
     // Translate to canvas position.
     const center = bounds.center;
-    const trM = Matrix.translation(center.x + offsetX, center.y + offsetY, elevationZ);
+    using center3d = this.tmp.set(center.x + offsetX, center.y + offsetY, elevationZ);
+    const trM = Matrix.translation(center3d, { d3: true });
     pts.forEach(pt => trM.multiplyPoint3d(pt, pt));
 
     return {
@@ -622,7 +623,7 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
   dot(other) {
     return super.dot(other) + (this.z * (other.z || 0));
   }
-  
+
   /**
    * Dot product of this point with itself
    * @returns {number}

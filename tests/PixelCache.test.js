@@ -670,8 +670,8 @@ quench.registerBatch(`${MODULE_ID}.libGeometry.tile-pixel-cache`, (context) => {
         expect(cache.tile).to.equal(testTile);
 
         // Translation should match the tile document's coordinates
-        expect(cache.modelMatrix.translation.getIndex(2, 0)).to.be.closeTo(testTile.document.x, EPSILON);
-        expect(cache.modelMatrix.translation.getIndex(2, 1)).to.be.closeTo(testTile.document.y, EPSILON);
+        expect(cache.modelMatrix._translation.getIndex(2, 0)).to.be.closeTo(testTile.document.x, EPSILON);
+        expect(cache.modelMatrix._translation.getIndex(2, 1)).to.be.closeTo(testTile.document.y, EPSILON);
       });
     });
 
@@ -691,7 +691,7 @@ quench.registerBatch(`${MODULE_ID}.libGeometry.tile-pixel-cache`, (context) => {
         cache.updateTransforms();
 
         const rMat = MatrixFloat32.rotationZ(Math.toRadians(originalRotation + 90), false);
-        expect(rMat.almostEqual(cache.modelMatrix.rotation)).to.be.true;
+        expect(rMat.almostEqual(cache.modelMatrix._rotation)).to.be.true;
 
         // Reset for other tests
         testTile.document.rotation = originalRotation;
@@ -714,7 +714,7 @@ quench.registerBatch(`${MODULE_ID}.libGeometry.tile-pixel-cache`, (context) => {
 
         const sc = cache.tileScale;
         const sMat = MatrixFloat32.scale(sc.x, sc.y);
-        expect(sMat.almostEqual(cache.modelMatrix.scale)).to.be.true;
+        expect(sMat.almostEqual(cache.modelMatrix._scale)).to.be.true;
 
         // Reset for other tests.
         tex.scaleX /= 2;

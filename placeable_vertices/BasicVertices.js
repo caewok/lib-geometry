@@ -650,10 +650,9 @@ export class HorizontalQuadVertices extends BasicVertices {
     const center = rect.center;
 
     // Build transform matrix.
-    MatrixFloat32.scale(rect.width, rect.height, 0, modelMatrix.scale);
-    MatrixFloat32.translation(center.x, center.y, elevationZ, modelMatrix.translation);
-    MatrixFloat32.rotationZ(radians, true, modelMatrix.rotation);
-    modelMatrix.needsUpdate = true;
+    modelMatrix.scale = { x: rect.width, y: rect.height, z: 0 };
+    modelMatrix.translation = { x: center.x, y: center.y, z: elevationZ };
+    modelMatrix.rotation = { x: 0, y: 0, z: radians };
     return modelMatrix;
   }
 }
@@ -736,9 +735,9 @@ export class VerticalQuadVertices extends BasicVertices {
     const length = PIXI.Point.distanceBetween(a, b);
 
     // Build transform matrix.
-    MatrixFloat32.scale(length, 1, zHeight, modelMatrix.scale);
-    MatrixFloat32.translation(center.x, center.y, z, modelMatrix.translation);
-    MatrixFloat32.rotationZ(radians, true, modelMatrix.rotation);
+    modelMatrix.scale = { x: length, y: 1, z: zHeight };
+    modelMatrix.translation = { x: center.x, y: center.y, z };
+    modelMatrix.rotation = { x: 0, y: 0, z: radians };
     return modelMatrix;
   }
 }
@@ -868,9 +867,9 @@ export class Rectangle3dVertices extends BasicVertices {
     const center = rect.center;
     const radians = toRadians(rotateZ);
 
-    MatrixFloat32.scale(rect.width, rect.height, zHeight, modelMatrix.scale);
-    MatrixFloat32.translation(center.x, center.y, z, modelMatrix.translation);
-    MatrixFloat32.rotationZ(radians, true, modelMatrix.rotation);
+    modelMatrix.scale = { x: rect.width, y: rect.height, z: zHeight };
+    modelMatrix.translation = { x: center.x, y: center.y, z };
+    modelMatrix.rotation = { x: 0, y: 0, z: radians };
     return modelMatrix;
   }
 }
@@ -1348,10 +1347,9 @@ export class Ellipse3dVertices extends Polygon3dVertices {
     const center = ellipse.center;
 
     // Build transform matrix.
-    MatrixFloat32.scale(width, height, zHeight, modelMatrix.scale);
-    MatrixFloat32.translation(center.x, center.y, z, modelMatrix.translation);
-    MatrixFloat32.rotationZ(radians, true, modelMatrix.rotation);
-    modelMatrix.needsUpdate = true;
+    modelMatrix.scale = { x: width, y: height, z: zHeight };
+    modelMatrix.translation = { x: center.x, y: center.y, z };
+    modelMatrix.rotation = { x: 0, y: 0, z: radians };
     return modelMatrix;
   }
 }
@@ -1387,10 +1385,8 @@ export class Circle3dVertices extends Ellipse3dVertices {
     const { center, radius } = circle;
 
     // Build transform matrix.
-    MatrixFloat32.scale(radius, radius, zHeight, modelMatrix.scale);
-    MatrixFloat32.translation(center.x, center.y, z, modelMatrix.translation);
-    MatrixFloat32.identity(4, 4, modelMatrix.rotation);
-    modelMatrix.needsUpdate = true;
+    modelMatrix.scale = { x: radius, y: radius, z: zHeight };
+    modelMatrix.translation = { x: center.x, y: center.y, z };
     return modelMatrix;
   }
 }
@@ -1480,10 +1476,8 @@ export class SphereVertices extends BasicVertices {
     modelMatrix ??= new ModelMatrix();
 
     // Build transform matrix.
-    MatrixFloat32.scale(circle.radius, circle.radius, circle.radius, modelMatrix.scale);
-    MatrixFloat32.translation(circle.x, circle.y, elevationZ, modelMatrix.translation);
-    MatrixFloat32.identity(4, 4, modelMatrix.rotation);
-    modelMatrix.needsUpdate = true;
+    modelMatrix.scale = { x: circle.radiuas, y: circle.radius, z: circle.radius };
+    modelMatrix.translation = { x: circle.x, y: circle.y, elevationZ };
     return modelMatrix;
   }
 
@@ -1491,10 +1485,8 @@ export class SphereVertices extends BasicVertices {
     modelMatrix ??= new ModelMatrix();
 
     // Build transform matrix.
-    MatrixFloat32.scale(sphere.radius, sphere.radius, sphere.radius, modelMatrix.scale);
-    MatrixFloat32.translation(sphere.x, sphere.y, sphere.z, modelMatrix.translation);
-    MatrixFloat32.identity(4, 4, modelMatrix.rotation);
-    modelMatrix.needsUpdate = true;
+    modelMatrix.scale = { x: sphere.radius, y: sphere.radius, z: sphere.radius };
+    modelMatrix.translation = sphere;
     return modelMatrix;
   }
 

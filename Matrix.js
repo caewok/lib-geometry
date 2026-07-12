@@ -797,10 +797,16 @@ class AbstractMatrix {
   /**
    * Rotation matrix for a given angle, rotating around X axis.
    * @param {number} angle          Radians
-   * @param {boolean} [d3 = true]    If d3, use a 4-d matrix. Otherwise, 3-d matrix.
+   * @param {object} [opts]
+   * @param {boolean} [opts.d3]           If d3, use a 4-d matrix. Otherwise, 3-d matrix.
+   * @param {Matrix} [opts.outMatrix]     If provided, will control 3d vs 4d unless 3d is set
+   *   It is assumed that providing outMatrix of different dimensions is intentional.
+   *   Matrix will be set from 0,0.
+   *   Default is a 4x4 matrix.
    * @returns {Matrix}
    */
-  static rotationX(angle, d3 = true, outMatrix) {
+  static rotationX(angle, { d3, outMatrix } = {}) {
+    if ( typeof d3 === "undefined" ) d3 = outMatrix ? outMatrix.nrow === 4 : true;
     const n = 3 + d3;
     outMatrix ??= this.empty(n);
     outMatrix.identity();
@@ -835,10 +841,16 @@ class AbstractMatrix {
   /**
    * Rotation matrix for a given angle, rotating around Y axis.
    * @param {number} angle          Radians
-   * @param {boolean} [d3 = true]    If d3, use a 4-d matrix. Otherwise, 3-d matrix.
+   * @param {object} [opts]
+   * @param {boolean} [opts.d3]           If d3, use a 4-d matrix. Otherwise, 3-d matrix.
+   * @param {Matrix} [opts.outMatrix]     If provided, will control 3d vs 4d unless 3d is set
+   *   It is assumed that providing outMatrix of different dimensions is intentional.
+   *   Matrix will be set from 0,0.
+   *   Default is a 4x4 matrix.
    * @returns {Matrix}
    */
-  static rotationY(angle, d3 = true, outMatrix) {
+  static rotationY(angle, { d3, outMatrix } = {}) {
+    if ( typeof d3 === "undefined" ) d3 = outMatrix ? outMatrix.nrow === 4 : true;
     const n = 3 + d3;
     outMatrix ??= this.empty(n);
     outMatrix.identity();
@@ -871,11 +883,17 @@ class AbstractMatrix {
 
   /**
    * Rotation matrix for a given angle, rotating around Z axis.
-   * @param {number} angle
-   * @param {boolean} [d3 = true]    If d3, use a 4-d matrix. Otherwise, 3-d matrix.
+   * @param {number} angle          Radians
+   * @param {object} [opts]
+   * @param {boolean} [opts.d3]           If d3, use a 4-d matrix. Otherwise, 3-d matrix.
+   * @param {Matrix} [opts.outMatrix]     If provided, will control 3d vs 4d unless 3d is set
+   *   It is assumed that providing outMatrix of different dimensions is intentional.
+   *   Matrix will be set from 0,0.
+   *   Default is a 4x4 matrix.
    * @returns {Matrix}
    */
-  static rotationZ(angle, d3 = true, outMatrix) {
+  static rotationZ(angle, { d3, outMatrix } = {}) {
+    if ( typeof d3 === "undefined" ) d3 = outMatrix ? outMatrix.nrow === 4 : true;
     const n = 3 + d3;
     outMatrix ??= this.empty(n);
     outMatrix.identity();
@@ -908,31 +926,56 @@ class AbstractMatrix {
 
   /**
    * Combine rotation matrixes for x, y, and z.
-   * @param {number} angleX   Radians
-   * @param {number} angleY   Radians
-   * @param {number} angleZ   Radians
-   * @param {boolean} [d3 = true]    If d3, use a 4-d matrix. Otherwise, 3-d matrix.
+   * @param {Point3d|PIXI.Point|object} angles      The x,y, and optionally z angles, in radians
+   * @param {object} [opts]
+   * @param {boolean} [opts.d3]           If d3, use a 4-d matrix. Otherwise, 3-d matrix.
+   * @param {Matrix} [opts.outMatrix]     If provided, will control 3d vs 4d unless 3d is set
    * @returns {Matrix}
    */
-  static rotationXYZ(angleX, angleY, angleZ, d3 = true, outMatrix) {
-    outMatrix = angleX ? this.rotationX(angleX, d3, outMatrix) : angleY
-      ? this.rotationY(angleY, d3, outMatrix) : angleZ
-        ? this.rotationZ(angleZ, d3, outMatrix) : outMatrix.identity();
+  static rotationXYZ(angles, { d3, outMatrix } = {}) {
+    if ( typeof d3 === "undefined" ) d3 = outMatrix ? outMatrix.nrow === 4 : true;
+    let multFn = d3 ? "multiply4x4" : "multiply3x3";
+    const n = 3 + d3;
+    if ( outMatrix ) {
+      // If an out matrix is provided, ensure the multiplication function is correct.
+      if ( outMatrix.nrow !== outMatrix.ncol || outMatrix.ncol !== n ) multFn = "multiply";
+    } else outMatrix = this.empty(n);
 
-    const multFn = d3 ? "multiply4x4" : "multiply3x3";
+    const angleX = angles.x || 0;
+    const angleY = angles.y || 0;
+    const angleZ = angles.z || 0;
+    const opts = { d3, outMatrix };
+
+    // Process the first angle. Skip 0 angles.
+    angleX ? this.rotationX(angleX, opts) : angleY
+      ? this.rotationY(angleY, opts) : (angleZ && d3)
+        ? this.rotationZ(angleZ, opts) : outMatrix.identity();
+
+    // If x and y angles, process the y angle.
     if ( angleX && angleY ) {
-      const rotY = this.rotationY(angleY, d3);
-      outMatrix = outMatrix[multFn](rotY); // Cannot pass outMatrix as tmp if it is rot.
+      const rotY = this.rotationY(angleY, { d3 }); // Get a new matrix
+      outMatrix[multFn](rotY, outMatrix);
     }
-    if ( (angleX || angleY) && angleZ ) {
-      const rotZ = this.rotationZ(angleZ, d3);
-      outMatrix = outMatrix[multFn](rotZ);
+
+    // If x/y/z, process the z angle.
+    if ( d3 && (angleX || angleY) && angleZ ) {
+      const rotZ = this.rotationZ(angleZ, { d3 }); // Get a new matrix
+      outMatrix[multFn](rotZ, outMatrix);
     }
     return outMatrix;
   }
 
-  static translation(x = 0, y = 0, z, outMatrix) {
-    const n = typeof z === "undefined" ? 3 : 4;
+  /**
+   * Build translation matrix for x, y, and z translation.
+   * @param {Point3d|PIXI.Point|object} vector      The x,y, and optionally z translation vector
+   * @param {object} [opts]
+   * @param {boolean} [opts.d3]           If d3, use a 4-d matrix. Otherwise, 3-d matrix.
+   * @param {Matrix} [opts.outMatrix]     If provided, will control 3d vs 4d unless 3d is set
+   * @returns {Matrix}
+   */
+  static translation(vector, { d3, outMatrix } = {}) {
+    if ( typeof d3 === "undefined" ) d3 = outMatrix ? outMatrix.nrow === 4 : true;
+    const n = 3 + d3;
     outMatrix ??= this.empty(n);
     outMatrix.identity();
 
@@ -947,14 +990,23 @@ class AbstractMatrix {
     [x, y, z, 1]
     */
     const r = n - 1;
-    outMatrix.setIndex(r, 0, x);
-    outMatrix.setIndex(r, 1, y);
-    if ( typeof z !== "undefined" ) outMatrix.setIndex(r, 2, z);
+    outMatrix.setIndex(r, 0, vector.x || 0);
+    outMatrix.setIndex(r, 1, vector.y || 0);
+    if ( d3 ) outMatrix.setIndex(r, 2, vector.z || 0);
     return outMatrix;
   }
 
-  static scale(x = 1, y = 1, z, outMatrix) {
-    const n = typeof z === "undefined" ? 3 : 4;
+  /**
+   * Build scale matrix for x, y, and z dimensions.
+   * @param {Point3d|PIXI.Point|object} dims      The x,y, and optionally z sizes
+   * @param {object} [opts]
+   * @param {boolean} [opts.d3]           If d3, use a 4-d matrix. Otherwise, 3-d matrix.
+   * @param {Matrix} [opts.outMatrix]     If provided, will control 3d vs 4d unless 3d is set
+   * @returns {Matrix}
+   */
+  static scale(dims, { d3, outMatrix } = {}) {
+    if ( typeof d3 === "undefined" ) d3 = outMatrix ? outMatrix.nrow === 4 : true;
+    const n = 3 + d3;
     outMatrix ??= this.empty(n);
     outMatrix.identity();
     /*
@@ -967,9 +1019,9 @@ class AbstractMatrix {
     [0, 0, z, 0],
     [0, 0, 0, 1]
     */
-   outMatrix.setIndex(0, 0, x);
-   outMatrix.setIndex(1, 1, y);
-   if ( typeof z !== "undefined" ) outMatrix.setIndex(2, 2, z);
+   outMatrix.setIndex(0, 0, dims.x || 1);
+   outMatrix.setIndex(1, 1, dims.y || 1);
+   if ( d3 ) outMatrix.setIndex(2, 2, dims.z || 1);
    return outMatrix;
   }
 
@@ -1081,7 +1133,7 @@ class AbstractMatrix {
   /**
    * Multiply this and another matrix. this • other.
    * @param {Matrix} other
-   * @param {Matrix} [outMatrix]    Must have this.nrow and other.ncol; cannot be this or other.
+   * @param {Matrix} [outMatrix]    Must have this.nrow and other.ncol
    * @returns {Matrix}
    */
   multiply(other, out) {
@@ -1852,6 +1904,15 @@ export class ModelMatrix2d {
 
   static get BUFFER_LENGTH() { return this.DIM2 * 3; }; // 9 values * 3 matrices.
 
+  /** @type {DIRTY} */
+  #dirty = true;
+
+  get dirty() { return this.#dirty }
+
+  set dirty(value) { this.#dirty ||= value; }
+
+  _clearDirty() { this.#dirty = false; }
+
   constructor(modelBuffer, offset = 0) {
     /** @type {MatrixFloat32} */
     const byteLength = Float32Array.BYTES_PER_ELEMENT * 16;
@@ -1869,11 +1930,8 @@ export class ModelMatrix2d {
   _matrixBuffer = new ArrayBuffer(Float32Array.BYTES_PER_ELEMENT * this.constructor.BUFFER_LENGTH);
 
   /** @type {object<MatrixFloat32>} */
-  // Could be private but may be useful to access them without triggering update.
-  // Use matrix buffer. E.g.:
-  // index 0: rotation 3 x 3.
-  // index 9: translation 3 x 3
-  // index 18: scale 3 x 3
+
+  // User must separately set dirty for each if changes are made. Otherwise use the getters/setters below.
   _rotation = (new MatrixFloat32(
     this.constructor.DIM,
     this.constructor.DIM,
@@ -1892,46 +1950,120 @@ export class ModelMatrix2d {
     this._matrixBuffer,
     this.constructor.DIM2 * 2)).identity();
 
-  get rotation() { this.#updated ||= true; return this._rotation; }
+  /** @type {Point3d} */
+  get rotation() { return this.constructor.extractRotationValues(this._rotation);  }
 
-  get translation() { this.#updated ||= true; return this._translation; }
+  /** @type {Point3d} */
+  set rotation(angles) {
+    const d3 = this.DIM === 4;
+    MatrixFloat32.rotationXYZ(angles, { d3, outMatrix: this._rotation });
+    this.dirty = true;
+  }
 
-  get scale() { this.#updated ||= true; return this._scale; }
+  /** @type {Point3d} */
+  get translation() { return this.constructor.extractTranslationValues(this._translation); }
+
+  /** @type {Point3d} */
+  set translation(vector) {
+    const d3 = this.DIM === 4;
+    MatrixFloat32.translation(vector, { d3, outMatrix: this._translation });
+    this.dirty = true;
+  }
+
+  /** @type {Point3d} */
+  get scale() { return this.constructor.extractScaleValues(this._scale); }
+
+  /** @type {Point3d} */
+  set scale(dims) {
+    const d3 = this.DIM === 4;
+    MatrixFloat32.scale(dims, { d3, outMatrix: this._scale });
+    this.dirty = true;
+  }
+
+  /**
+   * Extract the values on the last row for the provided translation matrix. Assumes no scaling or rotation.
+   * @param {MatrixFloat32<3x3|4x4>} txMat
+   * @returns {PIXI.Point|Point3d}
+   */
+  static extractTranslationValues(txMat) {
+    if ( txMat.nrow === 3 ) {
+      return PIXI.Point.tmp.set(
+        txMat.getIndex(2, 0),
+        txMat.getIndex(2, 1),
+      )
+    } else {
+      return Point3d.tmp.set(
+        txMat.getIndex(3, 0),
+        txMat.getIndex(3, 1),
+        txMat.getIndex(3, 2),
+      )
+    }
+  }
+
+  /**
+   * Extract the angle values from the provided rotation matrix. Assumes no scaling or rotation.
+   * @param {MatrixFloat32<3x3|4x4>} txMat
+   * @returns {PIXI.Point|Point3d}
+   */
+  static extractRotationValues(rotMat) {
+    if ( rotMat.nrow === 3 ) {
+      return PIXI.Point.tmp.set(
+        Math.asin(rotMat.getIndex(1, 2)),
+        Math.asin(rotMat.getIndex(0, 2)),
+      )
+    } else {
+      return Point3d.tmp.set(
+        Math.asin(rotMat.getIndex(1, 2)),
+        Math.asin(rotMat.getIndex(0, 2)),
+        Math.asin(rotMat.getIndex(0, 1)),
+      )
+    }
+  }
+
+  /**
+   * Extract the scale values from the provided rotation matrix. Assumes no translation or rotation.
+   * @param {MatrixFloat32<3x3|4x4>} txMat
+   * @returns {PIXI.Point|Point3d}
+   */
+  static extractScaleValues(scaleMat) {
+    if ( scaleMat.nrow === 3 ) {
+      return PIXI.Point.tmp.set(
+        scaleMat.getIndex(0, 0),
+        scaleMat.getIndex(1, 1),
+      )
+    } else {
+      return Point3d.tmp.set(
+        scaleMat.getIndex(0, 0),
+        scaleMat.getIndex(1, 1),
+        scaleMat.getIndex(2, 2),
+      )
+    }
+  }
 
   /** @type {MatrixFloat32} */
   _model;
 
   get model() {
-    if ( this.#updated ) this.update();
+    if ( this.dirty ) this.update();
     return this._model;
   }
 
-  /** @type {boolean} */
-  #updated = true;
-
-  get updated() { return this.#updated; }
-
-  set updated(value) { this.#updated ||= value; }
-
-
-  update(skip = false) {
-    this.#updated = false;
-    if ( skip ) return;
-
+  update() {
     const M = this._model;
     const multName = this.constructor.multiplyName;
 
     M.identity();
-    M[multName](this.scale, M);
-    M[multName](this.rotation, M);
-    M[multName](this.translation, M);
+    M[multName](this._scale, M);
+    M[multName](this._rotation, M);
+    M[multName](this._translation, M);
+    this.#dirty = false;
   }
 
   clone(out) {
     out ??= new this.constructor();
-    this.rotation.clone(out.rotation);
-    this.scale.clone(out.scale);
-    this.translation.clone(out.translation);
+    this._rotation.clone(out._rotation);
+    this._scale.clone(out._scale);
+    this._translation.clone(out._translation);
     return out;
   }
 }
@@ -1946,66 +2078,32 @@ export class ModelMatrix extends ModelMatrix2d {
 }
 
 /**
- * Center the model using a separate translation matrix before applying scale and rotation.
+ * NOTE: ModelCenterMixin
+ * Transform the model using a separate matrix before applying the rest.
+ * Typically used to center an object before applying scale/rotation/translation.
+ * Undoes that tranformation after the scale/rotation/translation happens.
  */
-export const ModelCenterMixin = superclass => {
+export const ModelAnchorMixin = superclass => {
   return class extends superclass {
     static BUFFER_IDX = super.BUFFER_LENGTH / this.DIM2;
 
     static get BUFFER_LENGTH() { return super.BUFFER_LENGTH + (this.DIM2 * 2); } // 1 additional translation matrix, plus inverse.
 
     /** @type {MatrixFloat32} */
-    #center = (new MatrixFloat32(
+    #anchor = (new MatrixFloat32(
       this.constructor.DIM,
       this.constructor.DIM,
       this._matrixBuffer,
       this.constructor.DIM2 * this.constructor.BUFFER_IDX)).identity();
 
-    /** @type {MatrixFloat32} */
-    #invCenter = (new MatrixFloat32(
-      this.constructor.DIM,
-      this.constructor.DIM,
-      this._matrixBuffer,
-      this.constructor.DIM2 * (this.constructor.BUFFER_IDX + 1))).identity();
-
-    get modelCenter() {
-      return this.#extractTranslationValues(this.#center);
+    get anchor() {
+      return this.constructor.extractTranslationValues(this.#anchor);
     }
 
-    set modelCenter(value) {
-      this.#setTranslationValues(value || {}, this.#center, this.#invCenter);
-    }
-
-    /**
-     * Extract the values on the last row for the provided translation matrix. Assumes no scaling or rotation.
-     * @param {MatrixFloat32<3x3|4x4>} txMat
-     * @returns {PIXI.Point|Point3d}
-     */
-    #extractTranslationValues(txMat) {
-      if ( this.DIM === 3 ) {
-        return PIXI.Point.tmp.set(
-          txMat.getIndex(2, 0),
-          txMat.getIndex(2, 1),
-        )
-      } else {
-        return Point3d.tmp.set(
-          txMat.getIndex(3, 0),
-          txMat.getIndex(3, 1),
-          txMat.getIndex(3, 2),
-        )
-      }
-    }
-
-    /**
-     * Define the translation and inverse translation matrices for a given set of translation coordinates.
-     * @param {PIXI.Point|Point3d|object} value
-     * @param {MatrixFloat32<3x3|4x4>} txMat
-     * @param {MatrixFloat32<3x3|4x4>} txInvMat
-     */
-    #setTranslationValues(value, txMat, txInvMat) {
-      MatrixFloat32.translation(value.x || 0, value.y || 0, value.z || 0, txMat);
-      MatrixFloat32.translation(-value.x || 0, -value.y || 0, -value.z || 0, txInvMat);
-      this.updated = true;
+    set anchor(value) {
+      const d3 = this.constructor.DIM.length === 4;
+      MatrixFloat32.translation(value, { d3, outMatrix: this.#anchor });
+      this.dirty = true;
     }
 
     update() {
@@ -2017,21 +2115,19 @@ export const ModelCenterMixin = superclass => {
       const multName = this.constructor.multiplyName;
 
       // Center prior to applying the model matrix.
-      this.#center[multName](M, M);
-
-      // Undo the centering after.
-      M[multName](this.#invCenter, M);
+      this.#anchor[multName](M, M);
     }
 
     clone(out) {
       out = super.clone(out);
-      out.modelCenter = this.modelCenter;
+      out.anchor = this.anchor;
       return out;
     }
   };
 };
 
 /**
+ * NOTE: ModelMultipleCentersMixin
  * Define separate centers for translation, scaling, and rotation.
  * Example: regions define x,y as well as a shape center.
  * To scale a unit shape requires the shape center, but they rotate and translate from x,y.
@@ -2086,44 +2182,24 @@ export const ModelMultipleCentersMixin = superclass => {
       this.constructor.DIM2 * (this.constructor.BUFFER_IDX + 5))).identity();
 
     /** @type {PIXI.Point|Point3d} */
-    get translationCenter() { return this.#extractTranslationValues(this.#txTranslationMat); }
+    get translationCenter() { return this.constructor.extractTranslationValues(this.#txTranslationMat); }
 
     /** @type {PIXI.Point|Point3d} */
-    get scaleCenter() { return this.#extractTranslationValues(this.#txScaleMat); }
+    get scaleCenter() { return this.constructor.extractTranslationValues(this.#txScaleMat); }
 
     /** @type {PIXI.Point|Point3d} */
-    get rotationCenter() { return this.#extractTranslationValues(this.#txRotationMat); }
-
-    /**
-     * Extract the values on the last row for the provided translation matrix. Assumes no scaling or rotation.
-     * @param {MatrixFloat32<3x3|4x4>} txMat
-     * @returns {PIXI.Point|Point3d}
-     */
-    #extractTranslationValues(txMat) {
-      if ( this.DIM === 3 ) {
-        return PIXI.Point.tmp.set(
-          txMat.getIndex(2, 0),
-          txMat.getIndex(2, 1),
-        )
-      } else {
-        return Point3d.tmp.set(
-          txMat.getIndex(3, 0),
-          txMat.getIndex(3, 1),
-          txMat.getIndex(3, 2),
-        )
-      }
-    }
+    get rotationCenter() { return this.constructor.extractTranslationValues(this.#txRotationMat); }
 
     set translationCenter(value) {
-      this.#setTranslationValues(value || {}, this.#txTranslationMat, this.#txInvTranslationMat);
+      this.#setTranslationValues(value, this.#txTranslationMat, this.#txInvTranslationMat);
     }
 
     set scaleCenter(value) {
-      this.#setTranslationValues(value || {}, this.#txScaleMat, this.#txInvScaleMat);
+      this.#setTranslationValues(value, this.#txScaleMat, this.#txInvScaleMat);
     }
 
     set rotationCenter(value) {
-      this.#setTranslationValues(value || {}, this.#txRotationMat, this.#txInvRotationMat);
+      this.#setTranslationValues(value, this.#txRotationMat, this.#txInvRotationMat);
     }
 
     /**
@@ -2133,9 +2209,12 @@ export const ModelMultipleCentersMixin = superclass => {
      * @param {MatrixFloat32<3x3|4x4>} txInvMat
      */
     #setTranslationValues(value, txMat, txInvMat) {
-      MatrixFloat32.translation(value.x || 0, value.y || 0, value.z || 0, txMat);
-      MatrixFloat32.translation(-value.x || 0, -value.y || 0, -value.z || 0, txInvMat);
-      this.updated = true;
+      const d3 = this.constructor.DIM.length === 4;
+      MatrixFloat32.translation(value, { d3, outMatrix: txMat });
+
+      using negValue = Point3d.tmp.set(-value.x, -value.y, -(value.z || 0));
+      MatrixFloat32.translation(negValue, { d3, outMatrix: txInvMat });
+      this.dirty = true;
     }
 
     update() {
@@ -2146,16 +2225,18 @@ export const ModelMultipleCentersMixin = superclass => {
 
       M.identity();
       M[multName](this.#txInvScaleMat, M);
-      M[multName](this.scale, M);
+      M[multName](this._scale, M);
       M[multName](this.#txScaleMat, M);
 
       M[multName](this.#txInvRotationMat, M);
-      M[multName](this.rotation, M);
+      M[multName](this._rotation, M);
       M[multName](this.#txRotationMat, M);
 
       M[multName](this.#txInvTranslationMat, M);
-      M[multName](this.translation, M);
+      M[multName](this._translation, M);
       M[multName](this.#txTranslationMat, M);
+
+      this._clearDirty();
 
       super.update(true);
     }
@@ -2183,7 +2264,10 @@ export const ModelInverseMixin = superclass => {
 
     get _modelInverse() { return this.#inverse; }
 
-    get modelInverse() { if ( this.updated ) this.update(); return this.#inverse; }
+    get modelInverse() {
+      if ( this.dirty ) this.update();
+      return this.#inverse;
+    }
 
     update() {
       super.update();
@@ -2194,15 +2278,15 @@ export const ModelInverseMixin = superclass => {
 
 export class ModelMatrix2dInverse extends mix(ModelMatrix2d).with(ModelInverseMixin) {}
 
-export class ModelMatrix2dCenter extends mix(ModelMatrix2d).with(ModelCenterMixin) {}
+export class ModelMatrix2dAnchor extends mix(ModelMatrix2d).with(ModelAnchorMixin) {}
 
-export class ModelMatrix2dCenterInverse extends mix(ModelMatrix2d).with(ModelCenterMixin, ModelInverseMixin) {}
+export class ModelMatrix2dAnchorInverse extends mix(ModelMatrix2d).with(ModelAnchorMixin, ModelInverseMixin) {}
 
 export class ModelMatrixInverse extends mix(ModelMatrix).with(ModelInverseMixin) {}
 
-export class ModelMatrixCenter extends mix(ModelMatrix).with(ModelCenterMixin) {}
+export class ModelMatrixAnchor extends mix(ModelMatrix).with(ModelAnchorMixin) {}
 
-export class ModelMatrixCenterInverse extends mix(ModelMatrix).with(ModelCenterMixin, ModelInverseMixin) {}
+export class ModelMatrixAnchorInverse extends mix(ModelMatrix).with(ModelAnchorMixin, ModelInverseMixin) {}
 
 export class ModelMatrixMultipleCenters extends mix(ModelMatrix).with(ModelMultipleCentersMixin) {}
 

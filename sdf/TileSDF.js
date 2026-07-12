@@ -67,9 +67,9 @@ export class TileSDF extends SDFPlaceable {
     const shiftX = x + (anchorX * width);
     const shiftY = y + (anchorY * height);
 
-    using translateM = Matrix.translation(-shiftX, -shiftY);
-    using rotM = Matrix.rotationZ(Math.toRadians(rotation), false);
-    using invTranslateM = Matrix.translation(shiftX, shiftY);
+    using translateM = Matrix.translation({ x: -shiftX, y: -shiftY }, { d3: false });
+    using rotM = Matrix.rotationZ(Math.toRadians(rotation), { d3: false });
+    using invTranslateM = Matrix.translation({ x: shiftX, y: shiftY }, { d3: false });
     const M = Matrix.tmpMatrix(3, 3);
     return translateM.multiply3x3(rotM, M).multiply3x3(invTranslateM, M)
   }

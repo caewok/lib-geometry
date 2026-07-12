@@ -321,7 +321,7 @@ export class SDF {
 	 * @returns {number} Signed distance squared.
 	 */
 	static sdPIXICircle(p, cir) {
-	  using txMat = Matrix.translation(-cir.x, -cir.y);
+	  using txMat = Matrix.translation({ x: -cir.x, y: -cir.y }, { d3: false });
 	  using txPt = txMat.multiplyPoint2d(p);
 	  return this.sdCircle(txPt, cir.radius);
 	}
@@ -396,7 +396,7 @@ export class SDF {
 	 * @returns {number} Signed distance squared.
 	 */
 	static sdPIXIEllipse(p, ellipse) {
-	  using txMat = Matrix.translation(-ellipse.x, -ellipse.y);
+	  using txMat = Matrix.translation({ x: -ellipse.x, y: -ellipse.y }, { d3: false });
 	  using txPt = txMat.multiplyPoint2d(p);
 	  using b = PIXI.Point.tmp.set(ellipse.width, ellipse.height);
 	  return this.sdEllipse(txPt, b);
@@ -442,7 +442,7 @@ export class SDF {
 	 */
 	static sdPIXIRectangle(p, rect) {
 	  const ctr = rect.center;
-	  using txMat = Matrix.translation(-ctr.x, -ctr.y);
+	  using txMat = Matrix.translation({ x: -ctr.x, y: -ctr.y }, { d3: false });
 	  using txPt = txMat.multiplyPoint2d(p);
 	  using b = PIXI.Point.tmp.set(rect.width * 0.5, rect.height * 0.5);
 	  return this.sdRectangle(txPt, b);
@@ -1556,13 +1556,13 @@ export class SDFPlaceable extends SDF {
   /** @type {Matrix<3x3>} */
   get translationMatrix2d() {
     using ctr = this.center;
-    return Matrix.translation(-ctr.x, -ctr.y);
+    return Matrix.translation({ x: -ctr.x, y: -ctr.y }, { d3: false });
   }
 
   /** @type {Matrix<4x4>} */
   get translationMatrix3d() {
     using ctr = this.center;
-    return Matrix.translation(-ctr.x, -ctr.y, -ctr.z);
+    return Matrix.translation({ x: -ctr.x, y: -ctr.y, z: -ctr.z }, { d3: true });
   }
 
   get isSingleShape() { return true; }
@@ -1750,7 +1750,7 @@ cir2 = new PIXI.Circle(120, 50, 80)
 Draw.shape(cir1, { color: Draw.COLORS.blue })
 Draw.shape(cir2, { color: Draw.COLORS.green })
 
-txMat1 = Matrix.translation(-cir1.x, -cir1.y)
+txMat1 = Matrix.translation({ x: -cir1.x, y: -cir1.y }, { d3: false })
 txPt = PIXI.Point.tmp
 prim1 = p => {
   txMat1.multiplyPoint2d(p, txPt);
@@ -1762,7 +1762,7 @@ aabb1.pad({ x: 20, y: 20 });
 SDF.drawHeatmap2d(prim1, aabb1)
 Draw.shape(cir1, { color: Draw.COLORS.black })
 
-txMat2 = Matrix.translation(-cir2.x, -cir2.y)
+txMat2 = Matrix.translation({ x: -cir2.x, y: -cir2.y }, { d3: false })
 prim2 = p => {
   txMat2.multiplyPoint2d(p, txPt);
   return SDF.sdCircle(txPt, cir2.radius);
