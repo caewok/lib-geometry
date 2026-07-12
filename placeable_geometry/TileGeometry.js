@@ -363,7 +363,7 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
 
     if ( this._updateFlags.rotation ) {
       const angles = this.constructor.tileRotation(this.placeableDocument);
-      this.shape.setScale(angles);
+      this.shape.setRotation(angles);
     }
 
     if ( this._updateFlags.scale ) {
