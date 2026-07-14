@@ -189,6 +189,19 @@ export class ModelMatrix2d {
     this._translation.clone(out._translation);
     return out;
   }
+
+  print() {
+    if ( this.dirty ) this.update();
+
+    console.log("Translation");
+    this._translation.print();
+    console.log("Rotation");
+    this._rotation.print();
+    console.log("Scale");
+    this._scale.print();
+    console.log("Model");
+    this._model.print();
+  }
 }
 
 /**
@@ -224,7 +237,7 @@ export const ModelAnchorMixin = superclass => {
     }
 
     set anchor(value) {
-      const d3 = this.constructor.DIM.length === 4;
+      const d3 = this.constructor.DIM === 4;
       MatrixFloat32.translation(value, { d3, outMatrix: this.#anchor });
       this.dirty = true;
     }
@@ -245,6 +258,12 @@ export const ModelAnchorMixin = superclass => {
       out = super.clone(out);
       out.anchor = this.anchor;
       return out;
+    }
+
+    print() {
+      console.log("Anchor");
+      this.#anchor.print();
+      super.print();
     }
   };
 };
@@ -332,7 +351,7 @@ export const ModelMultipleCentersMixin = superclass => {
      * @param {MatrixFloat32<3x3|4x4>} txInvMat
      */
     #setTranslationValues(value, txMat, txInvMat) {
-      const d3 = this.constructor.DIM.length === 4;
+      const d3 = this.constructor.DIM === 4;
       MatrixFloat32.translation(value, { d3, outMatrix: txMat });
 
       using negValue = Point3d.tmp.set(-value.x, -value.y, -(value.z || 0));
@@ -370,6 +389,16 @@ export const ModelMultipleCentersMixin = superclass => {
       out.scaleCenter = this.scaleCenter;
       out.rotationCenter = this.rotationCenter;
       return out;
+    }
+
+    print() {
+      console.log("txTranslation");
+      this.#txTranslationMat.print();
+      console.log("txRotation");
+      this.#txRotationMat.print();
+      console.log("txScale");
+      this.#txScaleMat.print();
+      super.print();
     }
   };
 };
