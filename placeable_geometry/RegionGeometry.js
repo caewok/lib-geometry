@@ -6,7 +6,7 @@ PIXI,
 
 // Geometry
 import { PlaceableGeometry } from "./PlaceableGeometry.js";
-import { CubeTransformPrimitive, CylinderPrimitive,  } from "./InstancedGeometricPrimitive.js";
+import { CubePrimitive, CylinderPrimitive,  } from "./InstancedGeometricPrimitive.js";
 import { ExtrudedPolygonPrimitive } from "./ModelGeometricPrimitive.js";
 
 // LibGeometry
@@ -69,12 +69,14 @@ export class RegionGeometry extends PlaceableGeometry {
   get topZ() { return this.placeable.topZ; }
 
   initialize() {
-    this._buildRegionShapes();
+    this.#buildRegionShapes();
     super.initialize();
+    this.#updateShapeModel();
   }
 
-  _buildRegionShapes() {
+  #buildRegionShapes() {
     this.shapes.forEach(shape => shape.destroy());
+    this.shapes.length = 0;
     const regionShapes = this.regionShapes;
     const opts = this.constructor.regionElevation(this.placeableDocument); // topZ, bottomZ.
 
@@ -91,7 +93,7 @@ export class RegionGeometry extends PlaceableGeometry {
       const regionShape = regionShapes[i];
       const id = `${this.placeableId}_${i}`;
       let shape;
-      if ( regionShape.gridBased ) shape = CubeTransformPrimitive.fromPolygons(id, regionShape.polygons, opts);
+      if ( regionShape.gridBased ) shape = ExtrudedPolygonPrimitive.fromPolygons(id, regionShape.polygons, opts);
       else switch ( regionShape.type ) {
         // See shape.constructor.TYPES
         case "circle":
@@ -102,12 +104,12 @@ export class RegionGeometry extends PlaceableGeometry {
 
         case "line":
         case "rectangle":
-          shape = new CubeTransformPrimitive(id);
+          shape = new CubePrimitive(id);
 
           // Use TL as the translation and rotation center.
-          shape.initialize(); // So we can set the model matrix.
-          shape.modelMatrix.translationCenter = { x: -0.5, y: -0.5, z: 0.0 };
-          shape.modelMatrix.rotationCenter = { x: -0.5, y: -0.5, z: 0.0 };
+          // shape.initialize(); // So we can set the model matrix.
+          // shape.modelMatrix.translationCenter = { x: -0.5, y: -0.5, z: 0.0 };
+          // shape.modelMatrix.rotationCenter = { x: -0.5, y: -0.5, z: 0.0 };
           break;
 
         case "emanation": // Use the polygon b/c corner radiuses can vary.
@@ -115,7 +117,7 @@ export class RegionGeometry extends PlaceableGeometry {
         case "polygon": // Obv. use the polygon.
         case "cone": // Use the polygon b/c no unit cone shape b/c angle varies.
 
-        case "grid": // Unclear what this is.
+        case "grid": /* eslint-disable-line no-fallthrough */ // Unclear what this is.
         case "token": // Unclear what this is.
         default: shape = ExtrudedPolygonPrimitive.fromPolygons(id, regionShape.polygons, opts);
       }
@@ -149,26 +151,35 @@ export class RegionGeometry extends PlaceableGeometry {
       if ( shape instanceof ExtrudedPolygonPrimitive ) continue;
 
       const regionShape = regionShapes[i];
-      shape.setPosition(regionShape.x, regionShape.y, z);
-      shape.setRotation(0, 0, Math.toRadians(regionShape.rotation));
+      shape.setPosition({ x: regionShape.x, y: regionShape.y, z });
+      shape.setRotation({ x: 0, y: 0, z: Math.toRadians(regionShape.rotation) });
 
       switch ( regionShape.type ) {
-        case "circle": shape.setScale(regionShape.radius, regionShape.radius, zHeight); break;
-        case "ellipse": shape.setScale(regionShape.radiusX, regionShape.radiusY, zHeight); break;
+        case "circle": shape.setScale({ x: regionShape.radius * 2, y: regionShape.radius * 2, z: zHeight }); break;
+        case "ellipse": shape.setScale({ x: regionShape.radiusX * 2, y: regionShape.radiusY * 2, z: zHeight }); break;
 
-        case "line": shape.setScale(regionShape.length, regionShape.width, zHeight); break;
-        case "rectangle": shape.setScale(regionShape.width, regionShape.height); break;
+        case "line": {
+          shape.setScale({ x: regionShape.length, y: regionShape.width, z: zHeight });
+
+          // Line anchors from middle left.
+          shape.setAnchor({ x: 0.5, y: 0.0, z: 0 });
+          break;
+        }
+        case "rectangle": {
+          shape.setScale({ x: regionShape.width, y: regionShape.height, z: zHeight });
+
+          // Rectangle anchors from user-defined position.
+          // shape.setAnchor({ x: regionShape.anchorX, y: regionShape.anchorY, z: 0 });
+          break;
+        }
 
         // Rest are using polygons, which were skipped above.
-
-
         case "emanation": // Use the polygon b/c corner radiuses can vary.
         case "ring": // Use the polygon(s) b/c of the hole.
         case "polygon": // Obv. use the polygon.
         case "cone": // Use the polygon b/c no unit cone shape b/c angle varies.
         case "grid": // Unclear what this is.
         case "token": // Unclear what this is.
-
       }
 
     }
