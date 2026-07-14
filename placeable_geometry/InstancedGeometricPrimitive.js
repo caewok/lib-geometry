@@ -8,7 +8,7 @@ PIXI,
 
 import { GeometricPrimitive } from "./GeometricPrimitive.js";
 import { MatrixFloat32 } from "../Matrix.js";
-import { ModelMatrix, ModelMatrixMultipleCenters } from "../ModelMatrix.js";
+import { ModelMatrixAnchor } from "../ModelMatrix.js";
 import { FixedLengthTrackingBuffer } from "../placeable_tracking/TrackingBuffer.js";
 import { almostBetween } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
@@ -115,32 +115,12 @@ const TrackerMixin = superclass => {
 };
 
 
-export class GeometricModelMatrix extends mix(ModelMatrix).with(TrackerMixin) {}
-
-export class GeometricTransformModelMatrix extends mix(ModelMatrixMultipleCenters).with(TrackerMixin) {}
-
-/**
- * Shares instances with the parent primitive but adds more complex model matrix
- * translations before each scale/rotate/translate.
- */
-const TransformPrimitiveMixin = superclass => {
-  return class extends superclass {
-    _initializeModel() {
-      this.modelMatrix = new GeometricTransformModelMatrix(this.id, this.constructor.modelMatrixTracker);
-    }
-  };
-};
+export class GeometricModelMatrix extends mix(ModelMatrixAnchor).with(TrackerMixin) {}
 
 export class InstancedGeometricPrimitive extends GeometricPrimitive {
 
   constructor(id) {
     super(id);
-  }
-
-  get trackerIndex() { return this.constructor.modelMatrixTracker.facetIdMap.get(this.id); }
-
-  _initializeModel() {
-    this.modelMatrix = new GeometricModelMatrix(this.id, this.constructor.modelMatrixTracker);
   }
 
   /**
@@ -153,6 +133,13 @@ export class InstancedGeometricPrimitive extends GeometricPrimitive {
 
   // ----- NOTE: Model Matrix ----- //
 
+  get trackerIndex() { return this.constructor.modelMatrixTracker.facetIdMap.get(this.id); }
+
+  _initializeModel() {
+    this.modelMatrix = new GeometricModelMatrix(this.id, this.constructor.modelMatrixTracker);
+  }
+
+
   /**
    * Each defined primitive will have its own buffer of matrices.
    * Store the entire model matrix as a single typed array.
@@ -163,7 +150,12 @@ export class InstancedGeometricPrimitive extends GeometricPrimitive {
   // Must be defined by the child class so that each class has a separate model buffer.
   // static modelMatrixTracker = new FixedLengthTrackingBuffer( { facetLengths: 16, numFacets: 0, type: Float32Array });
 
+  // ----- NOTE: FACES ----- //
 
+  /** @type {Polygon3d} */
+  static prototypeFaces = [] // Defined by child class.
+
+  get prototypeFaces() { return this.constructor.prototypeFaces; }
 }
 
 /**
@@ -174,7 +166,7 @@ export class QuadPrimitive extends InstancedGeometricPrimitive {
 
   static modelMatrixTracker = new FixedLengthTrackingBuffer({ facetLengths: 16, numFacets: 0, type: Float32Array });
 
-  /** @type {Faces} */
+  /** @type {Polygon3d} */
   static prototypeFaces = [QUADS.up.clone()];
 
   static CULL_FACES = {
@@ -330,8 +322,6 @@ export class CubePrimitive extends InstancedGeometricPrimitive {
   // Internal points follow the AABB.
 }
 
-export class CubeTransformPrimitive extends mix(CubePrimitive).with(TransformPrimitiveMixin) {}
-
 /**
  * Simple extruded (along z-axis) hexagon.
  */
@@ -386,8 +376,8 @@ export class CylinderPrimitive extends InstancedGeometricPrimitive {
    * @returns {Ellipse3d|Polygon3d[]}
    */
   static createUnitCylinder(radiusDensity = 100) {
-    const top = Ellipse3d.fromCenterPoint({ x: 0, y: 0, z: 0.5 }, 0.5, 0.5);
-    const bottom = Ellipse3d.fromCenterPoint({ x: 0, y: 0, z: -0.5 }, 0.5, 0.5);
+    const top = Ellipse3d.fromCenterPoint({ x: 0, y: 0, z: 0.5 }, { radiusX: 0.5, radiusY: 0.5 });
+    const bottom = Ellipse3d.fromCenterPoint({ x: 0, y: 0, z: -0.5 }, { radiusX: 0.5, radiusY: 0.5 });
     bottom.reverseOrientation();
     const density = PIXI.Circle.approximateVertexDensity(radiusDensity);
     return [top, bottom, ...top.buildTopSides(-0.5, { density })];
@@ -516,7 +506,7 @@ export class WedgeRectangularBasePrimitive extends InstancedGeometricPrimitive {
 
   initialize() {
     super.initialize();
-    this.modelMatrix = new GeometricTransformModelMatrix(this.id, this.constructor.modelMatrixTracker);
+    this.modelMatrix = new GeometricModelMatrix(this.id, this.constructor.modelMatrixTracker);
   }
 
   // Height as a percentage of the base.

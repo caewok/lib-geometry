@@ -10,7 +10,6 @@ import { AABB3d } from "../3d/AABB3d.js";
 import { almostBetween } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
 import { combineTypedArrays } from "../util.js";
-import { MatrixFloat32 } from "../Matrix.js";
 
 /* Geometric Primitives
 
@@ -57,22 +56,13 @@ Instanced Registry: 1 per geometric primitive, storing model
 
 export class GeometricPrimitive {
 
-  static DIRTY = {
-    NONE:             0,
-    FACES:            1 << 0, // 1
-    AABB:             1 << 1, // 2
-    FACE_POINTS:      1 << 2, // 4
-    INTERNAL_POINTS:  1 << 3, // 8
-    VERTICES:         1 << 4, // 16
-    ALL:              ~0,     // All bits set
-  };
+
 
 
   /** @type {string} */
   id;
 
-  /** @type {ModelMatrix} */
-  modelMatrix;
+
 
   /**
    * @param {string} id       Unique string per instance; used for debugging and for child classes
@@ -104,14 +94,6 @@ export class GeometricPrimitive {
     this.#initialized = true;
   }
 
-  _initializeModel() {}
-
-  _initializeFaces() {
-    this.#faces.length = 0;
-    this.constructor.prototypeFaces.forEach(f => this.#faces.push(f.clone()));
-    this.dirty = this.constructor.DIRTY.FACES;
-  }
-
   /**
    * Destroy this geometric primitive, releasing associated memory in buffers.
    */
@@ -123,12 +105,17 @@ export class GeometricPrimitive {
 
   _destroy() { }
 
-  // ----- NOTE: Updating ----- //
+  // ----- NOTE: Update Flags ----- //
 
-  // Can modify the
-
-  // TODO: Use dirty flags to limit the updating. Is this possible with the vertices, which
-  // would need to also get triggered? Maybe use a forceUpdate function to handle.
+  static DIRTY = {
+    NONE:             0,
+    FACES:            1 << 0, // 1
+    AABB:             1 << 1, // 2
+    FACE_POINTS:      1 << 2, // 4
+    INTERNAL_POINTS:  1 << 3, // 8
+    VERTICES:         1 << 4, // 16
+    ALL:              ~0,     // All bits set
+  };
 
   /** @type {DIRTY} */
   #dirtyFlags = this.constructor.DIRTY.ALL;
@@ -140,6 +127,17 @@ export class GeometricPrimitive {
   isDirty(flag = this.constructor.DIRTY.ALL) { return this.#dirtyFlags & flag; }
 
   _clearDirty(flag) { this.#dirtyFlags &= ~flag; }
+
+  // ----- NOTE: Model Matrix ----- //
+
+  // Every object has a model matrix, although some might be identity matrices.
+  // Model matrix used to change prototype faces --> model faces.
+  // Model matrix might be used to change instance vertices --> model vertices
+
+  /** @type {ModelMatrix} */
+  modelMatrix;
+
+  _initializeModel() {}
 
   /**
    * @type {Point3d|object} center
@@ -165,6 +163,11 @@ export class GeometricPrimitive {
     this.dirty = this.constructor.DIRTY.ALL;
   }
 
+  setAnchor(anchors) {
+    this.modelMatrix.anchor = anchors;
+    this.dirty = this.constructor.DIRTY.ALL;
+  }
+
   // ----- NOTE: AABB ----- //
 
   /** @type {AABB3d} */
@@ -186,15 +189,28 @@ export class GeometricPrimitive {
 
   // ----- NOTE: Faces ----- //
 
-  /** @type {Polygon3d[]} */
-  static prototypeFaces = [];
+
+  // Prototype faces defined by child class.
 
   /** @type {Polygon3d[]} */
+  get prototypeFaces() { throw Error("Prototype faces must be defined by child class."); }
+
   #faces = [];
 
+  /** @type {Polygon3d[]} */
   get faces() {
     if ( this.isDirty(this.constructor.DIRTY.FACES) ) this.updateFaces();
     return this.#faces;
+  }
+
+  /**
+   * Convert prototype faces to faces.
+   * After this is called, the faces are marked dirty because they have yet to be transformed.
+   */
+  _initializeFaces() {
+    this.#faces.length = 0;
+    this.prototypeFaces.forEach(f => this.#faces.push(f.clone()));
+    this.dirty = this.constructor.DIRTY.FACES;
   }
 
   /**
@@ -211,8 +227,8 @@ export class GeometricPrimitive {
    */
   updateFaces() {
     const M = this.modelMatrix.model;
-    const numSides = this.constructor.prototypeFaces.length;
-    for ( let i = 0; i < numSides; i += 1 ) this.constructor.prototypeFaces[i].transform(M, this.#faces[i]);
+    const numSides = this.prototypeFaces.length;
+    for ( let i = 0; i < numSides; i += 1 ) this.prototypeFaces[i].transform(M, this.#faces[i]);
     this._clearDirty(this.constructor.DIRTY.FACES);
   }
 
@@ -255,11 +271,13 @@ export class GeometricPrimitive {
 
   // ----- NOTE: Vertices ----- //
 
+  // Instance and model vertices, if any, defined by child class.
+
   /**
    * Vertices with normals and indices.
    * @type {object<VertexObject>}
    */
-  static instanceVO = new VertexObject();
+  get instanceVO() { return new VertexObject(); }
 
   /**
    * Update instance vertices.

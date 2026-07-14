@@ -9,7 +9,7 @@ import { VertexObject } from "../placeable_vertices/VertexObject.js";
 import { Point3d } from "../3d/Point3d.js";
 import { Polygon3d, Quad3d  } from "../3d/Polygon3d.js";
 import { AABB2d } from "../AABB.js";
-import { ModelMatrix } from "../ModelMatrix.js";
+import { ModelMatrixAnchor } from "../ModelMatrix.js";
 
 /**
  * ModelGeometricPrimitives are one-offs.
@@ -19,45 +19,22 @@ import { ModelMatrix } from "../ModelMatrix.js";
  */
 export class ModelGeometricPrimitive extends GeometricPrimitive {
 
-  modelMatrix = new ModelMatrix();
+  modelMatrix = new ModelMatrixAnchor();
 
-  initialize({ prototypeFaces, center, angles, dims } = {}) {
-    if ( prototypeFaces ) this.prototypeFaces = prototypeFaces;
-    if ( center ) this.setPosition(center);
-    if ( angles ) this.setRotation(angles);
-    if ( dims ) this.setScale(dims);
+  initialize() {
     super.initialize();
     this.updateInstanceVertices();
   }
 
-  // ----- NOTE: Update ----- //
-
-  /**
-   * Update this geom's instance vertices.
-   * @param {Float32Array[]} [vertices]       Vertices, including normals.
-   */
-  updateInstanceVertices(vertices) {
-    // Add vertices from faces or from vertex array.
-    const vo = this.instanceVO;
-    vertices ??= this.constructor.verticesFromFaces(this.prototypeFaces, true);
-    vo.hasNormals = true;
-    vo.hasUVs = false;
-    this.constructor.updateVertexObject(vo, vertices);
-    this.dirty = this.constructor.DIRTY.VERTICES;
-  }
-
   // ----- NOTE: Factory functions ----- //
 
-  static fromCanvasFaces(faces, id, { center, dims, angles } = {}) {
-    center ??= Point3d.tmp.set(0, 0, 0);
-    dims ??= Point3d.tmp.set(1, 1, 1);
-    angles ??= Point3d.tmp.set(0, 0, 0);
-
+  static fromCanvasFaces(id, faces, { center, dims, angles, anchors } = {}) {
     // Build the model matrix.
     const out = new this(id);
-    out.setPosition(center);
-    out.setRotation(angles);
-    out.setScale(dims);
+    if ( center ) out.setPosition(center);
+    if ( angles ) out.setRotation(angles);
+    if ( dims ) out.setScale(dims);
+    if ( anchors ) out.setAnchors(anchors)
 
     // Use the inverse to construct the prototype faces.
     const invM = out.modelMatrix.model.invert();
@@ -75,7 +52,8 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
 
   set prototypeFaces(value) {
     if ( !Array.isArray(value) ) value = [value];
-    this.#prototypeFaces = value;
+    this.#prototypeFaces.length = 0;
+    this.#prototypeFaces.push(...value);
     this.dirty = this.constructor.DIRTY.ALL;
   }
 
@@ -96,6 +74,20 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
   get modelVO() {
     if ( this.isDirty(this.constructor.VERTICES) ) this.updateModelVO();
     return this.#modelVO;
+  }
+
+  /**
+   * Update this geom's instance vertices.
+   * @param {Float32Array[]} [vertices]       Vertices, including normals.
+   */
+  updateInstanceVertices(vertices) {
+    // Add vertices from faces or from vertex array.
+    const vo = this.instanceVO;
+    vertices ??= this.constructor.verticesFromFaces(this.prototypeFaces, true);
+    vo.hasNormals = true;
+    vo.hasUVs = false;
+    this.constructor.updateVertexObject(vo, vertices);
+    this.dirty = this.constructor.DIRTY.VERTICES;
   }
 
   /**
@@ -128,15 +120,12 @@ export class PlanarPolygonPrimitive extends ModelGeometricPrimitive {
    * @param {Polygon3d} poly3d    3d planar polygon to use
    * @returns {PlanarPolygonPrimitive}
    */
-  static fromPolygon3d(id, poly3d) {
-    const center = poly3d.center;
-    return this.fromCanvasFaces([poly3d], id, { center });
-  }
+  static fromPolygon3d(id, poly3d, opts) { return this.fromCanvasFaces(id, [poly3d], opts); }
 }
 
 /**
  * Extruded polygon primitive.
- * A planar polygon that is extruded along the z axis, with vertical sides.
+ * A 2d planar polygon parallel to the XY axis is extruded along the z axis, with vertical sides.
  * Typical for regions.
  */
 export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
@@ -156,7 +145,7 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
     if ( !isFinite(topZ) ) topZ = 1e06;
     if ( !isFinite(bottomZ) ) bottomZ = 1e06;
     const faces = this.#facesFromPolygon(poly, topZ, bottomZ);
-    return this.fromCanvasFaces(faces, id, opts);
+    return this.fromCanvasFaces(id, faces, opts);
   }
 
   /**
@@ -174,7 +163,7 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
     if ( !isFinite(bottomZ) ) bottomZ = 1e06;
     const faces = [];
     for ( const poly of polys ) faces.push(...this.#facesFromPolygon(poly, topZ, bottomZ));
-    return this.fromCanvasFaces(faces, id, opts);
+    return this.fromCanvasFaces(id, faces, opts);
   }
 
   // ----- NOTE: Factory helpers to construct faces ----- //
