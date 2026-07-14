@@ -8,6 +8,12 @@
 // Treat just like { a, b } but can use the using keyword. E.g., using segment = new Segment(a, b)
 export class Segment {
 
+  static [Symbol.hasInstance](instance) {
+    return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
+  }
+
+  static get _geoLibType() { return this.name; }
+
   /** @type {PIXI.Point|Point3d} */
   a = null;
 
