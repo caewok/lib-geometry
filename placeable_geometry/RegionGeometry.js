@@ -97,20 +97,10 @@ export class RegionGeometry extends PlaceableGeometry {
       else switch ( regionShape.type ) {
         // See shape.constructor.TYPES
         case "circle":
-        case "ellipse":
-          shape = new CylinderPrimitive(id);
-          // Translation, rotation, and scale all from 0,0,0 for circle and ellipse extrusions.
-          break;
+        case "ellipse": shape = new CylinderPrimitive(id); break;
 
         case "line":
-        case "rectangle":
-          shape = new CubePrimitive(id);
-
-          // Use TL as the translation and rotation center.
-          // shape.initialize(); // So we can set the model matrix.
-          // shape.modelMatrix.translationCenter = { x: -0.5, y: -0.5, z: 0.0 };
-          // shape.modelMatrix.rotationCenter = { x: -0.5, y: -0.5, z: 0.0 };
-          break;
+        case "rectangle": shape = new CubePrimitive(id); break;
 
         case "emanation": // Use the polygon b/c corner radiuses can vary.
         case "ring": // Use the polygon(s) b/c of the hole.
@@ -169,7 +159,9 @@ export class RegionGeometry extends PlaceableGeometry {
           shape.setScale({ x: regionShape.width, y: regionShape.height, z: zHeight });
 
           // Rectangle anchors from user-defined position.
-          // shape.setAnchor({ x: regionShape.anchorX, y: regionShape.anchorY, z: 0 });
+          // Those represent percentage anchors from 0–1. Conform to the unit cube from -0.5 to 0.5.
+          //
+          shape.setAnchor({ x: 0.5 - regionShape.anchorX, y: 0.5 - regionShape.anchorY, z: 0 });
           break;
         }
 
