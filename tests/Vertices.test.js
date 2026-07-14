@@ -221,7 +221,7 @@ describe("BasicVertices.transformVertexPositions", () => {
     ]);
 
     // Create a translation matrix: +5 on X, -5 on Y, +10 on Z
-    const M = MatrixFloat32.translation(5, -5, 10);
+    const M = MatrixFloat32.translation({ x: 5, y: -5, z: 10 });
 
     BasicVertices.transformVertexPositions(vertices, M, { stride: 3 });
 
@@ -235,7 +235,7 @@ describe("BasicVertices.transformVertexPositions", () => {
 
   it("should apply a scaling transformation correctly", () => {
     const vertices = new Float32Array([1, 1, 1]);
-    const M = MatrixFloat32.scale(2, 3, 4);
+    const M = MatrixFloat32.scale({ x: 2, y: 3, z: 4 });
 
     BasicVertices.transformVertexPositions(vertices, M, { stride: 3 });
 
@@ -251,7 +251,7 @@ describe("BasicVertices.transformVertexPositions", () => {
       99, 2, 2, 2, 99
     ]);
 
-    const M = MatrixFloat32.translation(10, 10, 10);
+    const M = MatrixFloat32.translation({ x: 10, y: 10, z: 10 });
 
     BasicVertices.transformVertexPositions(vertices, M, { stride: 5, positionOffset: 1 });
 
