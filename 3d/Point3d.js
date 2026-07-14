@@ -601,6 +601,19 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
   }
 
   /**
+   * Get the square root of the coordinates.
+   * @param {Point3d} [outPoint]    A point-like object in which to store the value.
+   *   (Will create new point if none provided.)
+   * @returns {Point3d}
+   */
+  sqrt(outPoint) {
+    outPoint ??= this.constructor.tmp;
+    super.sqrt(outPoint);
+    outPoint.z = Math.sqrt(this.z);
+    return outPoint;
+  }
+
+  /**
    * Make all values finite.
    * @param {Point3d} [outPoint]    A point-like object in which to store the value.
    *   (Will create new point if none provided.)
