@@ -1103,8 +1103,9 @@ class AbstractMatrix {
    * @returns {Matrix}
    */
   transpose(outMatrix) {
-    outMatrix ??= this.constructor.empty(this.nrow, this.ncol);
+    outMatrix ??= this.constructor.empty(this.ncol, this.nrow);
     this.forEach((elem, r, c) => outMatrix.setIndex(c, r, elem));
+
     return outMatrix;
   }
 
