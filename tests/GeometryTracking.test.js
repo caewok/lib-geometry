@@ -31,7 +31,23 @@ describe("Walls", () => {
     it("should have numeric values", () => {
       canvas.walls.placeables.forEach(wall => {
         const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.walls.geomForPlaceable(wall);
-        expect(geom.modelMatrix.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
+        for ( const shape of geom.iterateShapes() ) {
+          expect(shape.modelMatrix.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
+        }
+      });
+    });
+  });
+
+  describe("AABB", () => {
+    it("should have numeric values", () => {
+      canvas.walls.placeables.forEach(wall => {
+        const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.walls.geomForPlaceable(wall);
+        expect(isFinite(geom.aabb.min.x)).to.be.true;
+        expect(isFinite(geom.aabb.min.y)).to.be.true;
+        expect(isFinite(geom.aabb.min.z)).to.be.true;
+        expect(isFinite(geom.aabb.max.x)).to.be.true;
+        expect(isFinite(geom.aabb.max.y)).to.be.true;
+        expect(isFinite(geom.aabb.max.z)).to.be.true;
       });
     });
   });
@@ -53,7 +69,23 @@ describe("Tokens", () => {
     it("should have numeric values", () => {
       canvas.tokens.placeables.forEach(token => {
         const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.tokens.geomForPlaceable(token);
-        expect(geom.modelMatrix.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
+        for ( const shape of geom.iterateShapes() ) {
+          expect(shape.modelMatrix.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
+        }
+      });
+    });
+  });
+
+  describe("AABB", () => {
+    it("should have numeric values", () => {
+      canvas.tokens.placeables.forEach(token => {
+        const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.tokens.geomForPlaceable(token);
+        expect(isFinite(geom.aabb.min.x)).to.be.true;
+        expect(isFinite(geom.aabb.min.y)).to.be.true;
+        expect(isFinite(geom.aabb.min.z)).to.be.true;
+        expect(isFinite(geom.aabb.max.x)).to.be.true;
+        expect(isFinite(geom.aabb.max.y)).to.be.true;
+        expect(isFinite(geom.aabb.max.z)).to.be.true;
       });
     });
   });
@@ -75,7 +107,23 @@ describe("Tiles", () => {
     it("should have numeric values", () => {
       canvas.tiles.placeables.forEach(tile => {
         const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.tiles.geomForPlaceable(tile);
-        expect(geom.modelMatrix.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
+        for ( const shape of geom.iterateShapes() ) {
+          expect(shape.modelMatrix.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
+        }
+      });
+    });
+  });
+
+  describe("AABB", () => {
+    it("should have numeric values", () => {
+      canvas.tiles.placeables.forEach(tile => {
+        const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.tiles.geomForPlaceable(tile);
+        expect(isFinite(geom.aabb.min.x)).to.be.true;
+        expect(isFinite(geom.aabb.min.y)).to.be.true;
+        expect(isFinite(geom.aabb.min.z)).to.be.true;
+        expect(isFinite(geom.aabb.max.x)).to.be.true;
+        expect(isFinite(geom.aabb.max.y)).to.be.true;
+        expect(isFinite(geom.aabb.max.z)).to.be.true;
       });
     });
   });
@@ -98,7 +146,9 @@ describe("Regions", () => {
     it("should have numeric values", () => {
       canvas.regions.placeables.forEach(region => {
         const geom = mgr.regions.geomForPlaceable(region);
-        expect(geom.modelMatrix.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
+        for ( const shape of geom.iterateShapes() ) {
+          expect(shape.modelMatrix.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
+        }
       });
     });
   });
@@ -140,7 +190,9 @@ describe("Levels", () => {
     it("should have numeric values", () => {
       canvas.scene.levels.forEach(levelD => {
         const geom = mgr.levels.background.geomForPlaceableDocument(levelD);
-        expect(geom.modelMatrix.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
+        for ( const shape of geom.iterateShapes() ) {
+          expect(shape.modelMatrix.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
+        }
       });
     });
   });
@@ -157,7 +209,6 @@ describe("Levels", () => {
         expect(Number.isNumeric(geom.aabb.max.z)).to.be.true;
       });
     });
-
   });
 });
 
