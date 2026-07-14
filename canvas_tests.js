@@ -31,12 +31,21 @@ Draw.shape(bb, { color: Draw.COLORS.blue })
 Draw.shape(bbThreshold, { color: Draw.COLORS.orange })
 Draw.shape(bbPoly, { color: Draw.COLORS.red })
 
+region = canvas.regions.placeables[0]
+geom = CONFIG.GeometryLib.geometryManager.geomForPlaceable(region)
+geom.shapes[0].draw2d({ color: Draw.COLORS.red })
+
+
 
 Draw = CONFIG.GeometryLib.lib.Draw
 Draw.clearDrawings()
 canvasTests = CONFIG.GeometryLib.lib.canvasTests
 Triangle3d = CONFIG.GeometryLib.lib.threeD.Triangle3d
 Point3d = CONFIG.GeometryLib.lib.threeD.Point3d
+Matrix = CONFIG.GeometryLib.lib.Matrix
+
+scaleMat = Matrix.scale({ x: 100, y: 100, z: 1 })
+faces = cyl.constructor.prototypeFaces.map(face => face.transform(scaleMat))
 
 canvasTests.drawTokenBorder()
 canvasTests.drawConstrainedTokenBorder()
@@ -47,7 +56,11 @@ canvasTests.drawTileGeometries({ faces: "alphaBoundingBox" })
 canvasTests.drawTileGeometries({ faces: "alphaBoundingPolygon" })
 canvasTests.drawTileGeometries({ faces: "alphaThresholdPolygons" })
 canvasTests.drawTileGeometries({ faces: "alphaThresholdTriangles" })
-canvasTests.drawRegionGeometries()
+
+canvasTests.drawRegionGeometries({ faceType: "top" })
+canvasTests.drawRegionGeometries({ faceType: "bottom" })
+canvasTests.drawRegionGeometries({ faceType: "sides" })
+
 canvasTests.drawLevelBackgroundGeometries()
 
 
@@ -187,18 +200,21 @@ export function drawPlaceableGeometry(placeableDocument, placeableColor, opts) {
   drawGeometry(geom, placeableColor, opts);
 }
 
-export function drawGeometry(geom,  placeableColor, { aabb = false, faces = "faces", drawAll = false, ...drawingOpts } = {}) {
+export function drawGeometry(geom,  placeableColor, { aabb = false, faces = "faces", faceTypes = "all", ...drawingOpts } = {}) {
   let color = Draw.COLORS[placeableColor];
   if ( aabb ) {
     let color = Draw.COLORS[`light${placeableColor}`];
     Draw.shape(geom.aabb.toRectangle(), { color, ...drawingOpts });
     return;
   }
-  if ( drawAll ) {
-    for ( const shape of geom.iterateShapes() ) shape.draw2d({ color, ...drawingOpts });
-    return;
+
+  switch ( faceTypes ) {
+    case "all": for ( const shape of geom.iterateShapes() ) shape.draw2d({ color, ...drawingOpts }); break;
+    case "top": for ( const face of geom.iterateFaces() ) face.shapes[0].draw2d({ color, ...drawingOpts }); break;
+    case "bottom": for ( const face of geom.iterateFaces() ) face.shapes[1].draw2d({ color, ...drawingOpts }); break;
+    case "sides": for ( const face of geom.iterateFaces() ) face.shapes.slice(2).draw2d({ color, ...drawingOpts }); break;
+    case "firstShape": geom.shapes[0].faces[0].draw2d({ color, ...drawingOpts }); break;
   }
-  geom.shapes[0].faces[0].draw2d({ color, ...drawingOpts });
 }
 
 /**
