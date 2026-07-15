@@ -6,9 +6,8 @@ PIXI,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { GeometricPrimitive } from "./GeometricPrimitive.js";
+import { GeometricPrimitive, GeometricModelMatrix } from "./GeometricPrimitive.js";
 import { MatrixFloat32 } from "../Matrix.js";
-import { ModelMatrixAnchor } from "../ModelMatrix.js";
 import { FixedLengthTrackingBuffer } from "../placeable_tracking/TrackingBuffer.js";
 import { almostBetween } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
@@ -16,8 +15,6 @@ import { getHexagonalShape } from "../placeable_vertices/BasicVertices.js";
 import { Polygon3d, Quad3d, Ellipse3d, Triangle3d } from "../3d/Polygon3d.js";
 import { Sphere } from "../3d/Sphere.js";
 import { HorizontalQuadVertices } from "../placeable_vertices/BasicVertices.js";
-import { mix } from "../mixwith.js";
-
 
 /** @type {Matrix<4,4>} */
 const IDENTITY_MATRIX = MatrixFloat32.identity(4, 4);
@@ -64,59 +61,6 @@ const QUADS = {
   ),
 };
 
-/**
- * Matrix model to handle rotation/scale/translation matrices.
- * Triggers updating of the underlying buffer.
- */
-const TrackerMixin = superclass => {
-  return class extends superclass {
-
-    /** @type {string} */
-    id;
-
-    /** @type {number} */
-    layoutVersion = 0;
-
-    /** @type {VariableLengthAbstractBuffer} */
-    tracker;
-
-    constructor(id, tracker) {
-      tracker.addFacet({ id, newValues: IDENTITY_MATRIX.arr });
-      const buffer = tracker.buffer;
-      const offset = tracker.facetOffsetAtId(id);
-      super(buffer, offset);
-
-      this.id = id;
-      this.tracker = tracker;
-    }
-
-    update() {
-      // Confirm the offset has not changed.
-      if ( this.layoutVersion !== this.tracker.layoutVersion ) {
-        this._model = (new MatrixFloat32(
-          this.constructor.DIM,
-          this.constructor.DIM,
-          this.tracker.buffer,
-          this.tracker.facetOffsetAtId(this.id)));
-        this.layoutVersion = this.tracker.layoutVersion;
-      }
-      super.update();
-
-      // Tell the underlying tracker that this facet changed.
-      this.tracker._facetIdUpdated(this.id);
-    }
-
-    clone(out) {
-      super.clone(out);
-      out.id = this.id;
-      out.offset = this.offset;
-    }
-  }
-};
-
-
-export class GeometricModelMatrix extends mix(ModelMatrixAnchor).with(TrackerMixin) {}
-
 export class InstancedGeometricPrimitive extends GeometricPrimitive {
 
   constructor(id) {
@@ -133,7 +77,7 @@ export class InstancedGeometricPrimitive extends GeometricPrimitive {
 
   // ----- NOTE: Model Matrix ----- //
 
-  get trackerIndex() { return this.constructor.modelMatrixTracker.facetIdMap.get(this.id); }
+  get modelTrackerIndex() { return this.constructor.modelMatrixTracker.facetIdMap.get(this.id); }
 
   _initializeModel() {
     this.modelMatrix = new GeometricModelMatrix(this.id, this.constructor.modelMatrixTracker);
@@ -258,11 +202,11 @@ export class TexturedQuadPrimitive extends QuadPrimitive {
   static alphaThresholdTracker = new FixedLengthTrackingBuffer({ facetLengths: 1, numFacets: 0, type: Float32Array });
 
   get alphaThreshold() {
-    return this.constructor.alphaThresholdTracker.viewFacetAtIndex(this.trackerIndex)[0];
+    return this.constructor.alphaThresholdTracker.viewFacetAtIndex(this.modelTrackerIndex)[0];
   }
 
   set alphaThreshold(value) {
-    const arr = this.constructor.alphaThresholdTracker.viewFacetAtIndex(this.trackerIndex);
+    const arr = this.constructor.alphaThresholdTracker.viewFacetAtIndex(this.modelTrackerIndex);
     arr.set(value);
   }
 

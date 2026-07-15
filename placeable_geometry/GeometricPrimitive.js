@@ -10,24 +10,50 @@ import { AABB3d } from "../3d/AABB3d.js";
 import { almostBetween } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
 import { combineTypedArrays } from "../util.js";
+import { ModelMatrixAnchor } from "../ModelMatrix.js";
+import { mix } from "../mixwith.js";
+import { MatrixFloat32 } from "../Matrix.js";
+
+/** @type {Matrix<4,4>} */
+const IDENTITY_MATRIX = MatrixFloat32.identity(4, 4);
+Object.freeze(IDENTITY_MATRIX);
 
 /* Geometric Primitives
 
-Data container: VertexObject
+Data container: modelMatrix
+- Track translation/scale/rotation
+- Model matrix buffer can be passed to webGL2
+- Both instanced and non-instanced (basic scale/rotation/translation of model shape)
+
+Data container: Prototype shapes
+- Array of GeometricPrimitives
+
+Data container: Shapes (Model)
+- Array of GeometricPrimitives
+
+Data container: Instance Vertex Object
 - Store vertices and indices.
+
+Data container: Model Vertex Object
+- Store vertices and indices
 
 Data container: Faces
 - Can generate face points
 - Ray intersection
 
-Geometric Primitives include:
-- VertexObject
-- Faces
-- AABB
-- ModelMatrix
-- Face points
-- Internal Points
-- Ray intersection test
+Data container: AABB
+- Combination of shape AABBs
+
+Data container: Face Points
+- Surface points
+
+Data container: Internal Points
+- Comparable to Foundry 9 points
+
+Method: RayIntersection
+- Intersection tests for shapes
+
+
 
 Basic work flow:
 0. Construct. Pass id used for tracking.
@@ -544,6 +570,60 @@ export class GeometricPrimitive {
     return points;
   }
 }
+
+
+/**
+ * Matrix model to handle rotation/scale/translation matrices.
+ * Triggers updating of the underlying buffer.
+ */
+const TrackerMixin = superclass => {
+  return class extends superclass {
+
+    /** @type {string} */
+    id;
+
+    /** @type {number} */
+    layoutVersion = 0;
+
+    /** @type {VariableLengthAbstractBuffer} */
+    tracker;
+
+    constructor(id, tracker) {
+      tracker.addFacet({ id, newValues: IDENTITY_MATRIX.arr });
+      const buffer = tracker.buffer;
+      const offset = tracker.facetOffsetAtId(id);
+      super(buffer, offset);
+
+      this.id = id;
+      this.tracker = tracker;
+    }
+
+    update() {
+      // Confirm the offset has not changed.
+      if ( this.layoutVersion !== this.tracker.layoutVersion ) {
+        this._model = (new MatrixFloat32(
+          this.constructor.DIM,
+          this.constructor.DIM,
+          this.tracker.buffer,
+          this.tracker.facetOffsetAtId(this.id)));
+        this.layoutVersion = this.tracker.layoutVersion;
+      }
+      super.update();
+
+      // Tell the underlying tracker that this facet changed.
+      this.tracker._facetIdUpdated(this.id);
+    }
+
+    clone(out) {
+      super.clone(out);
+      out.id = this.id;
+      out.offset = this.offset;
+    }
+  }
+};
+
+
+export class GeometricModelMatrix extends mix(ModelMatrixAnchor).with(TrackerMixin) {}
 
 
 

@@ -1,4 +1,5 @@
 /* globals
+canvas,
 PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
@@ -13,6 +14,7 @@ import { ExtrudedPolygonPrimitive } from "./ModelGeometricPrimitive.js";
 import { CenteredPolygon } from "../CenteredPolygon/CenteredPolygon.js";
 import { CenteredRectangle } from "../CenteredPolygon/CenteredRectangle.js";
 import { Ellipse } from "../Ellipse.js";
+import { Point3d } from "../3d/Point3d.js";
 
 /**
   Region will either be a single shape or a group of polygons.
@@ -89,10 +91,24 @@ export class RegionGeometry extends PlaceableGeometry {
 
     // If gridBased shape, use the model polygon shape.
     // Need the index for the id.
+    using center = Point3d.tmp;
+    using angles = Point3d.tmp;
+    using dims = Point3d.tmp;
+    using anchors = Point3d.tmp;
+    opts.center = center;
+    opts.angles = angles;
+    opts.dims = dims;
+    opts.anchors = anchors;
+    const zHeight = opts.topZ - opts.bottomZ;
+    const z = opts.bottomZ + (zHeight * 0.5);
+
     for ( let i = 0, iMax = regionShapes.length; i < iMax; i += 1 ) {
       const regionShape = regionShapes[i];
       const id = `${this.placeableId}_${i}`;
       let shape;
+
+
+
       if ( regionShape.gridBased ) shape = ExtrudedPolygonPrimitive.fromPolygons(id, regionShape.polygons, opts);
       else switch ( regionShape.type ) {
         // See shape.constructor.TYPES
@@ -103,13 +119,33 @@ export class RegionGeometry extends PlaceableGeometry {
         case "rectangle": shape = new CubePrimitive(id); break;
 
         case "emanation": // Use the polygon b/c corner radiuses can vary.
+          // base.x, base.y, rotation, base.width (# grid spaces), base.height (# grid spaces), origin
+
         case "ring": // Use the polygon(s) b/c of the hole.
+          // rotation, x, y, radius as width, origin
+
         case "polygon": // Obv. use the polygon.
+          // rotation, although not user-set, origin
+
         case "cone": // Use the polygon b/c no unit cone shape b/c angle varies.
+          // rotation, x, y, radius as width, origin
+
 
         case "grid": /* eslint-disable-line no-fallthrough */ // Unclear what this is.
         case "token": // Unclear what this is.
-        default: shape = ExtrudedPolygonPrimitive.fromPolygons(id, regionShape.polygons, opts);
+        default: {
+          // Pass the center, rotation, and dimensions so a prototype can be created.
+          center.copyFrom(regionShape.origin.x, regionShape.origin.y, )
+          const origin = regionShape.origin;
+          opts.center.set(origin.x, origin.y, z);
+          if ( regionShape.rotation ) opts.angles.set(0, 0, regionShape.rotation);
+          else opts.angles.set(0, 0, 0);
+          if ( regionShape.radius ) opts.dims.set(regionShape.radius, regionShape.radius, zHeight);
+          else if ( regionShape.base?.width ) opts.dims.set(regionShape.base.width * canvas.grid.size, regionShape.base.height * canvas.grid.size, zHeight)
+          else opts.dims.set(1, 1, 1);
+          shape = ExtrudedPolygonPrimitive.fromPolygons(id, regionShape.polygons, opts);
+
+        }
       }
       this.shapes.push(shape);
     }
@@ -135,33 +171,39 @@ export class RegionGeometry extends PlaceableGeometry {
     const { topZ, bottomZ } = this.constructor.regionElevation(this.placeableDocument);
     const zHeight = topZ - bottomZ;
     const z = bottomZ + (zHeight * 0.5);
+    using center = Point3d.tmp;
+    using angles = Point3d.tmp;
+    using dims = Point3d.tmp;
+    using anchors = Point3d.tmp;
 
     for ( let i = 0, iMax = regionShapes.length; i < iMax; i += 1 ) {
       const shape = shapes[i];
-      if ( shape instanceof ExtrudedPolygonPrimitive ) continue;
-
       const regionShape = regionShapes[i];
-      shape.setPosition({ x: regionShape.x, y: regionShape.y, z });
-      shape.setRotation({ x: 0, y: 0, z: Math.toRadians(regionShape.rotation) });
+      const origin = regionShape.origin;
+      dims.set(1, 1, 1);
+      anchors.set(0, 0, 0);
+      angles.z = Math.toRadians(regionShape.rotation || 0);
+      center.set(origin.x, origin.y, z);
 
       switch ( regionShape.type ) {
-        case "circle": shape.setScale({ x: regionShape.radius * 2, y: regionShape.radius * 2, z: zHeight }); break;
-        case "ellipse": shape.setScale({ x: regionShape.radiusX * 2, y: regionShape.radiusY * 2, z: zHeight }); break;
+        case "circle":
+          dims.set(regionShape.radius * 2, regionShape.radius * 2, zHeight);
+          break;
+        case "ellipse":
+          dims.set(regionShape.radiusX * 2,  regionShape.radiusY * 2, zHeight);
+          break;
 
         case "line": {
-          shape.setScale({ x: regionShape.length, y: regionShape.width, z: zHeight });
-
-          // Line anchors from middle left.
-          shape.setAnchor({ x: 0.5, y: 0.0, z: 0 });
+          dims.set(regionShape.length, regionShape.width, zHeight);
+          anchors.set(0.5, 0.0, 0.0); // Line anchors from middle left.
           break;
         }
         case "rectangle": {
-          shape.setScale({ x: regionShape.width, y: regionShape.height, z: zHeight });
+          dims.set(regionShape.width, regionShape.height, zHeight);
 
           // Rectangle anchors from user-defined position.
           // Those represent percentage anchors from 0–1. Conform to the unit cube from -0.5 to 0.5.
-          //
-          shape.setAnchor({ x: 0.5 - regionShape.anchorX, y: 0.5 - regionShape.anchorY, z: 0 });
+          anchors.set(0.5 - regionShape.anchorX, 0.5 - regionShape.anchorY, 0);
           break;
         }
 
@@ -172,7 +214,15 @@ export class RegionGeometry extends PlaceableGeometry {
         case "cone": // Use the polygon b/c no unit cone shape b/c angle varies.
         case "grid": // Unclear what this is.
         case "token": // Unclear what this is.
+        default: {
+          if ( regionShape.radius ) dims.set(regionShape.radius, regionShape.radius, zHeight);
+          else if ( regionShape.base?.width ) dims.set(regionShape.base.width * canvas.grid.size, regionShape.base.height * canvas.grid.size, zHeight)
+        }
       }
+      shape.setPosition(center);
+      shape.setRotation(angles);
+      shape.setScale(dims);
+      shape.setAnchor(anchors);
 
     }
   }

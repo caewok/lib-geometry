@@ -3,8 +3,8 @@
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { GeometricPrimitive } from "./GeometricPrimitive.js";
-import { VerticesIndicesTrackingBuffer } from "../placeable_tracking/TrackingBuffer.js";
+import { GeometricPrimitive, GeometricModelMatrix } from "./GeometricPrimitive.js";
+import { FixedLengthTrackingBuffer, VerticesIndicesTrackingBuffer } from "../placeable_tracking/TrackingBuffer.js";
 import { VertexObject } from "../placeable_vertices/VertexObject.js";
 import { Point3d } from "../3d/Point3d.js";
 import { Polygon3d, Quad3d  } from "../3d/Polygon3d.js";
@@ -19,28 +19,49 @@ import { ModelMatrixAnchor } from "../ModelMatrix.js";
  */
 export class ModelGeometricPrimitive extends GeometricPrimitive {
 
-  modelMatrix = new ModelMatrixAnchor();
+  constructor(id, prototypeFaces) {
+    super(id);
+    this.prototypeFaces = prototypeFaces;
+  }
 
-  initialize() {
-    super.initialize();
-    this.updateInstanceVertices();
+  /**
+   * All model primitives use the same model matrix buffer.
+   * Unlike instance primitives, where each instance type is separate.
+   */
+  static modelMatrixTracker = new FixedLengthTrackingBuffer({ facetLengths: 16, numFacets: 0, type: Float32Array });
+
+  destroy() {
+    this.constructor.viTracker.deleteFacet(this.id);
+    this.constructor.modelMatrixTracker.deleteFacet(this.id);
+    super.destroy();
+  }
+
+  // ----- NOTE: Model Matrix ----- //
+
+  get modelTrackerIndex() { return this.constructor.modelMatrixTracker.facetIdMap.get(this.id); }
+
+  _initializeModel() {
+    this.modelMatrix = new GeometricModelMatrix(this.id, this.constructor.modelMatrixTracker);
   }
 
   // ----- NOTE: Factory functions ----- //
 
   static fromCanvasFaces(id, faces, { center, dims, angles, anchors } = {}) {
-    // Build the model matrix.
-    const out = new this(id);
-    if ( center ) out.setPosition(center);
-    if ( angles ) out.setRotation(angles);
-    if ( dims ) out.setScale(dims);
-    if ( anchors ) out.setAnchors(anchors)
+    // Default approach is that the faces equal the prototype faces; model matrix is identity.
+    if ( !(center || dims || angles || anchors ) ) return new this(id, faces);
 
+    // Build a model matrix.
+    const modelMatrix = new ModelMatrixAnchor();
+    if ( center ) modelMatrix.translation = center;
+    if ( angles ) modelMatrix.rotation = angles;
+    if ( dims ) modelMatrix.scale = dims;
+    if ( anchors ) modelMatrix.anchor = anchors;
+
+    // Invert the model matrix to construct prototype faces.
     // Use the inverse to construct the prototype faces.
-    const invM = out.modelMatrix.model.invert();
-    out.prototypeFaces = faces.map(face => face.transform(invM));
-    out.initialize();
-    return out;
+    const invM = modelMatrix.model.invert();
+    const prototypeFaces = faces.map(face => face.transform(invM));
+    return new this(id, prototypeFaces);
   }
 
   // ----- NOTE: Faces ----- //
@@ -59,7 +80,7 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
 
   // ----- NOTE: Vertices ----- //
 
-  get trackerIndex() { return this.constructor.viTracker.vertices.facetIdMap.get(this.id); }
+  get verticesTrackerIndex() { return this.constructor.viTracker.vertices.facetIdMap.get(this.id); }
 
   static instanceVO = null;
 
@@ -102,11 +123,6 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
     this.constructor.viTracker.updateFacet({ id: this.id, newVertices: vo.vertices, newIndices: vo.indices });
     this._clearDirty(this.constructor.VERTICES);
   }
-
-  destroy() {
-    this.constructor.viTracker.deleteFacet(this.id);
-    super.destroy();
-  }
 }
 
 /**
@@ -141,9 +157,9 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    * @param {number} [opts.bottomZ]     Bottom elevation
    * @returns {ExtrudedPolygonPrimitive}
    */
-  static fromPolygon(id, poly, { topZ = Number.POSITIVE_INFINITY, bottomZ = Number.POSITIVE_INFINITY, ...opts } = {}) {
+  static fromPolygon(id, poly, { topZ = Number.POSITIVE_INFINITY, bottomZ = Number.NEGATIVE_INFINITY, ...opts } = {}) {
     if ( !isFinite(topZ) ) topZ = 1e06;
-    if ( !isFinite(bottomZ) ) bottomZ = 1e06;
+    if ( !isFinite(bottomZ) ) bottomZ = -1e06;
     const faces = this.#facesFromPolygon(poly, topZ, bottomZ);
     return this.fromCanvasFaces(id, faces, opts);
   }
@@ -157,10 +173,10 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    * @param {number} [opts.bottomZ]     Bottom elevation
    * @returns {ExtrudedPolygonPrimitive}
    */
-  static fromPolygons(id, polys, { topZ = Number.POSITIVE_INFINITY, bottomZ = Number.POSITIVE_INFINITY, ...opts } = {}) {
+  static fromPolygons(id, polys, { topZ = Number.POSITIVE_INFINITY, bottomZ = Number.NEGATIVE_INFINITY, ...opts } = {}) {
     if ( polys.length === 1 ) return this.fromPolygon(id, polys[0], { topZ, bottomZ, ...opts });
     if ( !isFinite(topZ) ) topZ = 1e06;
-    if ( !isFinite(bottomZ) ) bottomZ = 1e06;
+    if ( !isFinite(bottomZ) ) bottomZ = -1e06;
     const faces = [];
     for ( const poly of polys ) faces.push(...this.#facesFromPolygon(poly, topZ, bottomZ));
     return this.fromCanvasFaces(id, faces, opts);
