@@ -183,7 +183,7 @@ export class PlaceableGeometry {
   /**
    * @param {Set<string>} updateKeys      Flattened keys that were updated
    */
-  update(updateKeys) {
+  update(updateKeys, opts) {
     const updateFlags = this._updateFlags;
     Object.keys(updateFlags).forEach(key => updateFlags[key] = false);
 
@@ -193,7 +193,7 @@ export class PlaceableGeometry {
       shapeUpdated ||= true;
     }
     if ( !shapeUpdated ) return;
-    this._update();
+    this._update(opts);
   }
 
   forceUpdate() {
@@ -202,7 +202,7 @@ export class PlaceableGeometry {
   }
 
   // Triggered second.
-  _update() {
+  _update(_opts) {
     this.calculateAABB();
     this.updateCount += 1;
   }

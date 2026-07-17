@@ -92,11 +92,12 @@ export class CanvasGeometryManager {
    * Update the geometry for this document.
    * @param {CanvasDocument} doc        A document instance, e.g., TokenDocument, WallDocument, etc.
    * @param {Set<string>} updateKeys       Flattened set of properties that changed
+   * @param {object} opts               Options passed from update hook; currently used for tracking region shape changes
    */
-  update(doc, updateKeys) {
+  update(doc, updateKeys, opts) {
     const geom = this.geometryMap.get(doc.uuid);
     if ( !geom ) return;
-    geom.update(updateKeys);
+    geom.update(updateKeys, opts);
     this.quadtree.update({ t: geom, r: geom.aabb });
   }
 
@@ -139,10 +140,10 @@ export class CanvasGeometryManager {
     const docName = this.constructor.geometryClass.PLACEABLE_NAME;
     Hooks.on("canvasReady", () => this.initializeScene());
     Hooks.on(`create${docName}`, doc => this.create(doc));
-    Hooks.on(`update${docName}`, (doc, changeData) => {
+    Hooks.on(`update${docName}`, (doc, changeData, opts, userId) => {
       // Flatten the change object to handle nested keys, like flags.
       const updateKeys = Object.keys(foundry.utils.flattenObject(changeData));
-      this.update(doc, new Set(updateKeys));
+      this.update(doc, new Set(updateKeys), opts);
     });
     Hooks.on(`delete${docName}`, docId => this.delete(docId));
 
