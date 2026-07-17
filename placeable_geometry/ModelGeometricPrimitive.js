@@ -194,9 +194,6 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    */
   static #facesFromPolygon(poly, topZ, bottomZ) {
     const top = Polygon3d.fromPolygon(poly, topZ);
-
-    // Foundry default is for positive polygons to be normal; not positive are holes.
-    if ( !poly.isPositive ) top.isHole = true;
     return this._facesFromPolygon3d(top, bottomZ);
   }
 
