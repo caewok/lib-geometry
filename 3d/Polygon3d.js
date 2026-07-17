@@ -303,15 +303,9 @@ export class Polygon3d {
   // ----- NOTE: Factory methods ----- //
 
   static from2dPoints(pts, elevation = 0, out) {
-    const n = pts.length;
-    if ( out ) out.points.length = n;
-    else out = new this(n);
-    let i = 0;
-    for ( const pt of pts ) {
-      const outPt = out.points[i++] ??= Point3d.tmp;
-      outPt.set(pt.x, pt.y, elevation);
-    }
-    return out;
+    // While faster to just set the points, use a polygon to test for holes.
+    const poly = new PIXI.Polygon(pts);
+    return this.fromPolygon(poly, elevation, out);
   }
 
   static from3dPoints(pts, out) {
@@ -326,10 +320,18 @@ export class Polygon3d {
   }
 
   static fromPolygon(poly, elevation = 0, out) {
-    const pts = [...poly.iteratePoints()];
-    out = this.from2dPoints(pts, elevation, out);
-    PIXI.Point.release(...pts);
-    out.isHole = poly.isHole;
+    const n = Math.floor(poly.points.length * 0.5);
+    out ??= new this(n);
+    let i = 0;
+    for ( const pt of poly.iteratePoints() ) out.points[i++].set(pt.x, pt.y, elevation);
+
+    // 3d polygon faces up if the poly is not a hole.
+    // Confirm orientation manually b/c this always gets screwed up.
+    const isHole = poly.isHole ?? !poly.isPositive;
+    const ctr = poly.center;
+    using ctr3d = Point3d.tmp.set(ctr.x, ctr.y, elevation + 1);
+    if ( out.isFacing(ctr3d) ^ !isHole ) out.reverseOrientation();
+    out.isHole = isHole;
     return out;
   }
 
@@ -337,18 +339,14 @@ export class Polygon3d {
     return cpObj.toPolygons().map(poly => this.fromPolygon(poly, elevation));
   }
 
-  static fromPlanarPolygon(poly2d, plane) {
+  static fromPlanarPolygon(poly2d, plane, out) {
+    // First create a 3d polygon at elevation 0.
+    // This will also test for holes.
+    out = this.fromPolygon(poly2d, 0, out);
+
+    // Now translate the XY polygon in the z direction.
     const invM2d = plane.conversion2dMatrixInverse;
-    const ln = poly2d.points.length;
-    const pts3d = new Array(Math.floor(ln / 2));
-    for ( let i = 0, j = 0; i < ln; i += 2, j += 1 ) {
-      const x = poly2d.points[i];
-      const y = poly2d.points[i + 1];
-      const pt3d = Point3d.tmp.set(x, y, 0);
-      pts3d[j] = invM2d.multiplyPoint3d(pt3d, pt3d);
-    }
-    const out = this.from3dPoints(pts3d);
-    Point3d.release(...pts3d);
+    for ( const pt3d of out.iteratePoints() ) invM2d.multiplyPoint3d(pt3d, pt3d);
     return out;
   }
 
