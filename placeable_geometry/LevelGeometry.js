@@ -93,8 +93,6 @@ export class LevelBackgroundGeometry extends TileGeometry {
 
   get alphaThreshold() { return this.level.background.alphaThreshold; }
 
-  get elevationZ() { return gridUnitsToPixels(this.placeableDocument.elevation.base); }
-
   /**
    * Create an id used for the model matrix tracking.
    * @type {string}
@@ -115,10 +113,11 @@ export class LevelBackgroundGeometry extends TileGeometry {
   // ----- NOTE: AABB ----- //
   calculateAABB() {
     const cache = this.pixelCache;
+    const elevationZ = this.constructor.placeableElevationZ(this.placeableDocument)
     if ( !cache ) {
       // Cannot ascertain width and height without the texture. (At least, it would require a partial load.)
       // But there is a decent chance that the scene rect would cover the dimensions.
-      AABB3d.fromRectangle(canvas.scene.dimensions.sceneRect, this.elevationZ, this.aabb);
+      AABB3d.fromRectangle(canvas.scene.dimensions.sceneRect, elevationZ, this.aabb);
 
     } else {
       // Use the cache to find the boundary points.
@@ -128,8 +127,8 @@ export class LevelBackgroundGeometry extends TileGeometry {
       using TR = cache._toCanvasCoordinates(width, 0);
       using BR = cache._toCanvasCoordinates(width, height);
       AABB3d.fromPoints([TL, BL, TR, BR], this.aabb);
-      this.aabb.min.z = this.elevationZ;
-      this.aabb.max.z = this.elevationZ;
+      this.aabb.min.z = elevationZ;
+      this.aabb.max.z = elevationZ;
     }
   }
 
@@ -178,6 +177,19 @@ export class LevelBackgroundGeometry extends TileGeometry {
     );
   }
 
+  /**
+   * Finite elevation of the level background (bottom).
+   * @param {PlaceableDocument} placeableD
+   * @returns {number}
+   */
+  static placeableElevationZ(placeableD) {
+    const MAX_ELEV = 1e06;
+    const z = gridUnitsToPixels(placeableD.elevation.bottom);
+    if ( z === Number.POSITIVE_INFINITY ) return MAX_ELEV;
+    if ( z === Number.NEGATIVE_INFINITY ) return -MAX_ELEV;
+    return z;
+  }
+
 }
 
 export class LevelForegroundGeometry extends LevelBackgroundGeometry {
@@ -187,6 +199,16 @@ export class LevelForegroundGeometry extends LevelBackgroundGeometry {
 
   static get cacheManager() { return CONFIG[GEOMETRY_LIB_ID].levelForegroundPixelCache; }
 
-  get elevationZ() { return gridUnitsToPixels(this.placeableDocument.elevation.top); }
-
+  /**
+   * Finite elevation of the level background (bottom).
+   * @param {PlaceableDocument} placeableD
+   * @returns {number}
+   */
+  static placeableElevationZ(placeableD) {
+    const MAX_ELEV = 1e06;
+    const z = gridUnitsToPixels(placeableD.elevation.top);
+    if ( z === Number.POSITIVE_INFINITY ) return MAX_ELEV;
+    if ( z === Number.NEGATIVE_INFINITY ) return -MAX_ELEV;
+    return z;
+  }
 }

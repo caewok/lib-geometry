@@ -1,4 +1,5 @@
 /* globals
+canvas,
 Hooks,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
@@ -10,6 +11,7 @@ import { GeometricPrimitive } from "./GeometricPrimitive.js";
 // LibGeometry
 import { AABB3d } from "../3d/AABB3d.js";
 import { NULL_SET } from "../util.js";
+import { gridUnitsToPixels } from "../util.js";
 
 
 /* Store key geometry information for each placeable, in 3d.
@@ -37,14 +39,12 @@ propertiesUpdated
 
 */
 
-let LEVEL_SEGMENTS;
-
 Hooks.on("updateLevel", function(_level, _changes, _opts, _id) {
-  LEVEL_SEGMENTS = PlaceableGeometry.segmentLevels();
+  PlaceableGeometry.calculateLevelSegments();
 });
 
-Hooks.on("canvasReady", function(canvas) {
-  LEVEL_SEGMENTS = PlaceableGeometry.segmentLevels();
+Hooks.on("canvasReady", function(_canvas) {
+  PlaceableGeometry.calculateLevelSegments();
 });
 
 
@@ -59,29 +59,24 @@ export class PlaceableGeometry {
   /**
    * Reorganize and split level intervals to cover the low to high range with no overlaps.
    * Add gap intervals as necessary.
-   * @param {Level[]} levels
-   * @returns {object[]} The intervals
-   *  - @prop {number} bottom       Bottom elevation value
-   *  - @prop {number} top          Top elevation value
-   *  - @prop {string[]} id[]       Id of the levels encountered in this interval
-   */
-  static get levelSegments() { return LEVEL_SEGMENTS; }
-
-  /**
-   * Reorganize and split level intervals to cover the low to high range with no overlaps.
-   * Add gap intervals as necessary.
-   * @param {number[]} elevations     Elevations to add in addition to the scene levels
-   * @returns {object[]}
-   * - @prop {number} minElevation    Minimum elevation for the scene levels
-   * - @prop {number} maxElevation    Maximum elevation for the scene levels
-   * - @prop {object[]} segments      The intervals
+   * @param {object[]} segments      The intervals
    *    - @prop {number} bottom       Bottom elevation value
    *    - @prop {number} top          Top elevation value
    *    - @prop {string[]} id[]       Id of the levels encountered in this interval
    */
-  static segmentLevels(elevations = []) {
+  static levelSegments = [];
+
+  /**
+   * Reorganize and split level intervals to cover the low to high range with no overlaps.
+   * Add gap intervals as necessary.
+   * @returns {object[]} segments       The intervals
+   *    - @prop {number} bottom         Bottom elevation value
+   *    - @prop {number} top            Top elevation value
+   *    - @prop {Set<string>} ids       Ids of the levels encountered in this interval
+   */
+  static calculateLevelSegments() {
     // Create a distinct "event" for every bottom and top point.
-    const events = new Array(canvas.scene.levels.size * 2 + elevations.length);
+    const events = new Array(canvas.scene.levels.size * 2);
     let i = 0;
     for ( const level of canvas.scene.levels ) {
       const { bottom, top } = level.elevation;
@@ -89,14 +84,8 @@ export class PlaceableGeometry {
       events[i++] = { value: top, type: "end", id: level.id };
     }
 
-    for ( const elevation of elevations ) events[i++] = { value: elevation, type: "added", id: null };
-
     // Sort by value, with end events after start events if equal.
     events.sort((a, b) => (a.value - b.value) || a.type === "start");
-
-    // Store min and max elevations for later use.
-    const minElevation = events.at(0).value;
-    const maxElevation = events.at(-1).value;
 
     // Sweep through sorted events, identifying boundary changes.
     const segments = [];
@@ -122,7 +111,9 @@ export class PlaceableGeometry {
       // Move forward to the new value on the line.
       currentPosition = event.value;
     }
-    return { segments, minElevation, maxElevation };
+
+    this.levelSegments = segments;
+    return segments;
   }
 
   // ----- NOTE: Constructor ----- //
@@ -147,11 +138,12 @@ export class PlaceableGeometry {
   }
 
   initialize() {
-    this.shapes.forEach(shape => shape.initialize());
+    this.iterateShapes().forEach(shape => shape.initialize());
   }
 
   destroy() {
-    this.shapes.forEach(shape => shape.destroy());
+    this.iterateShapes().forEach(shape => shape.destroy());
+    this.shapes.length = 0;
   }
 
   // ----- NOTE: Updating ----- //
@@ -231,7 +223,7 @@ export class PlaceableGeometry {
   aabb = new AABB3d();
 
   calculateAABB() {
-    AABB3d.union(this.shapes.map(shape => shape.aabb), this.aabb);
+    AABB3d.union(this.iterateShapes().map(shape => shape.aabb), this.aabb);
   }
 
   // ----- NOTE: Geometric shapes and faces ----- //
@@ -248,7 +240,9 @@ export class PlaceableGeometry {
   *iterateShapes({ senseType, levelId } = {}) {
     if ( senseType && !this.blocksSense(senseType) ) return;
     if ( levelId && !this.blocksFromLevel(levelId) ) return;
-    yield* this.shapes;
+    for ( const shape of this.shapes ) {
+      if ( shape ) yield shape;
+    }
   }
 
   /**
@@ -271,7 +265,7 @@ export class PlaceableGeometry {
    * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
    * @returns {number|null} The distance along the ray, as a multiple of rayDirection
    */
-  rayIntersection(rayOrigin, rayDirection, opts = {}) {
+  rayIntersection(rayOrigin, rayDirection, opts) {
     for ( const shape of this.iterateShapes(opts) ) {
       const t = shape.rayIntersection(rayOrigin, rayDirection, opts);
       if ( t !== null ) return t;
@@ -280,18 +274,152 @@ export class PlaceableGeometry {
   }
 
   draw2d(opts) {
-    for ( const shape of this.shapes ) shape.draw2d(opts);
+    this.iterateShapes().forEach(shape => shape.draw2d(opts));
   }
 
   // ----- NOTE: Face points ----- //
 
-  get facePoints() { return this.shapes.flatMap(shape => shape.facePoints); }
+  getFacePoints(opts) {
+    return this.iterateShapes(opts).flatMap(shape => shape.facePoints());
+  }
 
   // ----- NOTE: Internal points ----- //
 
   static POINT_INDICES = GeometricPrimitive.POINT_INDICES;
 
-  getInternalPoints() {
-    return this.shapes.map(shape => shape.getInternalPoints());
+  getInternalPoints(opts) {
+    return this.iterateShapes(opts).map(shape => shape.getInternalPoints());
+  }
+
+  // ----- NOTE: Static helpers ----- //
+
+  /**
+   * Height and elevation along the z axis.
+   * @param {number} topZ
+   * @param {number} bottomZ
+   * @returns {object}
+   * - @prop {number} zHeight
+   * - @prop {number} z
+   */
+  static zDimensions(topZ, bottomZ) {
+    const zHeight = topZ - bottomZ;
+    const z = bottomZ + (zHeight * 0.5);
+    return { zHeight, z };
+  }
+
+  /**
+   * Top and bottom z values for a given segment index.
+   * @param {number} segmentIdx
+   * @param {number} topZ
+   * @param {number} bottomZ
+   * @returns {object}
+   * - @prop {number} topZ
+   * - @prop {number} bottomZ
+   */
+  static elevationZForSegment(segmentIdx, topZ, bottomZ) {
+    const segmentData = this.levelSegments[segmentIdx];
+    topZ = Math.min(gridUnitsToPixels(segmentData.top), topZ);
+    bottomZ = Math.max(gridUnitsToPixels(segmentData.bottom), bottomZ);
+    return { topZ, bottomZ };
+  }
+
+  /**
+   * Finite elevation of a placeable.
+   * @param {PlaceableDocument} placeableD
+   * @returns {object}
+   * - @prop {number} topZ
+   * - @prop {number} bottomZ
+   */
+  static placeableElevationZ(placeableD) {
+    const MAX_ELEV = 1e06;
+    let { topZ, bottomZ } = placeableD;
+    if ( !isFinite(topZ) ) topZ = MAX_ELEV;
+    if ( !isFinite(bottomZ) ) bottomZ = -MAX_ELEV;
+    return { topZ, bottomZ };
   }
 }
+
+/**
+ * Additional methods required for placeables—walls and regions—that span different levels.
+ * (Tiles show up in differrent levels but trivially so.)
+ */
+export const LevelSpanningMixin = superclass => {
+  return class extends superclass {
+
+    // ----- NOTE: Geometric shapes and faces ----- //
+
+    /**
+     * Iterate over the shapes.
+     * @param {object} [opts]
+     * @param {CONST.WALL_RESTRICTION_TYPES} [opts.senseType]   If provided, will return early if geometry does not block this sense type.
+     * @param {string} [opts.levelId]                           If provided, will return early if geometry does not affect this level.
+     * @yields {GeometricPrimitive}
+     */
+    *iterateShapes({ senseType, levelId } = {}) {
+      if ( senseType && !this.blocksSense(senseType) ) return;
+      if ( levelId && !this.blocksFromLevel(levelId) ) return;
+      for ( let i = 0, iMax = this.shapes.length; i < iMax; i += 1 ) {
+        const shape = this.shapes[i];
+        if ( !shape ) continue;
+        if ( levelId && !this.constructor.levelSegments[i].ids.has(levelId) ) continue;
+        yield shape;
+      }
+    }
+
+    // ----- NOTE: Levels ----- //
+
+    /**
+     * Id, taking into account the level segment.
+     * Combines the level segment ids so each segment is unique.
+     * @param {number} levelSegmentIdx
+     * @returns {string}
+     */
+    _levelShapeId(levelSegmentIdx) {
+      const segment = this.constructor.levelSegments[levelSegmentIdx];
+      const levelIds = [...segment.ids].join("_");
+      return `${this.placeableId}_${levelIds}`;
+    }
+
+    /**
+     * Does this geometry currently block a given sense type?
+     * @param {CONST.WALL_RESTRICTION_TYPES} [senseType="sight"]
+     * @returns {boolean}
+     */
+    blocksSense(_senseType = "sight") { return true; }
+
+    /**
+     * Does this geometry currently block, from the view of a given level?
+     * Must all check if it blocks at the given level.
+     * For walls, it is usually necessary to check each of the segments.
+     * @param {string} levelId
+     * @returns {boolean}
+     */
+    blocksFromLevel(levelId) {
+      return !this.constructor.levelSegments.some(segment => segment.ids.has(levelId));
+    }
+
+    /**
+     * Does this wall exist on this level?
+     * Must be at this level and within the level elevation range.
+     * @param {string} levelId
+     * @returns {boolean}
+     */
+    isPresentAtLevel(levelId) {
+      // Confirm this wall has the level id.
+      if ( !canvas.scene.levels.has(levelId) ) return false;
+      if ( !this.placeableDocument.levels.has(levelId) ) return false;
+
+      // Confirm this wall's top and bottom elevation place it within the level.
+      const { topZ, bottomZ } = this.constructor.placeableElevationZ(this.placeableDocument);
+      const level = canvas.scene.levels.get(levelId);
+      if ( !level ) return false;
+      const levelBottomZ = gridUnitsToPixels(level.elevation.bottom);
+      const levelTopZ = gridUnitsToPixels(level.elevation.top);
+      return (bottomZ < levelBottomZ && topZ > levelTopZ )
+        || bottomZ.between(levelBottomZ, levelTopZ)
+        || topZ.between(levelBottomZ, levelTopZ);
+    }
+  };
+}
+
+

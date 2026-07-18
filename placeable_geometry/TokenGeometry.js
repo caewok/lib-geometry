@@ -97,7 +97,11 @@ const TokenConstrainedFacesMixin = superclass => class extends superclass {
     this.#constrainedShapes.length = 0;
 
     const poly = this.token.constrainedTokenBorder.toPolygon();
-    this.#constrainedShapes.push(new ExtrudedPolygonPrimitive.fromPolygon(`${this.placeableId}_constrained`, poly, this.constructor.tokenElevationZ));
+    this.#constrainedShapes.push(new ExtrudedPolygonPrimitive.fromPolygon(
+      `${this.placeableId}_constrained`,
+      poly,
+      this.constructor.placeableElevationZ(this.placeableObject))
+    );
   }
 }
 
@@ -160,7 +164,11 @@ const TokenConstrainedLitFacesMixin = superclass => class extends superclass {
     this.#constrainedLitShapes.length = 0;
 
     const poly = this.token.litTokenBorder.toPolygon();
-    this.#constrainedLitShapes.push(new ExtrudedPolygonPrimitive.fromPolygon(`${this.placeableId}_lit`, poly, this.constructor.tokenElevationZ));
+    this.#constrainedLitShapes.push(new ExtrudedPolygonPrimitive.fromPolygon(
+      `${this.placeableId}_lit`,
+      poly,
+      this.constructor.placeableElevationZ(this.placeableObject))
+    );
 
     /*
     const SPACER = this.constructor.SPACER;
@@ -230,7 +238,11 @@ const TokenConstrainedBrightLitFacesMixin = superclass => class extends supercla
     this.#constrainedBrightLitShapes.length = 0;
 
     const poly = this.token.brightLitTokenBorder.toPolygon();
-    this.#constrainedBrightLitShapes.push(new ExtrudedPolygonPrimitive.fromPolygon(`${this.placeableId}_brightLit`, poly, this.constructor.tokenElevationZ));
+    this.#constrainedBrightLitShapes.push(new ExtrudedPolygonPrimitive.fromPolygon(
+      `${this.placeableId}_brightLit`,
+      poly,
+      this.constructor.placeableElevationZ(this.placeableObject))
+    );
 
     /*
     const SPACER = this.constructor.SPACER;
@@ -335,8 +347,8 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
     if ( type === TYPES.HEXAGONAL && !this.useSimpleHexagon ) {
       const res = getHexagonalShape(tokenD.w, tokenD.h, tokenD.shape, canvas.scene.grid.columns ?? false);
       const poly2d = new PIXI.Polygon(res.points);
-      const { topZ, bottomZ } = this.constructor.tokenElevationZ(this.placeableDocument);
-      this.shapes.push(ExtrudedPolygonPrimitive.fromPolygon(poly2d), { topZ, bottomZ });
+      const elevZ = this.constructor.placeableElevationZ(this.placeableDocument);
+      this.shapes.push(ExtrudedPolygonPrimitive.fromPolygon(poly2d), elevZ);
 
     } else this.shapes.push(new primitiveCl(this.placeableId));
   }
@@ -436,11 +448,11 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
    * - @param {number} topZ
    * - @param {number} bottomZ
    */
-  static tokenElevationZ(tokenD) {
-    return {
-      topZ: tokenD.topZ - this.SPACER,
-      bottomZ: tokenD.bottomZ + this.SPACER,
-    };
+  static placeableElevationZ(tokenD) {
+    const elevZ = super.placeableElevationZ(tokenD);
+    elevZ.topZ -= this.SPACER;
+    elevZ.bottomZ -= this.SPACER;
+    return elevZ;
   }
 
   /**

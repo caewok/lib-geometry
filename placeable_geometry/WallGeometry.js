@@ -1,5 +1,4 @@
 /* globals
-canvas,
 CONST,
 foundry,
 PIXI,
@@ -8,13 +7,14 @@ PIXI,
 "use strict";
 
 // Geometry
-import { PlaceableGeometry } from "./PlaceableGeometry.js";
+import { PlaceableGeometry, LevelSpanningMixin } from "./PlaceableGeometry.js";
 import { VerticalQuadPrimitive } from "./InstancedGeometricPrimitive.js";
 
 // LibGeometry
 import { Point3d } from "../3d/Point3d.js";
 import { Segment } from "../Segment.js";
-import { pixelsToGridUnits, gridUnitsToPixels } from "../util.js";
+
+import { mix } from "../mixwith.js";
 
 const TRACKER_TYPES = {
   position2d: [
@@ -68,8 +68,10 @@ Has numeric id to track which segment it represents.
 
     First, the wall will be defined per usual by its top and bottom elevation.
 
-    Walls will then be split by level. Gaps get their own split. Where levels overlap, each overlap
-    gets its own split. Levels for splits will be stored in the faceLevels map.
+    Walls will then be split by level. Gaps get their own split, but no wall segment.
+    Where levels overlap, each overlap gets its own split. Levels for splits will be stored
+    in the faceLevels map.
+
 
     All splits are Quad3d, stored in a Polygon3d.
 
@@ -85,8 +87,8 @@ Has numeric id to track which segment it represents.
         lvl 0.5        lvl1.5
 
     Splits:
-    -∞ to 1 | 1–5 | 5–8 | 8–13 | 13–16 | 16–20 | 20–22 | 22–23 | 23–26 | 26–30 | 30 to ∞
-       all     0    0,0.5 all    0.5,1    1      1, 1.5   1.5     all      2      all
+    1–5 | 5–8 | 8–13 | 13–16 | 16–20 | 20–22 | 22–23 | 23–26 | 26–30
+     0    0,0.5 all    0.5,1    1      1, 1.5   1.5     all      2
 
     Assume the wall is in 0 and 1 but not elsewhere.
     Level 2 is easy: The wall prototype would not include 26–30.
@@ -102,7 +104,7 @@ Has numeric id to track which segment it represents.
   */
 
 
-export class WallGeometry extends PlaceableGeometry {
+export class WallGeometry extends mix(PlaceableGeometry).with(LevelSpanningMixin) {
 
   /** @type {string} */
   static PLACEABLE_NAME = "Wall";
@@ -122,30 +124,6 @@ export class WallGeometry extends PlaceableGeometry {
 
 
   // ----- NOTE: Wall Segments ----- //
-
-  static wallLevelSegments;
-
-  /**
-   * Define segments for walls in the scene.
-   * @returns {LevelSegments}
-   */
-  static defineWallLevelSegments() {
-    // Find all defined elevations for walls.
-    const maxE = pixelsToGridUnits(1e06);
-    const elevations = new Set([maxE, -maxE]);
-    for ( const wallD of canvas.scene.walls ) {
-      const { topZ, bottomZ } = this.wallElevation(wallD);
-      elevations.add(pixelsToGridUnits(topZ));
-      elevations.add(pixelsToGridUnits(bottomZ));
-    }
-    this.wallLevelSegments = this.segmentLevels([...elevations]);
-
-    // Empty segments (gaps) should contain all levels.
-    const allLevels = new Set(canvas.scene.levels.keys())
-    for ( const segment of this.wallLevelSegments.segments ) {
-      if ( !segment.ids.size ) segment.ids = allLevels;
-    }
-  }
 
   get edge() {
     if ( !this.wall ) {
@@ -175,31 +153,27 @@ export class WallGeometry extends PlaceableGeometry {
     return this.wall.edge;
   }
 
-  /** @type {LevelSegments} */
-  wallSegments = [];
-
   initialize() {
     this._buildWallShapes();
     super.initialize();
-
-    // After initializing, the shapes are initialized and their positions/directions can be updated.
-    this._updateShapePositions();
-    this._updateShapeDirections();
   }
 
   _buildWallShapes() {
     // Reset the wall shapes.
     // Walls are made up of multiple vertical quads, spanning the defined wall segments.
-    this.shapes.forEach(shape => shape.destroy());
-    this.wallSegments ??= [];
-    this.wallSegments.length = 0;
+    const shapes = this.shapes;
+    shapes.forEach(shape => shape.destroy());
 
-    // Determine how many wall segments to construct.
-    this.constructor.defineWallLevelSegments();
-    this.wallSegments.push(...this.constructor.wallLevelSegments.segments) ;
-    const numSegments = this.wallSegments.length;
-    this.shapes.length = numSegments;
-    for ( let i = 0; i < numSegments; i += 1 ) this.shapes[i] = new VerticalQuadPrimitive(`${this.placeableId}_${i}`);
+    const levelSegments = this.constructor.levelSegments;
+    const numSegments = levelSegments.length;
+    shapes.length = numSegments;
+
+    // Build a primitive shape only for level segments that this wall is present within.
+    for ( let i = 0; i < numSegments; i += 1 ) {
+      const segment = levelSegments[i];
+      if ( !segment.ids.some(id => this.isPresentAtLevel(id)) ) continue;
+      shapes[i] = new VerticalQuadPrimitive(this._levelShapeId(i));
+    }
   }
 
   _updateShapePositions() {
@@ -208,16 +182,19 @@ export class WallGeometry extends PlaceableGeometry {
     using ctr2d = this.constructor.wallCenter(wallD);
     const rotZ = this.constructor.wallAngle(wallD)
     const lengthXY = this.constructor.wallLength(wallD);
+    const { topZ, bottomZ } = this.constructor.placeableElevationZ(wallD);
 
     using center3d = Point3d.tmp.set(ctr2d.x, ctr2d.y, 0);
     using angles = Point3d.tmp.set(0, 0, rotZ);
 
     for ( let i = 0, iMax = this.shapes.length; i < iMax; i += 1 ) {
       const shape = this.shapes[i];
-      const segmentData = this.wallSegments[i];
-      const zHeight = gridUnitsToPixels(segmentData.top - segmentData.bottom);
+      if ( !shape ) continue;
 
-      center3d.z = gridUnitsToPixels(segmentData.bottom) + (zHeight / 2);
+      // Account for walls that do not span the entire segment.
+      const zElevs = this.constructor.elevationZForSegment(i, topZ, bottomZ);
+      const { z, zHeight } = this.constructor.zDimensions(zElevs.topZ, zElevs.bottomZ);
+      center3d.z = z;
 
       shape.setPosition(center3d);
       shape.setRotation(angles);
@@ -227,7 +204,10 @@ export class WallGeometry extends PlaceableGeometry {
 
   _updateShapeDirections() {
     const dir = this.placeableDocument.dir;
-    this.shapes.forEach(shape => shape.direction = dir);
+    this.shapes.forEach(shape => {
+      if ( !shape ) return;
+      shape.direction = dir;
+    });
   }
 
 
@@ -237,9 +217,9 @@ export class WallGeometry extends PlaceableGeometry {
     // TODO: Only initialize if the segments changed.
     //       Handle level changes separately, by rebuilding as needed without updating class's wall segments.
     if ( this._updateFlags.elevation || this._updateFlags.level ) {
-      this.constructor.defineWallLevelSegments();
       this.initialize();
-      return;
+      this._updateFlags.positionXY = true;
+      this._updateFlags.properties = true;
     }
 
     if ( this._updateFlags.positionXY ) this._updateShapePositions();
@@ -256,38 +236,6 @@ export class WallGeometry extends PlaceableGeometry {
    */
   blocksSense(senseType = "sight") {
     return this.placeableDocument[senseType] || this.placeableDocument.threshold[senseType];
-  }
-
-  /**
-   * Does this geometry currently block, from the view of a given level?
-   * Must all check if it blocks the given sense type.
-   * For walls, it is usually necessary to check each of the segments.
-   * @param {string} levelId
-   * @returns {boolean}
-   */
-  blocksFromLevel(levelId) {
-    return !this.wallSegments.some(segment => segment.ids.has(levelId));
-  }
-
-
-  // ----- NOTE: Faces ----- //
-
-  /**
-   * Iterate over the shapes.
-   * @param {object} [opts]
-   * @param {CONST.WALL_RESTRICTION_TYPES} [opts.senseType]   If provided, will return early if geometry does not block this sense type.
-   * @param {string} [opts.levelId]                           If provided, will return early if geometry does not affect this level.
-   * @yields {GeometricPrimitive}
-   */
-  *iterateShapes({ senseType, levelId } = {}) {
-    if ( !levelId ) return super.iterateShapes({ senseType, levelId });
-
-    if ( senseType && !this.blocksSense(senseType) ) return;
-    if ( !this.blocksFromLevel(levelId) ) return;
-    for ( let i = 0, iMax = this.shapes.length; i < iMax; i += 1 ) {
-      if ( !this.wallSegments[i].ids.has(levelId) ) continue;
-      yield this.shapes[i];
-    }
   }
 
   // ----- NOTE: Wall characteristics ----- //
@@ -353,18 +301,4 @@ export class WallGeometry extends PlaceableGeometry {
    */
   static isDirectional(wallD) { return Boolean(wallD.dir); }
 
-  /**
-   * Finite elevation of the wall
-   * @param {WallDocument} wallD
-   * @returns {object}
-   * - @prop {number} topZ
-   * - @prop {number} bottomZ
-   */
-  static wallElevation(wallD) {
-    const MAX_ELEV = 1e06;
-    let { topZ, bottomZ } = wallD;
-    if ( !isFinite(topZ) ) topZ = MAX_ELEV;
-    if ( !isFinite(bottomZ) ) bottomZ = -MAX_ELEV;
-    return { topZ, bottomZ };
-  }
 }

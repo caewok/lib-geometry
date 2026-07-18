@@ -16,7 +16,6 @@ import { PlanarPolygonPrimitive } from "./ModelGeometricPrimitive.js";
 
 // LibGeometry
 import { GEOMETRY_LIB_ID } from "../const.js";
-import { gridUnitsToPixels } from "../util.js";
 import { AABB3d } from "../3d/AABB3d.js";
 import { Point3d } from "../3d/Point3d.js";
 import { Segment } from "../Segment.js";
@@ -104,7 +103,7 @@ const TileAlphaBoundingBoxMixin = superclass => class extends superclass {
     this.#alphaBoundingBoxShapes.length = 0;
 
     const rectOrPoly = cache.getThresholdCanvasBoundingBox(this.alphaThreshold);
-    const elevationZ = this.elevationZ;
+    const elevationZ = this.constructor.placeableElevationZ(this.placeableDocument)
     const center2d = rectOrPoly.center;
 
     const shape = new QuadPrimitive(`${this.placeableId}_alphaBoundingBox`);
@@ -174,7 +173,7 @@ const TileAlphaBoundingPolygonMixin = superclass => class extends superclass {
     if ( !cache ) return;
 
     const poly = cache.getThresholdCanvasBoundingPolygon(this.alphaThreshold);
-    const elevationZ = this.elevationZ;
+    const elevationZ = this.constructor.placeableElevationZ(this.placeableDocument)
 
     const poly3d = Polygon3d.fromPolygon(poly, elevationZ);
     const shape = PlanarPolygonPrimitive.fromPolygon3d(`${this.placeableId}_alphaBoundingPolygon`, poly3d);
@@ -227,7 +226,8 @@ const TileAlphaPolygonsMixin = superclass => class extends superclass {
     const polys = cache.getCanvasAlphaISOBands(this.alphaThreshold);
     if ( !polys ) return;
 
-    const polys3d = Polygons3d.fromPolygons(polys, this.elevationZ);
+    const elevationZ = this.constructor.placeableElevationZ(this.placeableDocument)
+    const polys3d = Polygons3d.fromPolygons(polys, elevationZ);
     const shape = PlanarPolygonPrimitive.fromPolygon3d(`${this.placeableId}_alphaThresholdPolygons`, polys3d);
     this.#alphaThresholdPolygonShapes.push(shape);
   }
@@ -284,8 +284,8 @@ const TileAlphaTrianglesMixin = superclass => class extends superclass {
     // Then make these into triangles.
     // Trickier than leaving as polygons but can dramatically cut down the number of polys
     // for more complex shapes.
-    const elev = this.elevationZ;
-    const { top } = Polygon3dVertices.polygonTopBottomFaces(polys, { topZ: elev, bottomZ: elev });
+    const elevationZ = this.constructor.placeableElevationZ(this.placeableDocument)
+    const { top } = Polygon3dVertices.polygonTopBottomFaces(polys, { topZ: elevationZ, bottomZ: elevationZ });
 
     // Trim the UVs and Normals.
     const topTrimmed = Polygon3dVertices.cutVertexData(top, { startingOffset: 3, deletionLength: 5, stride: 8 });
@@ -330,8 +330,6 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
   get alphaThreshold() { return this.placeableDocument.texture.alphaThreshold || 0; }
 
   get pixelCache() { return this.constructor.cacheManager.pixelCacheForDocument(this.placeableDocument); }
-
-  get elevationZ() { return gridUnitsToPixels(this.placeableDocument.elevation); }
 
   static get cacheManager() { return CONFIG[GEOMETRY_LIB_ID].tilePixelCache; }
 
@@ -378,8 +376,9 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
     const cache = this.pixelCache;
     if ( cache ) {
       const bbox = cache.getThresholdCanvasBoundingBox(this.alphaThreshold);
-      if ( bbox instanceof PIXI.Polygon ) AABB3d.fromPolygon(bbox, this.elevationZ, this.aabb);
-      else AABB3d.fromRectangle(bbox, this.elevationZ, this.aabb);
+      const elevationZ = this.constructor.placeableElevationZ(this.placeableDocument)
+      if ( bbox instanceof PIXI.Polygon ) AABB3d.fromPolygon(bbox, elevationZ, this.aabb);
+      else AABB3d.fromRectangle(bbox, elevationZ, this.aabb);
 
     // Fall back on tile dimensions instead of alpha dimensions.
     } else AABB3d.fromTileDocument(this.placeableDocument, this.aabb);
@@ -417,6 +416,15 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
   }
 
   // ----- NOTE: Tile characteristics ----- //
+
+  /**
+   * Finite elevation of a tile.
+   * @param {PlaceableDocument} placeableD
+   * @returns {number}
+   */
+  static placeableElevationZ(placeableD) {
+    return placeableD.elevationZ; // Tiles are always finite elevation.
+  }
 
   /**
    * Determine the tile rotation.
