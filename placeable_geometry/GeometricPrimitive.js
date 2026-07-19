@@ -82,13 +82,8 @@ Instanced Registry: 1 per geometric primitive, storing model
 
 export class GeometricPrimitive {
 
-
-
-
   /** @type {string} */
   id;
-
-
 
   /**
    * @param {string} id       Unique string per instance; used for debugging and for child classes
@@ -637,6 +632,172 @@ const TrackerMixin = superclass => {
     }
   }
 };
+
+/**
+ * Container to facilitate combining multiple shapes.
+ * This does not combine model matrices or vertices/indices.
+ * Merely a wrapper for the underlying shapes.
+ * Empty shapes are allowed.
+ */
+export class CombinedGeometricPrimitive extends GeometricPrimitive {
+
+  /**
+   * Initialize the values for this geometric primitive.
+   */
+  initialize() { this.iterateShapes().forEach(shape => shape.initialize); }
+
+  /**
+   * Destroy this geometric primitive, releasing associated memory in buffers.
+   */
+  destroy() {
+    this.iterateShapes().forEach(shape => shape.destroy();
+    this.shapes.length = 0;
+  }
+
+  // ----- NOTE: Dirty ----- //
+
+  get dirtyShapes() {
+    let dirty = 0;
+    this.iterateShapes().forEach(shape => dirty |= shape.dirty);
+    return dirty;
+  }
+
+  set dirtyShapes(flag) { this.iterateShapes().forEach(shape => shape.dirty = flag); }
+
+  isDirtyShapes(flag = this.constructor.DIRTY.ALL) {
+    return this.iterateShapes().some(shape => shape.isDirty(flag));
+  }
+
+  _clearDirtyShapes(flag) { this.iterateShapes().forEach(shape => shape._clearDirty(flag)) }
+
+  // ----- NOTE: Add/remove shapes ----- //
+
+  /** @type {GeometricPrimitive[]} */
+  shapes = [];
+
+  /**
+   * Add a primitive shape to this container.
+   * @param {GeometricPrimitive} shape
+   */
+  addShape(shape) {
+    this.shapes.push(shape);
+    this.dirty = this.constructor.DIRTY.ALL;
+  }
+
+  /**
+   * Remove a primitive shape from this container by id.
+   * @param {string} id
+   * @returns {GeometricPrimitive|null} Null if nothing removed
+   */
+  removeShapeById(id) {
+    const idx = this.shapes.findIndex(shape => shape.id === id);
+    if ( !~idx ) return null;
+    return this.removeShapeByIndex(idx);
+  }
+
+  /**
+   * Remove a primitive shape from this container by its index.
+   *
+   */
+  removeShapeByIndex(idx) {
+    const shape = this.shape.splice(idx, 1)[0] || null;
+    if ( shape ) this.dirty = this.constructor.DIRTY.ALL;
+    return shape;
+  }
+
+  // ----- NOTE: Iteration ----- //
+
+  /**
+   * Iterate over the shapes.
+   */
+  *iterateShapes() {
+    for ( const shape of this.shapes ) {
+      if ( shape ) yield shape;
+    }
+  }
+
+  /**
+   * Iterate over the world faces of the shapes.
+   * @yields {Polygon3d}
+   */
+  *iterateFaces() {
+    for ( const faceArr of this.faces ) {
+      if ( !faceArr ) continue;
+      yield *faceArr;
+    }
+  }
+
+  // ----- NOTE: AABB ----- //
+
+  /**
+   * Method for child class to define how the AABB is defined.
+   * Defaults to union of all model faces AABB.
+   */
+  calculateAABB() {
+    const aabbs = [...this.iterateShapes()].map(shape => shape.aabb);
+    AABB3d.union(aabbs, this.#aabb);
+    this._clearDirty(this.constructor.DIRTY.AABB);
+  }
+
+  /** @type {Point3d} */
+  get center() {
+    const centers = this.shapes.map(shape => shape.center);
+    const poly3d = new Polygon3d.from3dPoints(centers);
+    return poly3d.centroid;
+  }
+
+  // ----- NOTE: Model Matrix ----- //
+
+
+  /** @type {ModelMatrix} */
+  modelMatrix = new ModelMatrixAnchor();
+
+  /**
+   * Mworld = Mlocal x M.container (row-major)
+   * @returns {Matrix}
+   */
+  worldModelForShape(shape) { return shape.modelMatrix.model.multiply4x4(this.modelMatrix.model); }
+
+  // ----- NOTE: Faces ----- //
+
+  get prototypeFaces() {
+    const n = this.shapes.length;
+    const faces = new Array(n);
+    for ( let i = 0; i < n; i += 1 ) {
+      const shape = this.shapes[i];
+      if ( !shape ) continue;
+      faces[i] = shape.prototypeFaces;
+    }
+    return faces;
+  }
+
+  /**
+   * Update the faces for this primitive.
+   * Default is to use the world matrix on the prototypes.
+   */
+  updateFaces() {
+    const M = this.modelMatrix.model;
+    const protoFaces = this.prototypeFaces;
+    const faces = this.#faces;
+    for ( let i = 0, numShapes = this.shapes.length; i < numShapes; i += 1 ) {
+      const shape = this.shapes[i];
+      if ( !shape ) continue;
+
+      // Calculate each face from the world model.
+      const worldM = this.worldModelForShape(shape);
+      const protoArr = protoFaces[i];
+      const faceArr = faces[i];
+      for ( let j = 0, numProtos = protoArr.length, j < numProtos; j += 1 ) {
+        protoArr[j].transform(worldM, faceArr[j]);
+      }
+    }
+    this._clearDirty(this.constructor.DIRTY.FACES);
+  }
+
+
+
+}
+
 
 
 export class GeometricModelMatrix extends mix(ModelMatrixAnchor).with(TrackerMixin) {}
