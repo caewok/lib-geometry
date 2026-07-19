@@ -160,7 +160,7 @@ describe("Levels", () => {
     // Region shapes have the model matrix
     it("should have numeric values", () => {
       canvas.scene.levels.forEach(levelD => {
-        const geom = mgr.levels.background.geomForPlaceableDocument(levelD);
+        const geom = mgr.levels.background.geomForDocument(levelD);
         for ( const shape of geom.iterateShapes() ) {
           expect(shape.modelMatrix.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
         }
@@ -171,7 +171,7 @@ describe("Levels", () => {
   describe("AABB", () => {
     it("should have numeric values", () => {
       canvas.scene.levels.forEach(levelD => {
-        const geom = mgr.levels.geomForPlaceableDocument(levelD);
+        const geom = mgr.levels.background.geomForDocument(levelD);
         expect(isFinite(geom.aabb.min.x)).to.be.true;
         expect(isFinite(geom.aabb.min.y)).to.be.true;
         expect(Number.isNumeric(geom.aabb.min.z)).to.be.true;
