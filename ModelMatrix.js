@@ -83,20 +83,20 @@ export class ModelMatrix2d {
     this.dirty = true;
   }
 
-  /** @type {Point3d} */
+  /** @type {PIXI.Point} */
   get translation() { return this.constructor.extractTranslationValues(this._translation); }
 
-  /** @type {Point3d} */
+  /** @type {PIXI.Point} */
   set translation(vector) {
     const d3 = this.constructor.DIM === 4;
     MatrixFloat32.translation(vector, { d3, outMatrix: this._translation });
     this.dirty = true;
   }
 
-  /** @type {Point3d} */
+  /** @type {PIXI.Point} */
   get scale() { return this.constructor.extractScaleValues(this._scale); }
 
-  /** @type {Point3d} */
+  /** @type {PIXI.Point} */
   set scale(dims) {
     const d3 = this.constructor.DIM === 4;
     MatrixFloat32.scale(dims, { d3, outMatrix: this._scale });
@@ -126,21 +126,23 @@ export class ModelMatrix2d {
   /**
    * Extract the angle values from the provided rotation matrix. Assumes no scaling or rotation.
    * @param {MatrixFloat32<3x3|4x4>} txMat
-   * @returns {PIXI.Point|Point3d}
+   * @returns {Point3d}
    */
   static extractRotationValues(rotMat) {
-    if ( rotMat.nrow === 3 ) {
-      return PIXI.Point.tmp.set(
-        Math.asin(rotMat.getIndex(1, 2)),
-        Math.asin(rotMat.getIndex(0, 2)),
-      )
+    const thetaY = Math.asin(rotMat.getIndex(2, 0));
+
+    // Handle Gimbal Lock, when thetaY approaches ±90º.
+    let thetaX;
+    let thetaZ;;
+    if ( Math.abs(thetaY).almostEqual(Math.PI_1_2) ) {
+      const sign = Math.sign(thetaY);
+      thetaX = 0;
+      thetaZ = sign * Math.atan2(rotMat.getIndex(0, 1), rotMat.getIndex(1, 1));
     } else {
-      return Point3d.tmp.set(
-        Math.asin(rotMat.getIndex(1, 2)),
-        Math.asin(rotMat.getIndex(0, 2)),
-        Math.asin(rotMat.getIndex(0, 1)),
-      )
+      thetaX = Math.atan2(rotMat.getIndex(2, 1), rotMat.getIndex(2, 2));
+      thetaZ = Math.atan2(rotMat.getIndex(1, 0), rotMat.getIndex(0, 0));
     }
+    return Point3d.tmp.set(thetaX, thetaY, thetaZ);
   }
 
   /**
@@ -226,19 +228,19 @@ export const ModelAnchorMixin = superclass => {
     static get BUFFER_LENGTH() { return super.BUFFER_LENGTH + this.DIM2; } // 1 additional translation matrix.
 
     /** @type {MatrixFloat32} */
-    #anchor = (new MatrixFloat32(
+    _anchor = (new MatrixFloat32(
       this.constructor.DIM,
       this.constructor.DIM,
       this._matrixBuffer,
       this.constructor.DIM2 * this.constructor.BUFFER_IDX)).identity();
 
     get anchor() {
-      return this.constructor.extractTranslationValues(this.#anchor);
+      return this.constructor.extractTranslationValues(this._anchor);
     }
 
     set anchor(value) {
       const d3 = this.constructor.DIM === 4;
-      MatrixFloat32.translation(value, { d3, outMatrix: this.#anchor });
+      MatrixFloat32.translation(value, { d3, outMatrix: this._anchor });
       this.dirty = true;
     }
 
@@ -251,7 +253,7 @@ export const ModelAnchorMixin = superclass => {
       const multName = this.constructor.multiplyName;
 
       // Center prior to applying the model matrix.
-      this.#anchor[multName](M, M);
+      this._anchor[multName](M, M);
     }
 
     clone(out) {
@@ -262,7 +264,7 @@ export const ModelAnchorMixin = superclass => {
 
     print() {
       console.log("Anchor");
-      this.#anchor.print();
+      this._anchor.print();
       super.print();
     }
   };

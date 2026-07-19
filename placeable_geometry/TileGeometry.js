@@ -20,6 +20,7 @@ import { AABB3d } from "../3d/AABB3d.js";
 import { Point3d } from "../3d/Point3d.js";
 import { Segment } from "../Segment.js";
 import { Polygon3d, Polygons3d, Triangle3d } from "../3d/Polygon3d.js";
+import { gridUnitsToPixels } from "../util.js";
 
 // Tile alpha bounds
 import { Polygon3dVertices } from "../placeable_vertices/BasicVertices.js";
@@ -423,7 +424,7 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
    * @returns {number}
    */
   static placeableElevationZ(placeableD) {
-    return placeableD.elevationZ; // Tiles are always finite elevation.
+    return gridUnitsToPixels(placeableD.elevation); // Tiles are always finite elevation.
   }
 
   /**

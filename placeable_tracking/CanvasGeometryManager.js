@@ -114,6 +114,7 @@ export class CanvasGeometryManager {
   _deleteByUUID(uuid) {
     const geom = this.geometryMap.get(uuid);
     if ( !geom ) return;
+    geom.destroy();
     this.quadtree.remove(geom);
     this.geometryMap.delete(uuid);
   }
@@ -131,6 +132,8 @@ export class CanvasGeometryManager {
    */
   #initialized = false;
 
+  hooks = {};
+
   /**
    * Register hooks to track the geometries as documents change.
    */
@@ -138,19 +141,30 @@ export class CanvasGeometryManager {
     if ( this.#initialized ) return false;
 
     const docName = this.constructor.geometryClass.PLACEABLE_NAME;
-    Hooks.on("canvasReady", () => this.initializeScene());
-    Hooks.on(`create${docName}`, doc => this.create(doc));
-    Hooks.on(`update${docName}`, (doc, changeData, opts, userId) => {
+    const hooks = this.hooks;
+    hooks.canvasReady = Hooks.on("canvasReady", () => this.initializeScene());
+    hooks[`create${docName}`] = Hooks.on(`create${docName}`, doc => this.create(doc));
+    hooks[`update${docName}`] = Hooks.on(`update${docName}`, (doc, changeData, opts, _userId) => {
       // Flatten the change object to handle nested keys, like flags.
       const updateKeys = Object.keys(foundry.utils.flattenObject(changeData));
       this.update(doc, new Set(updateKeys), opts);
     });
-    Hooks.on(`delete${docName}`, docId => this.delete(docId));
+    hooks[`delete${docName}`] = Hooks.on(`delete${docName}`, docId => this.delete(docId));
 
     this.#initialized = true;
     return true;
   }
 
+  deactivateHooks() {
+    for ( const [name, id] of Object.entries(this.hooks) ) Hooks.off(name, id);
+    this.hooks = {};
+  }
+
+  destroy() {
+    this.deactivateHooks();
+    for ( const geom of this.geometryMap.values() ) geom.destroy();
+    this.clear();
+  }
 }
 
 // ----- NOTE: Subclasses ----- //

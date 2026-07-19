@@ -34,19 +34,21 @@ describe("Initialization", () => {
 describe("Coordinate Transformation", () => {
   let cache;
   beforeEach(() => {
-    // Simple 1:1 cache at canvas 100, 100
+    // Simple 1:1 cache with rectangle center at canvas 100, 100
+    // Rectangle 500 x 500, TL at -150, -150, center at 100, 100
     cache = new LocalCoordinateCache(500, 500, { resolution: 1 });
-    cache.translation = { x: 100, y: 100 };
+    cache.setTranslation({ x: 100, y: 100 });
   });
 
   it("should convert canvas coordinates to local coordinates", () => {
     const canvasPoint = { x: 150, y: 150 };
     const local = cache._fromCanvasCoordinates(canvasPoint.x, canvasPoint.y);
 
-    // If canvas is at 100,100, then canvas 150,150 should be local 50,50
-    // (Accounting for the internal translation logic in the class)
-    expect(local.x).to.be.closeTo(50, 0.1);
-    expect(local.y).to.be.closeTo(50, 0.1);
+    // Rectangle 500 x 500, TL at -150, -150, center at 100, 100
+    // Rectangle 150, 150 is 50 past center, or local 300, 300.
+
+    expect(local.x).to.be.closeTo(300, 0.1);
+    expect(local.y).to.be.closeTo(300, 0.1);
   });
 
   it("should round-trip coordinates accurately", () => {
@@ -91,24 +93,25 @@ describe("LocalCoordinateCache - Resolution Handling", () => {
   describe("Coordinate Mapping via Resolution", () => {
     it("should map 1 local pixel to 10 canvas pixels at 0.1 resolution", () => {
       const cache = new LocalCoordinateCache(10, 10, { resolution: 0.1 });
-      cache.translation = { x: 100, y: 100 };
+      cache.setTranslation({ x: 100, y: 100 });
 
       // Local grid is 10x10. Center is (5, 5).
-      // Canvas center is (150, 150).
+      // Canvas center is (100, 100).
       // Moving 1 unit locally (from 5 to 6) should be 10 units on canvas.
       const canvasPt = cache._toCanvasCoordinates(6, 5);
-      expect(canvasPt.x).to.be.closeTo(160, EPSILON);
-      expect(canvasPt.y).to.be.closeTo(150, EPSILON);
+      expect(canvasPt.x).to.be.closeTo(110, EPSILON);
+      expect(canvasPt.y).to.be.closeTo(100, EPSILON);
     });
 
     it("should map 2 local pixels to 1 canvas pixel at 2.0 resolution", () => {
       const cache = new LocalCoordinateCache(100, 100, { resolution: 2.0 });
-      cache.translation = { x: 100, y: 100 };
+      cache.setTranslation({ x: 100, y: 100 });
 
-      // Local grid is 200x200. Center is (100, 100).
+      // Local grid is 100x100. Local center is {50, 50}.
+      // Canvas rectangle is 50 x 50, center at canvas 100, 100.
       // Moving 10 units locally should be 5 units on canvas (10 * 0.5).
-      const canvasPt = cache._toCanvasCoordinates(110, 100);
-      expect(canvasPt.x).to.be.closeTo(155, EPSILON);
+      const canvasPt = cache._toCanvasCoordinates(60, 50);
+      expect(canvasPt.x).to.be.closeTo(105, EPSILON);
     });
   });
 
@@ -202,14 +205,15 @@ describe("LocalCoordinateCache - Advanced Transformations", () => {
   beforeEach(() => {
     // Create a 100x100 canvas area at (100, 100)
     cache = new LocalCoordinateCache(size.x, size.y, { resolution: 1 });
-    cache.translation = TL;
+    cache.setModelAnchor(0, 0); // TL
+    cache.setTranslation(TL);
   });
 
   // --- Scaling Tests ---
   describe("Scaling", () => {
     it("should correctly map coordinates when scaled uniformly (2x)", () => {
       const scale = PIXI.Point.tmp.set(2, 2);
-      cache.scale = scale;
+      cache.setScale(scale);
 
       // Local center is (50, 50). On canvas, width is 100 * 2 = 200; center is 200, 200.
       // Local point 60, 50 is 10 pixels right-of-center locally.
@@ -225,7 +229,7 @@ describe("LocalCoordinateCache - Advanced Transformations", () => {
 
     it("should handle non-uniform scaling", () => {
       const scale = PIXI.Point.tmp.set(2, 1);
-      cache.scale = scale;
+      cache.setScale(scale);
       const ctr = calcCenter(TL, size, scale);
 
 
@@ -237,7 +241,8 @@ describe("LocalCoordinateCache - Advanced Transformations", () => {
     it("should correctly incorporate resolution into scaling", () => {
       // Resolution 0.5 means local width is 50 for a 100px canvas width.
       const resCache = new LocalCoordinateCache(50, 50, { resolution: 0.5 });
-      resCache.translation = { x: 100, y: 100 };
+      resCache.setTranslation({ x: 100, y: 100 });
+      resCache.setModelAnchor(0, 0); // TL
       // resCache.scale = { x: 1, y: 1 }; // Identity scale
 
       // Local width is 50. Local center is 25.
@@ -245,6 +250,11 @@ describe("LocalCoordinateCache - Advanced Transformations", () => {
       const ctr = calcCenter(TL, size);
       const canvasPt = resCache._toCanvasCoordinates(30, 25);
       expect(canvasPt.x).to.be.closeTo(ctr.x + 10, EPSILON);
+
+      // Verification: Inverse mapping (Round-trip)
+      const localPt = resCache._fromCanvasCoordinates(canvasPt.x, canvasPt.y);
+      expect(localPt.x).to.be.closeTo(30, EPSILON);
+      expect(localPt.y).to.be.closeTo(25, EPSILON);
     });
   });
 
@@ -253,25 +263,38 @@ describe("LocalCoordinateCache - Advanced Transformations", () => {
     it("should rotate coordinates by 90 degrees clockwise", () => {
       // 90 degrees in radians is PI / 2
       const angle = Math.PI / 2;
-      cache.rotationZ = angle;
+      cache.setRotationZ(angle);
+      cache.setModelAnchor(0.5, 0.5);
 
-      // Local center (50, 50) -> Canvas center (150, 150)
+      // Local center (50, 50) -> Canvas center (100, 100)
       // Local point (60, 50) is "East" of center.
       // After 90 deg clockwise rotation, it should be "South" of center.
       const canvasPt = cache._toCanvasCoordinates(60, 50);
 
-      expect(canvasPt.x).to.be.closeTo(150, EPSILON);
-      expect(canvasPt.y).to.be.closeTo(160, EPSILON);
+      expect(canvasPt.x).to.be.closeTo(100, EPSILON);
+      expect(canvasPt.y).to.be.closeTo(110, EPSILON);
+
+      // Verification: Inverse mapping (Round-trip)
+      const localPt = cache._fromCanvasCoordinates(canvasPt.x, canvasPt.y);
+      expect(localPt.x).to.be.closeTo(60, EPSILON);
+      expect(localPt.y).to.be.closeTo(50, EPSILON);
     });
 
     it("should rotate coordinates by 180 degrees", () => {
-      cache.rotationZ = Math.PI;
+      cache.setRotationZ(Math.PI);
+      cache.setModelAnchor(0.5, 0.5);
 
       // Local point (60, 60) is 10 right, 10 down from center.
       // 180 rotation makes it 10 left, 10 up from center.
+      // Canvas center is 100, 100.
       const canvasPt = cache._toCanvasCoordinates(60, 60);
-      expect(canvasPt.x).to.be.closeTo(140, EPSILON);
-      expect(canvasPt.y).to.be.closeTo(140, EPSILON);
+      expect(canvasPt.x).to.be.closeTo(90, EPSILON);
+      expect(canvasPt.y).to.be.closeTo(90, EPSILON);
+
+      // Verification: Inverse mapping (Round-trip)
+      const localPt = cache._fromCanvasCoordinates(canvasPt.x, canvasPt.y);
+      expect(localPt.x).to.be.closeTo(60, EPSILON);
+      expect(localPt.y).to.be.closeTo(60, EPSILON);
     });
   });
 
@@ -279,18 +302,17 @@ describe("LocalCoordinateCache - Advanced Transformations", () => {
   describe("Combined Scaling and Rotation", () => {
     it("should handle simultaneous scaling, rotation, and translation", () => {
       const scale = PIXI.Point.tmp.set(2, 2);
-      cache.scale = scale;
-      cache.rotationZ = Math.PI / 2; // 90 deg
-
-      const ctr = calcCenter(TL, size, scale);
+      cache.setScale(scale);
+      cache.setRotationZ(Math.PI / 2); // 90 deg
+      cache.setModelAnchor(0.5, 0.5);
 
       // Local (60, 50) is 10 units East.
       // Scale 2x -> 20 units East.
       // Rotate 90 deg -> 20 units South.
-      // Canvas center (150, 150) + 20 units South = (150, 170)
+      // Canvas center (100, 100) + 20 units South = (100, 120)
       const canvasPt = cache._toCanvasCoordinates(60, 50);
-      expect(canvasPt.x).to.be.closeTo(ctr.x, EPSILON);
-      expect(canvasPt.y).to.be.closeTo(ctr.y + (10 * scale.x), EPSILON);
+      expect(canvasPt.x).to.be.closeTo(100, EPSILON);
+      expect(canvasPt.y).to.be.closeTo(100 + (10 * scale.x), EPSILON);
 
       // Verification: Inverse mapping (Round-trip)
       const localPt = cache._fromCanvasCoordinates(canvasPt.x, canvasPt.y);
@@ -528,7 +550,7 @@ describe("Coordinate Mapping & Transparency", () => {
     // Create the trimmed cache (2x2) from our 5x5 source
     cache = TrimmedPixelCache.fromPixelArray(pixels, fullWidth);
     // Position it at (100, 100) on the canvas
-    cache.translation = { x: 100, y: 100 };
+    cache.setTranslation({ x: 100, y: 100 });
   });
 
   it("should return null for pixels outside the full border", () => {
@@ -561,6 +583,7 @@ describe("Coordinate Mapping & Transparency", () => {
     // With translation at 100, 100 and no scale (res 1),
     // the conceptual (0,0) of the full frame would be at local (-2, -2), or canvas 100, 100.
     // Therefore, the data at (0,0) should be at 102, 102.
+    cache.setModelAnchor(0, 0);
 
     const canvasPt = cache._toCanvasCoordinates(0, 0);
     expect(canvasPt.x).to.be.closeTo(100, EPSILON);
@@ -577,7 +600,8 @@ describe("Resolution Scaling", () => {
 
     // We set the canvas translation to (100, 100).
     // This maps the conceptual (0, 0) of the UNTRIMMED image to (100, 100).
-    cache.translation = { x: 100, y: 100 };
+    cache.setTranslation({ x: 100, y: 100 });
+    cache.setModelAnchor(0, 0);
 
     // Math Check:
     // Untrimmed cache is 5 x 5. With resolution 0.5, this gives a canvas size of 10 x 10.
@@ -599,7 +623,8 @@ describe("Resolution Scaling", () => {
   it("should scale the trim offset correctly at 2.0 resolution", () => {
     // 2.0 resolution means 1 local unit = 0.5 canvas pixels (invRes = 0.5).
     const cache = TrimmedPixelCache.fromPixelArray(pixels, fullWidth, { resolution: 2.0 });
-    cache.translation = { x: 100, y: 100 };
+    cache.setTranslation({ x: 100, y: 100 });
+    cache.setModelAnchor(0, 0);
 
     // Untrimmed cache is 5 x 5. With resolution 2, this gives a canvas size of 2.5 x 2.5
     // TL is 100, 100. So untrimmed spans from 100,100 to 102.5,102.5
@@ -620,7 +645,7 @@ describe("Resolution Scaling", () => {
 describe("Memory & Safety", () => {
   it("should correctly handle PIXI.Point.tmp during pixelAtCanvas", () => {
     const cache = TrimmedPixelCache.fromPixelArray(pixels, fullWidth);
-    cache.translation = { x: 0, y: 0 };
+    cache.setTranslation({ x: 0, y: 0 });
 
     // pixelAtCanvas uses PIXI.Point.tmp. Verify it doesn't crash
     // and returns expected null for way-out-of-bounds.
@@ -690,8 +715,9 @@ quench.registerBatch(`${MODULE_ID}.libGeometry.tile-pixel-cache`, (context) => {
         testTile.document.rotation = originalRotation + 90;
         cache.updateTransforms();
 
-        const rMat = MatrixFloat32.rotationZ(Math.toRadians(originalRotation + 90), false);
+        const rMat = MatrixFloat32.rotationZ(Math.toRadians(originalRotation + 90), { d3: false });
         expect(rMat.almostEqual(cache.modelMatrix._rotation)).to.be.true;
+        expect(cache.modelMatrix.rotation.almostEqual({ x: 0, y: 0, z: -Math.PI_1_2 })).to.be.true;
 
         // Reset for other tests
         testTile.document.rotation = originalRotation;
@@ -700,9 +726,8 @@ quench.registerBatch(`${MODULE_ID}.libGeometry.tile-pixel-cache`, (context) => {
       it("should calculate scale based on tile dimensions", function() {
         tileGuard.call(this);
 
-
         const cache = new TileDocumentPixelCache(100, 100, {
-          tileDocument: testTile.document,
+          textureDocument: testTile.document,
           pixelsOrClass: new Uint8Array(10000)
         });
 
@@ -712,9 +737,9 @@ quench.registerBatch(`${MODULE_ID}.libGeometry.tile-pixel-cache`, (context) => {
         tex.scaleX *= 2;
         cache.updateTransforms();
 
-        const sc = cache.tileScale;
-        const sMat = MatrixFloat32.scale(sc.x, sc.y);
+        const sMat = MatrixFloat32.scale({ x: tex.scaleX, y: tex.scaleY }, { d3: false });
         expect(sMat.almostEqual(cache.modelMatrix._scale)).to.be.true;
+        xpect(cache.modelMatrix.scale.almostEqual({ x: tex.scaleX, y: 1, z: 1 })).to.be.true;
 
         // Reset for other tests.
         tex.scaleX /= 2;
@@ -728,7 +753,7 @@ quench.registerBatch(`${MODULE_ID}.libGeometry.tile-pixel-cache`, (context) => {
 
         // Note: Overhead tiles in Foundry often have their alpha data cached already
         try {
-          const cache = TileDocumentPixelCache.fromOverheadTileAlpha(testTile, { resolution: 1 });
+          const cache = TileDocumentPixelCache.fromTextureAlpha({ textureDocument: testTile.document, resolution: 1 });
           expect(cache).to.be.instanceOf(TileDocumentPixelCache);
           expect(cache.pixels).to.be.instanceOf(Uint8Array);
         } catch (e) {
@@ -743,7 +768,7 @@ quench.registerBatch(`${MODULE_ID}.libGeometry.tile-pixel-cache`, (context) => {
         it("should create valid cache from specified tile", function() {
             tileGuard.call(this);
 
-            const cache = TileDocumentPixelCache.fromTileChannel(testTile, { channel: 4 });
+            const cache = TileDocumentPixelCache.fromTextureChannel({ textureDocument: testTile.document, channel: 4 });
             expect(cache).to.be.instanceOf(TileDocumentPixelCache);
             expect(cache.pixels).to.be.instanceOf(Uint8Array);
 

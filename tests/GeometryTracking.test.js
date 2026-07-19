@@ -19,12 +19,7 @@ describe("Walls", () => {
   let mgr;
   before(() => {
     mgr = CONFIG[GEOMETRY_LIB_ID].geometryManager;
-    if ( !mgr.walls ) {
-      mgr.types.push("walls");
-      mgr.walls = new mgr.constructor.GEOMETRY_MANAGERS.walls;
-      mgr.walls.registerHooks();
-      mgr.walls.initializeScene();
-    }
+    if ( !mgr.walls ) mgr.addManager("walls");
   });
 
   describe("Model Matrix", () => {
@@ -57,12 +52,7 @@ describe("Tokens", () => {
   let mgr;
   before(() => {
     mgr = CONFIG[GEOMETRY_LIB_ID].geometryManager;
-    if ( !mgr.tokens ) {
-      mgr.types.push("tokens");
-      mgr.tokens = new mgr.constructor.GEOMETRY_MANAGERS.token;
-      mgr.tokens.registerHooks();
-      mgr.tokens.initializeScene();
-    }
+    if ( !mgr.tokens ) mgr.addManager("tokens");
   });
 
   describe("Model Matrix", () => {
@@ -95,12 +85,7 @@ describe("Tiles", () => {
   let mgr;
   before(() => {
     mgr = CONFIG[GEOMETRY_LIB_ID].geometryManager;
-    if ( !mgr.tiles ) {
-      mgr.types.push("tile");
-      mgr.tiles = new mgr.constructor.GEOMETRY_MANAGERS.tiles;
-      mgr.tiles.registerHooks();
-      mgr.tiles.initializeScene();
-    }
+    if ( !mgr.tiles ) mgr.addManager("levels");
   });
 
   describe("Model Matrix", () => {
@@ -133,12 +118,7 @@ describe("Regions", () => {
   let mgr;
   before(() => {
     mgr = CONFIG[GEOMETRY_LIB_ID].geometryManager;
-    if ( !mgr.regions ) {
-      mgr.types.push("regions");
-      mgr.regions = new mgr.constructor.GEOMETRY_MANAGERS.regions;
-      mgr.regions.registerHooks();
-      mgr.regions.initializeScene();
-    }
+    if ( !mgr.regions ) mgr.addManager("regions");
   });
 
   describe("Model Matrix", () => {
@@ -173,16 +153,7 @@ describe("Levels", () => {
   let mgr;
   before(() => {
     mgr = CONFIG[GEOMETRY_LIB_ID].geometryManager;
-    if ( !mgr.level ) {
-      mgr.types.push("levels");
-      mgr.levels.background = new mgr.constructor.GEOMETRY_MANAGERS.backgroundLevels;
-      mgr.levels.background.registerHooks();
-      mgr.levels.background.initializeScene();
-
-      mgr.levels.foreground = new mgr.constructor.GEOMETRY_MANAGERS.foregroundLevels;
-      mgr.levels.foreground.registerHooks();
-      mgr.levels.foreground.initializeScene();
-    }
+    if ( !mgr.levels ) mgr.addManager("levels");
   });
 
   describe("Model Matrix", () => {

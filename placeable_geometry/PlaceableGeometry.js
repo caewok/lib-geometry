@@ -223,7 +223,7 @@ export class PlaceableGeometry {
   aabb = new AABB3d();
 
   calculateAABB() {
-    AABB3d.union(this.iterateShapes().map(shape => shape.aabb), this.aabb);
+    AABB3d.union([...this.iterateShapes()].map(shape => shape.aabb), this.aabb);
   }
 
   // ----- NOTE: Geometric shapes and faces ----- //

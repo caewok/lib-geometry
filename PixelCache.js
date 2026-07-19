@@ -41,6 +41,7 @@ import * as MarchingSquares from "./marchingsquares-esm.js";
  * The underlying rectangle is in local coordinates, where 0, 0 is the top left.
  * The rectangle represents pixel positions and contains transforms and methods to
  * move from the local pixels to canvas pixels.
+ * Transforms apply from the cache center by default.
  */
 
 export class LocalCoordinateCache extends AABB2d {
@@ -138,7 +139,7 @@ export class LocalCoordinateCache extends AABB2d {
    * @param {number} anchorX        Percentage anchor along the x-axis
    * @param {number} anchorY        Percentage anchor along the y-axis
    */
-  _setModelAnchor(anchorX = 0.5, anchorY = 0.5) {
+  setModelAnchor(anchorX = 0.5, anchorY = 0.5) {
     this.modelMatrix.anchor = { x: -this.width * anchorX, y: -this.height * anchorY };
   }
 
@@ -146,15 +147,15 @@ export class LocalCoordinateCache extends AABB2d {
    * Offset the canvas object in relation to the 0,0 top left of the local rectangle.
    * @prop {PIXI.Point|object} vector       Amount to move in the x and y directions.
    */
-  _setTranslation(vector) {
-    this.modelMatrix.translation = vector ??= { x: 0, y: 0 };
+  setTranslation(vector) {
+    this.modelMatrix.translation = vector || { x: 0, y: 0 };
   }
 
   /**
    * Scale the canvas object in relation to size of the local rectangle.
    * @prop {PIXI.Point|object} dims       Amount to scale the object in the x and y dimensions.
    */
-  _setScale(dims) {
+  setScale(dims) {
     // Combine scale with resolution.
     // E.g.
     // resolution = 0.25. Local width is 1/4 the size of canvas width.
@@ -169,7 +170,7 @@ export class LocalCoordinateCache extends AABB2d {
    * Rotate the canvas object around the z axis.
    * @type {number} Angle in radians
    */
-  _setRotationZ(angle) {
+  setRotationZ(angle) {
     angle ||= 0;
     MatrixFloat32.rotationZ(angle, { d3: false, outMatrix: this.modelMatrix._rotation });
     this.modelMatrix.dirty = true;
@@ -187,20 +188,20 @@ export class LocalCoordinateCache extends AABB2d {
   // ----- NOTE: Transforms ----- //
 
   /** @type {MatrixFloat32} */
-  get toLocalTransform() { return this.modelMatrix._modelInverse; }
+  get toLocalTransform() { return this.modelMatrix.modelInverse; }
 
   /** @type {MatrixFloat32} */
-  get toCanvasTransform() { return this.modelMatrix._model; }
+  get toCanvasTransform() { return this.modelMatrix.model; }
 
   /**
    * Update the transforms.
    * Done manually to avoid repeated update checks.
    */
   updateTransforms() {
-    this._setModelAnchor();
-    this._setTranslation();
-    this._setScale();
-    this._setRotationZ();
+    this.setModelAnchor();
+    this.setTranslation();
+    this.setScale();
+    this.setRotationZ();
     this.modelMatrix.update();
   }
 
@@ -211,7 +212,7 @@ export class LocalCoordinateCache extends AABB2d {
     let i = 0;
     if ( this.modelMatrix.updated ) this.modelMatrix.update(); // Avoid checking update in the loop.
     for ( const pt of this.iterateVertices() ) {
-      this.modelMatrix._model.multiplyPoint2d(pt, pt);
+      this.modelMatrix.model.multiplyPoint2d(pt, pt);
       pts[i++] = pt;
     }
     const poly = new PIXI.Polygon(...pts);
@@ -3004,7 +3005,10 @@ export class TextureDocumentPixelCache extends TexturePixelCache {
   clearTransforms() { this.updateTransforms(); }
 
   get translationDims() {
-    return this.textureDocument ?? { x: 0, y: 0 };
+    const doc = this.textureDocument;
+    const x = doc?.x || 0;
+    const y = doc?.y || 0;
+    return { x, y };
   }
 
   get scaleDims() {
@@ -3012,25 +3016,19 @@ export class TextureDocumentPixelCache extends TexturePixelCache {
     return { x, y };
   }
 
-  _setModelAnchor() {
+  setModelAnchor() {
     // Center on the texture anchor.
     // Anchor is in local coordinates.
     // Because anchor is a percentage, it can be determined from local height and width alone.
     const { anchorX = 0.5, anchorY = 0.5 } = this.textureSpecs;
-    super._setModelAnchor(anchorX, anchorY);
+    super.setModelAnchor(anchorX, anchorY);
   }
 
-  _setTranslation() {
-    super._setTranslation(this.translationDims);
-  }
+  setTranslation() { super.setTranslation(this.translationDims); }
 
-  _setScale() {
-    super._setScale(this.scaleDims);
-  }
+  setScale() { super.setScale(this.scaleDims); }
 
-  _setRotationZ() {
-    super._setRotationZ(this.rotationRadians);
-  }
+  setRotationZ() { super.setRotationZ(this.rotationRadians); }
 
   // ----- NOTE: Methods that rely on alphaThreshold ---- //
   /**
