@@ -156,9 +156,7 @@ export class GeometricPrimitive {
   // Model matrix might be used to change instance vertices --> model vertices
 
   /** @type {ModelMatrix} */
-  modelMatrix;
-
-  _initializeModel() {}
+  modelMatrix = ModelMatrixAnchor;
 
   /**
    * @type {Point3d|object} center
@@ -192,11 +190,11 @@ export class GeometricPrimitive {
   // ----- NOTE: AABB ----- //
 
   /** @type {AABB3d} */
-  #aabb = new AABB3d();
+  _aabb = new AABB3d();
 
   get aabb() {
     if ( this.isDirty(this.constructor.DIRTY.AABB) ) this.calculateAABB();
-    return this.#aabb;
+    return this._aabb;
   }
 
   /**
@@ -204,7 +202,7 @@ export class GeometricPrimitive {
    * Defaults to union of all model faces AABB.
    */
   calculateAABB() {
-    AABB3d.union(this.faces.map(face => face.aabb), this.#aabb);
+    AABB3d.union(this.faces.map(face => face.aabb), this._aabb);
     this._clearDirty(this.constructor.DIRTY.AABB);
   }
 
@@ -566,73 +564,6 @@ export class GeometricPrimitive {
   }
 }
 
-
-/**
- * Matrix model to handle rotation/scale/translation matrices.
- * Triggers updating of the underlying buffer.
- */
-const TrackerMixin = superclass => {
-  return class extends superclass {
-
-    /** @type {string} */
-    id;
-
-    /** @type {number} */
-    layoutVersion = 0;
-
-    /** @type {VariableLengthAbstractBuffer} */
-    tracker;
-
-    constructor(id, tracker) {
-      tracker.addFacet({ id, newValues: IDENTITY_MATRIX.arr });
-      const buffer = tracker.buffer;
-      const offset = tracker.facetOffsetAtId(id);
-      super(buffer, offset);
-
-      this.id = id;
-      this.tracker = tracker;
-    }
-
-
-    /** @type {boolean} */
-    get needsBufferUpdate() { return this.layoutVersion !== this.tracker.layoutVersion; }
-
-    /**
-     * Confirm the buffer offset has not changed.
-     * @returns {boolean} True if the layout changed, requiring a model update.
-     */
-    #updateBufferLayout() {
-      if ( !this.needsBufferUpdate ) return;
-      this._model = (new MatrixFloat32(
-          this.constructor.DIM,
-          this.constructor.DIM,
-          this.tracker.buffer,
-          this.tracker.facetOffsetAtId(this.id)));
-      this.layoutVersion = this.tracker.layoutVersion;
-    }
-
-    get model() {
-      this.dirty = this.needsBufferUpdate;
-      return super.model;
-    }
-
-
-    update() {
-      this.#updateBufferLayout();
-      super.update();
-
-      // Tell the underlying tracker that this facet changed.
-      this.tracker._facetIdUpdated(this.id);
-    }
-
-    clone(out) {
-      super.clone(out);
-      out.id = this.id;
-      out.offset = this.offset;
-    }
-  }
-};
-
 /**
  * Container to facilitate combining multiple shapes.
  * This does not combine model matrices or vertices/indices.
@@ -650,7 +581,7 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
    * Destroy this geometric primitive, releasing associated memory in buffers.
    */
   destroy() {
-    this.iterateShapes().forEach(shape => shape.destroy();
+    this.iterateShapes().forEach(shape => shape.destroy());
     this.shapes.length = 0;
   }
 
@@ -735,7 +666,7 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
    */
   calculateAABB() {
     const aabbs = [...this.iterateShapes()].map(shape => shape.aabb);
-    AABB3d.union(aabbs, this.#aabb);
+    AABB3d.union(aabbs, this._aabb);
     this._clearDirty(this.constructor.DIRTY.AABB);
   }
 
@@ -787,7 +718,7 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
       const worldM = this.worldModelForShape(shape);
       const protoArr = protoFaces[i];
       const faceArr = faces[i];
-      for ( let j = 0, numProtos = protoArr.length, j < numProtos; j += 1 ) {
+      for ( let j = 0, numProtos = protoArr.length; j < numProtos; j += 1 ) {
         protoArr[j].transform(worldM, faceArr[j]);
       }
     }
@@ -797,11 +728,3 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
 
 
 }
-
-
-
-export class GeometricModelMatrix extends mix(ModelMatrixAnchor).with(TrackerMixin) {}
-
-
-
-

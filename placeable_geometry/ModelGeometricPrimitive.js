@@ -3,8 +3,7 @@
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { GeometricPrimitive, GeometricModelMatrix } from "./GeometricPrimitive.js";
-import { FixedLengthTrackingBuffer, VerticesIndicesTrackingBuffer } from "../placeable_tracking/TrackingBuffer.js";
+import { GeometricPrimitive } from "./GeometricPrimitive.js";
 import { VertexObject } from "../placeable_vertices/VertexObject.js";
 import { Point3d } from "../3d/Point3d.js";
 import { Polygon3d, Quad3d  } from "../3d/Polygon3d.js";
@@ -22,26 +21,6 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
   constructor(id, prototypeFaces) {
     super(id);
     this.prototypeFaces = prototypeFaces;
-  }
-
-  /**
-   * All model primitives use the same model matrix buffer.
-   * Unlike instance primitives, where each instance type is separate.
-   */
-  static modelMatrixTracker = new FixedLengthTrackingBuffer({ facetLengths: 16, numFacets: 0, type: Float32Array });
-
-  destroy() {
-    this.constructor.viTracker.deleteFacet(this.id);
-    this.constructor.modelMatrixTracker.deleteFacet(this.id);
-    super.destroy();
-  }
-
-  // ----- NOTE: Model Matrix ----- //
-
-  get modelTrackerIndex() { return this.constructor.modelMatrixTracker.facetIdMap.get(this.id); }
-
-  _initializeModel() {
-    this.modelMatrix = new GeometricModelMatrix(this.id, this.constructor.modelMatrixTracker);
   }
 
   // ----- NOTE: Factory functions ----- //
@@ -80,11 +59,7 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
 
   // ----- NOTE: Vertices ----- //
 
-  get verticesTrackerIndex() { return this.constructor.viTracker.vertices.facetIdMap.get(this.id); }
-
   static instanceVO = null;
-
-  static viTracker = new VerticesIndicesTrackingBuffer();
 
   /** @type {VertexObject} */
   instanceVO = new VertexObject();

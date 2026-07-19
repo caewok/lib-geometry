@@ -6,9 +6,8 @@ PIXI,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { GeometricPrimitive, GeometricModelMatrix } from "./GeometricPrimitive.js";
+import { GeometricPrimitive } from "./GeometricPrimitive.js";
 import { MatrixFloat32 } from "../Matrix.js";
-import { FixedLengthTrackingBuffer } from "../placeable_tracking/TrackingBuffer.js";
 import { almostBetween } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
 import { getHexagonalShape } from "../placeable_vertices/BasicVertices.js";
@@ -75,25 +74,6 @@ export class InstancedGeometricPrimitive extends GeometricPrimitive {
     this.modelMatrix = null;
   }
 
-  // ----- NOTE: Model Matrix ----- //
-
-  get modelTrackerIndex() { return this.constructor.modelMatrixTracker.facetIdMap.get(this.id); }
-
-  _initializeModel() {
-    this.modelMatrix = new GeometricModelMatrix(this.id, this.constructor.modelMatrixTracker);
-  }
-
-
-  /**
-   * Each defined primitive will have its own buffer of matrices.
-   * Store the entire model matrix as a single typed array.
-   * Each 16-element matrix (per placeable) is accessed using an id.
-   * Defaults to identity.
-   * @type {FixedLengthTrackingBuffer}
-   */
-  // Must be defined by the child class so that each class has a separate model buffer.
-  // static modelMatrixTracker = new FixedLengthTrackingBuffer( { facetLengths: 16, numFacets: 0, type: Float32Array });
-
   // ----- NOTE: FACES ----- //
 
   /** @type {Polygon3d} */
@@ -107,8 +87,6 @@ export class InstancedGeometricPrimitive extends GeometricPrimitive {
  * The prototype faces directly up and is centered at the XY origin.
  */
 export class QuadPrimitive extends InstancedGeometricPrimitive {
-
-  static modelMatrixTracker = new FixedLengthTrackingBuffer({ facetLengths: 16, numFacets: 0, type: Float32Array });
 
   /** @type {Polygon3d} */
   static prototypeFaces = [QUADS.up.clone()];
@@ -193,22 +171,11 @@ export class VerticalQuadPrimitive extends QuadPrimitive {
  */
 export class TexturedQuadPrimitive extends QuadPrimitive {
 
-  static modelMatrixTracker = new FixedLengthTrackingBuffer( { facetLengths: 16, numFacets: 0, type: Float32Array });
-
   static TEXTURED = true;
 
   textureURL = "";
 
-  static alphaThresholdTracker = new FixedLengthTrackingBuffer({ facetLengths: 1, numFacets: 0, type: Float32Array });
-
-  get alphaThreshold() {
-    return this.constructor.alphaThresholdTracker.viewFacetAtIndex(this.modelTrackerIndex)[0];
-  }
-
-  set alphaThreshold(value) {
-    const arr = this.constructor.alphaThresholdTracker.viewFacetAtIndex(this.modelTrackerIndex);
-    arr.set(value);
-  }
+  alphaThreshold = 0.75;
 
   /**
    * Update instance vertices.
@@ -229,8 +196,6 @@ export class TexturedQuadPrimitive extends QuadPrimitive {
  * Cube, e.g. for a square token.
  */
 export class CubePrimitive extends InstancedGeometricPrimitive {
-
-  static modelMatrixTracker = new FixedLengthTrackingBuffer( { facetLengths: 16, numFacets: 0, type: Float32Array });
 
   /**
    * Create the instance face shapes for a unit cube.
@@ -270,8 +235,6 @@ export class CubePrimitive extends InstancedGeometricPrimitive {
  * Simple extruded (along z-axis) hexagon.
  */
 export class HexagonCylinderPrimitive extends InstancedGeometricPrimitive {
-
-  static modelMatrixTracker = new FixedLengthTrackingBuffer( { facetLengths: 16, numFacets: 0, type: Float32Array });
 
   /**
    * Create the face shapes for a unit hexagon.
@@ -313,8 +276,6 @@ export class HexagonCylinderPrimitive extends InstancedGeometricPrimitive {
  */
 export class CylinderPrimitive extends InstancedGeometricPrimitive {
 
-  static modelMatrixTracker = new FixedLengthTrackingBuffer( { facetLengths: 16, numFacets: 0, type: Float32Array });
-
   /**
    * Create the faces for a unit cylinder.
    * @returns {Ellipse3d|Polygon3d[]}
@@ -347,8 +308,6 @@ export class CylinderPrimitive extends InstancedGeometricPrimitive {
  * Sphere.
  */
 export class SpherePrimitive extends InstancedGeometricPrimitive {
-
-  static modelMatrixTracker = new FixedLengthTrackingBuffer( { facetLengths: 16, numFacets: 0, type: Float32Array });
 
   static prototypeFaces = [new Sphere({ x: 0, y: 0 }, 0.5)];
 
@@ -395,8 +354,6 @@ export class SpherePrimitive extends InstancedGeometricPrimitive {
  * Wedge-shape used for ramps with rectangular bases.
  */
 export class WedgeRectangularBasePrimitive extends InstancedGeometricPrimitive {
-
-  static modelMatrixTracker = new FixedLengthTrackingBuffer( { facetLengths: 16, numFacets: 0, type: Float32Array });
 
   static #prototypeFaces;
 
@@ -446,11 +403,6 @@ export class WedgeRectangularBasePrimitive extends InstancedGeometricPrimitive {
     ));
 
     return faces;
-  }
-
-  initialize() {
-    super.initialize();
-    this.modelMatrix = new GeometricModelMatrix(this.id, this.constructor.modelMatrixTracker);
   }
 
   // Height as a percentage of the base.
