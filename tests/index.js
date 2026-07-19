@@ -10,6 +10,7 @@ import { registerTests as registerPointTests } from "./Point.test.js";
 import { registerTests as registerPoint3dTests } from "./Point3d.test.js";
 import { registerTests as registerGeometryTrackingTests } from "./GeometryTracking.test.js";
 import { registerTests as registerPolygonTests } from "./Polygon.test.js";
+import { registerTests as registerEllipse3dTests } from "./Ellipse3d.test.js";
 import { registerTests as registerVerticesTests } from "./Vertices.test.js";
 import { registerTests as registerSDFTests } from "./SDF.test.js";
 
@@ -23,4 +24,5 @@ export function registerTests(quench) {
   registerPolygonTests(quench);
   registerVerticesTests(quench);
   registerSDFTests(quench);
+  registerEllipse3dTests(quench);
 }

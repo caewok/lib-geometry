@@ -12,7 +12,8 @@ import { GEOMETRY_LIB_ID } from "./const.js";
 import { extractPixels } from "./extract-pixels.js";
 import { roundFastPositive, bresenhamLine, bresenhamLineIterator, trimLineSegmentToPixelRectangle, clamp } from "./util.js";
 import { Draw } from "./Draw.js";
-import { MatrixFloat32, ModelMatrix2dCenterInverse } from "./Matrix.js";
+import { MatrixFloat32 } from "./Matrix.js";
+import { ModelMatrix2dAnchorInverse } from "./ModelMatrix.js";
 import { AABB2d } from "./AABB.js";
 import * as MarchingSquares from "./marchingsquares-esm.js";
 
@@ -40,6 +41,7 @@ import * as MarchingSquares from "./marchingsquares-esm.js";
  * The underlying rectangle is in local coordinates, where 0, 0 is the top left.
  * The rectangle represents pixel positions and contains transforms and methods to
  * move from the local pixels to canvas pixels.
+ * Transforms apply from the cache center by default.
  */
 
 export class LocalCoordinateCache extends AABB2d {
@@ -63,11 +65,7 @@ export class LocalCoordinateCache extends AABB2d {
     this.min.y = 0;
     this.max.x = localWidth - 1; // AABB is inclusive. [min, max]
     this.max.y = localHeight - 1;
-
-    // Center the model before applying rotation and scale.
-    this.modelMatrix.modelCenter = { x: localWidth * 0.5, y: localHeight * 0.5 };
-    if ( resolution !== 1 ) this.scale = { x: 1, y: 1 }; // Updates when it scales.
-    else this.modelMatrix.update(); // To apply the model center change.
+    this.updateTransforms();
   }
 
   // ----- NOTE: Getters / setters ----- //
@@ -133,41 +131,49 @@ export class LocalCoordinateCache extends AABB2d {
   // ----- NOTE: Model Matrix ----- //
 
   /** @type {ModelMatrix2d} */
-  modelMatrix = new ModelMatrix2dCenterInverse();
+  modelMatrix = new ModelMatrix2dAnchorInverse();
+
+  /**
+   * Center the local rectangle before applying rotation and scale.
+   * This is a local coordinate center.
+   * @param {number} anchorX        Percentage anchor along the x-axis
+   * @param {number} anchorY        Percentage anchor along the y-axis
+   */
+  setModelAnchor(anchorX = 0.5, anchorY = 0.5) {
+    this.modelMatrix.anchor = { x: -this.width * anchorX, y: -this.height * anchorY };
+  }
 
   /**
    * Offset the canvas object in relation to the 0,0 top left of the local rectangle.
-   * @prop {number} [x=0]       Amount to move the canvas object along x axis in pixels
-   * @prop {number} [y=0]       Amount to move the canvas object along y axis in pixels
+   * @prop {PIXI.Point|object} vector       Amount to move in the x and y directions.
    */
-  set translation({ x = 0, y = 0 } = {}) {``
-    MatrixFloat32.translation(x, y, undefined, this.modelMatrix.translation);
-    this.modelMatrix.update(); // Run here so the toCanvasTransform/toLocalTransform can skip update test.
+  setTranslation(vector) {
+    this.modelMatrix.translation = vector || { x: 0, y: 0 };
   }
 
   /**
    * Scale the canvas object in relation to size of the local rectangle.
-   * @prop {number} [x=1]       Amount to scale the canvas object in the x direction
-   * @prop {number} [y=1]       Amount to scale the canvas object in the y direction
+   * @prop {PIXI.Point|object} dims       Amount to scale the object in the x and y dimensions.
    */
-  set scale({x = 1, y = 1} = {}) {
+  setScale(dims) {
     // Combine scale with resolution.
     // E.g.
     // resolution = 0.25. Local width is 1/4 the size of canvas width.
+    dims ??= { x: 1, y: 1 };
     const invRes = 1 / this.resolution;
-    x *= invRes;
-    y *= invRes;
-    MatrixFloat32.scale(x, y, undefined, this.modelMatrix.scale);
-    this.modelMatrix.update();
+    using d = PIXI.Point.fromObject(dims);
+    d.multiplyScalar(invRes, d);
+    this.modelMatrix.scale = d;
   }
 
   /**
    * Rotate the canvas object around the z axis.
    * @type {number} Angle in radians
    */
-  set rotationZ(angle) {
-    MatrixFloat32.rotationZ(angle, false, this.modelMatrix.rotation);
-    this.modelMatrix.update();
+  setRotationZ(angle) {
+    angle ||= 0;
+    MatrixFloat32.rotationZ(angle, { d3: false, outMatrix: this.modelMatrix._rotation });
+    this.modelMatrix.dirty = true;
   }
 
   // ----- NOTE: Modified PIXI methods ----- //
@@ -182,17 +188,21 @@ export class LocalCoordinateCache extends AABB2d {
   // ----- NOTE: Transforms ----- //
 
   /** @type {MatrixFloat32} */
-  get toLocalTransform() { return this.modelMatrix._modelInverse; }
+  get toLocalTransform() { return this.modelMatrix.modelInverse; }
 
   /** @type {MatrixFloat32} */
-  get toCanvasTransform() { return this.modelMatrix._model; }
+  get toCanvasTransform() { return this.modelMatrix.model; }
 
   /**
    * Update the transforms.
    * Done manually to avoid repeated update checks.
    */
   updateTransforms() {
-     if ( this.modelMatrix.updated ) this.modelMatrix.update();
+    this.setModelAnchor();
+    this.setTranslation();
+    this.setScale();
+    this.setRotationZ();
+    this.modelMatrix.update();
   }
 
   // ----- NOTE: Bounding box ----- //
@@ -202,7 +212,7 @@ export class LocalCoordinateCache extends AABB2d {
     let i = 0;
     if ( this.modelMatrix.updated ) this.modelMatrix.update(); // Avoid checking update in the loop.
     for ( const pt of this.iterateVertices() ) {
-      this.modelMatrix._model.multiplyPoint2d(pt, pt);
+      this.modelMatrix.model.multiplyPoint2d(pt, pt);
       pts[i++] = pt;
     }
     const poly = new PIXI.Polygon(...pts);
@@ -1172,7 +1182,10 @@ export class PixelCache extends LocalCoordinateCache {
    */
   updateTransforms() {
     super.updateTransforms();
-    this._clearCanvasThresholdBoundingBoxes();
+
+    // Catch the type error if clearing from the constructor.
+    try { this._clearCanvasThresholdBoundingBoxes(); }
+    catch ( _err ) { /* eslint-disable-line no-unused-vars */ }
   }
 
   /**
@@ -2945,7 +2958,15 @@ export class TextureDocumentPixelCache extends TexturePixelCache {
   // ----- NOTE: Tile data getters ----- //
 
   /** @type {object} */
-  get textureSpecs() { return this.textureDocument.texture; }
+  get textureSpecs() {
+    return this.textureDocument?.texture || {
+      scaleX: 1,
+      scaleY: 1,
+      anchorX: 0.5,
+      anchorY: 0.5,
+      fit: "fill",
+    };
+  }
 
   get textureSource() { return this.textureDocument.texture.src; }
 
@@ -2971,38 +2992,7 @@ export class TextureDocumentPixelCache extends TexturePixelCache {
   /** @type {number} */
   get alphaThreshold() { return this.textureDocument.alphaThreshold || 0.75; }
 
-  get rotationRadians() { return Math.toRadians(this.textureDocument.rotation); }
-
-  get translationValues() {
-    // Translation must be the canvas coordinate of the anchor point.
-    // Calculate the canvas distance of the anchor and add it to the canvas TL.
-    const { x = 0, y = 0 } = this.textureDocument;
-    const scale = this.scaleValues;
-    const anchor = this.anchorTranslation;
-    return {
-      x: x - (anchor.x * scale.x),
-      y: y - (anchor.y * scale.y),
-    };
-  }
-
-  get scaleValues() {
-    // Scale maps local texture pixels to canvas units, accounting for document size.
-    const { scaleX, scaleY } = this.textureSpecs;
-    return {
-      x: (this.textureDocument.width / this.width) * scaleX,
-      y: (this.textureDocument.height / this.height) * scaleY,
-    };
-  }
-
-  get anchorTranslation() {
-    const { anchorX, anchorY } = this.textureSpecs;
-    const fullWidth = this.width / this.resolution;
-    const fullHeight = this.height / this.resolution;
-    return {
-      x: anchorX * fullWidth,
-      y: anchorY * fullHeight,
-    };
-  }
+  get rotationRadians() { return Math.toRadians(this.textureDocument?.rotation || 0); }
 
   /**
    * For backwards compatibility only.
@@ -3014,18 +3004,31 @@ export class TextureDocumentPixelCache extends TexturePixelCache {
    */
   clearTransforms() { this.updateTransforms(); }
 
-  /**
-   * Transform canvas coordinates into the local pixel rectangle coordinates.
-   * @inherits
-   */
-  updateTransforms() {
-    // Set translation, rotation, and scale from the tile document.
-    this.modelMatrix.modelCenter = this.anchorTranslation;
-    this.translation = this.translationValues;
-    this.rotationZ = this.rotationRadians;
-    this.scale = this.scaleValues;
-    super.updateTransforms();
+  get translationDims() {
+    const doc = this.textureDocument;
+    const x = doc?.x || 0;
+    const y = doc?.y || 0;
+    return { x, y };
   }
+
+  get scaleDims() {
+    const { scaleX: x, scaleY: y } = this.textureSpecs;
+    return { x, y };
+  }
+
+  setModelAnchor() {
+    // Center on the texture anchor.
+    // Anchor is in local coordinates.
+    // Because anchor is a percentage, it can be determined from local height and width alone.
+    const { anchorX = 0.5, anchorY = 0.5 } = this.textureSpecs;
+    super.setModelAnchor(anchorX, anchorY);
+  }
+
+  setTranslation() { super.setTranslation(this.translationDims); }
+
+  setScale() { super.setScale(this.scaleDims); }
+
+  setRotationZ() { super.setRotationZ(this.rotationRadians); }
 
   // ----- NOTE: Methods that rely on alphaThreshold ---- //
   /**
@@ -3071,7 +3074,19 @@ export class LevelBackgroundPixelCache extends TextureDocumentPixelCache {
   // ----- NOTE: Level data getters ----- //
 
   /** @type {object} */
-  get textureSpecs() { return this.textureDocument.textures; } // Note "textures" is plural, unlike with tiles.
+  get textureSpecs() {
+    // Note "textures" is plural, unlike with tiles.
+    return this.textureDocument?.textures || {
+      scaleX: 1,
+      scaleY: 1,
+      anchorX: 0.5,
+      anchorY: 0.5,
+      fit: "fill",
+      offsetX: 0,
+      offsetY: 0,
+      rotation: 0,
+    };
+  }
 
   get textureSource() { return this.textureDocument[this.constructor.GROUND_TYPE].src; }
 
@@ -3082,33 +3097,23 @@ export class LevelBackgroundPixelCache extends TextureDocumentPixelCache {
     return this.textureDocument[this.constructor.GROUND_TYPE].alphaThreshold || 0.75;
   }
 
-  get rotationRadians() { return Math.toRadians(this.textureSpecs.rotation || 0); }
+  get rotationRadians() { return Math.toRadians(this.textureSpecs?.rotation || 0); }
 
-  get scaleValues() {
-    // Scale maps local texture pixels to canvas units, accounting for document size.
-    const { scaleX = 1, scaleY = 1 } = this.textureSpecs;
-    const fitScale = this._fitScale;
+  get translationDims() {
+    const sceneCenter = canvas.scene.dimensions.sceneRect.center;
+    const { offsetX, offsetY } = this.textureSpecs;
     return {
-      x: scaleX * fitScale.x, y:
-      scaleY * fitScale.y
+      x: sceneCenter.x + offsetX,
+      y: sceneCenter.y + offsetY
     };
   }
 
-  get translationValues() {
-    const { anchorX = 0.5, anchorY = 0.5, offsetX = 0, offsetY = 0} = this.textureSpecs;
-    const scale = this.scaleValues;
-    const anchorLocal = this.anchorTranslation;
-    const sceneRect = canvas.dimensions.sceneRect;
-
-    // Find the exact canvas coordinate for the texture's anchor point.
-    // Anchor of {0.5, 0.5} is the scene center (plus any explicit offsets).
-    const refX = sceneRect.x + (anchorX * sceneRect.width) + offsetX;
-    const refY = sceneRect.y + (anchorY * sceneRect.height) + offsetY;
-
-    // Subtract the scaled anchor offset to determin the true canvas TL (0, 0) coordinate.
+  get scaleDims() {
+    const { scaleX, scaleY } = this.textureSpecs;
+    const fitScale = this._fitScale;
     return {
-      x: refX - (anchorLocal.x * scale.x),
-      y: refY - (anchorLocal.y * scale.y),
+      x: scaleX * fitScale.x,
+      y: scaleY * fitScale.y,
     };
   }
 

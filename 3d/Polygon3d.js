@@ -13,7 +13,8 @@ import { Plane } from "./Plane.js";
 import { pointsAreCollinear, almostBetween } from "../util.js";
 import { AABB3d } from "./AABB3d.js";
 import { Draw } from "../Draw.js";
-import { Matrix } from "../Matrix.js";
+import { Matrix, MatrixFloat32 } from "../Matrix.js";
+import { Ellipse } from "../Ellipse.js";
 
 /*
 3d Polygon representing a flat polygon plane.
@@ -217,24 +218,73 @@ export class Polygon3d {
 
   /**
    * Centroid (center point) of this polygon.
+   * True geometric center.
    * @type {Point3d}
    */
   get centroid() {
-    if ( this.#dirtyCentroid ) {
-      const plane = this.plane;
-
-      // Convert to 2d polygon and calculate centroid.
-      const M2d = plane.conversion2dMatrix;
-      const tmpPt = Point3d.tmp;
-      const pts = this.points.map(pt3d => M2d.multiplyPoint3d(pt3d, tmpPt).to2d());
-      const poly2d = new PIXI.Polygon(pts);
-      PIXI.Point.release(...pts);
-      const ctr = poly2d.center;
-      using ctr3d = Point3d.tmp.set(ctr.x, ctr.y, 0);
-      this.#centroid = plane.conversion2dMatrixInverse.multiplyPoint3d(ctr3d);
-      this.#dirtyCentroid = false;
-    }
+    if ( this.points.length === 0 ) return Point3d.tmp.set(0, 0, 0);
+    if ( this.points.length === 1 ) return this.points[0].clone();
+    if ( this.points.length === 2 ) return Point3d.midpoint(this.points[0], this.points[1]);
+    if ( this.#dirtyCentroid ) this.#centroid = this._calculateCentroid();
     return this.#centroid;
+  }
+
+  /**
+   * Calculates the centroid of a 3d planar polygon.
+   * Presumes
+   * @returns {Point3d}
+   */
+  _calculateCentroid() {
+    if ( this.points.length < 3 ) throw Error("Centroid calculatino requires at least 3 points.");
+
+    // Translate the polygon to the origin using the first point as a reference.
+    // Improves floating point precision.
+    const ref = this.points[0];
+    using n = Point3d.tmp.set(0, 0, 0);
+
+    // Calculate the total normal vector (proportional to the total vector area).
+    const numPoints = this.points.length;
+    const txPts = Array(numPoints * 2); // Store repeated calcs.
+    const crossProducts = Array(numPoints); // Store repeated calcs.
+    let i = 0;
+    let j = 0;
+    for ( const edge of this.iterateEdges() ) {
+      const a = txPts[i++] = edge.a.subtract(ref);
+      const b = txPts[i++] = edge.b.subtract(ref);
+      const c = crossProducts[j++] = a.cross(b);
+      n.add(c, n);
+    }
+
+    // Squared magnitude of the total normal vector
+    const nMagSq = n.magnitudeSquared();
+    if ( nMagSq.almostEqual(0) ) {
+      console.warn("Polygon has zero area (points may be collinear).");
+      return this.points[0].clone();
+    }
+
+    // Calculate the area-weighted centroid.
+    using centroid = Point3d.tmp.set(0, 0, 0);
+    const denom1_3 = 1/3;
+    using tmp = Point3d.tmp;
+    for ( let i = 0, j = 0; j < numPoints; ) {
+      const a = txPts[i++];
+      const b = txPts[i++];
+      const c = crossProducts[j++];
+
+      // Dot product of current cross product with the total normal vector.
+      const dot = c.dot(n);
+
+      // Weight for this triangle segment.
+      const weight = dot / nMagSq;
+
+      // Accumulate the weighted triangle centroids.
+      a.add(b, tmp).multiplyScalar(denom1_3 * weight, tmp);
+      centroid.add(tmp, centroid);
+    }
+    Point3d.release(...crossProducts, ...txPts);
+
+    // Add the reference point back to return to the original coordinate space.
+    return centroid.add(ref);
   }
 
   /**
@@ -253,15 +303,9 @@ export class Polygon3d {
   // ----- NOTE: Factory methods ----- //
 
   static from2dPoints(pts, elevation = 0, out) {
-    const n = pts.length;
-    if ( out ) out.points.length = n;
-    else out = new this(n);
-    let i = 0;
-    for ( const pt of pts ) {
-      const outPt = out.points[i++] ??= Point3d.tmp;
-      outPt.set(pt.x, pt.y, elevation);
-    }
-    return out;
+    // While faster to just set the points, use a polygon to test for holes.
+    const poly = new PIXI.Polygon(pts);
+    return this.fromPolygon(poly, elevation, out);
   }
 
   static from3dPoints(pts, out) {
@@ -276,10 +320,18 @@ export class Polygon3d {
   }
 
   static fromPolygon(poly, elevation = 0, out) {
-    const pts = [...poly.iteratePoints()];
-    out = this.from2dPoints(pts, elevation, out);
-    PIXI.Point.release(...pts);
-    out.isHole = poly.isHole;
+    const n = Math.floor(poly.points.length * 0.5);
+    out ??= new this(n);
+    let i = 0;
+    for ( const pt of poly.iteratePoints() ) out.points[i++].set(pt.x, pt.y, elevation);
+
+    // 3d polygon faces up if the poly is not a hole.
+    // Confirm orientation manually b/c this always gets screwed up.
+    const isHole = poly.isHole ?? !poly.isPositive;
+    const ctr = poly.center;
+    using ctr3d = Point3d.tmp.set(ctr.x, ctr.y, elevation + 1);
+    if ( out.isFacing(ctr3d) ^ !isHole ) out.reverseOrientation();
+    out.isHole = isHole;
     return out;
   }
 
@@ -287,18 +339,14 @@ export class Polygon3d {
     return cpObj.toPolygons().map(poly => this.fromPolygon(poly, elevation));
   }
 
-  static fromPlanarPolygon(poly2d, plane) {
+  static fromPlanarPolygon(poly2d, plane, out) {
+    // First create a 3d polygon at elevation 0.
+    // This will also test for holes.
+    out = this.fromPolygon(poly2d, 0, out);
+
+    // Now translate the XY polygon in the z direction.
     const invM2d = plane.conversion2dMatrixInverse;
-    const ln = poly2d.points.length;
-    const pts3d = new Array(Math.floor(ln / 2));
-    for ( let i = 0, j = 0; i < ln; i += 2, j += 1 ) {
-      const x = poly2d.points[i];
-      const y = poly2d.points[i + 1];
-      const pt3d = Point3d.tmp.set(x, y, 0);
-      pts3d[j] = invM2d.multiplyPoint3d(pt3d, pt3d);
-    }
-    const out = this.from3dPoints(pts3d);
-    Point3d.release(...pts3d);
+    for ( const pt3d of out.iteratePoints() ) invM2d.multiplyPoint3d(pt3d, pt3d);
     return out;
   }
 
@@ -510,7 +558,7 @@ export class Polygon3d {
    * Iterate over the polygon's edges in order.
    * @param {object} [options]
    * @param {boolean} [close]   If true, return last point --> first point as edge.
-   * @returns { A: Point3d, B: Point3d } for each edge
+   * @returns { Segment } for each edge
    * Edges link, such that edge0.b === edge.1.a.
    */
   *iterateEdges({close = true} = {}) {
@@ -880,27 +928,101 @@ export class Ellipse3d extends Polygon3d {
   /** @type {Point3d} */
   get center() { return this.points[0]; }
 
-  get centroid() { return this.points[0]; }
+  set center(value) {
+    this.points[0].copyFrom(value);
+    this.plane.point.copyFrom(value);
+  }
+
+  // For numerical consistency, store the radius squared to use when possible.
+  /** @type {PIXI.Point} */
+  #radius = new PIXI.Point();
+  get radius() { return this.#radius; }
+  set radius(value) {
+    this.#radius.copyFrom(value);
+    using value2 = value.multiply(value);
+    this.#radiusSquared.copyFrom(value2);
+  }
+
+  /** @type {PIXI.Point} */
+  #radiusSquared = new PIXI.Point();
+  get radiusSquared() { return this.#radiusSquared; }
+  set radiusSquared(value) {
+    this.#radiusSquared.copyFrom(value);
+    using valueSqrt = value.sqrt();
+    this.#radius.copyFrom(valueSqrt);
+  }
 
   /** @type {number} */
-  #radiusX = 0;
+  get radiusX() { return this.#radius.x; }
+  set radiusX(value) {
+    using tmp = PIXI.Point.tmp.set(value, this.radiusY);
+    this.radius = tmp;
+  }
 
-  get radiusX() { return this.#radiusX; }
+  /** @type {number} */
+  get radiusY() { return this.#radius.y; }
+  set radiusY(value) {
+    using tmp = PIXI.Point.tmp.set(this.radiusX, value);
+    this.radius = tmp;
+  }
 
-  set radiusX(value) { this.#radiusX = value; }
+  /**
+   * Vectors that originate from the center and run along the two axes.
+   * Add and subtract from center to get axis endpoints:
+   * C + Vx and C - Vx; C + Vy and C - Vy
+   * @type {object<vx: Point3d, vy: Point3d>}
+   */
+  radiusVectors() {
+    // Find numerically stable axes.
+    const { u, v } = this.plane._calculateAxisVectors();
+    const cTheta = Math.cos(this.angle);
+    const sTheta = Math.sin(this.angle);
+    using tmp1 = Point3d.tmp;
+    using tmp2 = Point3d.tmp;
+    const vx = Point3d.tmp;
+    const vy = Point3d.tmp;
+    u.multiplyScalar(cTheta, tmp1).add(v.multiplyScalar(sTheta, tmp2), vx).multiplyScalar(this.radiusX, vx);
+    u.multiplyScalar(-sTheta, tmp1).add(v.multiplyScalar(cTheta, tmp2), vy).multiplyScalar(this.radiusY, vy);
+    return { vx, vy };
+  }
 
-  #radiusY = 0;
+  /** @type {Point3d} */
+  get majorRadiusAxis() {
+    const { vx, vy } = this.radiusVectors();
+    return vx.magnitudeSquared() > vy.magnitudeSquared ? vx : vy;
+  }
 
-  get radiusY() { return this.#radiusY; }
+  /** @type {Point3d} */
+  get minorRadiusAxis() {
+    const { vx, vy } = this.radiusVectors();
+    return vx.magnitudeSquared() < vy.magnitudeSquared ? vx : vy;
+  }
 
-  set radiusY(value) { this.#radiusY = value; }
+  get majorAxisEndpoints() {
+    const v = this.majorRadiusAxis();
+    return [this.center.add(v), this.center.subtract(v)];
+  }
 
-  get halfWidth() { return this.radiusX; }
+  get minorAxisEndpoints() {
+    const v = this.minorRadiusAxis();
+    return [this.center.add(v), this.center.subtract(v)];
+  }
 
-  get halfHeight() { return this.radiusY; }
 
+  /** @type {number<radians>} */
+  angle = 0;
+
+  // ----- NOTE: Synonyms/Aliases -----
+
+  /** @type {Point3d} */
+  get centroid() { return this.center; }
+
+  /** @type {number} */
+  get halfWidth() { return this.radiusX }
   set halfWidth(value) { this.radiusX = value; }
 
+  /** @type {number} */
+  get halfHeight() { return this.radiusY; }
   set halfHeight(value) { this.radiusY = value; }
 
   constructor() {
@@ -913,12 +1035,20 @@ export class Ellipse3d extends Polygon3d {
    * For Ellipse, the plane normal typically must be set, not calculated.
    * By default, the ellipse will face straight up, with normal {0, 0, 1}.
    */
-  _calculatePlane(_plane) { }
+  _calculatePlane(_plane) {
+    // plane.point.copyFrom(this.points[0]); // Unneeded b/c get plane does this.
+  }
 
-  _setDimensions(center, radiusX, radiusY) {
-    this.points[0].copyFrom(center);
-    this.radiusX = radiusX;
-    this.radiusY = radiusY;
+  _setDimensions({ center, radius, radiusSquared, radiusX, radiusY, angle } = {}) {
+    if ( center ) this.center = center;
+    if ( radius ) this.radius = radius;
+    else if ( radiusSquared ) this.radiusSquared = radiusSquared;
+    else if ( radiusX || radiusY ) {
+      if ( radiusX ) this.radiusX = radiusX;
+      if ( radiusY ) this.radiusY = radiusY;
+    }
+
+    if ( Number.isNumeric(angle) ) this.angle = angle;
     this.clearCache();
     return this;
   }
@@ -929,21 +1059,29 @@ export class Ellipse3d extends Polygon3d {
 
   // ----- NOTE: Plane ----- //
 
-  get ellipse() { return new PIXI.Ellipse(this.center.x, this.center.y, this.radiusX, this.radiusY); }
+  get ellipse() { return new Ellipse(this.center.x, this.center.y, this.radiusX, this.radiusY, { rotation: Math.toDegrees(this.angle) }); }
 
   // ----- NOTE: Factory methods ----- //
 
-  static fromEllipse(ellipse, elevationZ = 0, out) {
+  static fromPIXIEllipse(ellipse, elevationZ = 0, angle, out) {
     using centerPt = Point3d.tmp.set(ellipse.x, ellipse.y, elevationZ)
-    return this.fromCenterPoint(centerPt, ellipse.width, ellipse.height, out);
+    return this.fromCenterPoint(centerPt, { radiusX: ellipse.width, radiusY: ellipse.height, angle, out });
   }
 
-  static fromCenterPoint(center, radiusX, radiusY, out) {
+  static fromEllipse2d(ellipse, elevationZ, out) {
+    using centerPt = Point3d.tmp.set(ellipse.x, ellipse.y, elevationZ)
+    return this.fromCenterPoint(centerPt, { radiusX: ellipse.width, radiusY: ellipse.height, angle: Math.toRadians(ellipse.rotation || 0), out });
+  }
+
+  static fromCenterPoint(center, { out, ...opts } = {}) {
     out ??= new this();
-    return out._setDimensions(center, radiusX, radiusY);
+    opts.center = center;
+    return out._setDimensions(opts);
   }
 
-  static calculateDimensionsFromPoints(pts, { center, radiusX, radiusY } = {}) {
+  static calculateDimensionsFromPoints(pts, { center, radius, radiusSquared, angle } = {}) {
+    if ( radius && !radiusSquared ) radiusSquared = radius.multiply(radius);
+
     if ( !center ) {
       // Find two opposite points to locate the center.
       let max2 = Number.NEGATIVE_INFINITY;
@@ -964,50 +1102,54 @@ export class Ellipse3d extends Polygon3d {
         lastB = b;
       }
     }
-    if ( !(radiusX || radiusY) ) {
+    if ( !(radiusSquared || angle === undefined) ) {
       // Must find the minimum and maximum distance from the polygon center to determine the two radii.
       let min2 = Number.POSITIVE_INFINITY;
       let max2 = Number.NEGATIVE_INFINITY;
+      let majorAxisPt = pts[0];
       const cl = center.constructor;
       for ( const pt of pts ) {
         const dist2 = cl.distanceSquaredBetween(center, pt);
         min2 = Math.min(min2, dist2);
-        max2 = Math.max(max2, dist2);
+
+        // Track the point that gives us the max distance.
+        if ( dist2 > max2 ) {
+          max2 = dist2;
+          majorAxisPt = pt;
+        }
       }
-      radiusX ||= Math.sqrt(max2);
-      radiusY ||= Math.sqrt(min2);
+
+      radiusSquared = PIXI.Point.tmp.set(max2, min2);
+
+      // Determine the angle using the vector from the center to the major axis point.
+      if ( angle === undefined ) angle = Math.atan2(majorAxisPt.y - center.y, majorAxisPt.x - center.x);
     }
-    return { center, radiusX, radiusY };
+    return { center, radiusSquared, radius, angle };
   }
 
   /**
    * Construct from a set of points that are on the ellipse edge.
    */
-  static from2dPoints(pts, elevation = 0, out, opts) {
+  static from2dPoints(pts, elevation = 0, opts, out) {
     const res = this.calculateDimensionsFromPoints(pts, opts);
+    res.out = out;
     using centerPt = Point3d.tmp.set(res.center.x, res.center.y, elevation)
-    return this.fromCenterPoint(centerPt, res.radiusX, res.radiusY, out);
+    return this.fromCenterPoint(centerPt, res);
   }
 
-  static from3dPoints(pts, out, opts) {
-    const res = this.calculateDimensionsFromPoints(pts, opts);
+  static from3dPoints(pts, opts, out) {
     out ??= new this();
-    out._setDimensions(res.center, res.radiusX, res.radiusY);
-    out.points[0] = res.center;
+    const res = this.calculateDimensionsFromPoints(pts, opts);
     Plane.fromMultiplePoints([res.center, ...pts], out.plane);
+    out._setDimensions(res);
     return out;
   }
 
-  static fromPlanarPolygon(poly2d, plane, radiusX = null, radiusY = null) {
-    const center = poly2d.center;
-    if ( !(radiusX || radiusY) ) {
-      const res = this.calculateDimensionsFromPoints(poly2d.iteratePoints(), { center, radiusX, radiusY });
-      radiusX ??= res.radiusX;
-      radiusY ??= res.radiusY;
-    }
-    const out = new this();
-    out._setDimensions(center, radiusX, radiusY);
+  static fromPlanarPolygon(poly2d, plane, opts, out) {
+    out ??= new this();
     out.plane.copyFrom(plane);
+    const res = this.calculateDimensionsFromPoints(poly2d.iteratePoints(), opts);
+    out._setDimensions(res);
     return out;
   }
 
@@ -1018,17 +1160,16 @@ export class Ellipse3d extends Polygon3d {
   static fromVertices(...args) { return Polygon3d.fromVertices(...args); }
 
   static fromPlanarEllipse(ellipse2d, plane, out) {
-    let center3d;
-    if ( ellipse2d.center.x.almostEqual(0) && ellipse2d.center.y.almostEqual(0) ) {
-      center3d = plane.point;
-    } else {
-      const invM2d = plane.conversion2dMatrixInverse;
-      center3d = invM2d.multiplyPoint3d(Point3d.tmp.set(ellipse2d.center.x, ellipse2d.center.y, 0));
-    }
+    using center = Point3d.tmp();
+    const invM2d = plane.conversion2dMatrixInverse;
+    invM2d.multiplyPoint3d(Point3d.tmp.set(ellipse2d.center.x, ellipse2d.center.y, 0), center);
+
+    using radius = PIXI.Point.tmp.set(ellipse2d.width, ellipse2d.height);
+    const opts = { center, radius, angle: ellipse2d.radians || 0 };
+
     out ??= new this();
-    out._setDimensions(center3d, ellipse2d.width, ellipse2d.height);
     out.plane.copyFrom(plane);
-    center3d.release();
+    out._setDimensions(opts);
     return out;
   }
 
@@ -1036,6 +1177,7 @@ export class Ellipse3d extends Polygon3d {
     out = super.clone(out);
     out.radiusX = this.radiusX;
     out.radiusY = this.radiusY;
+    out.angle = this.angle;
     out.plane.copyFrom(this.plane);
     return out;
   }
@@ -1044,6 +1186,7 @@ export class Ellipse3d extends Polygon3d {
     const out = super._cloneEmpty();
     out.radiusX = this.radiusX;
     out.radiusY = this.radiusY;
+    out.angle = this.angle;
     return out;
   }
 
@@ -1057,7 +1200,7 @@ export class Ellipse3d extends Polygon3d {
       const to2dM = this.plane.conversion2dMatrix;
       to2dM.multiplyPoint3d(centroid, center);
     }
-    return new PIXI.Ellipse(center.x, center.y, this.radiusX, this.radiusY);
+    return new Ellipse(center.x, center.y, this.radiusX, this.radiusY, { rotation: Math.toDegrees(this.angle) });
   }
 
   /**
@@ -1086,6 +1229,9 @@ export class Ellipse3d extends Polygon3d {
    */
   toPerspectivePolygon(opts) { return this.toPolygon3d(opts).toPerspectivePolygon(); }
 
+  /**
+   * @returns {Polygon3d}
+   */
   toPlanarPolygon(opts) {
     const ellipse = this.toPlanarEllipse();
     return ellipse.toPolygon(opts);
@@ -1162,100 +1308,112 @@ export class Ellipse3d extends Polygon3d {
   }
 
   /**
-   * Transform the points using a transformation matrix.
+   * Transform this ellipse using a transformation matrix.
    * @param {Matrix} M
-   * @param {Polygon3d} [poly]    The triangle to modify
-   * @returns {Polygon3d} The modified tri.
+   * @param {Ellipse3d} [out]
+   * @returns {Ellipse3d} The modified ellipse.
    */
-  transform(M, ellipse3d) {
-    // Determine if scaling is not uniform.
-    // Look to the length of the basis vectors.
-    // If the plane is aligned with an axis, ignore that axis's scaling factor.
+  transform(M, out) {
+    if ( !out ) out = new Ellipse3d();
+    else if ( out instanceof Circle3d ) out = out.clone(new Ellipse3d());
+    this.clone(out);
+    const { angle, center, radiusX, radiusY } = this;
+    using tmp = Point3d.tmp;
 
-    // Scaling factors from the matrix.
-    using sx = Point3d.tmp.set(M.getIndex(0, 0), M.getIndex(0, 1), M.getIndex(0, 2));
-    using sy = Point3d.tmp.set(M.getIndex(1, 0), M.getIndex(1, 1), M.getIndex(1, 2));
-    using sz = Point3d.tmp.set(M.getIndex(2, 0), M.getIndex(2, 1), M.getIndex(2, 2));
-    using s = Point3d.tmp.set(sx.magnitude(), sy.magnitude(), sz.magnitude());
+    // This approach works even for shearing or other affine transformations.
+    // Applies transformation directly to the 2d basis vectors and resolves skew using
+    // conjugate diameters.
 
-    // Identify the primary orientation of the plane normal.
-    using n = this.plane.normal.abs();
+    // Transform the center point.
+    M.multiplyPoint3d(center, out.center);
 
-    // Check uniformity based on axis alignment, falling back on full check if plane is tilted.
-    const EPSILON = 1e-08;
-    let isUniform = false;
-    if ( n.z > (1 - EPSILON) ) isUniform = Math.abs(s.x - s.y) < EPSILON;
-    else if ( n.y > (1 - EPSILON) ) isUniform = Math.abs(s.x - s.z) < EPSILON;
-    else if ( n.x > (1 - EPSILON) ) isUniform = Math.abs(s.y - s.z) < EPSILON;
-    else isUniform = Math.abs(s.x - s.y) < EPSILON && Math.abs(s.y - s.z) < EPSILON;
-
-    // A non-uniform scale will result in an ellipse.
-    if ( !isUniform && !(ellipse3d instanceof Ellipse3d) ) ellipse3d = new Ellipse3d();
-    this.clone(ellipse3d);
-
-    // Transform the center.
-    M.multiplyPoint3d(this.centroid, ellipse3d.points[0]);
-
-    // Transform Normal. (Inverse transpose the 3x3 portion of the matrix.)
-    using mat3 = M.subset({ rowEnd: 2, colEnd: 2 });
-    using mat3Inv = mat3.invert();
-    using matNormal = Matrix.fromPoint3d(this.plane.normal, { homogenous: false });
+    // Transform the normal (inverse transpose of 3x3 portion)
+    const mat3 = M.subset({ rowEnd: 2, colEnd: 2 });
+    const mat3Inv = mat3.invert();
+    const matNormal = MatrixFloat32.fromPoint3d(this.plane.normal, { homogenous: false });
     mat3Inv.transpose(mat3Inv);
     matNormal.multiply1x3(mat3Inv, matNormal);
-    ellipse3d.plane.normal = {
+    out.plane.normal = {
       x: matNormal.getIndex(0, 0),
       y: matNormal.getIndex(0, 1),
       z: matNormal.getIndex(0, 2),
-    };
+    }; // Plane setter normalize the values.
+    out.plane.point.copyFrom(out.center);
 
-    if ( isUniform ) {
-      // Use scale factor relevant to the plane.
-      const effectiveScale = (n.z > 1 - EPSILON) ? s.x : (n.y > 1 - EPSILON ? s.x : s.y);
+    // Find the original major and minor axes as 2d vectors.
+    const cosA = Math.cos(angle || 0);
+    const sinA = Math.sin(angle || 0);
+    using uLocal = Point3d.tmp.set(radiusX * cosA, radiusX * sinA, 0);
+    using vLocal = Point3d.tmp.set(radiusY * -sinA, radiusY * cosA, 0);
 
-      // Store temporary in case ellipse3d === this, to avoid multiplying radius twice if it is a circle.
-      const { radiusX, radiusY } = this;
-      ellipse3d.radiusX = radiusX * effectiveScale;
-      ellipse3d.radiusY = radiusY * effectiveScale;
+    // Convert local 2d axes to 3d world vectors (ignore translation).
+    const invM2d = this.plane.conversion2dMatrixInverse;
+    using origin3d = invM2d.multiplyPoint3d(Point3d.tmp.set(0, 0, 0));
+    using U = invM2d.multiplyPoint3d(uLocal, tmp).subtract(origin3d);
+    using V = invM2d.multiplyPoint3d(vLocal, tmp).subtract(origin3d);
 
-    } else {
-      // Ellipse: Find two orthogonal vectors on the original plane.
-      using tangent = Point3d.tmp;
-      using bitangent = Point3d.tmp;
+    // Apply the 3x3 transformation matrix to the vectors.
+    using transformedU = MatrixFloat32.fromPoint3d(U, { homogenous: false });
+    using transformedV = MatrixFloat32.fromPoint3d(V, { homogenous: false });
+    transformedU.multiply1x3(mat3, transformedU);
+    transformedV.multiply1x3(mat3, transformedV);
 
-      // Find arbitrary vector not parallel to the normal.
-      using helper = Math.abs(this.plane.normal.y) < 0.9 ? Point3d.tmp.set(0, 1, 0) : Point3d.tmp.set(1, 0, 0);
-      this.plane.normal.cross(helper, tangent);
-      tangent.normalize(tangent);
-      this.plane.normal.cross(tangent, bitangent);
+    using Uprime = transformedU.toPoint3d({ homogenous: false });
+    using Vprime = transformedV.toPoint3d({ homogenous: false });
 
-      // Transform vectors by directions only; ignore translation.
-      using transformedT = Matrix.fromPoint3d(tangent, { homogenous: false });
-      using transformedB = Matrix.fromPoint3d(bitangent, { homogenous: false });
-      transformedT.multiply1x3(mat3, transformedT);
-      transformedB.multiply1x3(mat3, transformedB);
-      transformedT.toPoint3d({ homogenous: false, outPoint: tangent });
-      transformedB.toPoint3d({ homogenous: false, outPoint: bitangent });
+    // Resolve conjugate diameters into true major/minor axes.
+    const dotUV = Uprime.dot(Vprime);
+    const magU2 = Uprime.magnitudeSquared();
+    const magV2 = Vprime.magnitudeSquared();
 
-      ellipse3d.radiusX *= tangent.magnitude();
-      ellipse3d.radiusY *= bitangent.magnitude();
-    }
-    return ellipse3d;
+    // Find the parameter t that aligns with the major/minor axes.
+    let t = 0;
+    const delta = magU2 - magV2;
+    if ( !(delta.almostEqual(0) && dotUV.almostEqual(0)) ) t = 0.5 * Math.atan2(2 * dotUV, delta);
+    const cosT = Math.cos(t);
+    const sinT = Math.sin(t);
+
+    // Reconstruct the orthogonal axes.
+    using A = Point3d.tmp;
+    using B = Point3d.tmp;
+    Uprime.multiplyScalar(cosT, A).add(Vprime.multiplyScalar(sinT, tmp), A); // A = U' * cos(t) + V' * cos(t)
+    Uprime.multiplyScalar(-sinT, B).add(Vprime.multiplyScalar(cosT, tmp), B); // B = U' * -sin(t) + V' * cos(t)
+
+    // Ensure A is the longest (major) axis.
+    let majorAxis = A;
+    let minorAxis = B;
+    if ( B.magnitudeSquared() > A.magnitudeSquared() ) [majorAxis, minorAxis] = [minorAxis, majorAxis];
+
+    // Set the new radii.
+    out.radiusX = majorAxis.magnitude();
+    out.radiusY = minorAxis.magnitude();
+
+    // Calculate the new angle in the new plane's 2d coordinate system.
+    const newTo2dM = out.plane.conversion2dMatrix;
+    using newOrigin2d = newTo2dM.multiplyPoint3d(Point3d.tmp.set(0, 0, 0));
+    using majorAxis2d = newTo2dM.multiplyPoint3d(majorAxis, tmp).subtract(newOrigin2d);
+    out.angle = Math.atan2(majorAxis2d.y, majorAxis2d.x);
+
+    out.clearCache();
+
+    if ( out.radiusX.almostEqual(out.radiusY) ) return out.clone(new Circle3d());
+    return out;
   }
 
- multiplyScalar(multiplier, ellipse3d) {
-    ellipse3d ??= this._cloneEmpty();
-    this.clone(ellipse3d);
+ multiplyScalar(multiplier, out) {
+    out ??= this._cloneEmpty();
+    this.clone(out);
 
     // Store temporary in case ellipse3d is circle to avoid multiplying radius twice.
-    const newRX = ellipse3d.radiusX * multiplier;
-    const newRY = ellipse3d.radiusY * multiplier;
-    ellipse3d.radiusX = newRX;
-    ellipse3d.radiusY = newRY;
-    return ellipse3d;
+    const newRX = out.radiusX * multiplier;
+    const newRY = out.radiusY * multiplier;
+    out.radiusX = newRX;
+    out.radiusY = newRY;
+    return out;
   }
 
   scale({ x = 1, y = 1, z = 1 } = {}, ellipse3d) {
-    using scaleM = Matrix.scale(x, y, z);
+    using scaleM = Matrix.scale({ x, y, z }, { d3: true });
     return this.transform(scaleM, ellipse3d);
   }
 
@@ -1292,33 +1450,29 @@ export class Ellipse3d extends Polygon3d {
  */
 export class Circle3d extends Ellipse3d {
 
-  /** @type {number} */
-  #radius = 0;
+  get radius() { return this.radiusX; }
 
-  /** @type {number} */
-  #radiusSquared = 0;
-
-  get radius() { return this.#radius; }
-
-  get radiusSquared() { return this.#radiusSquared; }
+  get radiusSquared() { return this.radius * this.radius; }
 
   set radius(value) {
-    this.#radius = value;
-    this.#radiusSquared = value ** 2;
+    if ( Number.isNumeric(value) ) {
+      using v = PIXI.Point.tmp.set(value, value);
+      super.radius = v;
+    } else super.radius = value;
   }
 
   set radiusSquared(value) {
-    this.#radiusSquared = value;
-    this.#radius = Math.sqrt(value);
+    if ( Number.isNumeric(value) ) {
+      using v = PIXI.Point.tmp.set(value, value);
+      super.radiusSquared = v;
+    } else super.radiusSquared = value;
   }
 
-  get radiusX() { return this.#radius; }
-
-  get radiusY() { return this.#radius; }
-
-  set radiusX(value) { this.radius = value; }
-
-  set radiusY(value) { this.radius = value; }
+  _setDimensions(opts = {}) {
+    if ( Number.isNumeric(opts.radius) ) opts.radius = PIXI.Point.tmp.set(opts.radius, opts.radius);
+    if ( Number.isNumeric(opts.radiusSquared) ) opts.radiusSquared = PIXI.Point.tmp.set(opts.radiusSquared, opts.radiusSquared);
+    return super._setDimensions(opts);
+  }
 
   // ----- NOTE: Plane ----- //
 
@@ -1333,21 +1487,18 @@ export class Circle3d extends Ellipse3d {
 
   static fromCenterPoint(center, radius, out) {
     out ??= new this();
-    return out._setDimensions(center, radius, radius);
+    out._setDimensions({ center, radius });
+    return out;
   }
 
   static fromPlanarCircle(circle2d, plane, out) {
-    let center3d;
-    if ( circle2d.center.x.almostEqual(0) && circle2d.center.y.almostEqual(0) ) {
-      center3d = plane.point;
-    } else {
-      const invM2d = plane.conversion2dMatrixInverse;
-      center3d = invM2d.multiplyPoint3d(Point3d.tmp.set(circle2d.center.x, circle2d.center.y, 0));
-    }
+    using center = Point3d.tmp;
+    const invM2d = plane.conversion2dMatrixInverse;
+    invM2d.multiplyPoint3d(Point3d.tmp.set(circle2d.center.x, circle2d.center.y, 0), center);
+
     out ??= new this();
-    out._setDimensions(center3d, circle2d.radius, circle2d.radius);
     out.plane = plane;
-    center3d.release();
+    out._setDimensions({ center, radius: circle2d.radius });
     return out;
   }
 
@@ -1434,7 +1585,7 @@ export class Circle3d extends Ellipse3d {
    * Transform the points using a transformation matrix.
    * If the x and y scales are different, this will result in an ellipse, not a circle.
    * @param {Matrix} M
-   * @param {Polygon3d} [poly]    The triangle to modify
+   * @param {Ellipse3d} [poly]    The circle to modify
    * @returns {Polygon3d} The modified tri.
    */
   transform(M, circle3d) {

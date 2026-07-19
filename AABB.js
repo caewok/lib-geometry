@@ -139,12 +139,17 @@ export class AABB2d {
   static union(bounds, out) {
     if ( out ) out._clear();
     else out = new this();
-    const { min, max } = out;
+    const n = bounds.length;
+    const tmpArr = Array(n * 2);
     for ( const axis of this.axes ) {
-      const boundsMin = bounds.map(b => b.min[axis]);
-      const boundsMax = bounds.map(b => b.max[axis]);
-      min[axis] = Math.min(...boundsMin, min[axis]);
-      max[axis] = Math.max(...boundsMax, max[axis]);
+      let i = 0;
+      for ( const b of bounds ) {
+        tmpArr[i++] = b.min[axis];
+        tmpArr[i++] = b.max[axis];
+      }
+      const minMaxAxis = Math.minMax(...tmpArr);
+      out.min[axis] = minMaxAxis.min;
+      out.max[axis] = minMaxAxis.max;
     }
     return out;
   }

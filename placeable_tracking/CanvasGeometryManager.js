@@ -25,8 +25,6 @@ export class CanvasGeometryManager {
   /** @type { PlaceableGeometry } */
   static geometryClass = null;
 
-  static geometryClassForDocument(_doc) { return this.geometryClass; }
-
   /** @type {object<Map<UUID, PlaceableGeometry>>} */
   geometryMap = new Map();
 
@@ -81,9 +79,9 @@ export class CanvasGeometryManager {
     if ( this.geometryMap.has(doc.uuid) ) return;
 
     // Create the correct geometry type for this document.
-    const cl = this.constructor.geometryClassForDocument(doc);
-    const geom = new cl(doc);
+    const geom = new this.constructor.geometryClass(doc);
     geom.initialize();
+    geom.forceUpdate();
     this.geometryMap.set(doc.uuid, geom);
 
     // Add to the respective quadtree.
@@ -94,11 +92,12 @@ export class CanvasGeometryManager {
    * Update the geometry for this document.
    * @param {CanvasDocument} doc        A document instance, e.g., TokenDocument, WallDocument, etc.
    * @param {Set<string>} updateKeys       Flattened set of properties that changed
+   * @param {object} opts               Options passed from update hook; currently used for tracking region shape changes
    */
-  update(doc, updateKeys) {
+  update(doc, updateKeys, opts) {
     const geom = this.geometryMap.get(doc.uuid);
     if ( !geom ) return;
-    geom.update(updateKeys);
+    geom.update(updateKeys, opts);
     this.quadtree.update({ t: geom, r: geom.aabb });
   }
 
@@ -115,6 +114,7 @@ export class CanvasGeometryManager {
   _deleteByUUID(uuid) {
     const geom = this.geometryMap.get(uuid);
     if ( !geom ) return;
+    geom.destroy();
     this.quadtree.remove(geom);
     this.geometryMap.delete(uuid);
   }
@@ -132,27 +132,39 @@ export class CanvasGeometryManager {
    */
   #initialized = false;
 
+  hooks = {};
+
   /**
    * Register hooks to track the geometries as documents change.
    */
   registerHooks() {
-    if ( this.#initialized ) return;
+    if ( this.#initialized ) return false;
 
     const docName = this.constructor.geometryClass.PLACEABLE_NAME;
-    Hooks.on("canvasReady", () => this.initializeScene());
-    Hooks.on(`create${docName}`, doc => this.create(doc));
-    Hooks.on(`update${docName}`, (doc, changeData) => {
+    const hooks = this.hooks;
+    hooks.canvasReady = Hooks.on("canvasReady", () => this.initializeScene());
+    hooks[`create${docName}`] = Hooks.on(`create${docName}`, doc => this.create(doc));
+    hooks[`update${docName}`] = Hooks.on(`update${docName}`, (doc, changeData, opts, _userId) => {
       // Flatten the change object to handle nested keys, like flags.
       const updateKeys = Object.keys(foundry.utils.flattenObject(changeData));
-      this.update(doc, new Set(updateKeys));
+      this.update(doc, new Set(updateKeys), opts);
     });
-    Hooks.on(`delete${docName}`, docId => this.delete(docId));
-
-    this.constructor.geometryClass.registerHooks();
+    hooks[`delete${docName}`] = Hooks.on(`delete${docName}`, docId => this.delete(docId));
 
     this.#initialized = true;
+    return true;
   }
 
+  deactivateHooks() {
+    for ( const [name, id] of Object.entries(this.hooks) ) Hooks.off(name, id);
+    this.hooks = {};
+  }
+
+  destroy() {
+    this.deactivateHooks();
+    for ( const geom of this.geometryMap.values() ) geom.destroy();
+    this.clear();
+  }
 }
 
 // ----- NOTE: Subclasses ----- //
@@ -194,34 +206,36 @@ export class TokenGeometryManager extends CanvasGeometryManager {
   /** @type {PlaceableGeometry} */
   static geometryClass = TokenGeometry;
 
-  /**
-   * @param {TokenDocument} tokenD
-   * @returns {TokenGeometry} The correct child class
-   */
-  static geometryClassForDocument(tokenD) {
-    return TokenGeometry.geometryClassForToken(tokenD);
-  }
+  registerHooks() {
+    if ( !super.registerHooks() ) return;
 
-  /**
-   * Update the geometry for this document.
-   * @param {CanvasDocument} doc        A document instance, e.g., TokenDocument, WallDocument, etc.
-   * @param {Set<string>} updateKeys       Flattened set of properties that changed
-   */
-  update(doc, updateKeys) {
-    const geom = this.geometryMap.get(doc.uuid);
-    if ( !geom ) return;
+    // When tokens are dragged, the update hook provides the correct changes, which correspond
+    // to the token.document._source but not necessarily to the token.document.x, .y, etc.
+    // Tokens refresh along their move and the document is updated.
+    // To keep the shape aligned with current token position (may be important for visibility),
+    // need to update on the refresh hook.
+    Hooks.on("refreshToken", (token, flags) => {
+      /* Potential flags are at Token.RENDER_FLAGS. Key flags:
+      refreshPosition
+      refreshSize
+      refreshElevation
+      refreshShape
+      */
+      if ( token.isPreview ) return;
+      const needsUpdate = flags.refreshPosition || flags.refreshSize || flags.refreshElevation || flags.refreshShape;
+      if ( !needsUpdate ) return;
+      const geom = this.geometryMap.get(token.document.uuid);
+      if ( !geom ) return;
 
-    if ( this.constructor.geometryClassForDocument(doc) !== geom.constructor ) {
-      // Change the token geometry class if necessary.
-      this.delete(doc);
-      this.create(doc);
-      return;
-
-    } else {
-      // Otherwise do the update as normal.
-      geom.update(updateKeys);
-      this.quadtree.update({ t: geom, r: geom.aabb });
-    }
+      // Set the geometry update flags manually based on the refresh flags.
+      const updateFlags = geom._updateFlags;
+      Object.keys(updateFlags).forEach(key => updateFlags[key] = false);
+      updateFlags.properties = flags.refreshShape;
+      updateFlags.positionXY = flags.refreshPosition;
+      updateFlags.scale = flags.refreshSize;
+      updateFlags.elevation = flags.refreshElevation;
+      geom._update();
+    });
   }
 }
 

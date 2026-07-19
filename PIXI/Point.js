@@ -371,6 +371,19 @@ function ceil(outPoint) {
 }
 
 /**
+ * Take the square root of each coordinate.
+ * @param {PIXI.Point} [outPoint]    A point-like object in which to store the value.
+ *   (Will create new point if none provided.)
+ * @returns {PIXI.Point}
+ */
+function sqrt(outPoint) {
+  outPoint ??= this.constructor.tmp;
+  outPoint.x = Math.sqrt(this.x);
+  outPoint.y = Math.sqrt(this.y);
+  return outPoint;
+}
+
+/**
  * Make all coordinates finite.
  * @param {PIXI.Point} [outPoint]    A point-like object in which to store the value.
  *   (Will create new point if none provided.)

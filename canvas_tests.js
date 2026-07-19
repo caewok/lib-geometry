@@ -9,24 +9,43 @@ import { Draw } from "./Draw.js";
 import { Point3d } from "./3d/Point3d.js";
 import { Triangle3d } from "./3d/Polygon3d.js";
 import { ElevatedPoint } from "./3d/ElevatedPoint.js";
-import { TokenSquareGeometry } from "./placeable_geometry/TokenGeometry.js";
 
 // Testing functions that require a loaded canvas.
 
 /*
 Draw = CONFIG.GeometryLib.lib.Draw
+tile = canvas.tiles.controlled[0]
+geom = CONFIG.GeometryLib.geometryManager.geomForPlaceable(tile)
+cache = geom.pixelCache
+
+level = canvas.level
+geom = CONFIG.GeometryLib.geometryManager.geomForDocument(level, "background")
+cache = geom.pixelCache
+
+
+bb = cache.getThresholdCanvasBoundingBox(-1)
+bbThreshold = cache.getThresholdCanvasBoundingBox(0.75)
+bbPoly = cache.getThresholdCanvasBoundingPolygon(0.75)
+
+Draw.shape(bb, { color: Draw.COLORS.blue })
+Draw.shape(bbThreshold, { color: Draw.COLORS.orange })
+Draw.shape(bbPoly, { color: Draw.COLORS.red })
+
+region = canvas.regions.placeables[0]
+geom = CONFIG.GeometryLib.geometryManager.geomForPlaceable(region)
+geom.shapes[0].draw2d({ color: Draw.COLORS.red })
+
+
+
+Draw = CONFIG.GeometryLib.lib.Draw
 Draw.clearDrawings()
 canvasTests = CONFIG.GeometryLib.lib.canvasTests
 Triangle3d = CONFIG.GeometryLib.lib.threeD.Triangle3d
 Point3d = CONFIG.GeometryLib.lib.threeD.Point3d
-let {
-  BasicVertices,
-  HorizontalQuadVertices,
-  VerticalQuadVertices,
-  Rectangle3dVertices,
-  Polygon3dVertices,
-  Ellipse3dVertices,
-  Circle3dVertices } = CONFIG.GeometryLib.lib.placeableVertices.vertices
+Matrix = CONFIG.GeometryLib.lib.Matrix
+
+scaleMat = Matrix.scale({ x: 100, y: 100, z: 1 })
+faces = cyl.constructor.prototypeFaces.map(face => face.transform(scaleMat))
 
 canvasTests.drawTokenBorder()
 canvasTests.drawConstrainedTokenBorder()
@@ -37,14 +56,29 @@ canvasTests.drawTileGeometries({ faces: "alphaBoundingBox" })
 canvasTests.drawTileGeometries({ faces: "alphaBoundingPolygon" })
 canvasTests.drawTileGeometries({ faces: "alphaThresholdPolygons" })
 canvasTests.drawTileGeometries({ faces: "alphaThresholdTriangles" })
+
+canvasTests.drawRegionGeometries({ faceType: "top" })
+canvasTests.drawRegionGeometries({ faceType: "bottom" })
+canvasTests.drawRegionGeometries({ faceType: "sides" })
+
 canvasTests.drawLevelBackgroundGeometries()
 
 
 Original canvas: 1500 x 1500
 
+ground:
 anchor: 0.5, 0.5
 offset: -675, 150
 scale: 0.5, 0.5
+rotation: 0
+fit: contain
+
+basement:
+anchor: 0.5, 0.5
+offset: -400, 320
+scale: 0.5, 0.5
+rotation: 90
+fit: contain
 
 level = canvas.scene.levels.get("defaultLevel0000")
 geom = CONFIG.GeometryLib.geometryManager.backgroundLevels.geomForDocument(level)
@@ -160,18 +194,26 @@ export function drawPlaceableGeometry(placeableDocument, placeableColor, opts) {
   if ( placeableDocument.document ) placeableDocument = placeableDocument.document;
   const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.geomForDocument(placeableDocument);
   if ( !geom ) {
-    console.error(`${placeable.constructor.name} ${placeable.id} has no geometry.`);
+    console.error(`${placeableDocument.constructor.name} ${placeableDocument.id} has no geometry.`);
     return;
   }
   drawGeometry(geom, placeableColor, opts);
 }
 
-export function drawGeometry(geom,  placeableColor, { aabb = false, faces = "faces", ...drawingOpts } = {}) {
+export function drawGeometry(geom,  placeableColor, { aabb = false, faces = "faces", faceTypes = "all", ...drawingOpts } = {}) {
   let color = Draw.COLORS[placeableColor];
-  geom[faces][0].draw2d({ color, ...drawingOpts });
   if ( aabb ) {
     let color = Draw.COLORS[`light${placeableColor}`];
     Draw.shape(geom.aabb.toRectangle(), { color, ...drawingOpts });
+    return;
+  }
+
+  switch ( faceTypes ) {
+    case "all": for ( const shape of geom.iterateShapes() ) shape.draw2d({ color, ...drawingOpts }); break;
+    case "top": for ( const face of geom.iterateFaces() ) face.shapes[0].draw2d({ color, ...drawingOpts }); break;
+    case "bottom": for ( const face of geom.iterateFaces() ) face.shapes[1].draw2d({ color, ...drawingOpts }); break;
+    case "sides": for ( const face of geom.iterateFaces() ) face.shapes.slice(2).draw2d({ color, ...drawingOpts }); break;
+    case "firstShape": geom.shapes[0].faces[0].draw2d({ color, ...drawingOpts }); break;
   }
 }
 
@@ -329,6 +371,7 @@ export function testTileGeometryContainment() {
 
 export function testRegionGeometryContainment() {
   let incorrectRegions = new Set();
+  const mgr = CONFIG.GeometryLib.geometryManager;
   for ( const region of canvas.regions.placeables ) {
     const geom = mgr.geomForPlaceable(region);
     if ( !geom.faces.top ) continue;
@@ -459,6 +502,7 @@ export function drawTokenVertices({ tokens, type = "all", ...drawingOpts } = {})
  * @param {object} [opts]
  * @param {Token[]} [opts.tokens]                 Walls to draw; otherwise test entire canvas
  */
+/*
 export function testTokenVertices({ tokens } = {}) {
   const vo = TokenSquareGeometry.instanceVO;
   const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
@@ -467,6 +511,7 @@ export function testTokenVertices({ tokens } = {}) {
     if ( tri.orient3d(ctr) > 0 ) console.error(`Token ${token.name} (${token.id}) instance triangle facing wrong direction`);
   }
 }
+*/
 
 /**
  * Draw 2d tiles based on top geometry face.

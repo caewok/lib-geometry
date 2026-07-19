@@ -1,6 +1,7 @@
 /* globals
 canvas,
 CONFIG,
+Hooks,
 PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
@@ -10,7 +11,7 @@ import { TileGeometry } from "./TileGeometry.js";
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { gridUnitsToPixels, NULL_SET } from "../util.js";
 import { AABB3d } from "../3d/AABB3d.js";
-import { MatrixFloat32 } from "../Matrix.js";
+import { Point3d } from "../3d/Point3d.js";
 
 const TRACKER_TYPES = {
   background: [
@@ -92,8 +93,6 @@ export class LevelBackgroundGeometry extends TileGeometry {
 
   get alphaThreshold() { return this.level.background.alphaThreshold; }
 
-  get elevationZ() { return gridUnitsToPixels(this.placeableDocument.elevation.base); }
-
   /**
    * Create an id used for the model matrix tracking.
    * @type {string}
@@ -114,10 +113,11 @@ export class LevelBackgroundGeometry extends TileGeometry {
   // ----- NOTE: AABB ----- //
   calculateAABB() {
     const cache = this.pixelCache;
+    const elevationZ = this.constructor.placeableElevationZ(this.placeableDocument)
     if ( !cache ) {
       // Cannot ascertain width and height without the texture. (At least, it would require a partial load.)
       // But there is a decent chance that the scene rect would cover the dimensions.
-      AABB3d.fromRectangle(canvas.scene.dimensions.sceneRect, this.elevationZ, this.aabb);
+      AABB3d.fromRectangle(canvas.scene.dimensions.sceneRect, elevationZ, this.aabb);
 
     } else {
       // Use the cache to find the boundary points.
@@ -127,39 +127,20 @@ export class LevelBackgroundGeometry extends TileGeometry {
       using TR = cache._toCanvasCoordinates(width, 0);
       using BR = cache._toCanvasCoordinates(width, height);
       AABB3d.fromPoints([TL, BL, TR, BR], this.aabb);
-      this.aabb.min.z = this.elevationZ;
-      this.aabb.max.z = this.elevationZ;
+      this.aabb.min.z = elevationZ;
+      this.aabb.max.z = elevationZ;
     }
-  }
-
-  // ----- NOTE: Matrices ----- //
-
-  calculateTranslationMatrix() {
-    // Calculate the matrix first to avoid recalculating after the reload is done.
-    const mat = super.calculateTranslationMatrix();
-    const ctr = this.constructor.tileCenter(this.placeableDocument);
-    return MatrixFloat32.translation(ctr.x, ctr.y, this.elevationZ, mat);
-  }
-
-  calculateRotationMatrix() {
-    const mat = super.calculateRotationMatrix();
-    const rot = this.constructor.tileRotation(this.placeableDocument)
-    return MatrixFloat32.rotationZ(rot, true, mat);
-  }
-
-  calculateScaleMatrix() {
-    const mat = super.calculateScaleMatrix();
-    const { width, height } = this.constructor.tileDimensions(this.placeableDocument);
-    return MatrixFloat32.scale(width, height, 1.0, mat);
   }
 
   // ----- NOTE: Scene texture characteristics ----- //
 
-  static tileRotation(levelD) { return Math.toRadians(levelD.textures.rotation || 0); }
+  static tileRotation(levelD) {
+    return Point3d.tmp.set(0, 0, Math.toRadians(levelD.textures.rotation || 0));
+  }
 
   /**
-   * Determine the center of the tile, in pixel units.
-   * @param {Tile} tile
+   * Determine the center of the level, in pixel units.
+   * @param {Level} levelD
    * @returns {Point3d}
    */
   static tileCenter(levelD) {
@@ -168,14 +149,20 @@ export class LevelBackgroundGeometry extends TileGeometry {
     const { width, height } = cache;
     using TL = cache._toCanvasCoordinates(0, 0);
     using BR = cache._toCanvasCoordinates(width, height);
-    return PIXI.Point.midPoint(TL, BR);
+    using mid = PIXI.Point.midPoint(TL, BR);
+    return Point3d.tmp.set(mid.x, mid.y, gridUnitsToPixels(levelD.elevation.base));
   }
 
+  /**
+   * Determine the level 3d dimensions, in pixel units.
+   * @param {Level} levelD
+   * @returns {Point3d} x: width, y: height, z: zHeight
+   */
   static tileDimensions(levelD) {
     const cache = this.cacheManager.pixelCacheForDocument(levelD);
     if ( !cache ) {
       const { width, height } = canvas.scene;
-      return { width, height };
+      return Point3d.tmp.set(width, height, 1);
     }
 
     const { width, height } = cache;
@@ -183,10 +170,24 @@ export class LevelBackgroundGeometry extends TileGeometry {
     using BL = cache._toCanvasCoordinates(0, height);
     using TR = cache._toCanvasCoordinates(width, 0);
 
-    return {
-      width: PIXI.Point.distanceBetween(TL, TR),
-      height: PIXI.Point.distanceBetween(TL, BL),
-    };
+    return Point3d.tmp.set(
+      PIXI.Point.distanceBetween(TL, TR),
+      PIXI.Point.distanceBetween(TL, BL),
+      1,
+    );
+  }
+
+  /**
+   * Finite elevation of the level background (bottom).
+   * @param {PlaceableDocument} placeableD
+   * @returns {number}
+   */
+  static placeableElevationZ(placeableD) {
+    const MAX_ELEV = 1e06;
+    const z = gridUnitsToPixels(placeableD.elevation.bottom);
+    if ( z === Number.POSITIVE_INFINITY ) return MAX_ELEV;
+    if ( z === Number.NEGATIVE_INFINITY ) return -MAX_ELEV;
+    return z;
   }
 
 }
@@ -198,6 +199,16 @@ export class LevelForegroundGeometry extends LevelBackgroundGeometry {
 
   static get cacheManager() { return CONFIG[GEOMETRY_LIB_ID].levelForegroundPixelCache; }
 
-  get elevationZ() { return gridUnitsToPixels(this.placeableDocument.elevation.top); }
-
+  /**
+   * Finite elevation of the level background (bottom).
+   * @param {PlaceableDocument} placeableD
+   * @returns {number}
+   */
+  static placeableElevationZ(placeableD) {
+    const MAX_ELEV = 1e06;
+    const z = gridUnitsToPixels(placeableD.elevation.top);
+    if ( z === Number.POSITIVE_INFINITY ) return MAX_ELEV;
+    if ( z === Number.NEGATIVE_INFINITY ) return -MAX_ELEV;
+    return z;
+  }
 }

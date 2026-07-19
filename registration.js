@@ -102,9 +102,11 @@ function registerGeometryLibClasses() {
  * Register hooks for placeable geometry.
  */
 function registerPlaceableGeometry() {
-  if ( !CONFIG[GEOMETRY_LIB_ID].CONFIG.placeableGeometries.size ) return;
-  const mgr = CONFIG[GEOMETRY_LIB_ID].geometryManager = new GeometryManager(CONFIG[GEOMETRY_LIB_ID].CONFIG.placeableGeometries);
-  mgr.registerHooks();
+  const cfg = CONFIG[GEOMETRY_LIB_ID];
+
+  if ( !cfg.CONFIG.placeableGeometries.size ) return;
+  const mgr = cfg.geometryManager = new GeometryManager();
+  for ( const type of cfg.CONFIG.placeableGeometries ) mgr.addManager(type);
 }
 
 /* TODO: Any deconstruction needed?
@@ -141,11 +143,11 @@ class GeometryManager {
 
   /**
    * @typedef {string} GeometryType
-   * Wall|Tile|Region|Token|Level
+   * wall|tile|region|token|backgroundLevel|foregroundLevel
    */
 
-  /** @type {GeometryType[]} */
-  types = [];
+  /** @type {Set<GeometryType>} */
+  types = new Set();
 
   /** @type {TileGeometryManager} */
   tiles = null;
@@ -174,18 +176,53 @@ class GeometryManager {
     };
   }
 
-  constructor(types) {
-    for ( let type of types ) {
-      type = pluralize(type.toLowerCase());  // For consistency. Tile --> tiles
-      if ( type === "levels" ) this.types.push("backgroundLevels", "foregroundLevels");
-      else this.types.push(type);
+  addManager(type) {
+    type = pluralize(lowercaseFirstLetter(type));  // For consistency. Tile --> tiles
+    if ( type === "levels" ) {
+      return {
+        background: this.addManager("backgroundLevels"),
+        foreground: this.addManager("foregroundLevels"),
+      };
     }
-    this.#createManagers();
+
+    // Create the new manager.
+    const mgr = this.#createManager(type);
+    mgr.registerHooks();
+    if ( canvas.ready ) mgr.initializeScene();
+    return mgr;
   }
 
-  #createManagers() {
-    const GEOMETRY_MANAGERS = this.constructor.GEOMETRY_MANAGERS;
-    for ( const type of this.types ) this[type] = new GEOMETRY_MANAGERS[type]();
+  destroy() {
+    for ( const type of this.types ) this.destroyManager(type);
+  }
+
+  destroyManager(type) {
+    type = pluralize(lowercaseFirstLetter(type));  // For consistency. Tile --> tiles
+    if ( type === "levels" ) {
+      this.destroyManager("backgroundLevels"),
+      this.destroyManager("foregroundLevels");
+      return;
+    }
+
+    // Destroy the manager.
+    const mgr = this[type];
+    if ( !mgr ) return;
+    mgr.destroy();
+    this[type] = null;
+    this.types.delete(type);
+  }
+
+  /**
+   * Create a new manager. Does nothing if manager already exists for that type.
+   * @param {GeometryType} type     Must be exactly named
+   * returns {GeometryManager} For convenience
+   */
+  #createManager(type) {
+    if ( !this.types.has(type) ) {
+      const GEOMETRY_MANAGERS = this.constructor.GEOMETRY_MANAGERS;
+      this[type] = new GEOMETRY_MANAGERS[type]();
+    }
+    return this[type];
   }
 
   /**
@@ -194,17 +231,7 @@ class GeometryManager {
    */
   *iterateManagers() { for ( const type of this.types ) yield this[type]; }
 
-  /**
-   * For every relevant document in the scene, initialize the geometry.
-   */
-  initializeScene() { for ( const mgr of this.iterateManagers() ) mgr.initializeScene(); }
-
-  /**
-   * Register hooks to track the geometries as documents change.
-   */
-  registerHooks() { for ( const mgr of this.iterateManagers() ) mgr.registerHooks(); }
-
-  _typeFromDocument(typeOrDoc) { return pluralize((typeOrDoc.documentName || typeOrDoc).toLowerCase()); }
+  _typeFromDocument(typeOrDoc) { return pluralize((typeOrDoc.documentName || typeOrDoc).lowercaseFirstLetter()); }
 
   /**
    * Retrieve the manager for a specific document.
@@ -260,4 +287,9 @@ class GeometryManager {
 function pluralize(str) {
   if ( str.endsWith("s") ) return str;
   return `${str}s`;
+}
+
+function lowercaseFirstLetter(str) {
+  if (!str) return str; // Handle empty strings safely
+  return str.charAt(0).toLowerCase() + str.slice(1);
 }

@@ -442,8 +442,9 @@ function rotateAroundCenter(rotation = 0) {
   }
 
   // For all other rotations, translate center to 0,0, rotate, and then invert the translation.
-  const tMat = Matrix.translation(-center.x, -center.y);
-  const rMat = Matrix.rotationZ(Math.toRadians(rotation));
+  using invCenter = center.multiplyScalar(-1);
+  const tMat = Matrix.translation(invCenter, { d3: false });
+  const rMat = Matrix.rotationZ(Math.toRadians(rotation), { d3: false });
   const M = tMat.multiply3x3(rMat).multiply3x3(tMat.invert);
   const pts = [...this.iteratePoints()];
   const tPts = pts.map(pt => M.multiplyPoint2d(pt, pt));
