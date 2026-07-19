@@ -598,16 +598,32 @@ const TrackerMixin = superclass => {
       this.tracker = tracker;
     }
 
-    update() {
-      // Confirm the offset has not changed.
-      if ( this.layoutVersion !== this.tracker.layoutVersion ) {
-        this._model = (new MatrixFloat32(
+
+    /** @type {boolean} */
+    get needsBufferUpdate() { return this.layoutVersion !== this.tracker.layoutVersion; }
+
+    /**
+     * Confirm the buffer offset has not changed.
+     * @returns {boolean} True if the layout changed, requiring a model update.
+     */
+    #updateBufferLayout() {
+      if ( !this.needsBufferUpdate ) return;
+      this._model = (new MatrixFloat32(
           this.constructor.DIM,
           this.constructor.DIM,
           this.tracker.buffer,
           this.tracker.facetOffsetAtId(this.id)));
-        this.layoutVersion = this.tracker.layoutVersion;
-      }
+      this.layoutVersion = this.tracker.layoutVersion;
+    }
+
+    get model() {
+      this.dirty = this.needsBufferUpdate;
+      return super.model;
+    }
+
+
+    update() {
+      this.#updateBufferLayout();
       super.update();
 
       // Tell the underlying tracker that this facet changed.

@@ -739,7 +739,7 @@ quench.registerBatch(`${MODULE_ID}.libGeometry.tile-pixel-cache`, (context) => {
 
         const sMat = MatrixFloat32.scale({ x: tex.scaleX, y: tex.scaleY }, { d3: false });
         expect(sMat.almostEqual(cache.modelMatrix._scale)).to.be.true;
-        xpect(cache.modelMatrix.scale.almostEqual({ x: tex.scaleX, y: 1, z: 1 })).to.be.true;
+        expect(cache.modelMatrix.scale.almostEqual({ x: tex.scaleX, y: 1, z: 1 })).to.be.true;
 
         // Reset for other tests.
         tex.scaleX /= 2;
