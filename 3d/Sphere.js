@@ -651,13 +651,15 @@ export class Sphere {
     const triangles = delaunay.triangles; // Array of indices pointing to our original array.
 
     // Construct the final triangles
-    const numTriangles = triangles.length / 3;
+    const n = triangles.length;
+    const numTriangles = n / 3;
     const tris = Array(numTriangles);
-    for ( let i = 0; i < numTriangles; ) {
+    let j = 0;
+    for ( let i = 0; i < n; ) {
       const a = pts3d[triangles[i++]];
       const b = pts3d[triangles[i++]];
       const c = pts3d[triangles[i++]];
-      tris.push(Triangle3d.from3Points(a, b, c));
+      tris[j++] = Triangle3d.from3Points(a, b, c);
     }
 
     return tris;
