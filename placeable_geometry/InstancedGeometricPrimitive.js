@@ -445,7 +445,7 @@ export class SpherePrimitive extends InstancedGeometricPrimitive {
   static updateInstanceVertices() {
     const vo = this.instanceVO;
     const pts = this.prototypeFaces[0].pointsLattice(10 / canvas.grid.size);
-    const tris = Sphere.triangulateSphereSurface(pts)
+    const tris = Sphere.triangulate(pts)
     const vertices = tris.toVertices({ addNormals: true });
     vo.hasNormals = true;
     vo.hasUVs = false;
