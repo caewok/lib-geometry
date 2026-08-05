@@ -215,13 +215,15 @@ export class ClipperPaths {
    * @param {Matrix} M        3x3 transform matrix
    * @returns {ClipperPaths} New paths
    */
-  transform(M) {
-    const out = new this.constructor([], { scalingFactor: this.scalingFactor });
+  transform(M, out) {
+    out ??= new this.constructor([], { scalingFactor: this.scalingFactor });
+    const paths = [];
     this.paths.forEach(path => {
       const pts = this.constructor.pathToPoints(path, this.scalingFactor);
       pts.forEach(pt => M.multiplyPoint2d(pt, pt));
-      out.addPathPoints(pts);
+      paths.push(this.constructor.pointsToPath(pts, this.scalingFactor))
     });
+    out.paths = paths;
     return out;
   }
 
