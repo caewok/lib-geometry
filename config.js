@@ -81,6 +81,13 @@ const PLACEABLE_TRACKING_CONFIG = {
   perPixelSpacing: 10,
 
   /**
+   * Spacing of the points that comprise the mesh vertices for things like hills.
+   * Larger spacing means fewer points and better performance, sacrificing resolution.
+   * @type {number} Percentage of canvas.grid.size
+   */
+  meshSpacing: 0.25,
+
+  /**
    * Resolution when storing tile pixel caches.
    * @type {number}
    */
