@@ -38,6 +38,16 @@ import {
   CONFIG[GEOMETRY_LIB_ID].CONFIG.placeableGeometries ??= new Set();
   const geometries = GEOMETRY_LIB_OPTS.placeableGeometries;
   if ( geometries ) geometries.forEach(name => CONFIG[GEOMETRY_LIB_ID].CONFIG.placeableGeometries.add(name));
+
+  // Track geometry manager classes, so modules like Terrain Mapper can sub in their own.
+  CONFIG[GEOMETRY_LIB_ID].CONFIG.managerClasses = {
+    walls: WallGeometryManager,
+    tiles: TileGeometryManager,
+    regions: RegionGeometryManager,
+    tokens: TokenGeometryManager,
+    backgroundLevels: LevelBackgroundGeometryManager,
+    foregroundLevels: LevelForegroundGeometryManager,
+  };
 })();
 
 let IS_CONTROLLING_MODULE = false;
@@ -75,6 +85,10 @@ Hooks.on("setup", function() {
   }
 
   // Register the geometries.
+  // Change the geometry classes to match CONFIG.
+  for ( const [key, cl] of Object.entries(CONFIG[GEOMETRY_LIB_ID].CONFIG.managerClasses) ) {
+    GeometryManager.GEOMETRY_MANAGERS[key] = cl;
+  }
   registerPlaceableGeometry();
   // deregisterPlaceableGeometry();
 });

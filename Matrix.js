@@ -794,6 +794,8 @@ class AbstractMatrix {
     return { M, Minv };
   }
 
+  // ----- NOTE: Transformations ----- //
+
   /**
    * Rotation matrix for a given angle, rotating around X axis.
    * @param {number} angle          Radians
