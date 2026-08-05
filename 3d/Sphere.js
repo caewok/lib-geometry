@@ -638,7 +638,7 @@ export class Sphere {
    * @param {Point3d[]} pts
    * @returns {Triangle3d[]}
    */
-  static triangulateSphereSurface(pts3d) {
+  static triangulate(pts3d) {
     // Map the 3d surface points to 2d spherical coordinates (longitude, latitude)
     const pts2d = pts3d.map(pt => {
       const lon = Math.atan(pt.y, pt.x); // Range: -π to π
