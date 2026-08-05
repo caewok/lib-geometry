@@ -100,7 +100,7 @@ const TokenConstrainedFacesMixin = superclass => class extends superclass {
     this.#constrainedShapes.push(new ExtrudedPolygonPrimitive.fromPolygon(
       `${this.placeableId}_constrained`,
       poly,
-      this.constructor.placeableElevationZ(this.placeableObject))
+      this.elevationZ)
     );
   }
 }
@@ -167,7 +167,7 @@ const TokenConstrainedLitFacesMixin = superclass => class extends superclass {
     this.#constrainedLitShapes.push(new ExtrudedPolygonPrimitive.fromPolygon(
       `${this.placeableId}_lit`,
       poly,
-      this.constructor.placeableElevationZ(this.placeableObject))
+      this.elevationZ)
     );
 
     /*
@@ -241,7 +241,7 @@ const TokenConstrainedBrightLitFacesMixin = superclass => class extends supercla
     this.#constrainedBrightLitShapes.push(new ExtrudedPolygonPrimitive.fromPolygon(
       `${this.placeableId}_brightLit`,
       poly,
-      this.constructor.placeableElevationZ(this.placeableObject))
+      this.elevationZ)
     );
 
     /*
@@ -267,8 +267,6 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
 
   /** @type {string} */
   static LAYER = "tokens";
-
-  static TRACKER_TYPES = TRACKER_TYPES;
 
   static UPDATE_KEYS = {
     ...super.UPDATE_KEYS,
@@ -347,7 +345,7 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
     if ( type === TYPES.HEXAGONAL && !this.useSimpleHexagon ) {
       const res = getHexagonalShape(tokenD.w, tokenD.h, tokenD.shape, canvas.scene.grid.columns ?? false);
       const poly2d = new PIXI.Polygon(res.points);
-      const elevZ = this.constructor.placeableElevationZ(this.placeableDocument);
+      const elevZ = this.elevationZ;
       this.shapes.push(ExtrudedPolygonPrimitive.fromPolygon(poly2d), elevZ);
 
     } else this.shapes.push(new primitiveCl(this.placeableId));
@@ -448,11 +446,11 @@ export class TokenGeometry extends mix(PlaceableGeometry).with(
    * - @param {number} topZ
    * - @param {number} bottomZ
    */
-  static placeableElevationZ(tokenD) {
-    const elevZ = super.placeableElevationZ(tokenD);
-    elevZ.topZ -= this.SPACER;
-    elevZ.bottomZ -= this.SPACER;
-    return elevZ;
+  get elevationZ() {
+    const elevs = super.elevationZ;
+    elevs.topZ -= this.SPACER;
+    elevs.bottomZ -= this.SPACER;
+    return elevs;
   }
 
   /**

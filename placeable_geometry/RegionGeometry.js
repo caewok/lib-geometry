@@ -17,7 +17,7 @@ import { CenteredPolygon } from "../CenteredPolygon/CenteredPolygon.js";
 import { CenteredRectangle } from "../CenteredPolygon/CenteredRectangle.js";
 import { Ellipse } from "../Ellipse.js";
 import { Point3d } from "../3d/Point3d.js";
-import { NULL_SET } from "../util.js";
+import { NULL_SET, almostLessThan } from "../util.js";
 
 import { mix } from "../mixwith.js";
 
@@ -110,9 +110,6 @@ const TRACKER_TYPES = {
   ],
   shapes: [
     "shapes",
-    "flags.terrainmapper.rampDirection",
-    "flags.terrainmapper.splitPolygons",
-    "flags.terrainmapper.elevationAlgorithm",
   ],
   level: [
     "levels",
@@ -125,8 +122,6 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(LevelSpanningMix
 
   /** @type {string} */
   static LAYER = "regions";
-
-  static TRACKER_TYPES = TRACKER_TYPES;
 
   static UPDATE_KEYS = {
     ...super.UPDATE_KEYS,
@@ -171,7 +166,7 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(LevelSpanningMix
     const { shapes, regionShapes } = this;
     for ( const shapeArr of shapes ) { // Per level segment shape.
       for ( let i = 0, iMax = shapeArr.length; i < iMax; i += 1 ) {
-        if ( shapeArr[i] ) this.#updateShape(shapeArr[i], regionShapes[i]);
+        if ( shapeArr[i] ) this._updateShape(shapeArr[i], regionShapes[i]);
       }
     }
   }
@@ -198,29 +193,32 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(LevelSpanningMix
     // If there are holes, use the model polygon shape for the entire region.
     if ( regionShapes.some(regionShape => regionShape.hole) ) {
       const id = this._levelShapeId(levelSegmentIdx);
-      const { topZ, bottomZ } = this.constructor.placeableElevationZ(this.placeableDocument);
+      const { topZ, bottomZ } = this.elevationZ;
       const zElevs = this.constructor.elevationZForSegment(levelSegmentIdx, topZ, bottomZ);
       return [ExtrudedPolygonPrimitive.fromPolygons(id, this.regionPolygons, zElevs)];
     }
 
     const n = regionShapes.length;
     const shapes = Array(n)
-    for ( let i = 0, iMax = n; i < iMax; i += 1 ) shapes[i] = this.#buildRegionShape(levelSegmentIdx, i);
+    for ( let i = 0, iMax = n; i < iMax; i += 1 ) shapes[i] = this._buildRegionShape(levelSegmentIdx, i);
     return shapes;
   }
 
   /**
    * Construct a primitive shape for a given region shape.
    * @param {number} idx        Index of the region shape in the region.document.shapes array
-   * @returns {GeometricPrimitive}
+   * @returns {GeometricPrimitive|null}
    */
-  #buildRegionShape(levelSegmentIdx, shapeIdx) {
+  _buildRegionShape(levelSegmentIdx, shapeIdx, topZ, bottomZ) {
     const regionShape = this.regionShapes[shapeIdx];
     const id = this._levelShapeId(levelSegmentIdx, shapeIdx);
     let shape;
     if ( regionShape.gridBased ) {
-      const { topZ, bottomZ } = this.constructor.placeableElevationZ(this.placeableDocument);
+      const elevs = this.elevationZ;
+      topZ ??= elevs.topZ;
+      bottomZ ??= elevs.bottomZ;
       const zElevs = this.constructor.elevationZForSegment(levelSegmentIdx, topZ, bottomZ);
+      if ( almostLessThan(topZ, bottomZ) ) return null;
       shape = ExtrudedPolygonPrimitive.fromPolygons(id, regionShape.polygons, zElevs);
 
     } else switch ( regionShape.type ) {
@@ -256,29 +254,52 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(LevelSpanningMix
 
       default: {  /* eslint-disable-line no-fallthrough */
         // Pass the center, rotation, and dimensions so a prototype can be created.
-        using center = Point3d.tmp;
-        using dims = Point3d.tmp;
-        using angles = Point3d.tmp;
-
-        const { topZ, bottomZ } = this.constructor.placeableElevationZ(this.placeableDocument);
-        const opts = this.constructor.elevationZForSegment(levelSegmentIdx, topZ, bottomZ);
-        const { z, zHeight } = this.constructor.zDimensions(opts.topZ, opts.bottomZ);
-        opts.center = center;
-        opts.dims = dims;
-        opts.angles = angles;
-
-        const origin = regionShape.origin;
-        opts.center.set(origin.x, origin.y, z);
-        if ( regionShape.rotation ) opts.angles.set(0, 0, Math.toRadians(regionShape.rotation));
-        else opts.angles.set(0, 0, 0);
-        if ( regionShape.radius ) opts.dims.set(regionShape.radius, regionShape.radius, zHeight);
-        else if ( regionShape.base?.width ) opts.dims.set(regionShape.base.width * canvas.grid.size, regionShape.base.height * canvas.grid.size, zHeight)
-        else opts.dims.set(1, 1, 1);
+        const elevs = this.elevationZ;
+        topZ ??= elevs.topZ;
+        bottomZ ??= elevs.bottomZ;
+        const opts = this._polygonPrimitiveTransforms(regionShape, levelSegmentIdx, topZ, bottomZ);
+        if ( almostLessThan(opts.dims.z, 0) ) return null; // zHeight must be positive.
         shape = ExtrudedPolygonPrimitive.fromPolygons(id, regionShape.polygons, opts);
+        opts.center.release();
+        opts.dims.release();
+        opts.angles.release();
       }
     }
     return shape;
   }
+
+  /**
+   * Calculate the transform information for a region shape represented by a model polygon.
+   * @param {RegionShape} regionShape
+   * @param {number} levelSegmentIdx
+   * @returns {object}
+   *   - @prop {Point3d} center     The translation information
+   *   - @prop {Point3d} dims       The scaling information
+   *   - @prop {Point3d} angles     The rotation information
+   */
+  _polygonPrimitiveTransforms(regionShape, levelSegmentIdx, topZ, bottomZ) {
+    const elevZ = this.elevationZ;
+    topZ ??= elevZ;
+    bottomZ ??= elevZ;
+    const segmentElev = this.constructor.elevationZForSegment(levelSegmentIdx, topZ, bottomZ);
+    const { z, zHeight } = this.constructor.zDimensions(segmentElev.topZ, segmentElev.bottomZ);
+    const opts = {
+      center: Point3d.tmp,
+      dims: Point3d.tmp,
+      angles: Point3d.tmp,
+    }
+
+    const origin = regionShape.origin;
+    opts.center.set(origin.x, origin.y, z);
+    if ( regionShape.rotation ) opts.angles.set(0, 0, Math.toRadians(regionShape.rotation));
+    else opts.angles.set(0, 0, 0);
+    if ( regionShape.radius ) opts.dims.set(regionShape.radius, regionShape.radius, zHeight);
+    else if ( regionShape.base?.width ) opts.dims.set(regionShape.base.width * canvas.grid.size, regionShape.base.height * canvas.grid.size, zHeight)
+    else opts.dims.set(1, 1, zHeight);
+
+    return opts;
+  }
+
 
   _update(opts) {
     /*
@@ -322,9 +343,9 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(LevelSpanningMix
           || (trackingSet && (trackingSet.has("type") || trackingSet.has("points")));
         if ( needsRebuild ) {
           if ( shapeArr[i] ) shapeArr[i].destroy();
-          shapeArr[i] = this.#buildRegionShape(i);
+          shapeArr[i] = this._buildRegionShape(i);
           shapeArr[i].initialize();
-          this.#updateShape(shapeArr[i], regionShapes[i]);
+          this._updateShape(shapeArr[i], regionShapes[i]);
           continue;
         }
 
@@ -333,13 +354,14 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(LevelSpanningMix
 
         // If no tracking set, update everything.
         // Otherwise, update selectively based on the tracking set.
-        this.#updateShape(shapeArr[i], regionShapes[i], trackingSet);
+        this._updateShape(shapeArr[i], regionShapes[i], trackingSet);
       }
     }
 
     // Handle parent updates last.
     super._update();
   }
+
 
   /**
    * Update a specific shape.
@@ -348,8 +370,8 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(LevelSpanningMix
    * @param {Set<string>} [changeKeys]   Optional change keys; if not provided everything will be updated
    *   Adding a "elevation" key will update the position and scale.
    */
-  #updateShape(shape, regionShape, changes) {
-    const { topZ, bottomZ } = this.constructor.placeableElevationZ(this.placeableDocument);
+  _updateShape(shape, regionShape, changes) {
+    const { topZ, bottomZ } = this.elevationZ;
     const { z, zHeight } = this.constructor.zDimensions(topZ, bottomZ);
 
     let center;
@@ -485,60 +507,16 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(LevelSpanningMix
 
   /**
    * Top and bottom elevation of a region.
-   * @param {Region} region
+   * @param {RegionDocument} regionDocument
    * @returns {object}
    * - @prop {number} topZ
    * - @prop {number} bottomZ
    */
-  static placeableElevationZ(regionDocument) {
-    const elevZ = super.placeableElevationZ(regionDocument);
-    if ( !regionDocument.elevation.topInclusive ) elevZ.topZ -= 1; // Subtract 1 pixel if not inclusive.
-    return elevZ;
+  get elevationZ() {
+    const elevs = super.elevationZ
+    if ( !this.placeableDocument.elevation.topInclusive ) elevs.topZ -= 1; // Subtract 1 pixel if not inclusive.
+    return elevs;
   }
 }
 
-/**
- * Converts region shape to a PIXI shape.
- * @param {RegionShape} regionShape
- * @returns {PIXI.Rectangle|PIXI.Circle|PIXI.Polygon|Ellipse}
- */
-export function convertRegionShapeToPIXI(regionShape, rotate = true) {
-  switch ( regionShape.type ) {
-    case "rectangle": {
-      if ( rotate && regionShape.rotation ) return convertRegionRotatedRectangleShapeToPIXI(regionShape);
-      return convertRegionRectangleShapeToPIXI(regionShape);
-    }
-    case "ellipse": {
-      if ( rotate && regionShape.rotation ) return convertRegionRotatedEllipseShapeToPIXI(regionShape);
-      return convertRegionEllipseShapeToPIXI(regionShape);
-    }
-    case "polygon": {
-      if ( rotate && regionShape.rotation ) return convertRegionRotatedPolygonShapeToPIXI(regionShape);
-      return convertRegionPolygonShapeToPIXI(regionShape);
-    }
-    case "circle": return convertRegionCircleShapeToPIXI(regionShape);
-    default: console.error(`Shape ${regionShape.type} not recognized.`, regionShape);
-  }
-}
 
-function convertRegionRectangleShapeToPIXI(rectShape) { return new PIXI.Rectangle(rectShape.x, rectShape.y, rectShape.width, rectShape.height); }
-function convertRegionCircleShapeToPIXI(circleShape) { return new PIXI.Circle(circleShape.x, circleShape.y, circleShape.radius); }
-function convertRegionEllipseShapeToPIXI(ellipseShape) { return new PIXI.Ellipse(ellipseShape.x, ellipseShape.y, ellipseShape.radiusX, ellipseShape.radiusY); }
-function convertRegionPolygonShapeToPIXI(polygonShape) { return new PIXI.Polygon(polygonShape.points); }
-
-// Rotated shapes.
-function convertRegionRotatedRectangleShapeToPIXI(rectShape) {
-  const rect = CenteredRectangle.fromPIXIRectangle(rectShape);
-  rect.rotation = rectShape.rotation;
-  return rect;
-}
-
-function convertRegionRotatedEllipseShapeToPIXI(ellipseShape) {
-  return new Ellipse(ellipseShape.x, ellipseShape.y, ellipseShape.radiusX, ellipseShape.radiusY, { rotation: ellipseShape.rotation });
-}
-
-function convertRegionRotatedPolygonShapeToPIXI(polygonShape) {
-  const poly = CenteredPolygon.fromPIXIPolygon(convertRegionPolygonShapeToPIXI(polygonShape));
-  poly.rotation = polygonShape.rotation;
-  return poly;
-}

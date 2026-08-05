@@ -101,8 +101,6 @@ export class LevelBackgroundGeometry extends TileGeometry {
 
   static get cacheManager() { return CONFIG[GEOMETRY_LIB_ID].levelBackgroundPixelCache; }
 
-  static TRACKER_TYPES = TRACKER_TYPES;
-
   static UPDATE_KEYS = {
     ...super.UPDATE_KEYS,
     properties: new Set([...TRACKER_TYPES.texture, ...TRACKER_TYPES[this.LEVEL_TYPE]]),
@@ -113,7 +111,7 @@ export class LevelBackgroundGeometry extends TileGeometry {
   // ----- NOTE: AABB ----- //
   calculateAABB() {
     const cache = this.pixelCache;
-    const elevationZ = this.constructor.placeableElevationZ(this.placeableDocument)
+    const elevationZ = this.elevationZ;
     if ( !cache ) {
       // Cannot ascertain width and height without the texture. (At least, it would require a partial load.)
       // But there is a decent chance that the scene rect would cover the dimensions.
@@ -179,17 +177,11 @@ export class LevelBackgroundGeometry extends TileGeometry {
 
   /**
    * Finite elevation of the level background (bottom).
-   * @param {PlaceableDocument} placeableD
-   * @returns {number}
+   * @type {number}
    */
-  static placeableElevationZ(placeableD) {
-    const MAX_ELEV = 1e06;
-    const z = gridUnitsToPixels(placeableD.elevation.bottom);
-    if ( z === Number.POSITIVE_INFINITY ) return MAX_ELEV;
-    if ( z === Number.NEGATIVE_INFINITY ) return -MAX_ELEV;
-    return z;
+  get elevationZ() {
+    return this.constructor.finiteElevation(this.placeableDocument.bottomZ);
   }
-
 }
 
 export class LevelForegroundGeometry extends LevelBackgroundGeometry {
@@ -200,15 +192,10 @@ export class LevelForegroundGeometry extends LevelBackgroundGeometry {
   static get cacheManager() { return CONFIG[GEOMETRY_LIB_ID].levelForegroundPixelCache; }
 
   /**
-   * Finite elevation of the level background (bottom).
-   * @param {PlaceableDocument} placeableD
-   * @returns {number}
+   * Finite elevation of the level foreground (top).
+   * @type {number}
    */
-  static placeableElevationZ(placeableD) {
-    const MAX_ELEV = 1e06;
-    const z = gridUnitsToPixels(placeableD.elevation.top);
-    if ( z === Number.POSITIVE_INFINITY ) return MAX_ELEV;
-    if ( z === Number.NEGATIVE_INFINITY ) return -MAX_ELEV;
-    return z;
+  get elevationZ() {
+    return this.constructor.finiteElevation(this.placeableDocument.topZ);
   }
 }

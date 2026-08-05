@@ -324,18 +324,31 @@ export class PlaceableGeometry {
   }
 
   /**
-   * Finite elevation of a placeable.
-   * @param {PlaceableDocument} placeableD
-   * @returns {object}
+   * Finite elevation.
+   * If positive infinity, will be set to a maximum value.
+   * If negative infinity, will be set to a minimum value.
+   * If undefined, will be set to 0.
+   * @param {number|null|undefined} elev
+   * @returns {number}
+   */
+  static finiteElevation(elev) {
+    if ( !Number.isNumeric(elev) ) return 0;
+    if ( isFinite(elev) ) return elev;
+    const MAX_ELEV = 1e06;
+    return elev === Number.POSITIVE_INFINITY ? MAX_ELEV : -MAX_ELEV;
+  }
+
+  /**
+   * Finite elevation of the placeable document
+   * @type {number|object} Either a single elevation or an object.
    * - @prop {number} topZ
    * - @prop {number} bottomZ
    */
-  static placeableElevationZ(placeableD) {
-    const MAX_ELEV = 1e06;
-    let { topZ, bottomZ } = placeableD;
-    if ( !isFinite(topZ) ) topZ = MAX_ELEV;
-    if ( !isFinite(bottomZ) ) bottomZ = -MAX_ELEV;
-    return { topZ, bottomZ };
+  get elevationZ() {
+    return {
+      topZ: this.constructor.finiteElevation(this.placeableDocument.topZ),
+      bottomZ: this.constructor.finiteElevation(this.placeableDocument.bottomZ),
+    };
   }
 }
 
@@ -410,7 +423,7 @@ export const LevelSpanningMixin = superclass => {
       if ( !this.placeableDocument.levels.has(levelId) ) return false;
 
       // Confirm this wall's top and bottom elevation place it within the level.
-      const { topZ, bottomZ } = this.constructor.placeableElevationZ(this.placeableDocument);
+      const { topZ, bottomZ } = this.elevationZ;
       const level = canvas.scene.levels.get(levelId);
       if ( !level ) return false;
       const levelBottomZ = gridUnitsToPixels(level.elevation.bottom);

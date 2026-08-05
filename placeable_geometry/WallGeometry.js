@@ -112,8 +112,6 @@ export class WallGeometry extends mix(PlaceableGeometry).with(LevelSpanningMixin
   /** @type {string} */
   static LAYER = "walls";
 
-  static TRACKER_TYPES = TRACKER_TYPES;
-
   static UPDATE_KEYS = {
     ...super.UPDATE_KEYS,
     properties: new Set(TRACKER_TYPES.direction),
@@ -182,7 +180,7 @@ export class WallGeometry extends mix(PlaceableGeometry).with(LevelSpanningMixin
     using ctr2d = this.constructor.wallCenter(wallD);
     const rotZ = this.constructor.wallAngle(wallD)
     const lengthXY = this.constructor.wallLength(wallD);
-    const { topZ, bottomZ } = this.constructor.placeableElevationZ(wallD);
+    const { topZ, bottomZ } = this.elevationZ;
 
     using center3d = Point3d.tmp.set(ctr2d.x, ctr2d.y, 0);
     using angles = Point3d.tmp.set(0, 0, rotZ);

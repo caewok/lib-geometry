@@ -104,7 +104,7 @@ const TileAlphaBoundingBoxMixin = superclass => class extends superclass {
     this.#alphaBoundingBoxShapes.length = 0;
 
     const rectOrPoly = cache.getThresholdCanvasBoundingBox(this.alphaThreshold);
-    const elevationZ = this.constructor.placeableElevationZ(this.placeableDocument)
+    const elevationZ = this.elevationZ;
     const center2d = rectOrPoly.center;
 
     const shape = new QuadPrimitive(`${this.placeableId}_alphaBoundingBox`);
@@ -174,7 +174,7 @@ const TileAlphaBoundingPolygonMixin = superclass => class extends superclass {
     if ( !cache ) return;
 
     const poly = cache.getThresholdCanvasBoundingPolygon(this.alphaThreshold);
-    const elevationZ = this.constructor.placeableElevationZ(this.placeableDocument)
+    const elevationZ = this.elevationZ;
 
     const poly3d = Polygon3d.fromPolygon(poly, elevationZ);
     const shape = PlanarPolygonPrimitive.fromPolygon3d(`${this.placeableId}_alphaBoundingPolygon`, poly3d);
@@ -227,7 +227,7 @@ const TileAlphaPolygonsMixin = superclass => class extends superclass {
     const polys = cache.getCanvasAlphaISOBands(this.alphaThreshold);
     if ( !polys ) return;
 
-    const elevationZ = this.constructor.placeableElevationZ(this.placeableDocument)
+    const elevationZ = this.elevationZ;
     const polys3d = Polygons3d.fromPolygons(polys, elevationZ);
     const shape = PlanarPolygonPrimitive.fromPolygon3d(`${this.placeableId}_alphaThresholdPolygons`, polys3d);
     this.#alphaThresholdPolygonShapes.push(shape);
@@ -285,7 +285,7 @@ const TileAlphaTrianglesMixin = superclass => class extends superclass {
     // Then make these into triangles.
     // Trickier than leaving as polygons but can dramatically cut down the number of polys
     // for more complex shapes.
-    const elevationZ = this.constructor.placeableElevationZ(this.placeableDocument)
+    const elevationZ = this.elevationZ;
     const { top } = Polygon3dVertices.polygonTopBottomFaces(polys, { topZ: elevationZ, bottomZ: elevationZ });
 
     // Trim the UVs and Normals.
@@ -313,8 +313,6 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
 
   /** @type {string} */
   static LAYER = "tiles";
-
-  static TRACKER_TYPES = TRACKER_TYPES;
 
   static UPDATE_KEYS = {
     ...super.UPDATE_KEYS,
@@ -377,7 +375,7 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
     const cache = this.pixelCache;
     if ( cache ) {
       const bbox = cache.getThresholdCanvasBoundingBox(this.alphaThreshold);
-      const elevationZ = this.constructor.placeableElevationZ(this.placeableDocument)
+      const elevationZ = this.elevationZ;
       if ( bbox instanceof PIXI.Polygon ) AABB3d.fromPolygon(bbox, elevationZ, this.aabb);
       else AABB3d.fromRectangle(bbox, elevationZ, this.aabb);
 
@@ -423,8 +421,8 @@ export class TileGeometry extends mix(PlaceableGeometry).with(
    * @param {PlaceableDocument} placeableD
    * @returns {number}
    */
-  static placeableElevationZ(placeableD) {
-    return gridUnitsToPixels(placeableD.elevation); // Tiles are always finite elevation.
+  get elevationZ() {
+    return this.placeableDocument.elevationZ; // Tiles are always finite elevation.
   }
 
   /**
