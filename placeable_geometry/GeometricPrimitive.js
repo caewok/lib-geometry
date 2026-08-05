@@ -1,5 +1,6 @@
 /* globals
 CONFIG,
+PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
@@ -7,12 +8,14 @@ CONFIG,
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { VertexObject } from "../placeable_vertices/VertexObject.js";
 import { AABB3d } from "../3d/AABB3d.js";
-import { almostBetween } from "../util.js";
+import { almostBetween, cutaway } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
 import { combineTypedArrays } from "../util.js";
 import { ModelMatrixAnchor } from "../ModelMatrix.js";
-import { mix } from "../mixwith.js";
 import { MatrixFloat32 } from "../Matrix.js";
+import { Segment } from "../Segment.js";
+import { CutawayPolygon } from "../CutawayPolygon.js";
+import { Polygon3d } from "../3d/Polygon3d.js";
 
 /** @type {Matrix<4,4>} */
 const IDENTITY_MATRIX = MatrixFloat32.identity(4, 4);
@@ -109,7 +112,6 @@ export class GeometricPrimitive {
    */
   initialize() {
     if ( this.#initialized ) this.destroy();
-    this._initializeModel();
     this._initializeFaces();
     this.dirty = this.constructor.DIRTY.ALL;
     this.#initialized = true;
@@ -134,7 +136,8 @@ export class GeometricPrimitive {
     AABB:             1 << 1, // 2
     FACE_POINTS:      1 << 2, // 4
     INTERNAL_POINTS:  1 << 3, // 8
-    VERTICES:         1 << 4, // 16
+    INSTANCE_VERTICES:1 << 4, // 16
+    MODEL_VERTICES:   1 << 5, // 32
     ALL:              ~0,     // All bits set
   };
 
@@ -156,7 +159,7 @@ export class GeometricPrimitive {
   // Model matrix might be used to change instance vertices --> model vertices
 
   /** @type {ModelMatrix} */
-  modelMatrix = ModelMatrixAnchor;
+  modelMatrix = new ModelMatrixAnchor();
 
   /**
    * @type {Point3d|object} center
@@ -190,29 +193,33 @@ export class GeometricPrimitive {
   // ----- NOTE: AABB ----- //
 
   /** @type {AABB3d} */
-  _aabb = new AABB3d();
+  #aabb = new AABB3d();
 
   get aabb() {
-    if ( this.isDirty(this.constructor.DIRTY.AABB) ) this.calculateAABB();
-    return this._aabb;
+    if ( this.isDirty(this.constructor.DIRTY.AABB) ) this.updateAABB();
+    return this.#aabb;
+  }
+
+  /**
+   * Trigger update of the AABB.
+   */
+  updateAABB() {
+    this._calculateAABB(this.#aabb);
+    this._clearDirty(this.constructor.DIRTY.AABB);
   }
 
   /**
    * Method for child class to define how the AABB is defined.
    * Defaults to union of all model faces AABB.
    */
-  calculateAABB() {
-    AABB3d.union(this.faces.map(face => face.aabb), this._aabb);
-    this._clearDirty(this.constructor.DIRTY.AABB);
-  }
+  _calculateAABB(aabb) { AABB3d.union(this.faces.map(face => face.aabb), aabb); }
 
   // ----- NOTE: Faces ----- //
 
-
-  // Prototype faces defined by child class.
+  // Prototype faces should be set at initialization and not otherwise be dirty.
 
   /** @type {Polygon3d[]} */
-  get prototypeFaces() { throw Error("Prototype faces must be defined by child class."); }
+  get prototypeFaces() { return []; }
 
   #faces = [];
 
@@ -233,21 +240,37 @@ export class GeometricPrimitive {
   }
 
   /**
+   * Iterate over the prototype faces.
+   * @yields {Polygon3d}
+   */
+  *iteratePrototypeFaces() {
+    yield *this.prototypeFaces;
+  }
+
+  /**
    * Iterate over the faces.
    * @yields {Polygon3d}
    */
   *iterateFaces() {
-    yield *this.faces.values();
+    yield *this.#faces;
+  }
+
+  /**
+   * Trigger update of the faces.
+   */
+  updateFaces() {
+    this._generateFaces(this.#faces);
+    this._clearDirty(this.constructor.DIRTY.FACES);
   }
 
   /**
    * Update the faces for this primitive.
    * Default is to use the model matrix.
    */
-  updateFaces() {
+  _generateFaces(faces) {
     const M = this.modelMatrix.model;
     const numSides = this.prototypeFaces.length;
-    for ( let i = 0; i < numSides; i += 1 ) this.prototypeFaces[i].transform(M, this.#faces[i]);
+    for ( let i = 0; i < numSides; i += 1 ) this.prototypeFaces[i].transform(M, faces[i]);
     this._clearDirty(this.constructor.DIRTY.FACES);
   }
 
@@ -289,27 +312,49 @@ export class GeometricPrimitive {
   }
 
   // ----- NOTE: Vertices ----- //
+  /** @type {boolean} */
+  static HAS_UVs = false;
 
-  // Instance and model vertices, if any, defined by child class.
+  /** @type {VertexObject} */
+  #instanceVO = new VertexObject();
+
+  /** @type {VertexObject} */
+  get instanceVO() {
+    if ( this.isDirty(this.constructor.DIRTY.INSTANCE_VERTICES) ) this.updateInstanceVertices();
+    return this.#instanceVO;
+  }
 
   /**
-   * Vertices with normals and indices.
-   * @type {object<VertexObject>}
+   * Trigger an update of the instance vertices.
    */
-  get instanceVO() { return new VertexObject(); }
+  updateInstanceVertices() {
+    this._generateInstanceVertices(this.#instanceVO);
+    this._clearDirty(this.constructor.DIRTY.INSTANCE_VERTICES);
+  }
 
   /**
-   * Update instance vertices.
+   * Create instance vertices.
    * Default approach uses the prototype faces.
    */
-  static updateInstanceVertices() {
-    // Add vertices from faces.
-    const vo = this.instanceVO ;
-    const vertices = this.verticesFromFaces(this.prototypeFaces, true);
-    vo.hasNormals = true;
-    vo.hasUVs = false;
-    this.updateVertexObject(vo, vertices);
-    return vo;
+  _generateInstanceVertices(vo) {
+    return this.constructor.generateVerticesForFaces(this.iteratePrototypeFaces(), vo);
+  }
+
+  /** @type {VertexObject} */
+  #modelVO = new VertexObject();
+
+  /** @type {VertexObject} */
+  get modelVO() {
+    if ( this.isDirty(this.constructor.DIRTY.MODEL_VERTICES) ) this.updateModelVertices();
+    return this.#modelVO;
+  }
+
+  /**
+   * Trigger an update of the model vertices.
+   */
+  updateModelVertices() {
+    this._generateInstanceVertices(this.#modelVO);
+    this._clearDirty(this.constructor.DIRTY.MODEL_VERTICES);
   }
 
   /**
@@ -318,26 +363,37 @@ export class GeometricPrimitive {
    * @param {boolean} [addNormals=false]
    * @returns {Float32Array} The vertices
    */
-  static verticesFromFaces(faces, addNormals = true) {
-    // Store each Float32 array for each face separately.
-    const vertices = [];
-    for ( const face of faces ) vertices.push(face.toVertices({ addNormals }));
-
-    // Combine.
-    return combineTypedArrays(vertices);
+  _generateModelVertices(vo) {
+    return this.constructor.generateVerticesForFaces(this.iterateFaces(), vo);
   }
 
   /**
-   * Update a vertex object in place with vertices.
-   * @param {VertexObject} vo
-   * @param {Float32Array} vertices
-   * @returns {VertexObject} The object, for convenience
+   * From an array of faces, generate vertices/indices.
+   * @param {Polygon3d[]} faces         Array or iterator of faces
+   * @param {VertexObject} [vo]
+   * @returns {VertexObject}
    */
-  static updateVertexObject(vo, vertices) {
+  static generateVerticesForFaces(faces, vo) {
+    vo ??= new VertexObject();
+    // Add vertices from faces.
+    vo.vertices = this.verticesFromFaces(this.iterateFaces(), true);
     vo.indices = null;
-    vo.vertices = vertices;
+    vo.hasNormals = true;
+    vo.hasUVs = this.HAS_UVs;
     vo.condense(vo);
     return vo;
+  }
+
+  static verticesFromFaces(faces, addNormals = true) {
+    // Store each Float32 array for each face separately.
+    const vertices = [];
+    for ( const face of faces ) {
+      if ( !face ) continue;
+      vertices.push(face.toVertices({ addNormals }));
+    }
+
+    // Combine.
+    return combineTypedArrays(vertices);
   }
 
   // ----- NOTE: Face points ----- //
@@ -346,19 +402,28 @@ export class GeometricPrimitive {
   #facePoints = [];
 
   get facePoints() {
-    if ( this.isDirty(this.constructor.DIRTY.FACE_POINTS) ) this.generateFacePoints();
+    if ( this.isDirty(this.constructor.DIRTY.FACE_POINTS) ) this.updateFacePoints();
     return this.#facePoints;
   }
 
   /**
-   * For each face, generate points encompassed by its surface.
+   * Trigger update of the face points.
    */
-  generateFacePoints() {
+  updateFacePoints() {
+    this._generateFacePoints(this.#facePoints);
+    this._clearDirty(this.constructor.DIRTY.FACE_POINTS);
+  }
+
+  /**
+   * For each face, generate points encompassed by its surface.
+   * @param {Point3d[]} fp
+   */
+  _generateFacePoints(fp) {
     const opts = { spacing: CONFIG[GEOMETRY_LIB_ID].CONFIG.perPixelSpacing || 10, startAtEdge: false };
     const faces = this.faces;
     const numSides = faces.length;
     this.facePoints.length = numSides;
-    for ( let i = 0; i < numSides; i += 1 ) this.#facePoints[i] = faces[i].pointsLattice(opts);
+    for ( let i = 0; i < numSides; i += 1 ) fp[i] = faces[i].pointsLattice(opts);
   }
 
   // ----- NOTE: Internal points ----- //
@@ -419,68 +484,73 @@ export class GeometricPrimitive {
   #internalPoints = {};
 
   get internalPoints() {
-    if ( this.isDirty(this.constructor.INTERNAL_POINTS) ) this.generateInternalPoints();
+    if ( this.isDirty(this.constructor.INTERNAL_POINTS) ) this.updateInternalPoints();
     return this.#internalPoints;
   }
 
-  generateInternalPoints() {
-    this.#internalPoints = this.getInternalPoints();
-    this._clearDirty(this.constructor.INTERNAL_POINTS);
+  /**
+   * Trigger update of the internal points.
+   */
+  updateInternalPoints() {
+    this._generateInternalPoints(this.#internalPoints);
+    this._clearDirty(this.constructor.DIRTY.INTERNAL_POINTS);
   }
 
   /**
    * Calculate internal points for bottom, middle, and top elevations.
+   * @param {InternalPoints} ip       Object in which to store the points
    * @returns {InternalPoints}
    */
-  getInternalPoints() {
+  _generateInternalPoints(ip) {
     // Find the center using AABB bounds and default to that to calculate point locations.
     const { min, max } = this.aabb;
     const center = this.aabb.getCenter();
-    return {
-      center,
-      top: {
-        corners: [
-          Point3d.tmp.set(min.x, min.y, max.z),
-          Point3d.tmp.set(min.x, max.y, max.z),
-          Point3d.tmp.set(max.x, max.y, max.z),
-          Point3d.tmp.set(max.x, min.y, max.z),
-        ],
-        mids: [
-          Point3d.tmp.set(center.x, min.y, max.z),
-          Point3d.tmp.set(center.x, max.y, max.z),
-          Point3d.tmp.set(min.x, center.y, max.z),
-          Point3d.tmp.set(max.x, center.y, max.z),
-        ],
-      },
-      middle: {
-        corners: [
-          Point3d.tmp.set(min.x, min.y, center.z),
-          Point3d.tmp.set(min.x, max.y, center.z),
-          Point3d.tmp.set(max.x, max.y, center.z),
-          Point3d.tmp.set(max.x, min.y, center.z),
-        ],
-        mids: [
-          Point3d.tmp.set(center.x, min.y, center.z),
-          Point3d.tmp.set(center.x, max.y, center.z),
-          Point3d.tmp.set(min.x, center.y, center.z),
-          Point3d.tmp.set(max.x, center.y, center.z),
-        ],
-      },
-      bottom: {
-        corners: [
-          Point3d.tmp.set(min.x, min.y, min.z),
-          Point3d.tmp.set(min.x, max.y, min.z),
-          Point3d.tmp.set(max.x, max.y, min.z),
-          Point3d.tmp.set(max.x, min.y, min.z),
-        ],
-        mids: [
-          Point3d.tmp.set(center.x, min.y, min.z),
-          Point3d.tmp.set(center.x, max.y, min.z),
-          Point3d.tmp.set(min.x, center.y, min.z),
-          Point3d.tmp.set(max.x, center.y, min.z),
-        ],
-      },
-    }
+
+    ip.center = center;
+    ip.top = {
+      corners: [
+        Point3d.tmp.set(min.x, min.y, max.z),
+        Point3d.tmp.set(min.x, max.y, max.z),
+        Point3d.tmp.set(max.x, max.y, max.z),
+        Point3d.tmp.set(max.x, min.y, max.z),
+      ],
+      mids: [
+        Point3d.tmp.set(center.x, min.y, max.z),
+        Point3d.tmp.set(center.x, max.y, max.z),
+        Point3d.tmp.set(min.x, center.y, max.z),
+        Point3d.tmp.set(max.x, center.y, max.z),
+      ],
+    };
+
+    ip.middle =  {
+      corners: [
+        Point3d.tmp.set(min.x, min.y, center.z),
+        Point3d.tmp.set(min.x, max.y, center.z),
+        Point3d.tmp.set(max.x, max.y, center.z),
+        Point3d.tmp.set(max.x, min.y, center.z),
+      ],
+      mids: [
+        Point3d.tmp.set(center.x, min.y, center.z),
+        Point3d.tmp.set(center.x, max.y, center.z),
+        Point3d.tmp.set(min.x, center.y, center.z),
+        Point3d.tmp.set(max.x, center.y, center.z),
+      ],
+    };
+
+    ip.bottom = {
+      corners: [
+        Point3d.tmp.set(min.x, min.y, min.z),
+        Point3d.tmp.set(min.x, max.y, min.z),
+        Point3d.tmp.set(max.x, max.y, min.z),
+        Point3d.tmp.set(max.x, min.y, min.z),
+      ],
+      mids: [
+        Point3d.tmp.set(center.x, min.y, min.z),
+        Point3d.tmp.set(center.x, max.y, min.z),
+        Point3d.tmp.set(min.x, center.y, min.z),
+        Point3d.tmp.set(max.x, center.y, min.z),
+      ],
+    };
   }
 
   /**
@@ -562,6 +632,100 @@ export class GeometricPrimitive {
     }
     return points;
   }
+
+  // ----- NOTE: Vertical Cutaway -----
+
+  /**
+   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
+   * @param {PIXI.Point} start     Starting point of the slice on the XY plane
+   * @param {PIXI.Point} end        Ending point of the slice on the XY plane
+   * @returns {CutawayPolygon[]}
+   */
+  verticalSlice(start, end) {
+    using dirXY = Point3d.tmp;
+    end.subtract(start, dirXY).normalize(dirXY);
+
+    // Define the normal of the vertical slicing plane. Perpendicular to dirXY.
+    using sliceNormal = Point3d.tmp.set(-dirXY.y, dirXY.x, 0);
+
+    // Iterate through each polygon to find intersection segments.
+    using dirA = PIXI.Point.tmp;
+    using dirB = PIXI.Point.tmp;
+    const segments2d = [];
+    for ( const face of this.iterateFaces() ) {
+      const interPoints3d = [];
+      for ( const edge of face.iterateEdges() ) {
+        const { a, b } = edge;
+
+        // Distance from plane = (point - origin) • normal.
+        a.to2d(dirA).subtract(start, dirA);
+        b.to2d(dirB).subtract(start, dirB);
+        const distA = dirA.dot(sliceNormal);
+        const distB = dirB.dot(sliceNormal);
+
+        // Check if endpoints are on opposite sides of the slicing plane.
+        if ( distA * distB < 0 ) {
+          // Linear interpolation to find the exact intersection point.
+          const t = distA / (distA - distB);
+          const pInter = Point3d.tmp;
+          b.subtract(a, pInter).multiplyScalar(t, pInter).add(a, pInter); a + (t * (b - a))
+          interPoints3d.push(pInter);
+        } else if ( distA.almostEqual(0) ) interPoints3d.push(a);
+
+        // A convex/planar polygon sliced by a plane should yield exactly 2 unique points.
+        const uniquePts = getUniquePoints(interPoints3d);
+        if ( uniquePts.length === 2 ) {
+          // Map the 3d points to the 2d coordinate system.
+          const pt0 = cutaway.to2d(uniquePts[0], start, end);
+          const pt1 = cutaway.to2d(uniquePts[1], start, end);
+          segments2d.push(new Segment(pt0, pt1));
+
+        } else console.warn(`GeometricPrimitive|verticalSlice found ${uniquePts.length} unique points`, uniquePts);
+      }
+    }
+    return this.#assembleCutawayPolygons(segments2d, start, end);
+  }
+
+  /**
+   * Stitch a list of disconnected 2d segments into an ordered array of 2d polygons (islands).
+   * @param {Segment[]} segments      Array of 2d line segments
+   * @returns {PIXI.Polygon[]} Array of 2d polygons
+   */
+  #assembleCutawayPolygons(segments, start, end) {
+    if ( segments.length === 0 ) return [];
+
+    // Continue building new islands as long as there are unassigned segments.
+    const polygons = [];
+    const unvisited = [...segments];
+    while ( unvisited.length > 0 ) {
+      const polyPoints = [];
+
+      // Start a new loop with the first available unvisited segment.
+      const startSegment = unvisited.shift();
+      let targetPoint = startSegment.b;
+      polyPoints.push(startSegment.a);
+
+      // Trace the current loop until it closes or hits a dead end.
+      while ( true ) {
+        // Check if the loop closed back on itself.
+        if ( targetPoint.almostEqual(startSegment.a) ) break;
+
+        polyPoints.push(targetPoint);
+
+        // Find the next segment connecting our current target point.
+        const nextIndex = unvisited.findIndex(seg =>
+          seg.a.almostEqual(targetPoint) || seg.b.almostEqual(targetPoint));
+        if ( nextIndex === -1 ) break; // Open loop discontinuity. Save as-is.
+
+        // Set the new target point to the other end of the found segment.
+        const nextSegment = unvisited.splice(nextIndex, 1)[0];
+        targetPoint = nextSegment.a.almostEqual(targetPoint) ? nextSegment.b : nextSegment.a;
+      }
+      const cutaway = CutawayPolygon.fromCutawayPoints(polyPoints, start, end);
+      polygons.push(cutaway);
+    }
+    return polygons;
+  }
 }
 
 /**
@@ -613,6 +777,7 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
   addShape(shape) {
     this.shapes.push(shape);
     this.dirty = this.constructor.DIRTY.ALL;
+    if ( this.initialized ) this._initializeFaces();
   }
 
   /**
@@ -632,7 +797,10 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
    */
   removeShapeByIndex(idx) {
     const shape = this.shape.splice(idx, 1)[0] || null;
-    if ( shape ) this.dirty = this.constructor.DIRTY.ALL;
+    if ( shape ) {
+      this.dirty = this.constructor.DIRTY.ALL;
+      this._initializeFaces();
+    }
     return shape;
   }
 
@@ -658,16 +826,26 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
     }
   }
 
+  /**
+   * Iterate over the world faces of the shapes.
+   * @yields {Polygon3d}
+   */
+  *iteratePrototypeFaces() {
+    for ( const faceArr of this.prototypeFaces ) {
+      if ( !faceArr ) continue;
+      yield *faceArr;
+    }
+  }
+
   // ----- NOTE: AABB ----- //
 
   /**
    * Method for child class to define how the AABB is defined.
    * Defaults to union of all model faces AABB.
    */
-  calculateAABB() {
-    const aabbs = [...this.iterateShapes()].map(shape => shape.aabb);
-    AABB3d.union(aabbs, this._aabb);
-    this._clearDirty(this.constructor.DIRTY.AABB);
+  _calculateAABB(aabb) {
+    const shapeAABBs = [...this.iterateShapes()].map(shape => shape.aabb);
+    AABB3d.union(shapeAABBs, aabb);
   }
 
   /** @type {Point3d} */
@@ -678,7 +856,6 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
   }
 
   // ----- NOTE: Model Matrix ----- //
-
 
   /** @type {ModelMatrix} */
   modelMatrix = new ModelMatrixAnchor();
@@ -691,25 +868,26 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
 
   // ----- NOTE: Faces ----- //
 
-  get prototypeFaces() {
+  #prototypeFaces = [];
+
+  get prototypeFaces() { return this.#prototypeFaces; }
+
+  _initializeFaces() {
     const n = this.shapes.length;
-    const faces = new Array(n);
+    this.#prototypeFaces = new Array(n);
     for ( let i = 0; i < n; i += 1 ) {
       const shape = this.shapes[i];
       if ( !shape ) continue;
-      faces[i] = shape.prototypeFaces;
+      this.#prototypeFaces[i] = shape.prototypeFaces;
     }
-    return faces;
   }
 
   /**
    * Update the faces for this primitive.
    * Default is to use the world matrix on the prototypes.
    */
-  updateFaces() {
-    const M = this.modelMatrix.model;
+  _generateFaces(faces) {
     const protoFaces = this.prototypeFaces;
-    const faces = this.#faces;
     for ( let i = 0, numShapes = this.shapes.length; i < numShapes; i += 1 ) {
       const shape = this.shapes[i];
       if ( !shape ) continue;
@@ -722,9 +900,42 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
         protoArr[j].transform(worldM, faceArr[j]);
       }
     }
-    this._clearDirty(this.constructor.DIRTY.FACES);
   }
 
+  // ----- NOTE: Face points ----- //
 
+  /**
+   * For each face, generate points encompassed by its surface.
+   * @param {Point3d[]} fp
+   */
+  _generateFacePoints(fp) {
+    fp.length = 0;
+    for ( const shape of this.iterateShapes() ) {
+      fp.push(...shape.facePoints);
+    }
+  }
 
+  // ----- NOTE: Internal points ----- //
+
+  // Default is a single set of points based on AABB.
+  // TODO: More sophisticated version testing for containment.
+
+}
+
+// ----- NOTE: Helper functions -----
+
+/**
+ * Filters out duplicate intersection points. (Fixes issues with shared vertices.)
+ * @param {Point3d[]} points
+ * @returns {Point3d[]} The unique points
+ */
+function getUniquePoints(points) {
+  const unique = [];
+  using zero = Point3d.tmp.set(0, 0, 0);
+  using tmp = Point3d.tmp;
+  for ( const p of points ) {
+    const isDuplicate = unique.some(u =>  u.subtract(p, tmp).almostEqual(zero))
+    if ( !isDuplicate ) unique.push(p);
+  }
+  return unique;
 }

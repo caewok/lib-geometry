@@ -8,12 +8,13 @@ PIXI,
 
 import { GeometricPrimitive } from "./GeometricPrimitive.js";
 import { MatrixFloat32 } from "../Matrix.js";
-import { almostBetween } from "../util.js";
+import { almostBetween, cutaway } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
 import { getHexagonalShape } from "../placeable_vertices/BasicVertices.js";
 import { Polygon3d, Quad3d, Ellipse3d, Triangle3d } from "../3d/Polygon3d.js";
 import { Sphere } from "../3d/Sphere.js";
 import { HorizontalQuadVertices } from "../placeable_vertices/BasicVertices.js";
+import { CutawayPolygon } from "../CutawayPolygon.js";
 
 /** @type {Matrix<4,4>} */
 const IDENTITY_MATRIX = MatrixFloat32.identity(4, 4);
@@ -70,7 +71,6 @@ export class InstancedGeometricPrimitive extends GeometricPrimitive {
    * Destroy this geometric primitive, releasing associated memory in buffers.
    */
   _destroy() {
-    this.constructor.modelMatrixTracker.deleteFacet(this.id);
     this.modelMatrix = null;
   }
 
@@ -146,6 +146,29 @@ export class QuadPrimitive extends InstancedGeometricPrimitive {
     if ( t !== null && almostBetween(t, minT, maxT) ) return t;
     return null;
   }
+
+  /**
+   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
+   * @param {PIXI.Point} start     Starting point of the slice on the XY plane
+   * @param {PIXI.Point} end        Ending point of the slice on the XY plane
+   * @returns {CutawayPolygon[]}
+   */
+  verticalSlice(start, end) {
+    // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
+    const rot = this.modelMatrix.rotation;
+    if ( rot.x || rot.y ) return super.verticalSlice(start, end);
+
+    const top = this.faces[0];
+    const poly = top.toPlanarPolygon();
+    const topZ = top.points[0].z;
+    const bottomZ = topZ - 1;
+
+    const opts = {
+      topElevationFn: () => topZ,
+      bottomElevationFn: () => bottomZ,
+    };
+    return poly.cutaway(start, end, opts);
+  }
 }
 
 /**
@@ -162,6 +185,44 @@ export class VerticalQuadPrimitive extends QuadPrimitive {
     // Set y scale to 1 to avoid collapsing the matrix.
     using dims = Point3d.tmp.set(lengthXY, 1, zHeight);
     this.setScale(dims);
+  }
+
+  /**
+   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
+   * @param {PIXI.Point} start     Starting point of the slice on the XY plane
+   * @param {PIXI.Point} end        Ending point of the slice on the XY plane
+   * @returns {CutawayPolygon[]}
+   */
+  verticalSlice(start, end) {
+    // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
+    const rot = this.modelMatrix.rotation;
+    if ( rot.x || rot.y ) return super.verticalSlice(start, end);
+
+    // Draw the 2d top as a thin quad.
+    // The 3d quad has 4 edges: 2 vertical and 2 horizontal.
+    // Rely on fact that we know the points from QUAD.north.
+    const face = this.faces[0];
+    const a = face.points[0];
+    const b = face.points[3];
+
+    // Add/subtract half a pixel each way.
+    using dir = b.subtract(a);
+    using normal = PIXI.Point.tmp.set(-dir.y, dir.x);
+    normal.normalize(normal).multiplyScalar(0.5, normal);
+    using pt0 = a.subtract(normal);
+    using pt1 = a.add(normal);
+    using pt2 = b.add(normal);
+    using pt3 = b.subtract(normal);
+
+    const poly = new PIXI.Polygon(pt0, pt1, pt2, pt3);
+    const topZ = face.points[0].z
+    const bottomZ = face.points[1].z;
+
+    const opts = {
+      topElevationFn: () => topZ,
+      bottomElevationFn: () => bottomZ,
+    };
+    return poly.cutaway(start, end, opts);
   }
 }
 
@@ -229,6 +290,29 @@ export class CubePrimitive extends InstancedGeometricPrimitive {
   static prototypeFaces = this.createUnitCube();
 
   // Internal points follow the AABB.
+
+  /**
+   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
+   * @param {PIXI.Point} start     Starting point of the slice on the XY plane
+   * @param {PIXI.Point} end        Ending point of the slice on the XY plane
+   * @returns {CutawayPolygon[]}
+   */
+  verticalSlice(start, end) {
+    // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
+    const rot = this.modelMatrix.rotation;
+    if ( rot.x || rot.y ) return super.verticalSlice(start, end);
+    const top = this.faces[0];
+    const bottom = this.faces[1];
+    const poly = top.toPlanarPolygon();
+    const topZ = top.points[0].z;
+    const bottomZ = bottom.points[0].z;
+
+    const opts = {
+      topElevationFn: () => topZ,
+      bottomElevationFn: () => bottomZ,
+    };
+    return poly.cutaway(poly, start, end, opts);
+  }
 }
 
 /**
@@ -255,7 +339,7 @@ export class HexagonCylinderPrimitive extends InstancedGeometricPrimitive {
     return [top, bottom, ...top.buildTopSides(-0.5)];
   }
 
-  static #prototypeFaces;
+  static #prototypeFaces; /* eslint-disable-line no-unused-private-class-members */
 
   static get prototypeFaces() { return (this.#prototypeFaces = this.createUnitHexagonCylinder()); }
 
@@ -268,6 +352,29 @@ export class HexagonCylinderPrimitive extends InstancedGeometricPrimitive {
     const top = this.faces[0];
     const bottom = this.faces[1];
     return this.constructor.calculatePolygonCylinderInternalPoints(top, bottom);
+  }
+
+  /**
+   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
+   * @param {PIXI.Point} start     Starting point of the slice on the XY plane
+   * @param {PIXI.Point} end        Ending point of the slice on the XY plane
+   * @returns {CutawayPolygon[]}
+   */
+  verticalSlice(start, end) {
+    // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
+    const rot = this.modelMatrix.rotation;
+    if ( rot.x || rot.y ) return super.verticalSlice(start, end);
+    const top = this.faces[0];
+    const bottom = this.faces[1];
+    const poly = top.toPlanarPolygon();
+    const topZ = top.points[0].z;
+    const bottomZ = bottom.points[0].z;
+
+    const opts = {
+      topElevationFn: () => topZ,
+      bottomElevationFn: () => bottomZ,
+    };
+    return poly.cutaway(start, end, opts);
   }
 }
 
@@ -301,6 +408,30 @@ export class CylinderPrimitive extends InstancedGeometricPrimitive {
     const top = this.faces[0].toPolygon3d({ density: 8 })
     const bottom = this.faces[1].toPolygon3d({ density: 8 })
     return this.constructor.calculatePolygonCylinderInternalPoints(top, bottom);
+  }
+
+  /**
+   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
+   * @param {PIXI.Point} start     Starting point of the slice on the XY plane
+   * @param {PIXI.Point} end        Ending point of the slice on the XY plane
+   * @returns {CutawayPolygon[]}
+   */
+  verticalSlice(start, end) {
+    // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
+    const rot = this.modelMatrix.rotation;
+    if ( rot.x || rot.y ) return super.verticalSlice(start, end);
+
+    const top = this.faces[0];
+    const bottom = this.faces[1];
+    const ellipse = top.toPlanarEllipse();
+    const topZ = top.points[0].z;
+    const bottomZ = bottom.points[0].z;
+
+    const opts = {
+      topElevationFn: () => topZ,
+      bottomElevationFn: () => bottomZ,
+    };
+    return ellipse.cutaway(start, end, opts);
   }
 }
 
@@ -348,6 +479,55 @@ export class SpherePrimitive extends InstancedGeometricPrimitive {
       },
     };
   }
+
+  /**
+   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
+   * @param {PIXI.Point} start     Starting point of the slice on the XY plane
+   * @param {PIXI.Point} end        Ending point of the slice on the XY plane
+   * @returns {CutawayPolygon[]}
+   */
+  verticalSlice(start, end) {
+    // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
+    const rot = this.modelMatrix.rotation;
+    if ( rot.x || rot.y ) return super.verticalSlice(start, end);
+
+    const { center, radius } = this.faces[0];
+    using dirXY = PIXI.Point.tmp;
+    end.subtract(start, dirXY).normalize(dirXY);
+
+    // Define the normal of the vertical slicing plane.
+    const normalXY = PIXI.Point.tmp.set(-dirXY.y, dirXY.x);
+
+    // Calculate the perpendicular distance from the sphere's center to the plane.
+    using delta = PIXI.Point.tmp;
+    center.to2d(delta).subtract(start, delta);
+    const distToPlane = Math.abs(delta.dot(normalXY));
+
+    // Check for intersection
+    if ( distToPlane > radius ) return []; // Plane misses sphere entirely.
+
+    // Calculate the radius of the resulting 2d circle.
+    // Use Math.max to prevent NaN due to minor floating point inaccuracies if distToPlane === radius.
+    const circleRadius = Math.sqrt(Math.max(0, (radius ** 2)- (distToPlane ** 2)));
+    if ( circleRadius.almostEqual(0) ) return [];
+
+    // Calculate the center of the 2d circle mapped to the plane's coordinate system.
+    const distAlongPlane = delta.dot(dirXY);
+    using circleCenter = PIXI.Point.tmp.set(distAlongPlane, center.z);
+
+    // Convert to cutaway.
+    const circle = new PIXI.Circle(circleCenter.x, circleCenter.y, circleRadius);
+    const poly = CutawayPolygon.fromCutawayPoints(circle.toPolygon().points, start, end);
+
+    // Convert to squared distance.
+    let i = 0;
+    for ( using pt of poly.iteratePoints() ) {
+      cutaway.convertFromDistance(pt);
+      poly.points[i++] = pt.x;
+      poly.points[i++] = pt.y;
+    }
+    return [poly]; // TODO: Add CutawayCircle class.
+  }
 }
 
 /**
@@ -355,7 +535,7 @@ export class SpherePrimitive extends InstancedGeometricPrimitive {
  */
 export class WedgeRectangularBasePrimitive extends InstancedGeometricPrimitive {
 
-  static #prototypeFaces;
+  static #prototypeFaces; /* eslint-disable-line no-unused-private-class-members */
 
   static get prototypeFaces() { return (this.#prototypeFaces = this.createUnitWedge()); }
 
