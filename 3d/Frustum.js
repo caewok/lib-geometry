@@ -1,7 +1,6 @@
 /* globals
 canvas,
 CONFIG,
-foundry,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
@@ -32,9 +31,31 @@ export class Frustum {
 
   aabb = new AABB3d();
 
+  clone() {
+    const out = new this();
+    out.top.copyFrom(this.top);
+    out.bottom.copyFrom(this.bottom);
+    out.right.copyFrom(this.right);
+    out.left.copyFrom(this.left);
+    out.floor.copyFrom(this.floor);
+    out.aabb.copyFrom(this.aabb);
+    return out;
+  }
+
   /** @type {Point3d} */
   get viewpoint() { return this.top.a; }
 
+  set viewpoint(vp) {
+    for ( const side of [this.top, this.bottom, this.right, this.left] ) {
+      side.a.copyFrom(vp);
+      side.clearCache();
+    }
+    this.setAABB();
+  }
+
+  /**
+   * Define the bounding box for this frustum.
+   */
   setAABB() { AABB3d.union([this.floor.aabb, this.top.aabb], this.aabb); }
 
 
@@ -142,29 +163,70 @@ export class Frustum {
     return out.rebuild(opts);
   }
 
-  static fromTarget(target, opts = {}) {
-    opts.border2d ??= (CONFIG[GEOMETRY_LIB_ID].CONFIG.constrainTokens ? target.constrainedTokenBorder : target.tokenBorder);
-    opts.topZ ??= target.topZ;
-    opts.bottomZ ??= target.bottomZ;
-    return this.from2dBorder(opts);
+  /**
+   * Create a frustum from a target token.
+   * @param {Token} target
+   * @param {object} [opts={}]        Options passed to from2dBorder; must contain viewpoint
+   * @param {PIXI.Polygon|PIXI.Rectangle} [opts.border2d]   A 2d object with a center property and iteratePoints method
+   * @param {number} [opts.topZ]                   The top elevation of the target
+   * @param {number} [opts.bottomZ]                The bottom elevation of the target
+   * @param {Frustum} [opts.frustum]                    Existing frustum to modify
+   * @returns {Frustum}
+   */
+  static fromTarget(target, { border2d, topZ, bottomZ, ...opts } = {}) {
+    border2d ??= (CONFIG[GEOMETRY_LIB_ID].CONFIG.constrainTokens ? target.constrainedTokenBorder : target.tokenBorder);
+    topZ ??= target.topZ;
+    bottomZ ??= target.bottomZ;
+    return this.from2dBorder({ border2d, topZ, bottomZ, ...opts });
   }
 
-  static from2dBorder({ viewpoint, border2d, topZ, bottomZ, infiniteDistance, frustum } = {}) {
-    if ( !frustum
-      && (typeof topZ === "undefined"
-       || typeof bottomZ === "undefined"
-       || typeof viewpoint === "undefined") ) console.error("Frustum.from2dBorder|Either frustum or all of topZ|bottomZ|viewpoint must be provided.");
+  /**
+   * Create a frustum from a bounding box.
+   * @param {AABB3d} aabb
+   * @param {Point3d} [opts.viewpoint]      The viewpoint from which the frustum extends
+   * @param {boolean} [opts.infiniteDistance=false]     Should the frustum extend indefinitely?
+   * @param {Frustum} [opts.frustum]                    Existing frustum to modify
+   * @returns {Frustum}
+   */
+  static fromAABB(aabb, opts) {
+    using w = Point3d.tmp.set(aabb.width, 0, 0);
+    using h = Point3d.tmp.set(0, aabb.height, 0);
+    using wh = Point3d.tmp.set(aabb.width, aabb.height, 0);
+    const targetPoints = [
+      // Bottom
+      aabb.min.clone(), // TL
+      aabb.min.add(w), // TR
+      aabb.min.add(h), // BL
+      aabb.min.add(wh), // BR
 
+      // Top
+      aabb.max.clone(), // BR
+      aabb.max.subtract(w), // BL
+      aabb.max.subtract(h), // TR
+      aabb.max.subtract(wh), // TL
+    ];
+    const out = this.fromBorderPoints(targetPoints, aabb.center, opts);
+    targetPoints.forEach(pt => pt.release());
+    return out;
+  }
+
+
+  /**
+   * Create a frustum from a set of 3d border points around a target.
+   * @param {Point3d[]} targetBorderPoints        The points defining the target 3d border
+   * @param {Point3d} targetCenter                The 3d center of the target (focal point)
+   * @param {object} [opts]
+   * @param {Point3d} [opts.viewpoint]      The viewpoint from which the frustum extends
+   * @param {boolean} [opts.infiniteDistance=false]     Should the frustum extend indefinitely?
+   * @param {Frustum} [opts.frustum]                    Existing frustum to modify
+   * @returns {Frustum}
+   */
+  static fromBorderPoints(targetBorderPoints, targetCenter, { viewpoint, infiniteDistance = false, frustum } = {}) {
+    if ( !frustum && typeof viewpoint === "undefined" ) console.error("Frustum.from2dBorder|Either frustum or viewpoint must be provided.");
     frustum ??= new this();
 
     // Use existing properties if undefined.
     viewpoint ??= frustum.viewpoint;
-    topZ ??= frustum.top.b.z;
-    bottomZ ??= frustum.bottom.b.z;
-
-    // Calculate the 3d center of the boundary shape.
-    const center2d = border2d.center;
-    const targetCenter = Point3d.tmp.set(center2d.x, center2d.y, (topZ + bottomZ) * 0.5);
 
     // Derive the camera's local orthonormal basis.
     using dir = targetCenter.subtract(viewpoint);
@@ -189,31 +251,28 @@ export class Frustum {
     let uMax = Number.NEGATIVE_INFINITY;
     let vMin = Number.POSITIVE_INFINITY;
     let vMax = Number.NEGATIVE_INFINITY;
-    using P = Point3d.tmp;
     using vToP = Point3d.tmp;
     using pProj = Point3d.tmp;
     using vec = Point3d.tmp;
-    for ( const p2d of border2d.iteratePoints ) {
-      for ( const z of [topZ, bottomZ] ) {
-        P.set(p2d.x, p2d.y, z);
-        P.subtract(viewpoint, vToP);
 
-        const dotPN = vToP.dot(N);
-        if ( almostLessThan(dotPN, 0) ) continue; // Ignore vertices behind near-plane truncation.
+    for ( const P of targetBorderPoints) {
+      P.subtract(viewpoint, vToP);
 
-        const t = distPlane / dotPN;
-        viewpoint.add(vToP.multiplyScalar(t, pProj), pProj);
+      const dotPN = vToP.dot(N);
+      if ( almostLessThan(dotPN, 0) ) continue; // Ignore vertices behind near-plane truncation.
 
-        // Transform projected point to local plane coordinates (u, v).
-        pProj.subtract(planeCenter, vec);
-        const u = vec.dot(right);
-        const v = vec.dot(vUp);
+      const t = distPlane / dotPN;
+      viewpoint.add(vToP.multiplyScalar(t, pProj), pProj);
 
-        uMin = Math.min(uMin, u);
-        uMax = Math.max(uMax, u);
-        vMin = Math.min(vMin, v);
-        vMax = Math.max(vMax, v);
-      }
+      // Transform projected point to local plane coordinates (u, v).
+      pProj.subtract(planeCenter, vec);
+      const u = vec.dot(right);
+      const v = vec.dot(vUp);
+
+      uMin = Math.min(uMin, u);
+      uMax = Math.max(uMax, u);
+      vMin = Math.min(vMin, v);
+      vMax = Math.max(vMax, v);
     }
 
     // Map base corners.
@@ -233,6 +292,29 @@ export class Frustum {
 
     // Rebuild the converging pyramid side faces.
     return this.fromCorners(viewpoint, { TL, TR, BR, BL }, frustum);
+  }
+
+  /**
+   * Create a frustum from a 2d border.
+   * @param {PIXI.Polygon|...} border2d          A 2d object with a center property and iteratePoints method
+   * @param {object} [opts={}]                          Options to define the frustum
+   * @param {number} [opts.topZ]                        The top elevation of the target
+   * @param {number} [opts.bottomZ]                     The bottom elevation of the target
+   * @returns {Frustum}
+   */
+  static from2dBorder(border2d, { topZ = 1, bottomZ = 0, ...opts } = {}) {
+    // Calculate the 3d center of the boundary shape.
+    const center2d = border2d.center;
+    const targetCenter = Point3d.tmp.set(center2d.x, center2d.y, (topZ + bottomZ) * 0.5);
+    const targetPoints = [];
+    for ( const p2d of border2d.iteratePoints() ) {
+      for ( const z of [topZ, bottomZ] ) {
+        targetPoints.push(Point3d.tmp.set(p2d.x, p2d.y, z));
+      }
+    }
+    const out = this.fromBorderPoints(targetPoints, targetCenter, opts);
+    targetPoints.forEach(pt => pt.release());
+    return out;
   }
 
   static elevationZMinMax(viewpoint, topZ = 0, bottomZ = topZ) {
@@ -279,6 +361,8 @@ export class Frustum {
     this.setAABB();
   }
 
+  // ----- NOTE: Iteration ----- //
+
   *iteratePoints() {
     yield this.top.a; // Viewpoint.
     yield this.top.c;
@@ -294,6 +378,8 @@ export class Frustum {
     yield this.right;
     if ( includeFloor ) yield this.floor;
   }
+
+  // ----- NOTE: Overlap tests ----- //
 
   /**
    * Test if a point is contained within the frustrum.
