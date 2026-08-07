@@ -288,7 +288,7 @@ export class PlaceableGeometry {
   static POINT_INDICES = GeometricPrimitive.POINT_INDICES;
 
   getInternalPoints(opts) {
-    return this.iterateShapes(opts).map(shape => shape.getInternalPoints());
+    return this.iterateShapes(opts).map(shape => shape.internalPoints);
   }
 
   // ----- NOTE: Static helpers ----- //
