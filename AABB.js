@@ -329,6 +329,18 @@ export class AABB2d {
     return out;
   }
 
+  /**
+   * Inverse of clone.
+   * @param {AABB} other
+   * @returns {this}
+   */
+  copyFrom(other) {
+    if ( other === this ) return this;
+    this.min.copyFrom(other.min);
+    this.max.copyFrom(other.max);
+    return this;
+  }
+
 
   // ----- NOTE: Containment tests ----- //
 
@@ -595,6 +607,34 @@ export class AABB2d {
     using absAxis = axis.abs();
     const radius = extents.dot(absAxis);
     return { min: centerProj - radius, max: centerProj + radius };
+  }
+
+  // ----- NOTE: Equality ----- //
+
+  /**
+   * Is this bounding box equivalent to another?
+   * @param {AABB} other
+   * @returns {boolean}
+   */
+  equals(other) {
+    for ( const axis of this.constructor.axes ) {
+      if ( !(this.min[axis].equals(other.min[axis])
+          && this.max[axis].equals(other.max[axis])  ) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Is this bounding box almost equivalent to another?
+   * @param {AABB} other
+   * @returns {boolean}
+   */
+  almostEqual(other, epsilon) {
+    for ( const axis of this.constructor.axes ) {
+      if ( !(this.min[axis].almostEqual(other.min[axis], epsilon)
+          && this.max[axis].almostEqual(other.max[axis], epsilon)) ) return false;
+    }
+    return true;
   }
 
   // ----- NOTE: Debug ----- //
