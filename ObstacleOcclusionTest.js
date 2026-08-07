@@ -2,16 +2,17 @@
 canvas,
 CONST,
 CONFIG,
-foundry,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
 import { NULL_SET } from "./util.js";
-import { OTHER_MODULES, GEOMETRY_LIB_ID } from "./const.js";
+import { OTHER_MODULES } from "./const.js";
 import { AABB3d } from "./3d/AABB3d.js";
 import { Draw } from "./Draw.js";
 import { TokenGeometry } from "./placeable_geometry/TokenGeometry.js";
+import { ConfigHandler } from "./ConfigHandler.js";
+import { Point3d } from "./3d/Point3d.js";
 
 /**
  * An instance that, for a given configuration, tracks potential obstacles.
@@ -51,7 +52,7 @@ export class ObstacleOcclusionTest {
    * @yields {GeometricPrimitive}
    */
   *iterateObstacleShapes(opts) {
-    for ( const geom of this.iterateObstacleGeoms(opt) ) yield* geom.iterateShapes();
+    for ( const geom of this.iterateObstacleGeoms(opts) ) yield* geom.iterateShapes();
   }
 
   /**
@@ -61,7 +62,7 @@ export class ObstacleOcclusionTest {
    * @yields {Polygon3d}
    */
   *iterateObstacleFaces(opts) {
-    for ( const geom of this.iterateObstacleGeoms(opt) ) yield* geom.iterateFaces();
+    for ( const geom of this.iterateObstacleGeoms(opts) ) yield* geom.iterateFaces();
   }
 
   /**
@@ -134,7 +135,7 @@ export class ObstacleOcclusionTest {
    */
 
   /** @type {BlockingConfig} */
-  _config = {
+  #config = new ConfigHandler({
     senseType: "sight",
     walls: true,
     tiles: true,
@@ -153,13 +154,13 @@ export class ObstacleOcclusionTest {
       allies: false,      // False: allies do not block.
       excludedStatuses: NULL_SET,  // If token has status, it does not block
     },
-  };
+  });
 
-  get config() { return structuredClone(this._config); }
+  get config() { return this.#config; }
 
   set config(cfg = {}) {
     if ( cfg.blocking ) console.error("ObstacleOcclusionTest no longer has 'blocking' in its config.");
-    foundry.utils.mergeObject(this._config, cfg, { inplace: true, insertKeys: false, recursive: true });
+    this.#config.set(cfg); // Update but do not add new keys here.
     this.update();
   }
 
@@ -176,7 +177,6 @@ export class ObstacleOcclusionTest {
   set subjectToken(value) {
     if ( value.document ) value = value.document;
     this.#subjectToken = value;
-    this.obstacleGeometries.tokens = this.findBlockingTokens();
   }
 
   /**
@@ -193,7 +193,6 @@ export class ObstacleOcclusionTest {
       if ( !tokens[Symbol.iterator] ) tokens = [tokens];
       this.#tokensToExclude = new WeakSet(tokens.map(t => t.document ? t.document : t));
     }
-    this.obstacleGeometries.tokens = this.findBlockingTokens();
   }
 
   /**
@@ -272,7 +271,7 @@ export class ObstacleOcclusionTest {
   }
 
   _updateObstacles() {
-    const senseType = this._config.senseType;
+    const senseType = this.#config.senseType;
     this.obstacleGeometries.tiles = this.findBlockingTiles();
     this.obstacleGeometries.tokens = this.findBlockingTokens();
     this.obstacleGeometries.regions = this.findBlockingRegions();
@@ -305,10 +304,10 @@ export class ObstacleOcclusionTest {
    * @returns {Set<WallDocument>}
    */
   findBlockingWalls() {
-    if ( !this._config.walls ) return NULL_SET;
+    if ( !this.#config.walls ) return NULL_SET;
 
     // Drop non-blocking walls for this sense type.
-    const collisionTest = o => o.t.placeableDocument[this._config.senseType];
+    const collisionTest = o => o.t.placeableDocument[this.#config.senseType];
     return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.walls, { collisionTest });
   }
 
@@ -316,7 +315,7 @@ export class ObstacleOcclusionTest {
    * @returns {Set<TokenDocument>}
    */
   findBlockingTokens() {
-    const tokensCfg = this._config.tokens;
+    const tokensCfg = this.#config.tokens;
     if ( !(tokensCfg.dead || tokensCfg.live) ) return NULL_SET;
 
     const validLevels = this.validLevels;
@@ -346,7 +345,7 @@ export class ObstacleOcclusionTest {
    * @returns {Set<TileDocument>}
    */
   findBlockingTiles() {
-    if ( !this._config.tiles ) return NULL_SET;
+    if ( !this.#config.tiles ) return NULL_SET;
     const validLevels = this.validLevels;
     const collisionTest = o => o.t.placeableDocument.levels.intersects(validLevels);
     return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.tiles, { collisionTest });
@@ -356,7 +355,7 @@ export class ObstacleOcclusionTest {
    * @returns {Set<RegionDocument>}
    */
   findBlockingRegions() {
-    if ( !this._config.regions || !canvas.regions.placeables.length ) return NULL_SET;
+    if ( !this.#config.regions || !canvas.regions.placeables.length ) return NULL_SET;
     return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.regions);
   }
 
@@ -387,7 +386,7 @@ export class ObstacleOcclusionTest {
 
   includeToken(tokenD) {
     return this.constructor.includeToken(tokenD, {
-      blockingCfg: this._config.tokens,
+      blockingCfg: this.#config.tokens,
       subjectToken: this.subjectToken,
       tokensToExclude: this.tokensToExclude
     });
@@ -482,7 +481,7 @@ export class ObstacleOcclusionTest {
       if ( !this.#geomWithinRayBounds(geom, rayOrigin, rayEnd) ) continue;
 
       // If the proximity threshold is met, this edge excluded from perception calculations.
-      if ( geom.edge.applyThreshold(this._config.senseType, rayOrigin) ) continue;
+      if ( geom.edge.applyThreshold(this.#config.senseType, rayOrigin) ) continue;
 
       // If an intersection is found, we can stop.
       if ( geom.rayIntersection(rayOrigin, rayDirection, opts) ) return true;
