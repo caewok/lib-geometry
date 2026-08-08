@@ -236,7 +236,7 @@ export class Frustum {
     // Right vector using world's vertical axis
     using upWorld = Point3d.tmp.set(0, 0, 1);
     using right = upWorld.cross(N);
-    if ( right.magnitudeSquared.almostEqual(0) ) right.set(1, 0, 0); // Fallback if looking perfectly up/down.
+    if ( right.magnitudeSquared().almostEqual(0) ) right.set(1, 0, 0); // Fallback if looking perfectly up/down.
     else right.normalize(right);
     using vUp = N.cross(right);
     vUp.normalize(vUp); // True local vertical up vector.
