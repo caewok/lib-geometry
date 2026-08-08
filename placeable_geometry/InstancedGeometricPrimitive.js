@@ -134,8 +134,8 @@ export class QuadPrimitive extends InstancedGeometricPrimitive {
     return this.constructor.rayIntersectionForFace(this.faces[0], rayOrigin, rayDirection, opts);
   }
 
-  static rayIntersectionForFace(face, rayOrigin, rayDirection, { minT = 0, maxT = 1, direction = this.constructor.CULL_FACES.DOUBLE } = {}) {
-    const CF = this.constructor.CULL_FACES
+  static rayIntersectionForFace(face, rayOrigin, rayDirection, { minT = 0, maxT = 1, direction = this.CULL_FACES.DOUBLE } = {}) {
+    const CF = this.CULL_FACES
     switch ( direction ) {
       case CF.FRONT: if ( face.plane.whichSide(rayOrigin ) > 0 ) return null; break;
       case CF.BACK: if ( face.plane.whichSide(rayOrigin ) < 0 ) return null; break;

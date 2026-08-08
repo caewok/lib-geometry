@@ -279,8 +279,20 @@ export class PlaceableGeometry {
 
   // ----- NOTE: Face points ----- //
 
+  /**
+   * @param {object} [opts]   See iterateShape
+   * @returns {Point3d[]}
+   */
   getFacePoints(opts) {
     return this.iterateShapes(opts).flatMap(shape => shape.facePoints());
+  }
+
+  /**
+   * @param {object} [opts]   See iterateShape
+   * @yields {Point3d}
+   */
+  *iterateFacePoints(opts) {
+    for ( const shape of this.iterateShapes(opts) ) yield* shape.facePoints();
   }
 
   // ----- NOTE: Internal points ----- //

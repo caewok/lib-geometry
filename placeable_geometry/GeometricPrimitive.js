@@ -422,7 +422,7 @@ export class GeometricPrimitive {
     const opts = { spacing: CONFIG[GEOMETRY_LIB_ID].CONFIG.perPixelSpacing || 10, startAtEdge: false };
     const faces = this.faces;
     const numSides = faces.length;
-    this.facePoints.length = numSides;
+    fp.length = numSides;
     for ( let i = 0; i < numSides; i += 1 ) fp[i] = faces[i].pointsLattice(opts);
   }
 
