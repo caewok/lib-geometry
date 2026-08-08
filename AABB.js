@@ -68,6 +68,11 @@ export class AABB2d {
 
   get height() { return this.max.y - this.min.y; }
 
+  get center() {
+    const out = Point3d.tmp;
+    return this.min.add(this.max.subtract(this.min, out).multiplyScalar(0.5, out), out); // min + ((max - min) * 0.5)
+  }
+
   constructor() { this._clear(); }
 
   _clear() {
@@ -619,7 +624,7 @@ export class AABB2d {
   equals(other) {
     for ( const axis of this.constructor.axes ) {
       if ( !(this.min[axis].equals(other.min[axis])
-          && this.max[axis].equals(other.max[axis])  ) return false;
+          && this.max[axis].equals(other.max[axis])) ) return false;
     }
     return true;
   }
