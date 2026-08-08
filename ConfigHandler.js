@@ -63,10 +63,15 @@ export class ConfigHandler {
   }
 
   add(cfgs) {
+    if ( isObjectEmpty(cfgs) ) return;
     foundry.utils.mergeObject(this.#cfg, cfgs, { inplace: true, insertKeys: true, recursive: true });
+    Object.defineProperties(this, this.#getProperties(cfgs));
+  }
 
+  #getProperties(cfgs) {
     const props = {};
     for ( const key of Object.keys(cfgs) ) {
+      if ( !Object.hasOwn(this.#cfg, key) ) continue;
       props[key] = {
         get: () => {
           const val = this.#cfg[key];
@@ -77,7 +82,7 @@ export class ConfigHandler {
         configurable: true, // Required for deletion.
       };
     }
-    Object.defineProperties(this, props);
+    return props;
   }
 
   delete(key) {
@@ -86,7 +91,9 @@ export class ConfigHandler {
   }
 
   set(cfgs) {
+    if ( isObjectEmpty(cfgs) ) return;
     foundry.utils.mergeObject(this.#cfg, cfgs, { inplace: true, insertKeys: false, recursive: true });
+    Object.defineProperties(this, this.#getProperties(cfgs));
   }
 }
 
@@ -140,3 +147,9 @@ function cloneWithFunctions(value) {
   return restoreFunctions(cloned);
 }
 
+/**
+ * Is this object empty?
+ * @param {object} obj
+ * @returns {boolean}
+ */
+function isObjectEmpty(obj) { return !Object.keys(obj).length; }
