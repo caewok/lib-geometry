@@ -17,6 +17,8 @@ class rectangle {
 }
 rectangle.config.senseType;
 
+config.senseType = () => Math.random();
+
 √ Add properties:
 config.add({ tiles: true, levels: { background: true, foreground: false }})
 config.tiles
@@ -78,7 +80,7 @@ export class ConfigHandler {
           return typeof val === "function" ? val() : val;
         },
         set: (value) => this.#cfg[key] = value,
-        enumerable: true,
+        enumerable: true, // So Object.keys(), etc. work.
         configurable: true, // Required for deletion.
       };
     }
@@ -93,7 +95,7 @@ export class ConfigHandler {
   set(cfgs) {
     if ( isObjectEmpty(cfgs) ) return;
     foundry.utils.mergeObject(this.#cfg, cfgs, { inplace: true, insertKeys: false, recursive: true });
-    Object.defineProperties(this, this.#getProperties(cfgs));
+    // Object.defineProperties(this, this.#getProperties(cfgs)); // Should not be necessary; covered by add.
   }
 }
 
