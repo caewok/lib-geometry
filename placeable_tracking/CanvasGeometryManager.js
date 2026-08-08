@@ -222,19 +222,10 @@ export class TokenGeometryManager extends CanvasGeometryManager {
       refreshShape
       */
       if ( token.isPreview ) return;
-      const needsUpdate = flags.refreshPosition || flags.refreshSize || flags.refreshElevation || flags.refreshShape;
-      if ( !needsUpdate ) return;
-      const geom = this.geometryMap.get(token.document.uuid);
-      if ( !geom ) return;
 
-      // Set the geometry update flags manually based on the refresh flags.
-      const updateFlags = geom._updateFlags;
-      Object.keys(updateFlags).forEach(key => updateFlags[key] = false);
-      updateFlags.properties = flags.refreshShape;
-      updateFlags.positionXY = flags.refreshPosition;
-      updateFlags.scale = flags.refreshSize;
-      updateFlags.elevation = flags.refreshElevation;
-      geom._update();
+      // Flags have boolean values, but always seem to be set to true.
+      if ( Object.values(flags).some(flag => !Boolean(flag)) ) console.warn("Some flags set to false.", { ...flags });
+      this.update(token.document, new Set(Object.keys(flags)));
     });
   }
 }

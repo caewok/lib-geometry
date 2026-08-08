@@ -58,7 +58,7 @@ describe("Tokens", () => {
   describe("Model Matrix", () => {
     it("should have numeric values", () => {
       canvas.tokens.placeables.forEach(token => {
-        const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.tokens.geomForPlaceable(token);
+        const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.tokens.geomForPlaceable(token).full;
         for ( const shape of geom.iterateShapes() ) {
           expect(shape.modelMatrix.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
         }
@@ -69,7 +69,7 @@ describe("Tokens", () => {
   describe("AABB", () => {
     it("should have numeric values", () => {
       canvas.tokens.placeables.forEach(token => {
-        const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.tokens.geomForPlaceable(token);
+        const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.tokens.geomForPlaceable(token).full;
         expect(isFinite(geom.aabb.min.x)).to.be.true;
         expect(isFinite(geom.aabb.min.y)).to.be.true;
         expect(isFinite(geom.aabb.min.z)).to.be.true;
@@ -91,7 +91,7 @@ describe("Tiles", () => {
   describe("Model Matrix", () => {
     it("should have numeric values", () => {
       canvas.tiles.placeables.forEach(tile => {
-        const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.tiles.geomForPlaceable(tile);
+        const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.tiles.geomForPlaceable(tile).full;
         for ( const shape of geom.iterateShapes() ) {
           expect(shape.modelMatrix.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
         }
@@ -102,7 +102,7 @@ describe("Tiles", () => {
   describe("AABB", () => {
     it("should have numeric values", () => {
       canvas.tiles.placeables.forEach(tile => {
-        const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.tiles.geomForPlaceable(tile);
+        const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.tiles.geomForPlaceable(tile).full;
         expect(isFinite(geom.aabb.min.x)).to.be.true;
         expect(isFinite(geom.aabb.min.y)).to.be.true;
         expect(isFinite(geom.aabb.min.z)).to.be.true;

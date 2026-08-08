@@ -50,12 +50,18 @@ faces = cyl.constructor.prototypeFaces.map(face => face.transform(scaleMat))
 canvasTests.drawTokenBorder()
 canvasTests.drawConstrainedTokenBorder()
 canvasTests.drawWallGeometries()
-canvasTests.drawTokenGeometries()
+
+canvasTests.drawTokenGeometries({ geomType: "full" })
+canvasTests.drawTokenGeometries({ geomType: "constrained" })
+canvasTests.drawTokenGeometries({ geomType: "lit" })
+canvasTests.drawTokenGeometries({ geomType: "bright" })
+
 canvasTests.drawTileGeometries()
-canvasTests.drawTileGeometries({ faces: "alphaBoundingBox" })
-canvasTests.drawTileGeometries({ faces: "alphaBoundingPolygon" })
-canvasTests.drawTileGeometries({ faces: "alphaThresholdPolygons" })
-canvasTests.drawTileGeometries({ faces: "alphaThresholdTriangles" })
+canvasTests.drawTileGeometries({ geomType: "full" })
+canvasTests.drawTileGeometries({ geomType: "boundingRect" })
+canvasTests.drawTileGeometries({ geomType: "boundingPolygon" })
+canvasTests.drawTileGeometries({ geomType: "polygons" })
+canvasTests.drawTileGeometries({ geomType: "triangles" })
 
 canvasTests.drawRegionGeometries({ faceType: "top" })
 canvasTests.drawRegionGeometries({ faceType: "bottom" })
@@ -182,24 +188,6 @@ export function drawTokenSoundBorder({ tokens, ...drawingOpts } = {}) {
 
 // ----- NOTE: Placeable Geometry ----- //
 
-/**
- * Draw 2d shapes based on placeable geometry face.
- * @param {PlaceableObject} placeable
- * @param {object} [opts]
- * @param {"top"|"bottom"} [opts.face="top"]    Draw top or bottom face
- * @param {boolean} [opts.aabb=false]           If true, draw the bounding box
- * @param {*} [opts]                            Other opts passed to drawing
- */
-export function drawPlaceableGeometry(placeableDocument, placeableColor, opts) {
-  if ( placeableDocument.document ) placeableDocument = placeableDocument.document;
-  const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.geomForDocument(placeableDocument);
-  if ( !geom ) {
-    console.error(`${placeableDocument.constructor.name} ${placeableDocument.id} has no geometry.`);
-    return;
-  }
-  drawGeometry(geom, placeableColor, opts);
-}
-
 export function drawGeometry(geom,  placeableColor, { aabb = false, faces = "faces", faceTypes = "all", ...drawingOpts } = {}) {
   let color = Draw.COLORS[placeableColor];
   if ( aabb ) {
@@ -209,7 +197,7 @@ export function drawGeometry(geom,  placeableColor, { aabb = false, faces = "fac
   }
 
   switch ( faceTypes ) {
-    case "all": for ( const shape of geom.iterateShapes() ) shape.draw2d({ color, ...drawingOpts }); break;
+    case "all": for ( const face of geom.iterateFaces() ) face.draw2d({ color, ...drawingOpts }); break;
     case "top": for ( const face of geom.iterateFaces() ) face.shapes[0].draw2d({ color, ...drawingOpts }); break;
     case "bottom": for ( const face of geom.iterateFaces() ) face.shapes[1].draw2d({ color, ...drawingOpts }); break;
     case "sides": for ( const face of geom.iterateFaces() ) face.shapes.slice(2).draw2d({ color, ...drawingOpts }); break;
@@ -231,7 +219,7 @@ export function drawWallGeometries({ walls, ...drawingOpts } = {}) {
     const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.walls.geomForPlaceable(wall);
     let color = "blue";
     if ( geom.constructor.isDirectional(wall) ) color = wall.dir == 1 ? "green": "red";
-    drawPlaceableGeometry(wall, color, drawingOpts);
+    drawGeometry(geom, color, drawingOpts);
   }
 }
 
@@ -243,9 +231,12 @@ export function drawWallGeometries({ walls, ...drawingOpts } = {}) {
  * @param {boolean} [opts.aabb=false]           If true, draw the bounding box
  * @param {*} [opts]                            Other opts passed to drawing
  */
-export function drawTokenGeometries({ tokens, ...drawingOpts } = {}) {
+export function drawTokenGeometries({ tokens, geomType = "full", ...drawingOpts } = {}) {
   tokens ??= canvas.tokens.placeables;
-  for ( const token of tokens ) drawPlaceableGeometry(token, "orange", drawingOpts);
+  for ( const token of tokens ) {
+    const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.tokens.geomForPlaceable(token)[geomType];
+    drawGeometry(geom, "orange", drawingOpts);
+  }
 }
 
 /**
@@ -256,9 +247,12 @@ export function drawTokenGeometries({ tokens, ...drawingOpts } = {}) {
  * @param {boolean} [opts.aabb=false]           If true, draw the bounding box
  * @param {*} [opts]                            Other opts passed to drawing
  */
-export function drawTileGeometries({ tiles, ...drawingOpts } = {}) {
+export function drawTileGeometries({ tiles, geomType = "full", ...drawingOpts } = {}) {
   tiles ??= canvas.tiles.placeables;
-  for ( const tile of tiles ) drawPlaceableGeometry(tile, "yellow", drawingOpts);
+  for ( const tile of tiles ) {
+    const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.tiles.geomForPlaceable(tile)[geomType];
+    drawGeometry(geom, "yellow", drawingOpts);
+  }
 }
 
 /**
@@ -271,7 +265,10 @@ export function drawTileGeometries({ tiles, ...drawingOpts } = {}) {
  */
 export function drawRegionGeometries({ regions, ...drawingOpts } = {}) {
   regions ??= canvas.regions.placeables;
-  for ( const region of regions ) drawPlaceableGeometry(region, "green", drawingOpts);
+  for ( const region of regions ) {
+    const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.regions.geomForPlaceable(region);
+    drawGeometry(geom, "green", drawingOpts);
+  }
 }
 
 export function drawLevelBackgroundGeometries({ levels, ...drawingOpts } = {}) {
