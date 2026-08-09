@@ -124,7 +124,7 @@ export class ObstacleOcclusionTest {
 
   /**
    * @typedef BlockingConfig
-   * @prop {string} senseType
+   * @prop {CONST.WALL_RESTRICTION_TYPES} senseType
    * @prop {boolean} walls        True if walls block
    * @prop {boolean} tiles        True if tiles block
    * @prop {boolean} regions      True if regions block
@@ -448,6 +448,14 @@ export class ObstacleOcclusionTest {
       && geom.rayIntersection(rayOrigin, rayDirection, opts));
   }
 
+  #subGeometriesOcclude(geoms, rayOrigin, rayDirection, ixType = "full") {
+    using rayEnd = rayOrigin.add(rayDirection);
+    const opts = { levelId: this.levelId };
+    const tokenType = this.config.tokenType;
+    return geoms.some(geom => this.#geomWithinRayBounds(geom, rayOrigin, rayEnd)
+      && geom[ixType].rayIntersection(rayOrigin, rayDirection, opts));
+  }
+
   /**
    * Do the wall geometry obstacles occlude this ray?
    * @param {Point3d} rayOrigin
@@ -490,12 +498,26 @@ export class ObstacleOcclusionTest {
     return false;
   }
 
-  tilesOcclude(rayOrigin, rayDirection) {
-    return this.#geometriesOcclude(this.obstacleGeometries.tiles, rayOrigin, rayDirection);
+  /**
+   * Does a tile occlude this ray?
+   * @param {Pointd} rayOrigin
+   * @param {Point3d}  rayDirection
+   * @param {"full"|"boundingRect"|"boundingPolygon"|"polygons"|"triangles"} [ixType="full"]
+   * @returns {boolean}
+   */
+  tilesOcclude(rayOrigin, rayDirection, ixType = "full") {
+    return this.#subGeometriesOcclude(this.obstacleGeometries.tiles, rayOrigin, rayDirection, ixType);
   }
 
-  tokensOcclude(rayOrigin, rayDirection) {
-    return this.#geometriesOcclude(this.obstacleGeometries.tokens, rayOrigin, rayDirection);
+  /**
+   * Does a token occlude this ray?
+   * @param {Pointd} rayOrigin
+   * @param {Point3d}  rayDirection
+   * @param {"full"|"constrained"|"lit"|"bright"} [ixType="constrained"]
+   * @returns {boolean}
+   */
+  tokensOcclude(rayOrigin, rayDirection, ixType = "constrained") {
+    return this.#subGeometriesOcclude(this.obstacleGeometries.tokens, rayOrigin, rayDirection, ixType);
   }
 
   regionsOcclude(rayOrigin, rayDirection) {
