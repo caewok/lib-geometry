@@ -40,8 +40,9 @@ geom.shapes[0].draw2d({ color: Draw.COLORS.red })
 Draw = CONFIG.GeometryLib.lib.Draw
 Draw.clearDrawings()
 canvasTests = CONFIG.GeometryLib.lib.canvasTests
-Triangle3d = CONFIG.GeometryLib.lib.threeD.Triangle3d
 Point3d = CONFIG.GeometryLib.lib.threeD.Point3d
+
+Triangle3d = CONFIG.GeometryLib.lib.threeD.Triangle3d
 Matrix = CONFIG.GeometryLib.lib.Matrix
 
 scaleMat = Matrix.scale({ x: 100, y: 100, z: 1 })

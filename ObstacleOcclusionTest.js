@@ -535,7 +535,7 @@ export class ObstacleOcclusionTest {
 
   _drawFrustum(draw) {
     if ( !this.frustum ) return;
-    const drawOpts = { draw, width: 0, fill: Draw.COLORS.gray, fillAlpha: 0.1 }
+    const drawOpts = { draw, width: 0, fill: Draw.COLORS.yellow, fillAlpha: 0.1 }
     if ( this.frustum.draw2d ) this.frustum.draw2d(drawOpts);
     else {
       draw ??= Draw;
