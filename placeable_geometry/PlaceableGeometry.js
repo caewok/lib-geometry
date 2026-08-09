@@ -286,26 +286,18 @@ export class PlaceableGeometry {
 
   /**
    * @param {object} [opts]   See iterateShape
-   * @returns {Point3d[]}
-   */
-  getFacePoints(opts) {
-    return this.iterateShapes(opts).flatMap(shape => shape.facePoints());
-  }
-
-  /**
-   * @param {object} [opts]   See iterateShape
    * @yields {Point3d}
    */
   *iterateFacePoints(opts) {
-    for ( const shape of this.iterateShapes(opts) ) yield* shape.facePoints();
+    for ( const shape of this.iterateShapes(opts) ) yield* shape.iterateFacePoints();
   }
 
   // ----- NOTE: Internal points ----- //
 
   static POINT_INDICES = GeometricPrimitive.POINT_INDICES;
 
-  getInternalPoints(opts) {
-    return this.iterateShapes(opts).map(shape => shape.internalPoints);
+  *iterateInternalPoints(opts) {
+    for ( const shape of this.iterateShapes(opts) ) yield shape.internalPoints;
   }
 
   // ----- NOTE: Static helpers ----- //

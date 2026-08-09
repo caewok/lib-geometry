@@ -398,12 +398,17 @@ export class GeometricPrimitive {
 
   // ----- NOTE: Face points ----- //
 
-  /** @typedef {Point3d[]} */
+  /** @typedef {Point3d[][]} */
   #facePoints = [];
 
   get facePoints() {
     if ( this.isDirty(this.constructor.DIRTY.FACE_POINTS) ) this.updateFacePoints();
     return this.#facePoints;
+  }
+
+  /** @yield {Point3d} */
+  *iterateFacePoints() {
+    for ( const pts of this.facePoints ) yield* pts;
   }
 
   /**
@@ -416,6 +421,7 @@ export class GeometricPrimitive {
 
   /**
    * For each face, generate points encompassed by its surface.
+   * Generates an array of points per face.
    * @param {Point3d[]} fp
    */
   _generateFacePoints(fp) {
