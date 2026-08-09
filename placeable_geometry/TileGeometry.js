@@ -188,6 +188,41 @@ export class TileGeometry {
   - face points
   - internal points
   */
+
+  /**
+   * Determine the tile rotation.
+   * @param {TileDocument} tileD
+   * @returns {Point3d}    Rotation, in radians, along the z axis.
+   */
+  static tileRotation(tileD) {
+    return Point3d.tmp.set(0, 0, Math.toRadians(tileD.rotation || 0));
+  }
+
+  /**
+   * Determine the center of the tile, in pixel units.
+   * @param {TileDocument} tileD
+   * @returns {Point3d}
+   */
+  static tileCenter(tileD) {
+    const { x, y, width, height, texture, elevationZ } = tileD;
+    const anchorX = texture?.anchorX ?? 0.5;
+    const anchorY = texture?.anchorY ?? 0.5;
+
+    // Shift TL by the difference between the center (0.5) and the anchor position.
+    return Point3d.tmp.set(
+      x + (width * (0.5 - anchorX)),
+      y + (height * (0.5 - anchorY)),
+      elevationZ,
+    );
+  }
+
+  /**
+   * Determine the tile 3d dimensions, in pixel units.
+   * @param {TileDocument} tileD
+   * @returns {Point3d} x: width, y: height, z: zHeight
+   */
+  static tileDimensions(tileD) { return Point3d.tmp.set(tileD.width, tileD.height, 1); }
+
 }
 
 export class TileFullGeometry extends PlaceableGeometry {
@@ -237,17 +272,17 @@ export class TileFullGeometry extends PlaceableGeometry {
     // No changes required if level is updated.
 
     if ( this._updateFlags.positionXY || this._updateFlags.elevation ) {
-      const ctr = this.constructor.tileCenter(this.placeableDocument);
+      const ctr = TileGeometry.tileCenter(this.placeableDocument);
       this.shape.setPosition(ctr);
     }
 
     if ( this._updateFlags.rotation ) {
-      const angles = this.constructor.tileRotation(this.placeableDocument);
+      const angles = TileGeometry.tileRotation(this.placeableDocument);
       this.shape.setRotation(angles);
     }
 
     if ( this._updateFlags.scale ) {
-      const dims = this.constructor.tileDimensions(this.placeableDocument);
+      const dims = TileGeometry.tileDimensions(this.placeableDocument);
       this.shape.setScale(dims);
     }
     super._update();
@@ -294,40 +329,6 @@ export class TileFullGeometry extends PlaceableGeometry {
   get elevationZ() {
     return this.placeableDocument.elevationZ; // Tiles are always finite elevation.
   }
-
-  /**
-   * Determine the tile rotation.
-   * @param {TileDocument} tileD
-   * @returns {Point3d}    Rotation, in radians, along the z axis.
-   */
-  static tileRotation(tileD) {
-    return Point3d.tmp.set(0, 0, Math.toRadians(tileD.rotation || 0));
-  }
-
-  /**
-   * Determine the center of the tile, in pixel units.
-   * @param {TileDocument} tileD
-   * @returns {Point3d}
-   */
-  static tileCenter(tileD) {
-    const { x, y, width, height, texture, elevationZ } = tileD;
-    const anchorX = texture?.anchorX ?? 0.5;
-    const anchorY = texture?.anchorY ?? 0.5;
-
-    // Shift TL by the difference between the center (0.5) and the anchor position.
-    return Point3d.tmp.set(
-      x + (width * (0.5 - anchorX)),
-      y + (height * (0.5 - anchorY)),
-      elevationZ,
-    );
-  }
-
-  /**
-   * Determine the tile 3d dimensions, in pixel units.
-   * @param {TileDocument} tileD
-   * @returns {Point3d} x: width, y: height, z: zHeight
-   */
-  static tileDimensions(tileD) { return Point3d.tmp.set(tileD.width, tileD.height, 1); }
 }
 
 export class TileBoundingRectGeometry extends TileFullGeometry {

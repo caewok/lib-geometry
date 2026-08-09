@@ -162,6 +162,87 @@ export class TokenGeometry {
   - face points
   - internal points
   */
+
+  // ----- NOTE: Static methods -----
+
+  static SPACER = 2; // Shrink tokens slightly to avoid z-fighting with walls and tiles.
+
+  /**
+   * Determine the token 3d dimensions, in pixel units.
+   * @param {TokenDocument} tokenD
+   * @returns {Point3d} x: width, y: height, z: zHeight
+   */
+  static tokenDimensions(tokenD, out) {
+    out ??= Point3d.tmp;
+    const { width, height } = tokenD.getSize(); // Multiplier, e.g. 1, 2, or 3.
+    const zHeight = tokenD.verticalHeightZ;
+    return out.set(
+      width - this.SPACER,
+      height - this.SPACER,
+      zHeight - this.SPACER,
+    );
+  }
+
+  /**
+   * Determine the token center, in pixel units.
+   * @param {TokenDocument} tokenD
+   * @returns {Point3d}
+   * @prop {number} x       In x direction
+   * @prop {number} y      In y direction
+   * @prop {number} z     In z direction
+   */
+  static tokenCenter(tokenD, out) {
+    out ??= Point3d.tmp;
+    const { x, y, topZ, bottomZ } = tokenD;
+    const { width, height } = tokenD.getSize();
+    const z = bottomZ + ((topZ - bottomZ) * 0.5);
+    return out.set(x + (width * 0.5), y + (height * 0.5), z);
+  }
+
+  /**
+   * Does the token block with respect to a movement token?
+   * @param {TokenDocument} tokenD           Token to test for whether it could block
+   * @param {TokenDocument} [subjectTokenD]       Token doing the movement or viewing
+   * @param {TokenBlockingConfig} blockingCfg
+   * @returns {boolean}
+   */
+  static tokenBlocks(tokenD, subjectTokenD, blockingCfg = {}) {
+    if ( tokenD.document ) tokenD = tokenD.document;
+    if ( subjectTokenD?.document ) subjectTokenD = subjectTokenD.document;
+
+    // Hidden tokens don't block.
+    if ( tokenD.hidden ) return false;
+
+    // Don't block self. Note this is ignored if no subject token.
+    if ( subjectTokenD === tokenD ) return false;
+
+    // Exclude certain token statuses.
+    blockingCfg.excludedStatuses ??= NULL_SET;
+    if ( tokenD.actor
+      && tokenD.actor.statuses.intersects(blockingCfg.excludedStatuses) ) return false;
+
+    // Tests for dead tokens.
+    if ( !blockingCfg.dead && CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsDead(tokenD) ) return false;
+
+    // Tests for live tokens.
+    if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsAlive(tokenD) ) {
+      if ( !blockingCfg.live ) return false;
+      if ( !blockingCfg.prone && tokenD.isProne ) return false;
+
+      // Compare disposition to subject token.
+      if ( subjectTokenD ) {
+        if ( !blockingCfg.enemies && CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsEnemy(subjectTokenD, tokenD) ) return false;
+        if ( !blockingCfg.allies && CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsAlly(subjectTokenD, tokenD) ) return false;
+      }
+    }
+    return true;
+  }
+
+  static includeToken(tokenD, { blockingCfg = {}, subjectToken, tokensToExclude = NULL_SET }) {
+    if ( subjectToken && subjectToken.document ) subjectToken = subjectToken.document;
+    if ( tokenD === subjectToken || tokensToExclude.has(tokenD) ) return false;
+    return this.tokenBlocks(tokenD, subjectToken, blockingCfg);
+  }
 }
 
 /**
@@ -176,6 +257,9 @@ export class TokenFullGeometry extends PlaceableGeometry {
 
   static UPDATE_KEYS = {
     ...super.UPDATE_KEYS,
+    positionXY: new Set(TRACKER_TYPES.positionXY),
+    shape: new Set(TRACKER_TYPES.shpae),
+    elevation: new Set(TRACKER_TYPES.elevation),
     properties: new Set([...TRACKER_TYPES.shape, ...TRACKER_TYPES.disposition]),
     level: new Set(TRACKER_TYPES.level),
     scale: new Set(TRACKER_TYPES.scale),
@@ -255,8 +339,8 @@ export class TokenFullGeometry extends PlaceableGeometry {
       const elevs = this.elevationZ;
       this.shapes.push(ExtrudedPolygonPrimitive.fromPolygon(this.placeableId, poly2d, {
         ...elevs,
-        dims: this.constructor.tokenDimensions(this.placeableDocument),
-        center: this.constructor.tokenCenter(this.placeableDocument),
+        dims: TokenGeometry.tokenDimensions(this.placeableDocument),
+        center: TokenGeometry.tokenCenter(this.placeableDocument),
       }));
     } else this.shapes.push(new primitiveCl(this.placeableId));
   }
@@ -271,12 +355,13 @@ export class TokenFullGeometry extends PlaceableGeometry {
     // No changes required if level is updated.
 
     if ( this._updateFlags.positionXY || this._updateFlags.elevation ) {
-      const ctr = this.constructor.tokenCenter(this.placeableDocument);
+      const ctr = TokenGeometry.tokenCenter(this.placeableDocument);
+      console.debug(`${this.constructor.name}|Updating position for ${this.placeableDocument.name} to ${ctr}`);
       this.shape.setPosition(ctr);
     }
 
     if ( this._updateFlags.scale ) {
-      const dims = this.constructor.tokenDimensions(this.placeableDocument);
+      const dims = TokenGeometry.tokenDimensions(this.placeableDocument);
       this.shape.setScale(dims);
     }
 
@@ -299,7 +384,7 @@ export class TokenFullGeometry extends PlaceableGeometry {
    */
   blocksSense(_senseType) {
     // Tokens block all sense types equally.
-    return this.constructor.tokenBlocks(this.placeableDocument);
+    return TokenGeometry.tokenBlocks(this.placeableDocument);
   }
 
   /**
@@ -309,7 +394,7 @@ export class TokenFullGeometry extends PlaceableGeometry {
    * @returns {boolean}
    */
   blocksFromLevel(levelId) {
-    if ( !this.constructor.tokenBlocks(this.placeableDocument) ) return false;
+    if ( !TokenGeometry.tokenBlocks(this.placeableDocument) ) return false;
 
     // If the level can see the token level, than token could block.
     const lvl = canvas.scene.levels.get(levelId);
@@ -319,7 +404,6 @@ export class TokenFullGeometry extends PlaceableGeometry {
 
   // ----- NOTE: Token properties ----- //
 
-  static SPACER = 2; // Shrink tokens slightly to avoid z-fighting with walls and tiles.
 
   /**
    * Determine the token top and bottom elevations, accounting for spacer.
@@ -330,84 +414,9 @@ export class TokenFullGeometry extends PlaceableGeometry {
    */
   get elevationZ() {
     const elevs = super.elevationZ;
-    elevs.topZ -= this.constructor.SPACER;
-    elevs.bottomZ -= this.constructor.SPACER;
+    elevs.topZ -= TokenGeometry.SPACER;
+    elevs.bottomZ -= TokenGeometry.SPACER;
     return elevs;
-  }
-
-  /**
-   * Determine the token 3d dimensions, in pixel units.
-   * @param {TokenDocument} tokenD
-   * @returns {Point3d} x: width, y: height, z: zHeight
-   */
-  static tokenDimensions(tokenD) {
-    const { width, height } = tokenD; // Multiplier, e.g. 1, 2, or 3.
-    const zHeight = tokenD.verticalHeightZ;
-    return Point3d.tmp.set(
-      (width * canvas.dimensions.size) - this.SPACER,
-      (height * canvas.dimensions.size) - this.SPACER,
-      zHeight - this.SPACER,
-    );
-  }
-
-  /**
-   * Determine the token center, in pixel units.
-   * @param {TokenDocument} tokenD
-   * @returns {Point3d}
-   * @prop {number} x       In x direction
-   * @prop {number} y      In y direction
-   * @prop {number} z     In z direction
-   */
-  static tokenCenter(tokenD) {
-    const { x, y, topZ, bottomZ } = tokenD;
-    const { width, height } = tokenD.getSize();
-    const z = bottomZ + ((topZ - bottomZ) * 0.5);
-    return Point3d.tmp.set(x + (width * 0.5), y + (height * 0.5), z);
-  }
-
-  /**
-   * Does the token block with respect to a movement token?
-   * @param {TokenDocument} tokenD           Token to test for whether it could block
-   * @param {TokenDocument} [subjectTokenD]       Token doing the movement or viewing
-   * @param {TokenBlockingConfig} blockingCfg
-   * @returns {boolean}
-   */
-  static tokenBlocks(tokenD, subjectTokenD, blockingCfg = {}) {
-    if ( tokenD.document ) tokenD = tokenD.document;
-    if ( subjectTokenD?.document ) subjectTokenD = subjectTokenD.document;
-
-    // Hidden tokens don't block.
-    if ( tokenD.hidden ) return false;
-
-    // Don't block self. Note this is ignored if no subject token.
-    if ( subjectTokenD === tokenD ) return false;
-
-    // Exclude certain token statuses.
-    blockingCfg.excludedStatuses ??= NULL_SET;
-    if ( tokenD.actor
-      && tokenD.actor.statuses.intersects(blockingCfg.excludedStatuses) ) return false;
-
-    // Tests for dead tokens.
-    if ( !blockingCfg.dead && CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsDead(tokenD) ) return false;
-
-    // Tests for live tokens.
-    if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsAlive(tokenD) ) {
-      if ( !blockingCfg.live ) return false;
-      if ( !blockingCfg.prone && tokenD.isProne ) return false;
-
-      // Compare disposition to subject token.
-      if ( subjectTokenD ) {
-        if ( !blockingCfg.enemies && CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsEnemy(subjectTokenD, tokenD) ) return false;
-        if ( !blockingCfg.allies && CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenIsAlly(subjectTokenD, tokenD) ) return false;
-      }
-    }
-    return true;
-  }
-
-  static includeToken(tokenD, { blockingCfg = {}, subjectToken, tokensToExclude = NULL_SET }) {
-    if ( subjectToken && subjectToken.document ) subjectToken = subjectToken.document;
-    if ( tokenD === subjectToken || tokensToExclude.has(tokenD) ) return false;
-    return this.tokenBlocks(tokenD, subjectToken, blockingCfg);
   }
 
 }
@@ -424,8 +433,8 @@ function createShape(shapeFn = "tokenBorder") {
     `${this.placeableId}`,
     poly,
     { ...this.elevationZ,
-      dims: this.constructor.tokenDimensions(this.placeableDocument),
-      center: this.constructor.tokenCenter(this.placeableDocument),
+      dims: TokenGeometry.tokenDimensions(this.placeableDocument),
+      center: TokenGeometry.tokenCenter(this.placeableDocument),
     }
   );
   this.shapes.push(shape);
