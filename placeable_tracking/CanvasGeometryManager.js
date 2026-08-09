@@ -97,8 +97,8 @@ export class CanvasGeometryManager {
   update(doc, updateKeys, opts) {
     const geom = this.geometryMap.get(doc.uuid);
     if ( !geom ) return;
-    geom.update(updateKeys, opts);
-    this.quadtree.update({ t: geom, r: geom.aabb });
+    const updated = geom.update(updateKeys, opts);
+    if ( updated ) this.quadtree.update({ t: geom, r: geom.aabb });
   }
 
  /**

@@ -174,6 +174,7 @@ export class PlaceableGeometry {
 
   /**
    * @param {Set<string>} updateKeys      Flattened keys that were updated
+   * @returns {boolean} True if an update occurred.
    */
   update(updateKeys, opts) {
     const updateFlags = this._updateFlags;
@@ -181,16 +182,20 @@ export class PlaceableGeometry {
 
     let shapeUpdated = false;
     for ( const [type, s] of Object.entries(this.constructor.UPDATE_KEYS) ) {
-      updateFlags[type] = s.intersects(updateKeys);
-      shapeUpdated ||= true;
+      const needsUpdate = s.intersects(updateKeys);
+      updateFlags[type] = needsUpdate
+      shapeUpdated ||= needsUpdate;
     }
-    if ( !shapeUpdated ) return;
+    if ( !shapeUpdated ) return false;
+    console.debug(`\n\n${this.constructor.name}|Updating ${this.placeableDocument.name} with keys`, [...updateKeys.values()]);
     this._update(opts);
+    return true;
   }
 
   forceUpdate() {
     Object.keys(this._updateFlags).forEach(key => this._updateFlags[key] = true);
     this._update();
+    return true;
   }
 
   // Triggered second.
