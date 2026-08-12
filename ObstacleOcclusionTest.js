@@ -51,8 +51,11 @@ export class ObstacleOcclusionTest {
    * @param {string} [opts.levelId]                           If provided, will return early if geometry does not affect this level.
    * @yields {GeometricPrimitive}
    */
-  *iterateObstacleShapes(opts) {
-    for ( const geom of this.iterateObstacleGeoms(opts) ) yield* geom.iterateShapes();
+  *iterateObstacleShapes({ geomSubtype = "full", ...opts } = {}) {
+    for ( const geom of this.iterateObstacleGeoms(opts) ) {
+      if ( geom.constructor.HAS_SUBTYPES ) yield* geom[geomSubtype].iterateShapes();
+      else yield* geom.iterateShapes();
+    }
   }
 
   /**
@@ -61,8 +64,11 @@ export class ObstacleOcclusionTest {
    * @param {string} [opts.levelId]                           If provided, will return early if geometry does not affect this level.
    * @yields {Polygon3d}
    */
-  *iterateObstacleFaces(opts) {
-    for ( const geom of this.iterateObstacleGeoms(opts) ) yield* geom.iterateFaces();
+  *iterateObstacleFaces({ geomSubtype = "full", ...opts } = {}) {
+    for ( const geom of this.iterateObstacleGeoms(opts) ) {
+      if ( geom.constructor.HAS_SUBTYPES ) yield* geom[geomSubtype].iterateFaces();
+      else yield* geom.iterateFaces();
+    }
   }
 
   /**
@@ -76,7 +82,7 @@ export class ObstacleOcclusionTest {
     levelId ??= this.levelId;
     for ( const key of includeObstacles ) {
       const geoms = this.obstacleGeometries[key] || [];
-      for ( const geom of geoms ) {
+      for ( let geom of geoms ) {
         if ( !geom.blocksSense(senseType) ) continue;
         if ( !geom.blocksFromLevel(levelId) ) continue;
         yield geom;
@@ -448,12 +454,12 @@ export class ObstacleOcclusionTest {
       && geom.rayIntersection(rayOrigin, rayDirection, opts));
   }
 
-  #subGeometriesOcclude(geoms, rayOrigin, rayDirection, ixType = "full") {
+  #subGeometriesOcclude(geoms, rayOrigin, rayDirection, geomSubtype = "full") {
     using rayEnd = rayOrigin.add(rayDirection);
     const opts = { levelId: this.levelId };
     const tokenType = this.config.tokenType;
     return geoms.some(geom => this.#geomWithinRayBounds(geom, rayOrigin, rayEnd)
-      && geom[ixType].rayIntersection(rayOrigin, rayDirection, opts));
+      && geom[geomSubtype].rayIntersection(rayOrigin, rayDirection, opts));
   }
 
   /**
@@ -505,8 +511,8 @@ export class ObstacleOcclusionTest {
    * @param {"full"|"boundingRect"|"boundingPolygon"|"polygons"|"triangles"} [ixType="full"]
    * @returns {boolean}
    */
-  tilesOcclude(rayOrigin, rayDirection, ixType = "full") {
-    return this.#subGeometriesOcclude(this.obstacleGeometries.tiles, rayOrigin, rayDirection, ixType);
+  tilesOcclude(rayOrigin, rayDirection, geomSubtype = "full") {
+    return this.#subGeometriesOcclude(this.obstacleGeometries.tiles, rayOrigin, rayDirection, geomSubtype);
   }
 
   /**
@@ -516,8 +522,8 @@ export class ObstacleOcclusionTest {
    * @param {"full"|"constrained"|"lit"|"bright"} [ixType="constrained"]
    * @returns {boolean}
    */
-  tokensOcclude(rayOrigin, rayDirection, ixType = "constrained") {
-    return this.#subGeometriesOcclude(this.obstacleGeometries.tokens, rayOrigin, rayDirection, ixType);
+  tokensOcclude(rayOrigin, rayDirection, geomSubtype = "constrained") {
+    return this.#subGeometriesOcclude(this.obstacleGeometries.tokens, rayOrigin, rayDirection, geomSubtype);
   }
 
   regionsOcclude(rayOrigin, rayDirection) {
