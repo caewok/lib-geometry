@@ -214,6 +214,13 @@ export class VariableLengthAbstractBuffer {
   }
 
   /**
+   * Does this tracker track this id?
+   * @param {string} id
+   * @returns {boolean}
+   */
+  hasId(id) { return this.facetIdMap.has(id); }
+
+  /**
    * Track facet ids and whether they have changed.
    * By tracking ids, not indices, we can see when the id's index has moved.
    * @type {Map<string, number>}
@@ -233,11 +240,13 @@ export class VariableLengthAbstractBuffer {
 
   /**
    * Increment whenever any data is written.
+   * @type {number}
    */
   dataVersion = 0;
 
   /**
    * Increment whenever the buffer is resized or defragmented.
+   * @type {number}
    */
   layoutVersion = 0;
 
@@ -630,8 +639,8 @@ export class VerticesIndicesAbstractTrackingBuffer {
 
   viewWholeBuffer(verticesBuffer, indicesBuffer) {
     return {
-      indices: this.indices.viewBuffer(indicesBuffer),
-      vertices: this.vertices.viewBuffer(verticesBuffer)
+      indices: this.indices.viewWholeBuffer(indicesBuffer),
+      vertices: this.vertices.viewWholeBuffer(verticesBuffer)
     }
   }
 
