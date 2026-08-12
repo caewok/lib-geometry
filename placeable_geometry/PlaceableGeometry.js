@@ -137,9 +137,7 @@ export class PlaceableGeometry {
     this.placeableDocument = placeableDocument;
   }
 
-  initialize() {
-    this.iterateShapes().forEach(shape => shape.initialize());
-  }
+  initialize() { }
 
   destroy() {
     this.iterateShapes().forEach(shape => shape.destroy());
@@ -220,7 +218,12 @@ export class PlaceableGeometry {
    * @param {string} levelId
    * @returns {boolean}
    */
-  blocksFromLevel(_levelId) { return true; }
+  blocksFromLevel(levelId) {
+    // If the level can see the token level, than token could block.
+    const lvl = canvas.scene.levels.get(levelId);
+    if ( !lvl ) return false;
+    return lvl.visibility.has(this.placeableDocument.level);
+  }
 
   // ----- NOTE: AABB ----- //
 

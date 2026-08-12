@@ -94,11 +94,12 @@ export class GeometricPrimitive {
    */
   constructor(id) {
     this.id = id;
+    this.initialize();
   }
 
-  #initialized = false;
-
-  get initialized() { return this.#initialized; }
+  initialize() {
+    this._initializeFaces();
+  }
 
   #center = new Point3d();
 
@@ -108,25 +109,12 @@ export class GeometricPrimitive {
   }
 
   /**
-   * Initialize the values for this geometric primitive.
-   */
-  initialize() {
-    if ( this.#initialized ) this.destroy();
-    this._initializeFaces();
-    this.dirty = this.constructor.DIRTY.ALL;
-    this.#initialized = true;
-  }
-
-  /**
    * Destroy this geometric primitive, releasing associated memory in buffers.
    */
   destroy() {
-    if ( !this.#initialized ) return;
-    this._destroy();
-    this.#initialized = false;
+    this.id = null;
+    this.#faces.length = null;
   }
-
-  _destroy() { }
 
   // ----- NOTE: Update Flags ----- //
 
@@ -136,7 +124,6 @@ export class GeometricPrimitive {
     AABB:             1 << 1, // 2
     FACE_POINTS:      1 << 2, // 4
     INTERNAL_POINTS:  1 << 3, // 8
-    INSTANCE_VERTICES:1 << 4, // 16
     MODEL_VERTICES:   1 << 5, // 32
     ALL:              ~0,     // All bits set
   };
@@ -350,10 +337,16 @@ export class GeometricPrimitive {
   }
 
   /**
+   * Increment when the model vertices are updated.
+   * @type {number}
+   */
+  modelVerticesVersion = 0;
+
+  /**
    * Trigger an update of the model vertices.
    */
   updateModelVertices() {
-    this._generateInstanceVertices(this.#modelVO);
+    this._generateModelVertices(this.#modelVO);
     this._clearDirty(this.constructor.DIRTY.MODEL_VERTICES);
   }
 
@@ -364,6 +357,7 @@ export class GeometricPrimitive {
    * @returns {Float32Array} The vertices
    */
   _generateModelVertices(vo) {
+    this.modelVerticesVersion += 1;
     return this.constructor.generateVerticesForFaces(this.iterateFaces(), vo);
   }
 
@@ -376,7 +370,7 @@ export class GeometricPrimitive {
   static generateVerticesForFaces(faces, vo) {
     vo ??= new VertexObject();
     // Add vertices from faces.
-    vo.vertices = this.verticesFromFaces(this.iterateFaces(), true);
+    vo.vertices = this.verticesFromFaces(faces, true);
     vo.indices = null;
     vo.hasNormals = true;
     vo.hasUVs = this.HAS_UVs;

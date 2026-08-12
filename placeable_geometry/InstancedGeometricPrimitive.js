@@ -15,6 +15,7 @@ import { Polygon3d, Quad3d, Ellipse3d, Triangle3d } from "../3d/Polygon3d.js";
 import { Sphere } from "../3d/Sphere.js";
 import { HorizontalQuadVertices } from "../placeable_vertices/BasicVertices.js";
 import { CutawayPolygon } from "../CutawayPolygon.js";
+import { VertexObject } from "../placeable_vertices/VertexObject.js";
 
 /** @type {Matrix<4,4>} */
 const IDENTITY_MATRIX = MatrixFloat32.identity(4, 4);
@@ -70,8 +71,9 @@ export class InstancedGeometricPrimitive extends GeometricPrimitive {
   /**
    * Destroy this geometric primitive, releasing associated memory in buffers.
    */
-  _destroy() {
+  destroy() {
     this.modelMatrix = null;
+    super.destroy();
   }
 
   // ----- NOTE: FACES ----- //
@@ -80,6 +82,24 @@ export class InstancedGeometricPrimitive extends GeometricPrimitive {
   static prototypeFaces = [] // Defined by child class.
 
   get prototypeFaces() { return this.constructor.prototypeFaces; }
+
+  // ----- NOTE: Vertices ----- //
+
+  /**
+   * Instanced primitives share a static instanceVO, just like they share static prototype faces.
+   * @type {VertexObject}
+   */
+  static _instanceVO;
+
+  static get instanceVO() { return (this._instanceVO ??= this.generateInstanceVertices()); }
+
+  get instanceVO() { return this.constructor.instanceVO; }
+
+  static generateInstanceVertices() {
+    const vo = new VertexObject();
+    this.generateVerticesForFaces(this.prototypeFaces, vo);
+    return vo;
+  }
 }
 
 /**
@@ -90,6 +110,8 @@ export class QuadPrimitive extends InstancedGeometricPrimitive {
 
   /** @type {Polygon3d} */
   static prototypeFaces = [QUADS.up.clone()];
+
+  static _instanceVO;
 
   static CULL_FACES = {
     NONE: 0,
@@ -180,6 +202,8 @@ export class VerticalQuadPrimitive extends QuadPrimitive {
 
   static prototypeFaces = [QUADS.north.clone()];
 
+  static _instanceVO;
+
   setDims({ lengthXY, zHeight } = {}) {
     // For the horizontal quad (before rotation), length is the x-axis, height is z-axis.
     // Set y scale to 1 to avoid collapsing the matrix.
@@ -238,13 +262,15 @@ export class TexturedQuadPrimitive extends QuadPrimitive {
 
   alphaThreshold = 0.75;
 
+  static _instanceVO;
+
   /**
    * Update instance vertices.
    * Default approach uses the prototype faces.
    */
-  static updateInstanceVertices() {
+  static generateInstanceVertices() {
     // Add vertices from faces.
-    const vo = this.instanceVO ;
+    const vo = new VertexObject;
     const vertices = HorizontalQuadVertices.top;
     vo.hasNormals = true;
     vo.hasUVs = true;
@@ -288,6 +314,8 @@ export class CubePrimitive extends InstancedGeometricPrimitive {
 
   /** @type {Faces} */
   static prototypeFaces = this.createUnitCube();
+
+  static _instanceVO;
 
   // Internal points follow the AABB.
 
@@ -342,6 +370,8 @@ export class HexagonCylinderPrimitive extends InstancedGeometricPrimitive {
   static #prototypeFaces; /* eslint-disable-line no-unused-private-class-members */
 
   static get prototypeFaces() { return (this.#prototypeFaces = this.createUnitHexagonCylinder()); }
+
+  static _instanceVO;
 
   /**
    * Determine all top, bottom, and mid corners along with midpoints between for the
@@ -399,6 +429,8 @@ export class CylinderPrimitive extends InstancedGeometricPrimitive {
 
   static get prototypeFaces() { return this.#prototypeFaces ||= this.createUnitCylinder(canvas.scene.dimensions.maxR / 10); }
 
+  static _instanceVO;
+
   /**
    * Determine all top, bottom, and mid corners along with midpoints between for the cylinder.
    * Splits the circle into 8 points.
@@ -442,8 +474,10 @@ export class SpherePrimitive extends InstancedGeometricPrimitive {
 
   static prototypeFaces = [new Sphere({ x: 0, y: 0 }, 0.5)];
 
-  static updateInstanceVertices() {
-    const vo = this.instanceVO;
+  static _instanceVO;
+
+  static generateInstanceVertices() {
+    const vo = new VertexObject();
     const pts = this.prototypeFaces[0].pointsLattice(10 / canvas.grid.size);
     const tris = Sphere.triangulate(pts)
     const vertices = tris.toVertices({ addNormals: true });
@@ -538,6 +572,8 @@ export class WedgeRectangularBasePrimitive extends InstancedGeometricPrimitive {
   static #prototypeFaces; /* eslint-disable-line no-unused-private-class-members */
 
   static get prototypeFaces() { return (this.#prototypeFaces = this.createUnitWedge()); }
+
+  static _instanceVO;
 
   static createUnitWedge() {
     // Right-angled isoceles triangle.

@@ -18,7 +18,8 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
 
   constructor(id, prototypeFaces) {
     super(id);
-    this.prototypeFaces = prototypeFaces;
+    this._prototypeFaces = prototypeFaces;
+    this._initializeFaces();
   }
 
   // ----- NOTE: Factory functions ----- //
@@ -44,16 +45,9 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
   // ----- NOTE: Faces ----- //
 
   /** @type {Polygon3d[]} */
-  #prototypeFaces = [];
+  _prototypeFaces = [];
 
-  get prototypeFaces() { return this.#prototypeFaces; }
-
-  set prototypeFaces(value) {
-    if ( !Array.isArray(value) ) value = [value];
-    this.#prototypeFaces.length = 0;
-    this.#prototypeFaces.push(...value);
-    this.dirty = this.constructor.DIRTY.ALL;
-  }
+  get prototypeFaces() { return this._prototypeFaces ?? []; } // Needed for constructor, when _prototypeFaces not yet initialized but this getter is.
 
   // ----- NOTE: Vertices ----- //
 
@@ -61,41 +55,6 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
 
   /** @type {VertexObject} */
   instanceVO = new VertexObject();
-
-  /** @type {VertexObject} */
-  #modelVO = new VertexObject();
-
-  get modelVO() {
-    if ( this.isDirty(this.constructor.VERTICES) ) this.updateModelVO();
-    return this.#modelVO;
-  }
-
-  /**
-   * Update this geom's instance vertices.
-   * @param {Float32Array[]} [vertices]       Vertices, including normals.
-   */
-  updateInstanceVertices(vertices) {
-    // Add vertices from faces or from vertex array.
-    const vo = this.instanceVO;
-    vertices ??= this.constructor.verticesFromFaces(this.prototypeFaces, true);
-    vo.hasNormals = true;
-    vo.hasUVs = false;
-    this.constructor.updateVertexObject(vo, vertices);
-    this.dirty = this.constructor.DIRTY.VERTICES;
-  }
-
-  /**
-   * Defaults to using the model faces to construct the vertices.
-   */
-  updateModelVO(vertices) {
-    vertices ??= this.constructor.verticesFromFaces(this.faces, true);
-    const vo = this.modelVO ;
-    vo.hasNormals = true;
-    vo.hasUVs = false;
-    this.constructor.updateVertexObject(vo, vertices);
-    this.constructor.viTracker.updateFacet({ id: this.id, newVertices: vo.vertices, newIndices: vo.indices });
-    this._clearDirty(this.constructor.VERTICES);
-  }
 }
 
 /**
