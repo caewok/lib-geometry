@@ -61,6 +61,8 @@ export class TokenGeometry {
   /** @type {string} */
   static LAYER = "tokens";
 
+  /** @type {boolean} */
+  static HAS_SUBTYPES = true;
 
   /** @type {FullTokenGeometry} */
   #full
@@ -150,6 +152,29 @@ export class TokenGeometry {
     this.#iterateGeometries("calculateAABB");
     if ( !this.#full ) AABB3d.fromTokenDocument(this.placeableDocument, this.aabb);
     else AABB3d.copyFrom(this.#full.aabb);
+  }
+
+  // ----- NOTE: Levels ----- //
+
+  /**
+   * Does this geometry currently block a given sense type?
+   * @param {CONST.WALL_RESTRICTION_TYPES} [senseType="sight"]
+   * @returns {boolean}
+   */
+  blocksSense(_senseType) {
+    // Tokens block all sense types equally.
+    return this.constructor.tokenBlocks(this.placeableDocument);
+  }
+
+  /**
+   * Does this geometry currently block, from the view of a given level?
+   * Must all check if it blocks the given sense type.
+   * @param {string} levelId
+   * @returns {boolean}
+   */
+  blocksFromLevel(levelId) {
+    if ( !this.constructor.tokenBlocks(this.placeableDocument) ) return false;
+    return super.blocksFromLevel(levelId);
   }
 
   /*
@@ -346,8 +371,6 @@ export class TokenFullGeometry extends PlaceableGeometry {
   }
 
   // ----- NOTE: Update ----- //
-
-
 
   _update() {
     if ( this._updateFlags.properties ) this.propertiesUpdated();

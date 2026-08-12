@@ -60,6 +60,9 @@ export class TileGeometry {
   /** @type {string} */
   static LAYER = "tiles";
 
+  /** @type {boolean} */
+  static HAS_SUBTYPES = true;
+
   /**
    * Full tile, no alpha
    * @type {TileFullGeometry}
@@ -177,6 +180,28 @@ export class TileGeometry {
     this.#iterateGeometries("calculateAABB");
     if ( !this.#full ) AABB3d.fromTileDocument(this.placeableDocument, this.aabb);
     else AABB3d.copyFrom(this.#full.aabb);
+  }
+
+  // ----- NOTE: Levels ----- //
+
+  /**
+   * Does this geometry currently block a given sense type?
+   * @param {CONST.WALL_RESTRICTION_TYPES} [senseType="sight"]
+   * @returns {boolean}
+   */
+  blocksSense(_senseType = "sight") { return true; }
+
+  /**
+   * Does this geometry currently block, from the view of a given level?
+   * Must all check if it blocks the given sense type.
+   * @param {string} levelId
+   * @returns {boolean}
+   */
+  blocksFromLevel(levelId) {
+    // If the level can see the token level, than token could block.
+    const lvl = canvas.scene.levels.get(levelId);
+    if ( !lvl ) return false;
+    return lvl.visibility.has(this.placeableDocument.level);
   }
 
   /*
