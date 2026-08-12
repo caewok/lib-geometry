@@ -47,8 +47,8 @@ export class ModelMatrix2d {
 
   constructor(modelBuffer, offset = 0) {
     /** @type {MatrixFloat32} */
-    const byteLength = Float32Array.BYTES_PER_ELEMENT * 16;
-    modelBuffer ??= new Array(byteLength);
+    const byteLength = Float32Array.BYTES_PER_ELEMENT * this.constructor.DIM2;
+    modelBuffer ??= new ArrayBuffer(byteLength);
     if ( !modelBuffer.byteLength === byteLength ) throw Error("ModelMatrix|Buffer byte length is incorrect.");
 
     this._model = (new MatrixFloat32(
