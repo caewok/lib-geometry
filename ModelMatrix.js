@@ -32,9 +32,18 @@ export class ModelMatrix2d {
 
   get dirty() { return this.#dirty }
 
-  set dirty(value) { this.#dirty ||= value; }
+  set dirty(value) {
+    this.#dirty ||= value;
+    this.dataVersion += value;
+  }
 
   _clearDirty() { this.#dirty = false; }
+
+  /**
+   * Increment whenever any data is written.
+   * @type {number}
+   */
+  dataVersion = 0;
 
   constructor(modelBuffer, offset = 0) {
     /** @type {MatrixFloat32} */
