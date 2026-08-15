@@ -98,8 +98,19 @@ cache._toCanvasCoordinates(1500, 1500)
 
 canvasTests.drawRegionGeometries()
 
-incorrectProtoTokens = canvasTests.testTokenPrototypeGeometryContainment()
-incorrectTokens = canvasTests.testTokenGeometryContainment();
+incorrectProtoTokens = canvasTests.testTokenPrototypeGeometryContainment("full")
+incorrectTokens = canvasTests.testTokenGeometryContainment("full");
+
+incorrectProtoTokens = canvasTests.testTokenPrototypeGeometryContainment("constrained")
+incorrectTokens = canvasTests.testTokenGeometryContainment("constrained");
+
+incorrectProtoTokens = canvasTests.testTokenPrototypeGeometryContainment("constrained")
+incorrectTokens = canvasTests.testTokenGeometryContainment("constrained");
+
+incorrectProtoTokens = canvasTests.testTokenPrototypeGeometryContainment("constrained")
+incorrectTokens = canvasTests.testTokenGeometryContainment("constrained");
+
+
 incorrectWalls = canvasTests.testWallGeometryContainment();
 incorrectTiles = canvasTests.testTileGeometryContainment();
 incorrectRegions = canvasTests.testRegionGeometryContainment();
@@ -296,32 +307,34 @@ export function drawLevelForegroundGeometries({ levels, ...drawingOpts } = {}) {
 /**
  * Test tokens for containment.
  */
-export function testTokenGeometryContainment() {
+export function testTokenGeometryContainment(geomType = "full") {
   let incorrectTokens = new Set();
   const mgr = CONFIG.GeometryLib.geometryManager;
   for ( const token of canvas.tokens.placeables ) {
-    const geom = mgr.geomForPlaceable(token);
+    const geom = mgr.geomForPlaceable(token)[geomType];
     using ctr = Point3d.fromTokenCenter(token);
     for ( const face of geom.iterateFaces() ) {
-      if ( face.isFacing(ctr) ) incorrectTokens.add(token);
+      if ( face.isFacing(ctr) ) {
+        incorrectTokens.add(token);
+        break;
+      }
     }
   }
   console.log(`${incorrectTokens.size} incorrect tokens out of ${canvas.tokens.placeables.length}.`, incorrectTokens);
   return incorrectTokens;
 }
 
-export function testTokenPrototypeGeometryContainment() {
+export function testTokenPrototypeGeometryContainment(geomType = "full") {
   let incorrectTokens = new Set();
   const mgr = CONFIG.GeometryLib.geometryManager;
   for ( const token of canvas.tokens.placeables ) {
-    const geom = mgr.geomForPlaceable(token);
+    const geom = mgr.geomForPlaceable(token)[geomType];
     using ctr = Point3d.tmp.set(0, 0, 0);
-    const pf = geom._prototypeFaces;
-
-    if ( pf.top.isFacing(ctr) ) incorrectTokens.add(token);
-    if ( pf.bottom.isFacing(ctr) ) incorrectTokens.add(token);
-    for ( const side of pf.sides ) {
-      if ( side.isFacing(ctr) ) incorrectTokens.add(token);
+    for ( const face of geom.shapes[0].prototypeFaces ) {
+      if ( face.isFacing(ctr) ) {
+        incorrectTokens.add(token);
+        break;
+      }
     }
   }
   console.log(`${incorrectTokens.size} incorrect tokens out of ${canvas.tokens.placeables.length}.`, incorrectTokens);
@@ -352,11 +365,11 @@ export function testWallGeometryContainment() {
   return incorrectWalls;
 }
 
-export function testTileGeometryContainment() {
+export function testTileGeometryContainment(geomType = "full") {
   let incorrectTiles = new Set();
   const mgr = CONFIG.GeometryLib.geometryManager;
   for ( const tile of canvas.tiles.placeables ) {
-    const geom = mgr.geomForPlaceable(tile);
+    const geom = mgr.geomForPlaceable(tile)[geomType];
     const ctr2d = tile.center;
     using ptTop = Point3d.tmp.set(ctr2d.x, ctr2d.y, tile.elevationZ + 50);
     using ptBottom = Point3d.tmp.set(ctr2d.x, ctr2d.y, tile.elevationZ - 50);

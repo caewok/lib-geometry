@@ -7,6 +7,7 @@ import { GeometricPrimitive } from "./GeometricPrimitive.js";
 import { VertexObject } from "../placeable_vertices/VertexObject.js";
 import { Polygon3d  } from "../3d/Polygon3d.js";
 import { ModelMatrixAnchor } from "../ModelMatrix.js";
+import { Point3d } from "../3d/Point3d.js";
 
 /**
  * ModelGeometricPrimitives are one-offs.
@@ -39,6 +40,13 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
     // Use the inverse to construct the prototype faces.
     const invM = modelMatrix.model.invert();
     const prototypeFaces = faces.map(face => face.transform(invM));
+
+    // Ensure the prototype faces are facing outward from the origin.
+    using origin = Point3d.tmp.set(0, 0, 0);
+    for ( const face of prototypeFaces ) {
+      if ( face.isFacing(origin) ) face.reverseOrientation();
+    }
+
     return new this(id, prototypeFaces);
   }
 
@@ -48,6 +56,19 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
   _prototypeFaces = [];
 
   get prototypeFaces() { return this._prototypeFaces ?? []; } // Needed for constructor, when _prototypeFaces not yet initialized but this getter is.
+
+  /**
+   * Update the faces for this primitive.
+   * Default is to use the model matrix.
+   * Confirms orientation, which the more complex model matrices can screw up (apparently).
+   */
+  _generateFaces(faces) {
+    super._generateFaces(faces);
+    const center = this.center;
+    for ( const face of faces ) {
+      if ( face.isFacing(center) ) face.reverseOrientation();
+    }
+  }
 
   // ----- NOTE: Vertices ----- //
 
@@ -126,7 +147,15 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    */
   static #facesFromPolygon(poly, topZ, bottomZ) {
     const top = Polygon3d.fromPolygon(poly, topZ);
-    return this._facesFromPolygon3d(top, bottomZ);
+    const faces = this._facesFromPolygon3d(top, bottomZ);
+
+    // Ensure orientation faces out from center.
+    using ctr2d = poly.center;
+    using ctr3d = Point3d.tmp.set(ctr2d.x, ctr2d.y, bottomZ + ((topZ - bottomZ) * 0.5));
+    for ( const face of faces ) {
+      if ( face.isFacing(ctr3d) ) face.reverseOrientation();
+    }
+    return faces;
   }
 
   /**

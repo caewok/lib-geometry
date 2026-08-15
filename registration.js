@@ -245,7 +245,7 @@ class GeometryManager {
    */
   *iterateManagers() { for ( const type of this.types ) yield this[type]; }
 
-  _typeFromDocument(typeOrDoc) { return pluralize((typeOrDoc.documentName || typeOrDoc).lowercaseFirstLetter()); }
+  _typeFromDocument(typeOrDoc) { return pluralize(lowercaseFirstLetter(typeOrDoc.documentName || typeOrDoc)); }
 
   /**
    * Retrieve the manager for a specific document.
