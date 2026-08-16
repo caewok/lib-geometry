@@ -23,6 +23,7 @@ import { NULL_SET } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
 import { getHexagonalShape } from "../placeable_vertices/BasicVertices.js";
 import { AABB3d } from "../3d/AABB3d.js";
+import { mix } from "../mixwith.js";
 
 const TRACKER_TYPES = {
   shape: [
@@ -48,69 +49,9 @@ const TRACKER_TYPES = {
 };
 
 /**
- * Handler to hold different versions of token geometry for a given token.
- * - full
- * - constrained
- * - lit
- * - bright
+ * Subclass handler
  */
-export class TokenGeometry {
-  /** @type {string} */
-  static PLACEABLE_NAME = "Token";
-
-  /** @type {string} */
-  static LAYER = "tokens";
-
-  /** @type {boolean} */
-  static HAS_SUBTYPES = true;
-
-  /** @type {FullTokenGeometry} */
-  #full
-
-  get full() {
-    if ( !this.#full ) {
-      this.#full = new TokenFullGeometry(this.placeableDocument);
-      this.#full.initialize();
-      this.#full.forceUpdate();
-    }
-    return this.#full;
-  };
-
-  /** @type {ConstrainedTokenGeometry} */
-  #constrained;
-
-  get constrained() {
-    if ( !this.#constrained ) {
-      this.#constrained = new TokenConstrainedGeometry(this.placeableDocument);
-      this.#constrained.initialize();
-      this.#constrained.forceUpdate();
-    }
-    return this.#constrained;
-  };
-
-  /** @type {LitTokenGeometry} */
-  #lit;
-
-  get lit() {
-    if ( !this.#lit ) {
-      this.#lit = new TokenLitGeometry(this.placeableDocument);
-      this.#lit.initialize();
-      this.#lit.forceUpdate();
-    }
-    return this.#lit;
-  };
-
-  /** @type {BrightTokenGeometry} */
-  #bright;
-
-  get bright() {
-    if ( !this.#bright ) {
-      this.#bright = new TokenBrightGeometry(this.placeableDocument);
-      this.#bright.initialize();
-      this.#bright.forceUpdate();
-    }
-    return this.#bright;
-  };
+export const GeometrySubclassMixin = superclass => class extends superclass {
 
   /** @type {CanvasDocument} */
   placeableDocument;
@@ -119,40 +60,94 @@ export class TokenGeometry {
    * @param {CanvasDocument} placeable
    */
   constructor(placeableDocument) {
+    super();
     this.placeableDocument = placeableDocument;
+
+    // Set up subclass access.
+    for ( const key of Object.keys(this.constructor.SUBCLASSES) ) {
+      Object.defineProperty(this, key, {
+        get: () => (this.#subclasses[key] ||= this.constructor._createSubclass(key, this.placeableDocument)),
+        enumerable: true,
+      });
+    }
   }
 
-  #iterateGeometries(methodName, ...args) {
-    if ( this.#full ) this.#full[methodName](...args);
-    if ( this.#constrained ) this.#constrained[methodName](...args);
-    if ( this.#lit ) this.#lit[methodName](...args);
-    if ( this.#bright ) this.#bright[methodName](...args);
+  /**
+   * Subclass holder.
+   */
+  #subclasses = {}
+
+  /** @type {boolean} */
+  static HAS_SUBTYPES = true;
+
+  // Defined by subclass
+  static SUBCLASSES = {};
+
+  static _createSubclass(type, doc) {
+    const out = new this.SUBCLASSES[type](doc);
+    out.initialize();
+    out.forceUpdate();
+    return out;
   }
 
-  initialize() { this.#iterateGeometries("initialize"); }
+  _iterateSubclasses(methodName, ...args) {
+    for ( const key of Object.keys(this.#subclasses) ) this[key][methodName](...args);
+  }
+
+  _iterateGeometriesBoolean(methodName, ...args) {
+    let out = false;
+    for ( const key of Object.keys(this.#subclasses) ) {
+      const res = this[key][methodName](...args);
+      out ||= res;
+    }
+    return out;
+  }
+
+  initialize() { this._iterateSubclasses("initialize"); }
 
   destroy() {
-    this.#iterateGeometries("destroy");
-    this.#full = null;
-    this.#constrained = null;
-    this.#lit = null;
-    this.#bright = null;
+    this._iterateSubclasses("destroy");
+    this.#subclasses = {};
   }
 
-  update(updateKeys, opts) {  this.#iterateGeometries("update", updateKeys, opts); }
+  update(updateKeys, opts) {
+    if ( this._iterateGeometriesBoolean("update", updateKeys, opts) ) this._update(opts); // For AABB and updateCount.
+  }
 
-  forceUpdate() {  this.#iterateGeometries("forceUpdate"); }
+  updateCount = 0;
+
+  _update(_opts) {
+    this._calculateAABB(); // Don't need to reiterate geometries again.
+    this.updateCount += 1;
+  }
+
+  forceUpdate() {
+    this._iterateSubclasses("forceUpdate");
+    this._update(); // For AABB and updateCount.
+  }
 
   // ----- NOTE: AABB ----- //
 
-  // AABB required for Quadtree.
-  aabb = new AABB3d();
-
   calculateAABB() {
-    this.#iterateGeometries("calculateAABB");
-    if ( !this.#full ) AABB3d.fromTokenDocument(this.placeableDocument, this.aabb);
-    else AABB3d.copyFrom(this.#full.aabb);
+    this._iterateSubclasses("calculateAABB");
+    this._calculateAABB();
   }
+}
+
+
+/**
+ * Mostly static methods used to calculate values from the placeable document.
+ */
+const TokenDocumentCalculationsMixin = superclass => class extends superclass {
+
+  /** @type {string} */
+  static PLACEABLE_NAME = "Token";
+
+  /** @type {string} */
+  static LAYER = "tokens";
+
+  /** @type {Token} */
+  get token() { return this.placeableDocument.object; }
 
   // ----- NOTE: Levels ----- //
 
@@ -177,16 +172,26 @@ export class TokenGeometry {
     return super.blocksFromLevel(levelId);
   }
 
-  /*
-  Other calculations are handled only by the sub-geometries, including:
-  - aabb
-  - shape iteration
-  - face iteration
-  - intersection
-  - drawing
-  - face points
-  - internal points
-  */
+  // ----- NOTE: AABB ----- //
+
+  // AABB required for Quadtree.
+  aabb = new AABB3d();
+
+  /**
+   * Determine the token top and bottom elevations, accounting for spacer.
+   * @param {TokenDocument} tokenD
+   * @returns {object}
+   * - @param {number} topZ
+   * - @param {number} bottomZ
+   */
+  get elevationZ() {
+    const elevs = super.elevationZ;
+    elevs.topZ -= this.constructor.SPACER;
+    elevs.bottomZ -= this.constructor.SPACER;
+    return elevs;
+  }
+
+
 
   // ----- NOTE: Static methods -----
 
@@ -268,18 +273,15 @@ export class TokenGeometry {
     if ( tokenD === subjectToken || tokensToExclude.has(tokenD) ) return false;
     return this.tokenBlocks(tokenD, subjectToken, blockingCfg);
   }
+
+
 }
+
 
 /**
  * Geometry that is specific to all tokens.
  */
-export class TokenFullGeometry extends PlaceableGeometry {
-  /** @type {string} */
-  static PLACEABLE_NAME = "Token";
-
-  /** @type {string} */
-  static LAYER = "tokens";
-
+export class TokenFullGeometry extends mix(PlaceableGeometry).with(TokenDocumentCalculationsMixin) {
   static UPDATE_KEYS = {
     ...super.UPDATE_KEYS,
     positionXY: new Set(TRACKER_TYPES.positionXY),
@@ -298,9 +300,6 @@ export class TokenFullGeometry extends PlaceableGeometry {
     SPHERICAL: 3,
     ELLIPSOID: 4,
   };
-
-  /** @type {Token} */
-  get token() { return this.placeableDocument.object; }
 
   /**
    * Determine the shape type for a given token
@@ -364,8 +363,8 @@ export class TokenFullGeometry extends PlaceableGeometry {
       const elevs = this.elevationZ;
       this.shapes.push(ExtrudedPolygonPrimitive.fromPolygon(this.placeableId, poly2d, {
         ...elevs,
-        dims: TokenGeometry.tokenDimensions(this.placeableDocument),
-        center: TokenGeometry.tokenCenter(this.placeableDocument),
+        dims: this.constructor.tokenDimensions(this.placeableDocument),
+        center: this.constructor.tokenCenter(this.placeableDocument),
       }));
     } else this.shapes.push(new primitiveCl(this.placeableId));
   }
@@ -378,13 +377,13 @@ export class TokenFullGeometry extends PlaceableGeometry {
     // No changes required if level is updated.
 
     if ( this._updateFlags.positionXY || this._updateFlags.elevation ) {
-      const ctr = TokenGeometry.tokenCenter(this.placeableDocument);
+      const ctr = this.constructor.tokenCenter(this.placeableDocument);
       console.debug(`${this.constructor.name}|Updating position for ${this.placeableDocument.name} to ${ctr}`);
       this.shape.setPosition(ctr);
     }
 
     if ( this._updateFlags.scale ) {
-      const dims = TokenGeometry.tokenDimensions(this.placeableDocument);
+      const dims = this.constructor.tokenDimensions(this.placeableDocument);
       this.shape.setScale(dims);
     }
 
@@ -401,47 +400,19 @@ export class TokenFullGeometry extends PlaceableGeometry {
   // ----- NOTE: Levels ----- //
 
   /**
-   * Does this geometry currently block a given sense type?
-   * @param {CONST.WALL_RESTRICTION_TYPES} [senseType="sight"]
-   * @returns {boolean}
-   */
-  blocksSense(_senseType) {
-    // Tokens block all sense types equally.
-    return TokenGeometry.tokenBlocks(this.placeableDocument);
-  }
-
-  /**
    * Does this geometry currently block, from the view of a given level?
    * Must all check if it blocks the given sense type.
    * @param {string} levelId
    * @returns {boolean}
    */
   blocksFromLevel(levelId) {
-    if ( !TokenGeometry.tokenBlocks(this.placeableDocument) ) return false;
+    if ( !super.blocksFromLevel(levelId) ) return false;
 
     // If the level can see the token level, than token could block.
     const lvl = canvas.scene.levels.get(levelId);
     if ( !lvl ) return false;
     return lvl.visibility.has(this.placeableDocument.level);
   }
-
-  // ----- NOTE: Token properties ----- //
-
-
-  /**
-   * Determine the token top and bottom elevations, accounting for spacer.
-   * @param {TokenDocument} tokenD
-   * @returns {object}
-   * - @param {number} topZ
-   * - @param {number} bottomZ
-   */
-  get elevationZ() {
-    const elevs = super.elevationZ;
-    elevs.topZ -= TokenGeometry.SPACER;
-    elevs.bottomZ -= TokenGeometry.SPACER;
-    return elevs;
-  }
-
 }
 
 /**
@@ -456,8 +427,8 @@ function createShape(shapeFn = "tokenBorder") {
     `${this.placeableId}`,
     poly,
     { ...this.elevationZ,
-      dims: TokenGeometry.tokenDimensions(this.placeableDocument),
-      center: TokenGeometry.tokenCenter(this.placeableDocument),
+      dims: this.constructor.tokenDimensions(this.placeableDocument),
+      center: this.constructor.tokenCenter(this.placeableDocument),
     }
   );
   this.shapes.push(shape);
@@ -516,5 +487,26 @@ export class TokenBrightGeometry extends TokenFullGeometry {
   createShapes() {
     if ( !this.isConstrainedLit ) return super.createShapes();
     createShape.call(this, "brightLitTokenBorder");
+  }
+}
+
+/**
+ * Handler to hold different versions of token geometry for a given token.
+ * - full
+ * - constrained
+ * - lit
+ * - bright
+ */
+export class TokenGeometry extends mix(Object).with(GeometrySubclassMixin, TokenDocumentCalculationsMixin) {
+
+  static SUBCLASSES = {
+    full: TokenFullGeometry,
+    constrained: TokenConstrainedGeometry,
+    lit: TokenLitGeometry,
+    bright: TokenBrightGeometry,
+  };
+
+  _calculateAABB() {
+    AABB3d.fromTokenDocument(this.placeableDocument, this.aabb);
   }
 }

@@ -1,4 +1,5 @@
 /* globals
+canvas,
 CONFIG,
 foundry,
 PIXI,
@@ -11,15 +12,19 @@ import { PlaceableGeometry } from "./PlaceableGeometry.js";
 import { QuadPrimitive, TexturedQuadPrimitive } from "./InstancedGeometricPrimitive.js";
 import { PlanarPolygonPrimitive } from "./ModelGeometricPrimitive.js";
 
+
 // LibGeometry
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { Point3d } from "../3d/Point3d.js";
 import { Segment } from "../Segment.js";
 import { Polygon3d, Polygons3d, Triangle3d } from "../3d/Polygon3d.js";
 import { AABB3d } from "../3d/AABB3d.js";
+import { mix } from "../mixwith.js";
 
 // Tile alpha bounds
 import { Polygon3dVertices } from "../placeable_vertices/BasicVertices.js";
+
+import { GeometrySubclassMixin } from "./TokenGeometry.js";
 
 const TRACKER_TYPES = {
   position2d: [
@@ -53,134 +58,27 @@ const TRACKER_TYPES = {
   ],
 };
 
-export class TileGeometry {
+/**
+ * Mostly static methods used to calculate values from the placeable document.
+ */
+const TileDocumentCalculationsMixin = superclass => class extends superclass {
   /** @type {string} */
   static PLACEABLE_NAME = "Tile";
 
   /** @type {string} */
   static LAYER = "tiles";
 
-  /** @type {boolean} */
-  static HAS_SUBTYPES = true;
+  /** @type {number} */
+  get alphaThreshold() { return this.placeableDocument.texture.alphaThreshold || 0; }
 
-  /**
-   * Full tile, no alpha
-   * @type {TileFullGeometry}
-   */
-  #full;
+  get tile() { return this.placeableDocument.object; }
 
-  get full() {
-    if ( !this.#full ) {
-      this.#full = new TileGeometry(this.placeableDocument);
-      this.#full.initialize();
-      this.#full.forceUpdate();
-    }
-    return this.#full;
-  };
+  get pixelCache() { return this.constructor.cacheManager.pixelCacheForDocument(this.placeableDocument); }
 
-  /**
-   * Alpha tile, bounding box
-   * @type {TileBoundingRectGeometry}
-   */
-  #boundingRect;
-
-  get boundingRect() {
-    if ( !this.#boundingRect ) {
-      this.#boundingRect = new TileBoundingRectGeometry(this.placeableDocument);
-      this.#boundingRect.initialize();
-      this.#boundingRect.forceUpdate();
-    }
-    return this.#boundingRect;
-  };
-
-  /**
-   * Alpha tile, bounding polygon
-   * @type {TileBoundingPolygonGeometry}
-   */
-  #boundingPolygon;
-
-  get boundingPolygon() {
-    if ( !this.#boundingPolygon ) {
-      this.#boundingPolygon = new TileBoundingPolygonGeometry(this.placeableDocument);
-      this.#boundingPolygon.initialize();
-      this.#boundingPolygon.forceUpdate();
-    }
-    return this.#boundingPolygon;
-  };
-
-  /**
-   * Alpha tile, polygons to model alpha holes.
-   * @type {TilePolygonsGeometry}
-   */
-  #polygons;
-
-  get polygons() {
-    if ( !this.#polygons ) {
-      this.#polygons = new TileBoundingPolygonGeometry(this.placeableDocument);
-      this.#polygons.initialize();
-      this.#polygons.forceUpdate();
-    }
-    return this.#polygons;
-  };
-
-  /**
-   * Alpha tile, triangles to model alpha holes.
-   * @type {TileTrianglesGeometry}
-   */
-  #triangles;
-
-  get triangles() {
-    if ( !this.#triangles ) {
-      this.#triangles = new TileBoundingPolygonGeometry(this.placeableDocument);
-      this.#triangles.initialize();
-      this.#triangles.forceUpdate();
-    }
-    return this.#triangles;
-  };
-
-  /** @type {CanvasDocument} */
-  placeableDocument;
-
-  /**
-   * @param {CanvasDocument} placeable
-   */
-  constructor(placeableDocument) {
-    this.placeableDocument = placeableDocument;
-  }
-
-  #iterateGeometries(methodName, ...args) {
-    if ( this.#full ) this.#full[methodName](...args);
-    if ( this.#boundingRect ) this.#boundingRect[methodName](...args);
-    if ( this.#boundingPolygon ) this.#boundingPolygon[methodName](...args);
-    if ( this.#polygons ) this.#polygons[methodName](...args);
-    if ( this.#triangles ) this.#triangles[methodName](...args);
-  }
-
-  initialize() { this.#iterateGeometries("initialize"); }
-
-  destroy() {
-    this.#iterateGeometries("destroy");
-    this.#full = null;
-    this.#boundingRect = null;
-    this.#boundingPolygon = null;
-    this.#polygons = null;
-    this.#triangles = null;
-  }
-
-  update(updateKeys, opts) {  this.#iterateGeometries("update", updateKeys, opts); }
-
-  forceUpdate() {  this.#iterateGeometries("forceUpdate"); }
-
-  // ----- NOTE: AABB ----- //
+  static get cacheManager() { return CONFIG[GEOMETRY_LIB_ID].tilePixelCache; }
 
   // AABB required for Quadtree.
   aabb = new AABB3d();
-
-  calculateAABB() {
-    this.#iterateGeometries("calculateAABB");
-    if ( !this.#full ) AABB3d.fromTileDocument(this.placeableDocument, this.aabb);
-    else AABB3d.copyFrom(this.#full.aabb);
-  }
 
   // ----- NOTE: Levels ----- //
 
@@ -203,16 +101,6 @@ export class TileGeometry {
     if ( !lvl ) return false;
     return lvl.visibility.has(this.placeableDocument.level);
   }
-
-  /*
-  Other calculations are handled only by the sub-geometries, including:
-  - shape iteration
-  - face iteration
-  - intersection
-  - drawing
-  - face points
-  - internal points
-  */
 
   /**
    * Determine the tile rotation.
@@ -248,14 +136,17 @@ export class TileGeometry {
    */
   static tileDimensions(tileD) { return Point3d.tmp.set(tileD.width, tileD.height, 1); }
 
+  /**
+   * Finite elevation of a tile.
+   * @param {PlaceableDocument} placeableD
+   * @returns {number}
+   */
+  get elevationZ() {
+    return this.placeableDocument.elevationZ; // Tiles are always finite elevation.
+  }
 }
 
-export class TileFullGeometry extends PlaceableGeometry {
-  /** @type {string} */
-  static PLACEABLE_NAME = "Tile";
-
-  /** @type {string} */
-  static LAYER = "tiles";
+export class TileFullGeometry extends mix(PlaceableGeometry).with(TileDocumentCalculationsMixin) {
 
   static UPDATE_KEYS = {
     ...super.UPDATE_KEYS,
@@ -266,14 +157,6 @@ export class TileFullGeometry extends PlaceableGeometry {
     scale: new Set(TRACKER_TYPES.scale),
     rotation: new Set(TRACKER_TYPES.rotation),
   };
-
-  get tile() { return this.placeableDocument.object; }
-
-  get alphaThreshold() { return this.placeableDocument.texture.alphaThreshold || 0; }
-
-  get pixelCache() { return this.constructor.cacheManager.pixelCacheForDocument(this.placeableDocument); }
-
-  static get cacheManager() { return CONFIG[GEOMETRY_LIB_ID].tilePixelCache; }
 
   get shape() { return this.shapes[0]; } // Tiles currently always only using a single shape.
 
@@ -297,17 +180,17 @@ export class TileFullGeometry extends PlaceableGeometry {
     // No changes required if level is updated.
 
     if ( this._updateFlags.positionXY || this._updateFlags.elevation ) {
-      const ctr = TileGeometry.tileCenter(this.placeableDocument);
+      const ctr = this.constructor.tileCenter(this.placeableDocument);
       this.shape.setPosition(ctr);
     }
 
     if ( this._updateFlags.rotation ) {
-      const angles = TileGeometry.tileRotation(this.placeableDocument);
+      const angles = this.constructor.tileRotation(this.placeableDocument);
       this.shape.setRotation(angles);
     }
 
     if ( this._updateFlags.scale ) {
-      const dims = TileGeometry.tileDimensions(this.placeableDocument);
+      const dims = this.constructor.tileDimensions(this.placeableDocument);
       this.shape.setScale(dims);
     }
     super._update();
@@ -342,17 +225,6 @@ export class TileFullGeometry extends PlaceableGeometry {
     const px = pixelCache.pixelAtCanvas(projPt.x, projPt.y);
     if ( px > pxThreshold ) return t;
     return null;
-  }
-
-  // ----- NOTE: Tile characteristics ----- //
-
-  /**
-   * Finite elevation of a tile.
-   * @param {PlaceableDocument} placeableD
-   * @returns {number}
-   */
-  get elevationZ() {
-    return this.placeableDocument.elevationZ; // Tiles are always finite elevation.
   }
 }
 
@@ -482,5 +354,20 @@ export class TileTrianglesGeometry extends TileFullGeometry {
       .filter(tri => !foundry.utils.orient2dFast(tri.a, tri.b, tri.c).almostEqual(0, 1e-06));
     const shape = PlanarPolygonPrimitive.fromPolygon3d(`${this.placeableId}`, triTop);
     this.shapes.push(shape);
+  }
+}
+
+export class TileGeometry extends mix(Object).with(GeometrySubclassMixin, TileDocumentCalculationsMixin) {
+
+  static SUBCLASSES = {
+    full: TileFullGeometry,
+    boundingRect: TileBoundingRectGeometry,
+    boundingPolygon: TileBoundingPolygonGeometry,
+    polygons: TilePolygonsGeometry,
+    triangles: TileTrianglesGeometry,
+  };
+
+  _calculateAABB() {
+    AABB3d.fromTileDocument(this.placeableDocument, this.aabb);
   }
 }

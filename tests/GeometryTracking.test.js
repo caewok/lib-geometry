@@ -160,7 +160,7 @@ describe("Levels", () => {
     // Region shapes have the model matrix
     it("should have numeric values", () => {
       canvas.scene.levels.forEach(levelD => {
-        const geom = mgr.levels.background.geomForDocument(levelD);
+        const geom = mgr.levels.background.geomForDocument(levelD).full;
         for ( const shape of geom.iterateShapes() ) {
           expect(shape.modelMatrix.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
         }
