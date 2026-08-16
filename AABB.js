@@ -258,27 +258,56 @@ export class AABB2d {
   }
 
   static fromTileDocument(tileD, out) {
-    // From Tile.bounds.
-    let { x, y, width, height, texture, rotation } = tileD;
+    return AABB2d.fromRectangle(tileD.shape.bounds, out);
+  }
 
-    // Adjust top left coordinate and dimensions according to scale
-    if ( texture.scaleX !== 1 ) {
-      const w0 = width;
-      width *= Math.abs(texture.scaleX);
-      x += (w0 - width) / 2;
+  static fromLevel(level, { textureWidth, textureHeight, type = "background", out } = {}) {
+    const src = level[type].src;
+    if ( src && !(textureWidth && textureHeight) ) {
+      const tex = PIXI.Assets.get(level[type].src) || {};
+      textureWidth ??= tex.width;
+      textureHeight ??= tex.height;
     }
-    if ( texture.scaleY !== 1 ) {
-      const h0 = height;
-      height *= Math.abs(texture.scaleY);
-      y += (h0 - height) / 2;
+    if ( !(textureWidth && textureHeight) ) {
+      console.warn(`AABB.fromLevel ${level.name} (${level.id}) ${type} estimated using canvas scene dimensions.`);
+      return AABB2d.fromRectangle(canvas.dimensions.sceneRect);
     }
 
-    // If the tile is rotated, return recomputed bounds according to rotation
-    if ( rotation !== 0 ) return PIXI.Rectangle.fromRotation(x, y, width, height, Math.toRadians(rotation)).normalize();
+    const texData = level.textures || {};
+    const { anchorX = 0.5, anchorY = 0.5, scaleX = 1, scaleY = 1, offsetX = 0, offsetY = 0, rotation = 0 } = texData;
+    const rotationRadians = Math.toRadians(rotation);
 
-    // Normal case
-    const rect = new PIXI.Rectangle(x, y, width, height).normalize();
-    return AABB2d.fromRectangle(rect, out);
+    // Define texture corner coordinates relative to the anchor point.
+    using dims = PIXI.Point.tmp.set(textureWidth, textureHeight);
+    using scale = PIXI.Point.tmp.set(scaleX, scaleY);
+    using offset = PIXI.Point.tmp.set(offsetX, offsetY);
+    const corners = [
+      PIXI.Point.tmp.set(-anchorX, -anchorY),
+      PIXI.Point.tmp.set(1 - anchorX, -anchorY),
+      PIXI.Point.tmp.set(1 - anchorX, 1 - anchorX),
+      PIXI.Point.tmp.set(-anchorX, 1 - anchorY),
+    ];
+    const cos = Math.cos(rotationRadians);
+    const sin = Math.sin(rotationRadians);
+
+    // Scale, rotate, and offset each corner point to scene space.
+    // corner * dims * scale
+    // res.x = corner.x * cos - corner.y * sin
+    // res.y = corner.x * sin - corner.y * cos
+    // res + offset
+    const worldPoints = corners.map(corner => {
+      corner.multiply(dims, corner).multiply(scale, corner);
+      const res = PIXI.Point.tmp;
+      res.x = corner.x * cos - corner.y * sin;
+      res.y = corner.x * cos - corner.y * sin;
+      return res.add(offset, res);
+    });
+
+    // Extract min/max coordinates.
+    out = this.fromPoints(worldPoints, out);
+    PIXI.Point.release(...corners);
+    PIXI.Point.release(...worldPoints);
+    return out;
   }
 
   /**
