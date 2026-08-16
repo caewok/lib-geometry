@@ -307,6 +307,15 @@ export class ObstacleOcclusionTest {
   }
 
   /**
+   * Helper to get placeable docs within bounds, filter by the 3d aabb, and filter by frustum.
+   */
+  #filterDocSubgeometries(mgr, opts) {
+    const geoms = mgr.quadtree.getObjects(this.aabb, opts);
+    if ( this.frustum ) return geoms.filter(geom => this.#frustum.overlapsGeometry(geom.full));
+    return geoms;
+  }
+
+  /**
    * @returns {Set<WallDocument>}
    */
   findBlockingWalls() {
@@ -326,7 +335,7 @@ export class ObstacleOcclusionTest {
 
     const validLevels = this.validLevels;
     const collisionTest = o => validLevels.has(o.t.placeableDocument.level) && this.includeToken(o.t.placeableDocument);
-    let tokenGeoms = this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.tokens, { collisionTest });
+    let tokenGeoms = this.#filterDocSubgeometries(CONFIG.GeometryLib.geometryManager.tokens, { collisionTest });
 
     // Filter out the subject token and other tokens to exclude (such as the target).
     tokenGeoms = tokenGeoms.filter(geom => !(this.subjectToken === geom.placeableDocument || this.tokensToExclude.has(geom.placeableDocument)));
@@ -354,7 +363,7 @@ export class ObstacleOcclusionTest {
     if ( !this.#config.tiles ) return NULL_SET;
     const validLevels = this.validLevels;
     const collisionTest = o => o.t.placeableDocument.levels.intersects(validLevels);
-    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.tiles, { collisionTest });
+    return this.#filterDocSubgeometries(CONFIG.GeometryLib.geometryManager.tiles, { collisionTest });
   }
 
   /**
@@ -372,7 +381,7 @@ export class ObstacleOcclusionTest {
   findBlockingLevels(levelType = "background") {
     const validLevels = this.validLevels;
     const collisionTest = o => validLevels.has(o.t.placeableDocument.id);
-    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.levels[levelType], { collisionTest })
+    return this.#filterDocSubgeometries(CONFIG.GeometryLib.geometryManager.levels[levelType], { collisionTest })
       .filter(geom => geom.level[levelType].src); // Must have a defined texture.
   }
 
@@ -590,7 +599,10 @@ export class ObstacleOcclusionTest {
     for ( const [key, obstacleGeoms] of Object.entries(this.obstacleGeometries) ) {
       const color = OBSTACLE_COLORS[key];
       const drawOpts = { draw, color, fillAlpha: 0.1, fill: color };
-      obstacleGeoms.forEach(geom => geom.draw2d(drawOpts));
+      obstacleGeoms.forEach(geom => {
+        if ( geom.constructor.HAS_SUBTYPES ) geom.full.draw2d(drawOpts)
+        else geom.draw2d(drawOpts)
+      });
     }
   }
 }
