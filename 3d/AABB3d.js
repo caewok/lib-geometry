@@ -157,14 +157,20 @@ export class AABB3d extends AABB2d {
     return out;
   }
 
-  static fromTileDocument(tileD, alphaThreshold, out) {
-    out = super.fromTileDocument(tileD, alphaThreshold, out);
+  static fromTileDocument(tileD, out) {
+    out = super.fromTileDocument(tileD, out);
     const elevZ = gridUnitsToPixels(tileD.elevation);
     out.max.z = elevZ;
     out.min.z = elevZ;
     return out;
   }
 
+  static fromLevel(level, opts) {
+    const out = super.fromLevel(level, opts);
+    out.min.z = gridUnitsToPixels(level.elevation.bottom);
+    out.max.z = gridUnitsToPixels(level.elevation.top);
+    return out;
+  }
 
   /**
    * @param {Edge} edge
