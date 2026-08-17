@@ -7,6 +7,7 @@ PIXI,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
+import { PlaceableGeometry } from "./PlaceableGeometry.js";
 import {
   TileGeometry,
   TileFullGeometry,
@@ -109,6 +110,34 @@ const LevelCalculationsMixin = superclass => class extends superclass {
 
   // AABB required for Quadtree.
   aabb = new AABB3d();
+
+  /**
+   * Does this geometry currently block a given sense type?
+   * @param {CONST.WALL_RESTRICTION_TYPES} [senseType="sight"]
+   * @returns {boolean}
+   */
+  blocksSense(_senseType = "sight") { return true; }
+
+  /**
+   * Does this placeable exist on this level?
+   * @param {string} levelId
+   * @returns {boolean} True if seen from this level or the levelId is null or "".
+   */
+  isPresentAtLevel(levelId) {
+    if ( !canvas.scene.levels.has(levelId) ) return !levelId;
+    if ( this.placeableDocument.id === levelId ) return true;
+    return !this.placeableDocument.visibility.has(levelId);
+  }
+
+  /**
+   * Combines sense test with level test with any other tests specific to the placeable document.
+   * @param {object} [opts]
+   * @prop {CONST.WALL_RESTRICTION_TYPES} [opts.senseType = "sight"]
+   * @prop {string} [opts.levelId]
+   * @prop {...}                      Other options used by subclasses
+   * @returns {boolean}
+   */
+  couldBlock(opts) { return PlaceableGeometry.prototype.couldBlock.call(this, opts); }
 
   // ----- NOTE: Scene texture characteristics ----- //
 

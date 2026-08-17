@@ -11,7 +11,6 @@ import { GeometricPrimitive } from "./GeometricPrimitive.js";
 // LibGeometry
 import { AABB3d } from "../3d/AABB3d.js";
 import { NULL_SET } from "../util.js";
-import { gridUnitsToPixels } from "../util.js";
 
 
 /* Store key geometry information for each placeable, in 3d.
@@ -35,9 +34,52 @@ scaleUpdated
 rotationUpdated
 shapeUpdated
 propertiesUpdated
+*/
 
+/* Levels visibility
+
+Tokens are at a specific level but can be at any elevation, including ones outside the level parameters.
+Same is true of everything else—their elevation does not dictate their level.
+
+Tokens have a defined elevation and a user vieweable elevation.
+When you move a token to a different level, its defined elevation stays the same but its
+viewable elevation changes. (This may change if a Level or Stairs behavior is used.)
+
+E.g.
+- Basement: -20–0
+- Ground: 0–20
+- First Floor: 20–40
+
+Token at 0 on Ground is -20 at First Floor (0 - 20) but 0 in its document.
+Token at 50 on Ground is 30 at First Floor (50 - 20) but 50 in its document.
+
+Tiles have a defined elevation, and are either present or not in a level regardless of elevation.
+
+For base Foundry then, a given level has, in effect, infinite ± elevation. Objects are either
+there or not based on their levels set.
+
+Regions, then, do not get split between levels but instead are either present/not present in the scene
+from any given token viewpoint.
+
+Infinite walls are either present or not. Same with non-infinite walls. No splitting.
+
+E.g., from First Floor, a token looks down at Ground. It sees a Ground region from 10–30 and
+a wall from 0–10. The region is defined as in both Ground and First. The wall is defined as
+in only Ground. A second wall from 0–10 is defined in both Ground and First. Then the token will
+see the region and the second wall only. This is annoying for infinite walls in base Foundry but
+fine for finite walls using Wall Height.
+
+This avoids splitting objects. While walls can conceivably overlap, usually it will be either
+a shorter wall viewed from a balcony or a wall to block view of a room, not both at once.
+
+Note: The visibleLevels selection for a given level really controls:
+1. Can the other level's background/foreground be seen?
+2. Can the other level's tokens be seen?
+
+- Tiles, walls, regions all display only if they are marked as being on the level.
 
 */
+
 
 Hooks.on("updateLevel", function(_level, _changes, _opts, _id) {
   PlaceableGeometry.calculateLevelSegments();
@@ -213,16 +255,25 @@ export class PlaceableGeometry {
   blocksSense(_senseType = "sight") { return true; }
 
   /**
-   * Does this geometry currently block, from the view of a given level?
-   * Must all check if it blocks the given sense type.
+   * Does this placeable exist on this level?
    * @param {string} levelId
+   * @returns {boolean} True if seen from this level or the levelId is null or "".
+   */
+  isPresentAtLevel(levelId) {
+    if ( !canvas.scene.levels.has(levelId) ) return !levelId;
+    return this.placeableDocument.levels.has(levelId);
+  }
+
+  /**
+   * Combines sense test with level test with any other tests specific to the placeable document.
+   * @param {object} [opts]
+   * @prop {CONST.WALL_RESTRICTION_TYPES} [opts.senseType = "sight"]
+   * @prop {string} [opts.levelId]
+   * @prop {...}                      Other options used by subclasses
    * @returns {boolean}
    */
-  blocksFromLevel(levelId) {
-    // If the level can see the token level, than token could block.
-    const lvl = canvas.scene.levels.get(levelId);
-    if ( !lvl ) return false;
-    return lvl.visibility.has(this.placeableDocument.level);
+  couldBlock({ levelId, senseType } = {}) {
+    return this.blocksSense(senseType) && this.isPresentAtLevel(levelId);
   }
 
   // ----- NOTE: AABB ----- //
@@ -320,22 +371,6 @@ export class PlaceableGeometry {
   }
 
   /**
-   * Top and bottom z values for a given segment index.
-   * @param {number} segmentIdx
-   * @param {number} topZ
-   * @param {number} bottomZ
-   * @returns {object}
-   * - @prop {number} topZ
-   * - @prop {number} bottomZ
-   */
-  static elevationZForSegment(segmentIdx, topZ, bottomZ) {
-    const segmentData = this.levelSegments[segmentIdx];
-    topZ = Math.min(gridUnitsToPixels(segmentData.top), topZ);
-    bottomZ = Math.max(gridUnitsToPixels(segmentData.bottom), bottomZ);
-    return { topZ, bottomZ };
-  }
-
-  /**
    * Finite elevation.
    * If positive infinity, will be set to a maximum value.
    * If negative infinity, will be set to a minimum value.
@@ -363,88 +398,3 @@ export class PlaceableGeometry {
     };
   }
 }
-
-/**
- * Additional methods required for placeables—walls and regions—that span different levels.
- * (Tiles show up in differrent levels but trivially so.)
- */
-export const LevelSpanningMixin = superclass => {
-  return class extends superclass {
-
-    // ----- NOTE: Geometric shapes and faces ----- //
-
-    /**
-     * Iterate over the shapes.
-     * @param {object} [opts]
-     * @param {CONST.WALL_RESTRICTION_TYPES} [opts.senseType]   If provided, will return early if geometry does not block this sense type.
-     * @param {string} [opts.levelId]                           If provided, will return early if geometry does not affect this level.
-     * @yields {GeometricPrimitive}
-     */
-    *iterateShapes({ senseType, levelId } = {}) {
-      if ( senseType && !this.blocksSense(senseType) ) return;
-      if ( levelId && !this.blocksFromLevel(levelId) ) return;
-      for ( let i = 0, iMax = this.shapes.length; i < iMax; i += 1 ) {
-        const shape = this.shapes[i];
-        if ( !shape ) continue;
-        if ( levelId && !this.constructor.levelSegments[i].ids.has(levelId) ) continue;
-        yield shape;
-      }
-    }
-
-    // ----- NOTE: Levels ----- //
-
-    /**
-     * Id, taking into account the level segment.
-     * Combines the level segment ids so each segment is unique.
-     * @param {number} levelSegmentIdx
-     * @returns {string}
-     */
-    _levelShapeId(levelSegmentIdx) {
-      const segment = this.constructor.levelSegments[levelSegmentIdx];
-      const levelIds = [...segment.ids].join("_");
-      return `${this.placeableId}_${levelIds}`;
-    }
-
-    /**
-     * Does this geometry currently block a given sense type?
-     * @param {CONST.WALL_RESTRICTION_TYPES} [senseType="sight"]
-     * @returns {boolean}
-     */
-    blocksSense(_senseType = "sight") { return true; }
-
-    /**
-     * Does this geometry currently block, from the view of a given level?
-     * Must all check if it blocks at the given level.
-     * For walls, it is usually necessary to check each of the segments.
-     * @param {string} levelId
-     * @returns {boolean}
-     */
-    blocksFromLevel(levelId) {
-      return !this.constructor.levelSegments.some(segment => segment.ids.has(levelId));
-    }
-
-    /**
-     * Does this wall exist on this level?
-     * Must be at this level and within the level elevation range.
-     * @param {string} levelId
-     * @returns {boolean}
-     */
-    isPresentAtLevel(levelId) {
-      // Confirm this wall has the level id.
-      if ( !canvas.scene.levels.has(levelId) ) return false;
-      if ( !this.placeableDocument.levels.has(levelId) ) return false;
-
-      // Confirm this wall's top and bottom elevation place it within the level.
-      const { topZ, bottomZ } = this.elevationZ;
-      const level = canvas.scene.levels.get(levelId);
-      if ( !level ) return false;
-      const levelBottomZ = gridUnitsToPixels(level.elevation.bottom);
-      const levelTopZ = gridUnitsToPixels(level.elevation.top);
-      return (bottomZ < levelBottomZ && topZ > levelTopZ )
-        || bottomZ.between(levelBottomZ, levelTopZ)
-        || topZ.between(levelBottomZ, levelTopZ);
-    }
-  };
-}
-
-

@@ -158,18 +158,33 @@ const TokenDocumentCalculationsMixin = superclass => class extends superclass {
    */
   blocksSense(_senseType) {
     // Tokens block all sense types equally.
-    return this.constructor.tokenBlocks(this.placeableDocument);
+    return true;
   }
 
   /**
-   * Does this geometry currently block, from the view of a given level?
-   * Must all check if it blocks the given sense type.
+   * Does this placeable exist on this level?
    * @param {string} levelId
    * @returns {boolean}
    */
-  blocksFromLevel(levelId) {
-    if ( !this.constructor.tokenBlocks(this.placeableDocument) ) return false;
-    return super.blocksFromLevel(levelId);
+  isPresentAtLevel(levelId) {
+    const lvl = canvas.scene.levels.get(levelId);
+    if ( !lvl ) return !levelId;
+
+    // For tokens, if they either are at the level or at a level viewable by this level, then
+    // they would be present.
+    const docLevel = this.placeableDocument.level
+    return docLevel === levelId || lvl.visibility.has(docLevel);
+  }
+
+  /**
+   * Does this token block with respect to a movement token?
+   * @param {TokenDocument} [subjectTokenD]       Token doing the movement or viewing
+   * @param {TokenBlockingConfig} [blockingCfg]
+   * @returns {boolean}
+   */
+  couldBlock({ subjectTokenD, levelId, ...blockingCfg } = {} ) {
+    if ( !this.isPresentAtLevel(levelId) ) return false;
+    return this.constructor.tokenBlocks(this.placeableDocument, subjectTokenD, blockingCfg);
   }
 
   // ----- NOTE: AABB ----- //
@@ -190,8 +205,6 @@ const TokenDocumentCalculationsMixin = superclass => class extends superclass {
     elevs.bottomZ -= this.constructor.SPACER;
     return elevs;
   }
-
-
 
   // ----- NOTE: Static methods -----
 
@@ -400,13 +413,12 @@ export class TokenFullGeometry extends mix(PlaceableGeometry).with(TokenDocument
   // ----- NOTE: Levels ----- //
 
   /**
-   * Does this geometry currently block, from the view of a given level?
-   * Must all check if it blocks the given sense type.
+   * Does this geometry potentially block, from the view of a given level?
    * @param {string} levelId
    * @returns {boolean}
    */
   blocksFromLevel(levelId) {
-    if ( !super.blocksFromLevel(levelId) ) return false;
+    if ( this.placeableDocument.level === levelId ) return true;
 
     // If the level can see the token level, than token could block.
     const lvl = canvas.scene.levels.get(levelId);

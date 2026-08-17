@@ -1,25 +1,19 @@
 /* globals
 canvas,
 Hooks,
-PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
 // Geometry
-import { PlaceableGeometry, LevelSpanningMixin } from "./PlaceableGeometry.js";
+import { PlaceableGeometry } from "./PlaceableGeometry.js";
 import { CubePrimitive, CylinderPrimitive,  } from "./InstancedGeometricPrimitive.js";
 import { ExtrudedPolygonPrimitive } from "./ModelGeometricPrimitive.js";
 
 // LibGeometry
 import { GEOMETRY_LIB_ID } from "../const.js";
-import { CenteredPolygon } from "../CenteredPolygon/CenteredPolygon.js";
-import { CenteredRectangle } from "../CenteredPolygon/CenteredRectangle.js";
-import { Ellipse } from "../Ellipse.js";
 import { Point3d } from "../3d/Point3d.js";
-import { NULL_SET, almostLessThan } from "../util.js";
-
-import { mix } from "../mixwith.js";
+import { almostLessThan } from "../util.js";
 
 /**
   Region will either be a single shape or a group of polygons.
@@ -116,7 +110,7 @@ const TRACKER_TYPES = {
   ],
 };
 
-export class RegionGeometry extends mix(PlaceableGeometry).with(LevelSpanningMixin) {
+export class RegionGeometry extends PlaceableGeometry {
   /** @type {string} */
   static PLACEABLE_NAME = "Region";
 
@@ -157,50 +151,45 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(LevelSpanningMix
 
   get topZ() { return this.placeable.topZ; }
 
+  /**
+   * Id, taking into account the shape index
+   * @param {number} shapeIdx
+   * @returns {string}
+   */
+  _shapeId(shapeIdx) { return `${this.placeableId}_${shapeIdx}`; }
+
+
   initialize() {
-    this.buildShapesForAllLevels();
+    this.createShapes();
     super.initialize();
   }
 
   updateAllShapes() {
     const { shapes, regionShapes } = this;
-    for ( const shapeArr of shapes ) { // Per level segment shape.
-      for ( let i = 0, iMax = shapeArr.length; i < iMax; i += 1 ) {
-        if ( shapeArr[i] ) this._updateShape(shapeArr[i], regionShapes[i]);
-      }
+    for ( let i = 0, iMax = shapes.length; i < iMax; i += 1 ) {
+      const shape = shapes[i];
+      const regionShape = regionShapes[i];
+       this._updateShape(shape, regionShape);
     }
   }
 
-  buildShapesForAllLevels() {
+  createShapes() {
+    const regionShapes = this.regionShapes;
     const shapes = this.shapes;
     this.iterateShapes().forEach(subshape => subshape.destroy());
+    this.shapes.length = 1;
 
-    const levelSegments = this.constructor.levelSegments;
-    const numSegments = levelSegments.length;
-    shapes.length = numSegments;
-
-    // Build a primitive shape array only for level segments that this region is present within.
-    for ( let i = 0; i < numSegments; i += 1 ) {
-      const segment = levelSegments[i];
-      if ( !segment.ids.some(id => this.isPresentAtLevel(id)) ) continue;
-      shapes[i] = this.#buildAllShapes(i);
-    }
-  }
-
-  #buildAllShapes(levelSegmentIdx) {
-    const regionShapes = this.regionShapes;
-
-    // If there are holes, use the model polygon shape for the entire region.
-    if ( regionShapes.some(regionShape => regionShape.hole) ) {
-      const id = this._levelShapeId(levelSegmentIdx);
-      const { topZ, bottomZ } = this.elevationZ;
-      const zElevs = this.constructor.elevationZForSegment(levelSegmentIdx, topZ, bottomZ);
-      return [ExtrudedPolygonPrimitive.fromPolygons(id, this.regionPolygons, zElevs)];
+    // If there are holes or wall restrictions, use the model polygon shape for the entire region.
+    if ( this.placeableDocument.restriction.enabled || regionShapes.some(regionShape => regionShape.hole) ) {
+      const id = this.placeableId;
+      const zElevs = this.elevationZ;
+      this.shapes[0] = ExtrudedPolygonPrimitive.fromPolygons(id, this.regionPolygons, zElevs);
+      return;
     }
 
     const n = regionShapes.length;
-    const shapes = Array(n)
-    for ( let i = 0, iMax = n; i < iMax; i += 1 ) shapes[i] = this._buildRegionShape(levelSegmentIdx, i);
+    this.shapes.length = n;
+    for ( let i = 0, iMax = n; i < iMax; i += 1 ) shapes[i] = this._buildRegionShape(i);
     return shapes;
   }
 
@@ -209,19 +198,14 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(LevelSpanningMix
    * @param {number} idx        Index of the region shape in the region.document.shapes array
    * @returns {GeometricPrimitive|null}
    */
-  _buildRegionShape(levelSegmentIdx, shapeIdx, topZ, bottomZ) {
+  _buildRegionShape(shapeIdx) {
     const regionShape = this.regionShapes[shapeIdx];
-    const id = this._levelShapeId(levelSegmentIdx, shapeIdx);
-    let shape;
-    if ( regionShape.gridBased ) {
-      const elevs = this.elevationZ;
-      topZ ??= elevs.topZ;
-      bottomZ ??= elevs.bottomZ;
-      const zElevs = this.constructor.elevationZForSegment(levelSegmentIdx, topZ, bottomZ);
-      if ( almostLessThan(topZ, bottomZ) ) return null;
-      shape = ExtrudedPolygonPrimitive.fromPolygons(id, regionShape.polygons, zElevs);
+    const id = this._shapeId(shapeIdx);
+    const zElevs = this.elevationZ;
 
-    } else switch ( regionShape.type ) {
+    let shape;
+    if ( regionShape.gridBased ) shape = ExtrudedPolygonPrimitive.fromPolygons(id, regionShape.polygons, zElevs);
+    else switch ( regionShape.type ) {
       // See shape.constructor.TYPES
       case "circle":
       case "ellipse": shape = new CylinderPrimitive(id); break;
@@ -254,10 +238,7 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(LevelSpanningMix
 
       default: {  /* eslint-disable-line no-fallthrough */
         // Pass the center, rotation, and dimensions so a prototype can be created.
-        const elevs = this.elevationZ;
-        topZ ??= elevs.topZ;
-        bottomZ ??= elevs.bottomZ;
-        const opts = this._polygonPrimitiveTransforms(regionShape, levelSegmentIdx, topZ, bottomZ);
+        const opts = this._polygonPrimitiveTransforms(regionShape);
         if ( almostLessThan(opts.dims.z, 0) ) return null; // zHeight must be positive.
         shape = ExtrudedPolygonPrimitive.fromPolygons(id, regionShape.polygons, opts);
         opts.center.release();
@@ -277,12 +258,9 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(LevelSpanningMix
    *   - @prop {Point3d} dims       The scaling information
    *   - @prop {Point3d} angles     The rotation information
    */
-  _polygonPrimitiveTransforms(regionShape, levelSegmentIdx, topZ, bottomZ) {
-    const elevZ = this.elevationZ;
-    topZ ??= elevZ;
-    bottomZ ??= elevZ;
-    const segmentElev = this.constructor.elevationZForSegment(levelSegmentIdx, topZ, bottomZ);
-    const { z, zHeight } = this.constructor.zDimensions(segmentElev.topZ, segmentElev.bottomZ);
+  _polygonPrimitiveTransforms(regionShape) {
+    const { topZ, bottomZ } = this.elevationZ;
+    const { z, zHeight } = this.constructor.zDimensions(topZ, bottomZ);
     const opts = {
       center: Point3d.tmp,
       dims: Point3d.tmp,
@@ -313,7 +291,7 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(LevelSpanningMix
     // Because a change to any shape could change the model polygon for the region, just
     // redo everything.
     // Similarly, if the region's levels changed, redo everything.
-    if ( regionShapes.some(regionShape => regionShape.hole) || this._updateFlags.levels ) {
+    if ( regionShapes.some(regionShape => regionShape.hole) || this._updateFlags.levels || this.placeableDocument.restriction.enabled ) {
       // Each level shape array should contain a single polygon primitive.
       this.initialize();
       this.updateAllShapes();
@@ -324,38 +302,33 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(LevelSpanningMix
     const trackingArr = opts?.[GEOMETRY_LIB_ID] || [];
 
     // Go through each segment array and examine the shapes.
-    for ( let segmentIdx = 0, n = this.constructor.levelSegments.length; segmentIdx < n; segmentIdx += 1 ) {
-      const shapeArr = shapes[segmentIdx];
-      if ( !shapeArr ) continue;
+    // If no specific changes, re-do everything but don't rebuild shapes unless we have to.
+    if ( trackingArr.length && shapes.length > regionShapes.length  ) {
+      // Remove the extra shapes.
+      for ( let i = regionShapes.length, iMax = shapes.length; i < iMax; i += 1 ) shapes[i].destroy();
+      shapes.length = regionShapes.length;
+    }
 
-      // If no specific changes, re-do everything but don't rebuild shapes unless we have to.
-      if ( trackingArr.length && shapeArr.length > regionShapes.length  ) {
-        // Remove the extra shapes.
-        for ( let i = regionShapes.length, iMax = shapeArr.length; i < iMax; i += 1 ) shapeArr[i].destroy();
-        shapeArr.length = regionShapes.length;
+    for ( let i = 0, iMax = regionShapes.length; i < iMax; i += 1 ) {
+      // Don't rebuild shapes unless we have to.
+      const trackingSet = trackingArr[i]; // May be undefined.
+      const needsRebuild = !shapes[i]
+        || !(shapes[i] instanceof this.shapeClass(regionShapes[i]))
+        || (trackingSet && (trackingSet.has("type") || trackingSet.has("points")));
+      if ( needsRebuild ) {
+        if ( shapes[i] ) shapes[i].destroy();
+        shapes[i] = this._buildRegionShape(i);
+        shapes[i].initialize();
+        this._updateShape(shapes[i], regionShapes[i]);
+        continue;
       }
 
-      for ( let i = 0, iMax = regionShapes.length; i < iMax; i += 1 ) {
-        // Don't rebuild shapes unless we have to.
-        const trackingSet = trackingArr[i]; // May be undefined.
-        const needsRebuild = !shapeArr[i]
-          || !(shapeArr[i] instanceof this.shapeClass(regionShapes[i]))
-          || (trackingSet && (trackingSet.has("type") || trackingSet.has("points")));
-        if ( needsRebuild ) {
-          if ( shapeArr[i] ) shapeArr[i].destroy();
-          shapeArr[i] = this._buildRegionShape(i);
-          shapeArr[i].initialize();
-          this._updateShape(shapeArr[i], regionShapes[i]);
-          continue;
-        }
+      // Trigger elevation changes, which are based on the overall region change.
+      if ( trackingSet && this._updateFlags.elevation ) trackingSet.add("elevation");
 
-        // Trigger elevation changes, which are based on the overall region change.
-        if ( trackingSet && this._updateFlags.elevation ) trackingSet.add("elevation");
-
-        // If no tracking set, update everything.
-        // Otherwise, update selectively based on the tracking set.
-        this._updateShape(shapeArr[i], regionShapes[i], trackingSet);
-      }
+      // If no tracking set, update everything.
+      // Otherwise, update selectively based on the tracking set.
+      this._updateShape(shapes[i], regionShapes[i], trackingSet);
     }
 
     // Handle parent updates last.
@@ -479,31 +452,13 @@ export class RegionGeometry extends mix(PlaceableGeometry).with(LevelSpanningMix
 
   // ----- NOTE: Levels ----- //
 
-  /**
-   * Id, taking into account the level segment.
-   * Combines the level segment ids so each segment is unique.
-   * @param {number} levelSegmentIdx
-   * @param {number} shapeIdx
-   * @returns {string}
-   */
-  _levelShapeId(levelSegmentIdx, shapeIdx) {
-    let id = super._levelShapeId(levelSegmentIdx);
-    if ( typeof shapeIdx !== "undefined" ) id += `_${shapeIdx}`;
-    return id;
-  }
 
-  // ----- NOTE: Geometric shapes and faces ----- //
+  // blockSense handled by parent class.
 
-  /**
-   * Iterate over the shapes.
-   * @param {object} [opts]
-   * @param {CONST.WALL_RESTRICTION_TYPES} [opts.senseType]   If provided, will return early if geometry does not block this sense type.
-   * @param {string} [opts.levelId]                           If provided, will return early if geometry does not affect this level.
-   * @yields {GeometricPrimitive}
-   */
-  *iterateShapes(opts) {
-    for ( const shapeArr of super.iterateShapes(opts) ) yield* shapeArr;
-  }
+  // isPresentAtLevel handled by parent class.
+
+  // couldBlock handled by parent class.
+
 
   /**
    * Top and bottom elevation of a region.

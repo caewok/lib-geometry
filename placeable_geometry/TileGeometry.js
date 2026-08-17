@@ -1,5 +1,4 @@
 /* globals
-canvas,
 CONFIG,
 foundry,
 PIXI,
@@ -87,19 +86,30 @@ const TileDocumentCalculationsMixin = superclass => class extends superclass {
    * @param {CONST.WALL_RESTRICTION_TYPES} [senseType="sight"]
    * @returns {boolean}
    */
-  blocksSense(_senseType = "sight") { return true; }
+  blocksSense(senseType = "sight") {
+    if ( senseType === "light" ) return this.placeableDocument.restrictions.light;
+    return true;
+  }
 
   /**
-   * Does this geometry currently block, from the view of a given level?
-   * Must all check if it blocks the given sense type.
+   * Does this placeable exist on this level?
    * @param {string} levelId
+   * @returns {boolean} True if seen from this level or the levelId is null or "".
+   */
+  isPresentAtLevel(levelId) {
+    return PlaceableGeometry.prototype.isPresentAtLevel.call(this, levelId);
+  }
+
+  /**
+   * Combines sense test with level test with any other tests specific to the placeable document.
+   * @param {object} [opts]
+   * @prop {CONST.WALL_RESTRICTION_TYPES} [opts.senseType = "sight"]
+   * @prop {string} [opts.levelId]
+   * @prop {...}                      Other options used by subclasses
    * @returns {boolean}
    */
-  blocksFromLevel(levelId) {
-    // If the level can see the token level, than token could block.
-    const lvl = canvas.scene.levels.get(levelId);
-    if ( !lvl ) return false;
-    return lvl.visibility.has(this.placeableDocument.level);
+  couldBlock(opts) {
+    return PlaceableGeometry.prototype.couldBlock.call(this, opts);
   }
 
   /**
@@ -168,8 +178,8 @@ export class TileFullGeometry extends mix(PlaceableGeometry).with(TileDocumentCa
 
   createShapes() {
     this.shapes.forEach(shape => shape.destroy());
-    this.shapes.length = 0;
-    this.shapes.push(new TexturedQuadPrimitive(this.placeableId));
+    this.shapes.length = 1;
+    this.shapes[0] = new TexturedQuadPrimitive(this.placeableId);
   }
 
   // ----- NOTE: Update ----- //
@@ -236,17 +246,50 @@ export class TileBoundingRectGeometry extends TileFullGeometry {
    */
   get placeableId() { return `${super.placeableId}_boundingRect`; }
 
-  createShapes() {
+  /** @type {PIXI.Polygon|PIXI.Rectangle} */
+  get _boundingRect() {
     const cache = this.pixelCache;
-    if ( !cache ) return super.createShapes();
+    if ( !cache ) return this.placeableDocument.shape.bounds;
+    return cache.getThresholdCanvasBoundingBox(this.alphaThreshold);
+  }
 
+  createShapes() {
     this.shapes.forEach(shape => shape.destroy());
     this.shapes.length = 0;
+    this.shapes.push(new QuadPrimitive(this.placeableId));
+  }
 
-    const poly = cache.getThresholdCanvasBoundingPolygon(this.alphaThreshold);
-    const elevationZ = this.elevationZ;
-    const poly3d = Polygon3d.fromPolygon(poly, elevationZ);
-    this.shapes.push(PlanarPolygonPrimitive.fromPolygon3d(`${this.placeableId}`, poly3d));
+  _update() {
+    const rectOrPoly = this._boundingRect;
+
+    if ( this._updateFlags.positionXY || this._updateFlags.elevation ) {
+      const ctr = rectOrPoly.center;
+      this.shape.setPosition(ctr);
+    }
+
+    if ( this._updateFlags.rotation || this._updateFlags.scale ) {
+      using dims = Point3d.tmp;
+      using angles = Point3d.tmp;
+
+      if ( rectOrPoly instanceof PIXI.Polygon ) {
+        // Determine the rotation angle of the box.
+        const iter = rectOrPoly.iteratePoints();
+        const a = iter.next().value;
+        const b = iter.next().value;
+        const c = iter.next().value;
+        using s0 = new Segment(a, b);
+        using s1 = new Segment(b, c);
+        angles.set(0, 0, s0.angleXY );
+        dims.set(s0.length, s1.length, 1 );
+      } else {
+        angles.set(0, 0, 0);
+        dims.set(rectOrPoly.width, rectOrPoly.height, 1)
+      }
+      this.shape.setRotation(angles);
+      this.shape.setScale(dims);
+    }
+
+    PlaceableGeometry.prototype._update.call(this); // Skip super._update.
   }
 
 }
@@ -258,6 +301,13 @@ export class TileBoundingPolygonGeometry extends TileFullGeometry {
    */
   get placeableId() { return `${super.placeableId}_boundingPolygon`; }
 
+  /** @type {PIXI.Polygon} */
+  get _boundingPolygon() {
+    const cache = this.pixelCache;
+    if ( !cache ) return this.placeableDocument.shape.bounds;
+    return cache.getThresholdCanvasBoundingPolygon(this.alphaThreshold);
+  }
+
   createShapes() {
     const cache = this.pixelCache;
     if ( !cache ) return super.createShapes();
@@ -265,33 +315,20 @@ export class TileBoundingPolygonGeometry extends TileFullGeometry {
     this.shapes.forEach(shape => shape.destroy());
     this.shapes.length = 0;
 
-    const rectOrPoly = cache.getThresholdCanvasBoundingBox(this.alphaThreshold);
+    const poly = this._boundingPolygon;
     const elevationZ = this.elevationZ;
-    const center2d = rectOrPoly.center;
+    const poly3d = Polygon3d.fromPolygon(poly, elevationZ);
+    const opts = {
+      center: this.constructor.tileCenter(this.placeableDocument),
+      dims: this.constructor.tileDimensions(this.placeableDocument),
+      angles: this.constructor.tileRotation(this.placeableDocument),
+    };
+    this.shapes.push(PlanarPolygonPrimitive.fromPolygon3d(this.placeableId, poly3d, opts));
+  }
 
-    const shape = new QuadPrimitive(`${this.placeableId}`);
-    shape.initialize();
-    using ctr = Point3d.tmp.set(
-      center2d.x,
-      center2d.y,
-      elevationZ,
-    );
-    shape.setPosition(ctr);
-
-    if ( rectOrPoly instanceof PIXI.Polygon ) {
-      // Determine the rotation angle of the box.
-      const iter = rectOrPoly.iteratePoints();
-      const a = iter.next().value;
-      const b = iter.next().value;
-      const c = iter.next().value;
-      using s0 = new Segment(a, b);
-      using s1 = new Segment(b, c);
-      shape.setRotation({ x: 0, y: 0, z: s0.angleXY });
-      shape.setScale({ x: s0.length, y: s1.length, z: 1 });
-    } else { // Rectangle; no rotation.
-      shape.setScale({ x: rectOrPoly.width, y: rectOrPoly.height, z: 1 });
-    }
-    this.shapes.push(shape);
+  _update() {
+    if ( this._updateFlags.texture ) this.createShapes();
+    super._update();
   }
 }
 
@@ -302,17 +339,34 @@ export class TilePolygonsGeometry extends TileFullGeometry {
    */
   get placeableId() { return `${super.placeableId}_polygons`; }
 
+  /** @type {PIXI.Polygon[]} */
+  get _polygons() {
+    const cache = this.pixelCache;
+    if ( !cache ) return this.placeableDocument.shape.bounds;
+    return cache.getCanvasAlphaISOBands(this.alphaThreshold);
+  }
+
   createShapes() {
     const cache = this.pixelCache;
     if ( !cache ) return super.createShapes();
 
-    const polys = cache.getCanvasAlphaISOBands(this.alphaThreshold);
+    const polys = this._polygons;
     if ( !polys ) return super.createShapes();
 
     const elevationZ = this.elevationZ;
     const polys3d = Polygons3d.fromPolygons(polys, elevationZ);
-    const shape = PlanarPolygonPrimitive.fromPolygon3d(`${this.placeableId}_alphaThresholdPolygons`, polys3d);
+    const opts = {
+      center: this.constructor.tileCenter(this.placeableDocument),
+      dims: this.constructor.tileDimensions(this.placeableDocument),
+      angles: this.constructor.tileRotation(this.placeableDocument),
+    };
+    const shape = PlanarPolygonPrimitive.fromPolygon3d(`${this.placeableId}_alphaThresholdPolygons`, polys3d, opts);
     this.shapes.push(shape);
+  }
+
+  _update() {
+    if ( this._updateFlags.texture ) this.createShapes();
+    super._update();
   }
 }
 
@@ -323,19 +377,22 @@ export class TileTrianglesGeometry extends TileFullGeometry {
    */
   get placeableId() { return `${super.placeableId}_triangles`; }
 
+  /** @type {PIXI.Polygon[]} */
+  get _polygons() {
+    const cache = this.pixelCache;
+    if ( !cache ) return this.placeableDocument.shape.bounds;
+    return cache.getCanvasAlphaISOBands(this.alphaThreshold);
+  }
+
   createShapes() {
     const cache = this.pixelCache;
     if ( !cache ) return super.createShapes();
 
-    const polys = cache.getCanvasAlphaISOBands(this.alphaThreshold);
+    const polys = this._polygons;
     if ( !polys ) return super.createShapes();
 
     this.shapes.forEach(shape => shape.destroy());
     this.shapes.length = 0;
-
-    // TODO: Fix. Need to convert multiple polygons with holes to triangles.
-    console.error("Not yet implemented.");
-    return super.createShapes();
 
     // Convert the polygons to top and bottom faces.
     // Then make these into triangles.
@@ -354,6 +411,11 @@ export class TileTrianglesGeometry extends TileFullGeometry {
       .filter(tri => !foundry.utils.orient2dFast(tri.a, tri.b, tri.c).almostEqual(0, 1e-06));
     const shape = PlanarPolygonPrimitive.fromPolygon3d(`${this.placeableId}`, triTop);
     this.shapes.push(shape);
+  }
+
+  _update() {
+    if ( this._updateFlags.texture ) this.createShapes();
+    super._update();
   }
 }
 
