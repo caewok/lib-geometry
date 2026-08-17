@@ -1508,8 +1508,8 @@ console.table(pts)
     const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
 
     // Convert pixels to isobands.
-    const width = this.bufferWidth;
-    const height = this.bufferHeight;
+    const width = this.bufferWidth || this.width; // Need the actual pixel width and height, which depends on the class.
+    const height = this.bufferHeight || this.height;
     const rowViews = new Array(height);
     for ( let r = 0, start = 0, rMax = height; r < rMax; r += 1, start += width ) {
       // TODO: Use single Typed view instead of slicing?
@@ -1554,7 +1554,7 @@ console.table(pts)
     // Translate by the minimum alpha bounds.
     const aabb = this.getThresholdLocalAABB(alphaThreshold);
     if ( aabb.min.x || aabb.min.y ) {
-      const M = MatrixFloat32.translation(aabb.min.x, aabb.min.y);
+      using M = MatrixFloat32.translation(aabb.min, { d3: false });
       return paths.transform(M);
     } else return paths;
   }
