@@ -86,8 +86,8 @@ const TileDocumentCalculationsMixin = superclass => class extends superclass {
    * @param {CONST.WALL_RESTRICTION_TYPES} [senseType="sight"]
    * @returns {boolean}
    */
-  blocksSense(senseType = "sight") {
-    if ( senseType === "light" ) return this.placeableDocument.restrictions.light;
+  static blocksSense(placeableDocument, senseType = "sight") {
+    if ( senseType === "light" ) return placeableDocument.restrictions.light;
     return true;
   }
 
@@ -96,8 +96,8 @@ const TileDocumentCalculationsMixin = superclass => class extends superclass {
    * @param {string} levelId
    * @returns {boolean} True if seen from this level or the levelId is null or "".
    */
-  isPresentAtLevel(levelId) {
-    return PlaceableGeometry.prototype.isPresentAtLevel.call(this, levelId);
+  static isPresentAtLevel(placeableDocument, levelId) {
+    return PlaceableGeometry.isPresentAtLevel(placeableDocument, levelId);
   }
 
   /**
@@ -108,8 +108,8 @@ const TileDocumentCalculationsMixin = superclass => class extends superclass {
    * @prop {...}                      Other options used by subclasses
    * @returns {boolean}
    */
-  couldBlock(opts) {
-    return PlaceableGeometry.prototype.couldBlock.call(this, opts);
+  static couldBlock(placeableDocument, opts) {
+    return PlaceableGeometry.couldBlock(placeableDocument, opts);
   }
 
   /**

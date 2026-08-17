@@ -116,17 +116,17 @@ const LevelCalculationsMixin = superclass => class extends superclass {
    * @param {CONST.WALL_RESTRICTION_TYPES} [senseType="sight"]
    * @returns {boolean}
    */
-  blocksSense(_senseType = "sight") { return true; }
+  static blocksSense(_placeableDocument, _senseType = "sight") { return true; }
 
   /**
    * Does this placeable exist on this level?
    * @param {string} levelId
    * @returns {boolean} True if seen from this level or the levelId is null or "".
    */
-  isPresentAtLevel(levelId) {
+  static isPresentAtLevel(placeableDocument, levelId) {
     if ( !canvas.scene.levels.has(levelId) ) return !levelId;
-    if ( this.placeableDocument.id === levelId ) return true;
-    return !this.placeableDocument.visibility.has(levelId);
+    if ( placeableDocument.id === levelId ) return true;
+    return !placeableDocument.visibility.has(levelId);
   }
 
   /**
@@ -137,7 +137,7 @@ const LevelCalculationsMixin = superclass => class extends superclass {
    * @prop {...}                      Other options used by subclasses
    * @returns {boolean}
    */
-  couldBlock(opts) { return PlaceableGeometry.prototype.couldBlock.call(this, opts); }
+  static couldBlock(placeableDocument, opts) { return PlaceableGeometry.couldBlock(placeableDocument, opts); }
 
   // ----- NOTE: Scene texture characteristics ----- //
 

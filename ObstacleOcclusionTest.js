@@ -10,7 +10,6 @@ import { NULL_SET } from "./util.js";
 import { OTHER_MODULES } from "./const.js";
 import { AABB3d } from "./3d/AABB3d.js";
 import { Draw } from "./Draw.js";
-import { TokenGeometry } from "./placeable_geometry/TokenGeometry.js";
 import { ConfigHandler } from "./ConfigHandler.js";
 import { Point3d } from "./3d/Point3d.js";
 
@@ -300,18 +299,12 @@ export class ObstacleOcclusionTest {
   /**
    * Helper to get placeable docs within bounds, filter by the 3d aabb, and filter by frustum.
    */
-  #filterDocGeometries(mgr, opts) {
-    const geoms = mgr.quadtree.getObjects(this.aabb, opts);
+  #filterDocGeometries(mgr, collisionOpts = {}) {
+    collisionOpts.senseType = this.#config.senseType;
+    collisionOpts.levelId = this.levelId;
+    const collisionTest = o => o.t.constructor.couldBlock(o.t.placeableDocument, collisionOpts);
+    const geoms = mgr.quadtree.getObjects(this.aabb, { collisionTest });
     if ( this.frustum ) return geoms.filter(geom => this.#frustum.overlapsGeometry(geom));
-    return geoms;
-  }
-
-  /**
-   * Helper to get placeable docs within bounds, filter by the 3d aabb, and filter by frustum.
-   */
-  #filterDocSubgeometries(mgr, opts) {
-    const geoms = mgr.quadtree.getObjects(this.aabb, opts);
-    if ( this.frustum ) return geoms.filter(geom => this.#frustum.overlapsGeometry(geom.full));
     return geoms;
   }
 
@@ -320,10 +313,7 @@ export class ObstacleOcclusionTest {
    */
   findBlockingWalls() {
     if ( !this.#config.walls ) return NULL_SET;
-
-    // Drop non-blocking walls for this sense type.
-    const collisionTest = o => o.t.placeableDocument[this.#config.senseType];
-    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.walls, { collisionTest });
+    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.walls);
   }
 
   /**
@@ -333,9 +323,9 @@ export class ObstacleOcclusionTest {
     const tokensCfg = this.#config.tokens;
     if ( !(tokensCfg.dead || tokensCfg.live) ) return NULL_SET;
 
-    const validLevels = this.validLevels;
-    const collisionTest = o => validLevels.has(o.t.placeableDocument.level) && this.includeToken(o.t.placeableDocument);
-    let tokenGeoms = this.#filterDocSubgeometries(CONFIG.GeometryLib.geometryManager.tokens, { collisionTest });
+    const blockingCfg = this.#config.tokens;
+    const subjectToken = this.subjectToken;
+    let tokenGeoms = this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.tokens, { subjectToken, ...blockingCfg });
 
     // Filter out the subject token and other tokens to exclude (such as the target).
     tokenGeoms = tokenGeoms.filter(geom => !(this.subjectToken === geom.placeableDocument || this.tokensToExclude.has(geom.placeableDocument)));
@@ -361,9 +351,7 @@ export class ObstacleOcclusionTest {
    */
   findBlockingTiles() {
     if ( !this.#config.tiles ) return NULL_SET;
-    const validLevels = this.validLevels;
-    const collisionTest = o => o.t.placeableDocument.levels.intersects(validLevels);
-    return this.#filterDocSubgeometries(CONFIG.GeometryLib.geometryManager.tiles, { collisionTest });
+    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.tiles);
   }
 
   /**
@@ -379,33 +367,10 @@ export class ObstacleOcclusionTest {
    * @returns {Set<Level>}
    */
   findBlockingLevels(levelType = "background") {
-    const validLevels = this.validLevels;
-    const collisionTest = o => validLevels.has(o.t.placeableDocument.id);
-    return this.#filterDocSubgeometries(CONFIG.GeometryLib.geometryManager.levels[levelType], { collisionTest })
+    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.levels[levelType])
       .filter(geom => geom.level[levelType].src); // Must have a defined texture.
   }
 
-  /**
-   * Does the token block with respect to a movement token?
-   * @param {TokenDocument} tokenD           Token to test for whether it could block
-   * @param {TokenDocument} [subjectTokenD]       Token doing the movement or viewing
-   * @param {TokenBlockingConfig} blockingCfg
-   * @returns {boolean}
-   */
-
-
-  static tokenBlocks = TokenGeometry.tokenBlocks;
-
-  static includeToken = TokenGeometry.includeToken;
-
-
-  includeToken(tokenD) {
-    return this.constructor.includeToken(tokenD, {
-      blockingCfg: this.#config.tokens,
-      subjectToken: this.subjectToken,
-      tokensToExclude: this.tokensToExclude
-    });
-  }
 
   // ---- NOTE: Test ray intersection with obstacles ----- //
   obstacleTester;
@@ -458,17 +423,14 @@ export class ObstacleOcclusionTest {
    */
   #geometriesOcclude(geoms, rayOrigin, rayDirection) {
     using rayEnd = rayOrigin.add(rayDirection);
-    const opts = { levelId: this.levelId };
     return geoms.some(geom => this.#geomWithinRayBounds(geom, rayOrigin, rayEnd)
-      && geom.rayIntersection(rayOrigin, rayDirection, opts));
+      && geom.rayIntersection(rayOrigin, rayDirection));
   }
 
   #subGeometriesOcclude(geoms, rayOrigin, rayDirection, geomSubtype = "full") {
     using rayEnd = rayOrigin.add(rayDirection);
-    const opts = { levelId: this.levelId };
-    const tokenType = this.config.tokenType;
     return geoms.some(geom => this.#geomWithinRayBounds(geom, rayOrigin, rayEnd)
-      && geom[geomSubtype].rayIntersection(rayOrigin, rayDirection, opts));
+      && geom[geomSubtype].rayIntersection(rayOrigin, rayDirection));
   }
 
   /**
@@ -485,9 +447,8 @@ export class ObstacleOcclusionTest {
     let limitedOcclusion = 0;
     using rayEnd = rayOrigin.add(rayDirection);
     const geoms = geoms.filter(geom => this.#geomWithinRayBounds(geom, rayOrigin, rayEnd));
-    const opts = { ignoreLevelIds: this.invalidLevels };
     for ( const geom of geoms ) {
-      if ( !geom.rayIntersection(rayOrigin, rayDirection, opts) ) continue;
+      if ( !geom.rayIntersection(rayOrigin, rayDirection) ) continue;
       if ( limitedOcclusion++ ) return true;
     }
     return false;
@@ -499,7 +460,6 @@ export class ObstacleOcclusionTest {
       ...this.obstacleGeometries.proximateWalls,
       ...this.obstacleGeometries.reverseProximateWalls
     ];
-    const opts = { ignoreLevelIds: this.invalidLevels };
     for ( const geom of geoms ) {
       if ( !this.#geomWithinRayBounds(geom, rayOrigin, rayEnd) ) continue;
 
@@ -507,7 +467,7 @@ export class ObstacleOcclusionTest {
       if ( geom.edge.applyThreshold(this.#config.senseType, rayOrigin) ) continue;
 
       // If an intersection is found, we can stop.
-      if ( geom.rayIntersection(rayOrigin, rayDirection, opts) ) return true;
+      if ( geom.rayIntersection(rayOrigin, rayDirection) ) return true;
 
     }
     return false;

@@ -160,8 +160,8 @@ export class WallGeometry extends PlaceableGeometry {
    * @prop {...}                      Other options used by subclasses
    * @returns {boolean}
    */
-  couldBlock(opts) {
-    if ( this.placeableDocument.isOpen ) return false;
+  static couldBlock(placeableDocument, opts) {
+    if ( placeableDocument.isOpen ) return false;
     return super.couldBlock(opts);
   }
 

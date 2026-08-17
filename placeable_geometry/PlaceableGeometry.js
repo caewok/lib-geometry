@@ -252,16 +252,16 @@ export class PlaceableGeometry {
    * @param {CONST.WALL_RESTRICTION_TYPES} [senseType="sight"]
    * @returns {boolean}
    */
-  blocksSense(_senseType = "sight") { return true; }
+  static blocksSense(placeableDocument, _senseType = "sight") { return true; }
 
   /**
    * Does this placeable exist on this level?
    * @param {string} levelId
    * @returns {boolean} True if seen from this level or the levelId is null or "".
    */
-  isPresentAtLevel(levelId) {
+  static isPresentAtLevel(placeableDocument, levelId) {
     if ( !canvas.scene.levels.has(levelId) ) return !levelId;
-    return this.placeableDocument.levels.has(levelId);
+    return placeableDocument.levels.has(levelId);
   }
 
   /**
@@ -272,8 +272,8 @@ export class PlaceableGeometry {
    * @prop {...}                      Other options used by subclasses
    * @returns {boolean}
    */
-  couldBlock({ levelId, senseType } = {}) {
-    return this.blocksSense(senseType) && this.isPresentAtLevel(levelId);
+  static couldBlock(placeableDocument, { levelId, senseType } = {}) {
+    return this.blocksSense(placeableDocument, senseType) && this.isPresentAtLevel(placeableDocument, levelId);
   }
 
   // ----- NOTE: AABB ----- //
@@ -296,21 +296,13 @@ export class PlaceableGeometry {
    * @param {string} [opts.levelId]                           If provided, will return early if geometry does not affect this level.
    * @yields {GeometricPrimitive}
    */
-  *iterateShapes({ senseType, levelId } = {}) {
-    if ( senseType && !this.blocksSense(senseType) ) return;
-    if ( levelId && !this.blocksFromLevel(levelId) ) return;
-    for ( const shape of this.shapes ) {
-      if ( shape ) yield shape;
-    }
-  }
+  *iterateShapes() { yield *this.shapes; }
 
   /**
    * Iterate over the shapes' faces.
    * @yields {Polygon3d}
    */
-  *iterateFaces(opts = {}) {
-    for ( const shape of this.iterateShapes(opts) ) yield* shape.faces;
-  }
+  *iterateFaces() { for ( const shape of this.iterateShapes() ) yield* shape.faces; }
 
   /**
    * Determine where a ray hits this object in 3d.
@@ -325,7 +317,7 @@ export class PlaceableGeometry {
    * @returns {number|null} The distance along the ray, as a multiple of rayDirection
    */
   rayIntersection(rayOrigin, rayDirection, opts) {
-    for ( const shape of this.iterateShapes(opts) ) {
+    for ( const shape of this.iterateShapes() ) {
       const t = shape.rayIntersection(rayOrigin, rayDirection, opts);
       if ( t !== null ) return t;
     }

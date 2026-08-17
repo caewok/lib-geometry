@@ -156,7 +156,7 @@ const TokenDocumentCalculationsMixin = superclass => class extends superclass {
    * @param {CONST.WALL_RESTRICTION_TYPES} [senseType="sight"]
    * @returns {boolean}
    */
-  blocksSense(_senseType) {
+  static blocksSense(_placeableDocument, _senseType) {
     // Tokens block all sense types equally.
     return true;
   }
@@ -166,13 +166,13 @@ const TokenDocumentCalculationsMixin = superclass => class extends superclass {
    * @param {string} levelId
    * @returns {boolean}
    */
-  isPresentAtLevel(levelId) {
+  static isPresentAtLevel(placeableDocument, levelId) {
     const lvl = canvas.scene.levels.get(levelId);
     if ( !lvl ) return !levelId;
 
     // For tokens, if they either are at the level or at a level viewable by this level, then
     // they would be present.
-    const docLevel = this.placeableDocument.level
+    const docLevel = placeableDocument.level
     return docLevel === levelId || lvl.visibility.has(docLevel);
   }
 
@@ -182,9 +182,9 @@ const TokenDocumentCalculationsMixin = superclass => class extends superclass {
    * @param {TokenBlockingConfig} [blockingCfg]
    * @returns {boolean}
    */
-  couldBlock({ subjectTokenD, levelId, ...blockingCfg } = {} ) {
-    if ( !this.isPresentAtLevel(levelId) ) return false;
-    return this.constructor.tokenBlocks(this.placeableDocument, subjectTokenD, blockingCfg);
+  static couldBlock(placeableDocument, { subjectTokenD, levelId, ...blockingCfg } = {} ) {
+    if ( !this.isPresentAtLevel(placeableDocument, levelId) ) return false;
+    return this.tokenBlocks(placeableDocument, subjectTokenD, blockingCfg);
   }
 
   // ----- NOTE: AABB ----- //
