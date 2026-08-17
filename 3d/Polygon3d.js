@@ -10,7 +10,7 @@ PIXI,
 import { GEOMETRY_CONFIG } from "../const.js";
 import { Point3d } from "./Point3d.js";
 import { Plane } from "./Plane.js";
-import { pointsAreCollinear, almostBetween } from "../util.js";
+import { pointsAreCollinear, almostBetween, cleanPolygonPoints } from "../util.js";
 import { AABB3d } from "./AABB3d.js";
 import { Draw } from "../Draw.js";
 import { Matrix, MatrixFloat32 } from "../Matrix.js";
@@ -75,38 +75,7 @@ export class Polygon3d {
   clean() {
     if ( this.#cleaned ) return;
     if ( this.points.length < 2 ) return;
-
-    const points = this.iteratePoints();
-    const result = [points.next().value];
-    for ( const curr of points ) {
-      if ( result.at(-1).almostEqual(curr) ) continue;
-      while ( result.length >= 2
-        && pointsAreCollinear(result.at(-2), result.at(-1), curr) ) result.pop().release();
-      result.push(curr);
-    }
-
-    // Clean up where end meets beginning.
-    // Loop b/c removing a point at a seam may expose a new collinearity.
-    while ( result.length >= 3 ) {
-      // Is the last point a duplicate of the first?
-      if ( result[0].almostEqual(result.at(-1)) ) {
-        result.pop().release();
-        continue;
-      }
-
-      // Is the last point redundant? (2nd-to-last -> last -> first)
-      if ( pointsAreCollinear(result.at(-2), result.at(-1), result[0]) ) {
-        result.pop().release();
-        continue;
-      }
-
-      // Is the first point redundant? (Last -> first -> second)
-      if ( pointsAreCollinear(result.at(-1), result.at(0), result[1]) ) {
-        result.shift().release(); // Remove the first point.
-        continue;
-      }
-      break;
-    }
+    const result = cleanPolygonPoints(this.points);
 
     // Copy over the points if necessary.
     if ( result.length < this.points.length ) {
@@ -316,14 +285,19 @@ export class Polygon3d {
       const outPt = out.points[i] ??= Point3d.tmp;
       outPt.copyFrom(pts[i]);
     }
+    out.clean();
     return out;
   }
 
   static fromPolygon(poly, elevation = 0, out) {
     const n = Math.floor(poly.points.length * 0.5);
-    out ??= new this(n);
+    out ??= new this();
+
+    // Clean the points before adding them to the polygon.
+    const points = cleanPolygonPoints([...poly.iteratePoints()]);
+    out.points.length = points.length;
     let i = 0;
-    for ( const pt of poly.iteratePoints() ) out.points[i++].set(pt.x, pt.y, elevation);
+    for ( const pt of points ) out.points[i++] = Point3d.tmp.set(pt.x, pt.y, elevation);
 
     // 3d polygon faces up if the poly is not a hole.
     // Confirm orientation manually b/c this always gets screwed up.
