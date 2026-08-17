@@ -78,7 +78,7 @@ export class ObstacleOcclusionTest {
    * @yields {PlaceableGeometry}
    */
   *iterateObstacleGeoms({ includeObstacles = this.constructor.OBSTACLE_KEYS, senseType, levelId } = {}) {
-    senseType ??= this.senseType;
+    senseType ??= this.config.senseType;
     levelId ??= this.levelId;
     for ( const key of includeObstacles ) {
       const geoms = this.obstacleGeometries[key] || [];
@@ -215,8 +215,8 @@ export class ObstacleOcclusionTest {
   get validLevels() {
     const thisLevel = canvas.scene.levels.get(this.levelId);
     if ( !thisLevel ) return new Set(canvas.scene.levels.keys()); // Default to all levels.
-    const s = Set(thisLevel.visibility.levels); // Clone the set so we can modify it.
-    s.add(thisLevel);
+    const s = new Set(thisLevel.visibility.levels); // Clone the set so we can modify it.
+    s.add(thisLevel.id);
     return s;
   }
 
