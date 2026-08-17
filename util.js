@@ -1177,14 +1177,15 @@ export function doSegmentsOverlap(a, b, c, d) {
 }
 
 export function pointsAreCollinear(a, b, c, epsilon = 1e-06) {
-  if ( Object.hasOwn(a, "z") ) return foundry.utils.orient2dFast(a, b, c).almostEqual(epsilon);
+  if ( !Object.hasOwn(a, "z") ) return foundry.utils.orient2dFast(a, b, c).almostEqual(0, epsilon);
 
   // Collinear 3d points form a degenerate triangle with zero area.
   // Test the cross products.
   using ab = b.subtract(a);
-  using bc = c.subtract(b);
-  using cross = ab.cross(bc);
-  return cross.almostEqual(0, epsilon);
+  using ac = c.subtract(a);
+  using cross = ab.cross(ac);
+  using zero = Point3d.tmp.set(0, 0, 0);
+  return cross.almostEqual(zero, epsilon);
 }
 
 /**
@@ -1225,6 +1226,49 @@ export function findOverlappingPoints(a, b, c, d) {
   || (p0.x < p1.x && p0.y < p1.y)) return [p0, p1];
 
   return [];
+}
+
+/**
+ * Remove repeated and collinear points from an array of 2d or 3d points.
+ * @param {PIXI.Point[]|Point3d[]} points
+ * @returns {PIXI.Point[]|Point3d[]}
+ */
+export function cleanPolygonPoints(points) {
+  if ( points.length < 2 ) return points;
+
+  points = points.values();
+  const result = [points.next().value];
+  for ( const curr of points ) {
+    if ( result.at(-1).almostEqual(curr) ) continue;
+    while ( result.length >= 2
+      && pointsAreCollinear(result.at(-2), result.at(-1), curr) ) result.pop().release();
+    result.push(curr);
+  }
+
+  // Clean up where end meets beginning.
+  // Loop b/c removing a point at a seam may expose a new collinearity.
+  while ( result.length >= 3 ) {
+    // Is the last point a duplicate of the first?
+    if ( result[0].almostEqual(result.at(-1)) ) {
+      result.pop().release();
+      continue;
+    }
+
+    // Is the last point redundant? (2nd-to-last -> last -> first)
+    if ( pointsAreCollinear(result.at(-2), result.at(-1), result[0]) ) {
+      result.pop().release();
+      continue;
+    }
+
+    // Is the first point redundant? (Last -> first -> second)
+    if ( pointsAreCollinear(result.at(-1), result.at(0), result[1]) ) {
+      result.shift().release(); // Remove the first point.
+      continue;
+    }
+    break;
+  }
+
+  return result;
 }
 
 /** @type {enum} */
