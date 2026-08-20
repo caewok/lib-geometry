@@ -14,9 +14,9 @@ import { ElevatedPoint } from "./3d/ElevatedPoint.js";
 
 /*
 Draw = CONFIG.GeometryLib.lib.Draw
-tile = canvas.tiles.controlled[0]
-geom = CONFIG.GeometryLib.geometryManager.geomForPlaceable(tile)
-cache = geom.pixelCache
+Draw.clearDrawings()
+canvasTests = CONFIG.GeometryLib.lib.canvasTests
+Point3d = CONFIG.GeometryLib.lib.threeD.Point3d
 
 level = canvas.level
 geom = CONFIG.GeometryLib.geometryManager.geomForDocument(level, "background")
@@ -37,10 +37,7 @@ geom.shapes[0].draw2d({ color: Draw.COLORS.red })
 
 
 
-Draw = CONFIG.GeometryLib.lib.Draw
-Draw.clearDrawings()
-canvasTests = CONFIG.GeometryLib.lib.canvasTests
-Point3d = CONFIG.GeometryLib.lib.threeD.Point3d
+
 
 Triangle3d = CONFIG.GeometryLib.lib.threeD.Triangle3d
 Matrix = CONFIG.GeometryLib.lib.Matrix
@@ -57,12 +54,26 @@ canvasTests.drawTokenGeometries({ geomType: "constrained" })
 canvasTests.drawTokenGeometries({ geomType: "lit" })
 canvasTests.drawTokenGeometries({ geomType: "bright" })
 
+canvasTests.drawTokenGeometries({ geomType: "full", aabb: true, faceTypes: "none" })
+canvasTests.drawTokenGeometries({ geomType: "constrained", aabb: true, faceTypes: "none" })
+canvas.tokens.placeables.forEach(token => {
+  const geom = CONFIG.GeometryLib.geometryManager.tokens.geomForPlaceable(token);
+  canvasTests.drawGeometry(geom, "red", { aabb: true, faceTypes: "none" });
+});
+
 canvasTests.drawTileGeometries()
 canvasTests.drawTileGeometries({ geomType: "full" })
 canvasTests.drawTileGeometries({ geomType: "boundingRect" })
 canvasTests.drawTileGeometries({ geomType: "boundingPolygon" })
 canvasTests.drawTileGeometries({ geomType: "polygons" })
 canvasTests.drawTileGeometries({ geomType: "triangles" })
+
+canvasTests.drawTileGeometries({ geomType: "full", aabb: true, faceTypes: "none" })
+canvasTests.drawTileGeometries({ geomType: "boundingRect", aabb: true, faceTypes: "none" })
+canvas.tiles.placeables.forEach(tile => {
+  const geom = CONFIG.GeometryLib.geometryManager.tiles.geomForPlaceable(tile);
+  canvasTests.drawGeometry(geom, "red", { aabb: true, faceTypes: "none" });
+});
 
 canvasTests.drawRegionGeometries({ faceType: "top" })
 canvasTests.drawRegionGeometries({ faceType: "bottom" })

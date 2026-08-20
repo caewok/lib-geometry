@@ -10,7 +10,6 @@ import { NULL_SET } from "./util.js";
 import { OTHER_MODULES } from "./const.js";
 import { AABB3d } from "./3d/AABB3d.js";
 import { Draw } from "./Draw.js";
-import { ConfigHandler } from "./ConfigHandler.js";
 import { Point3d } from "./3d/Point3d.js";
 
 /**
@@ -76,16 +75,10 @@ export class ObstacleOcclusionTest {
    * @param {string} [opts.levelId]                           If provided, will return early if geometry does not affect this level.
    * @yields {PlaceableGeometry}
    */
-  *iterateObstacleGeoms({ includeObstacles = this.constructor.OBSTACLE_KEYS, senseType, levelId } = {}) {
-    senseType ??= this.config.senseType;
-    levelId ??= this.levelId;
+  *iterateObstacleGeoms({ includeObstacles = this.constructor.OBSTACLE_KEYS } = {}) {
     for ( const key of includeObstacles ) {
       const geoms = this.obstacleGeometries[key] || [];
-      for ( let geom of geoms ) {
-        if ( !geom.blocksSense(senseType) ) continue;
-        if ( !geom.blocksFromLevel(levelId) ) continue;
-        yield geom;
-      }
+      yield* geoms;
     }
   }
 
@@ -140,7 +133,7 @@ export class ObstacleOcclusionTest {
    */
 
   /** @type {BlockingConfig} */
-  #config = new ConfigHandler({
+  config = {
     senseType: "sight",
     walls: true,
     tiles: true,
@@ -159,15 +152,7 @@ export class ObstacleOcclusionTest {
       allies: false,      // False: allies do not block.
       excludedStatuses: NULL_SET,  // If token has status, it does not block
     },
-  });
-
-  get config() { return this.#config; }
-
-  set config(cfg = {}) {
-    if ( cfg.blocking ) console.error("ObstacleOcclusionTest no longer has 'blocking' in its config.");
-    this.#config.set(cfg); // Update but do not add new keys here.
-    this.update();
-  }
+  };
 
   /**
    * Subject token for which obstacles are being tested.
@@ -237,12 +222,11 @@ export class ObstacleOcclusionTest {
    * @param {Point3d} [viewpoint]             Used for _rayIsOccluded as the starting viewpoint
    * @param {Token[]} [tokensToExclude=[]]    Exclude these tokens from collision testing
    */
-  initialize({ subjectToken, tokensToExclude, levelId, ...cfg } = {}) {
+  initialize({ subjectToken, tokensToExclude, levelId } = {}) {
     // Set privately and then trigger full update.
     if ( levelId ) this.levelId = levelId;
     if ( subjectToken ) this.#subjectToken = subjectToken.document ? subjectToken.document : subjectToken;
     if ( tokensToExclude ) this.#tokensToExclude = new WeakSet(tokensToExclude.map(t => t.document ? t.document : t));
-    this.config = cfg; // Even if empty, trigger this.constructObstacleTester() via config setter;
   }
 
   /**
@@ -276,7 +260,7 @@ export class ObstacleOcclusionTest {
   }
 
   _updateObstacles() {
-    const senseType = this.#config.senseType;
+    const senseType = this.config.senseType;
     this.obstacleGeometries.tiles = this.findBlockingTiles();
     this.obstacleGeometries.tokens = this.findBlockingTokens();
     this.obstacleGeometries.regions = this.findBlockingRegions();
@@ -300,7 +284,7 @@ export class ObstacleOcclusionTest {
    * Helper to get placeable docs within bounds, filter by the 3d aabb, and filter by frustum.
    */
   #filterDocGeometries(mgr, collisionOpts = {}) {
-    collisionOpts.senseType = this.#config.senseType;
+    collisionOpts.senseType = this.config.senseType;
     collisionOpts.levelId = this.levelId;
     const collisionTest = o => o.t.constructor.couldBlock(o.t.placeableDocument, collisionOpts);
     const geoms = mgr.quadtree.getObjects(this.aabb, { collisionTest });
@@ -308,11 +292,20 @@ export class ObstacleOcclusionTest {
     return geoms;
   }
 
+  #filterDocSubGeometries(mgr, collisionOpts = {}) {
+    collisionOpts.senseType = this.config.senseType;
+    collisionOpts.levelId = this.levelId;
+    const collisionTest = o => o.t.constructor.couldBlock(o.t.placeableDocument, collisionOpts);
+    const geoms = mgr.quadtree.getObjects(this.aabb, { collisionTest });
+    if ( this.frustum ) return geoms.filter(geom => this.#frustum.overlapsGeometry(geom.full));
+    return geoms;
+  }
+
   /**
    * @returns {Set<WallDocument>}
    */
   findBlockingWalls() {
-    if ( !this.#config.walls ) return NULL_SET;
+    if ( !this.config.walls ) return NULL_SET;
     return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.walls);
   }
 
@@ -320,12 +313,12 @@ export class ObstacleOcclusionTest {
    * @returns {Set<TokenDocument>}
    */
   findBlockingTokens() {
-    const tokensCfg = this.#config.tokens;
+    const tokensCfg = this.config.tokens;
     if ( !(tokensCfg.dead || tokensCfg.live) ) return NULL_SET;
 
-    const blockingCfg = this.#config.tokens;
+    const blockingCfg = this.config.tokens;
     const subjectToken = this.subjectToken;
-    let tokenGeoms = this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.tokens, { subjectToken, ...blockingCfg });
+    let tokenGeoms = this.#filterDocSubGeometries(CONFIG.GeometryLib.geometryManager.tokens, { subjectToken, ...blockingCfg });
 
     // Filter out the subject token and other tokens to exclude (such as the target).
     tokenGeoms = tokenGeoms.filter(geom => !(this.subjectToken === geom.placeableDocument || this.tokensToExclude.has(geom.placeableDocument)));
@@ -350,15 +343,15 @@ export class ObstacleOcclusionTest {
    * @returns {Set<TileDocument>}
    */
   findBlockingTiles() {
-    if ( !this.#config.tiles ) return NULL_SET;
-    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.tiles);
+    if ( !this.config.tiles ) return NULL_SET;
+    return this.#filterDocSubGeometries(CONFIG.GeometryLib.geometryManager.tiles);
   }
 
   /**
    * @returns {Set<RegionDocument>}
    */
   findBlockingRegions() {
-    if ( !this.#config.regions || !canvas.regions.placeables.length ) return NULL_SET;
+    if ( !this.config.regions || !canvas.regions.placeables.length ) return NULL_SET;
     return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.regions);
   }
 
@@ -367,7 +360,7 @@ export class ObstacleOcclusionTest {
    * @returns {Set<Level>}
    */
   findBlockingLevels(levelType = "background") {
-    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.levels[levelType])
+    return this.#filterDocSubGeometries(CONFIG.GeometryLib.geometryManager.levels[levelType])
       .filter(geom => geom.level[levelType].src); // Must have a defined texture.
   }
 
@@ -464,7 +457,7 @@ export class ObstacleOcclusionTest {
       if ( !this.#geomWithinRayBounds(geom, rayOrigin, rayEnd) ) continue;
 
       // If the proximity threshold is met, this edge excluded from perception calculations.
-      if ( geom.edge.applyThreshold(this.#config.senseType, rayOrigin) ) continue;
+      if ( geom.edge.applyThreshold(this.config.senseType, rayOrigin) ) continue;
 
       // If an intersection is found, we can stop.
       if ( geom.rayIntersection(rayOrigin, rayDirection) ) return true;
@@ -544,7 +537,7 @@ export class ObstacleOcclusionTest {
    * For debugging.
    * Draw outlines for the various objects that can be detected on the canvas.
    */
-  _drawDetectedObjects(draw) {
+  _drawDetectedObjects(draw, { tileSubtype = "full", tokenSubtype = "full", levelSubtype = "full" } = {}) {
     const colors = Draw.COLORS;
     const OBSTACLE_COLORS = {
       walls: colors.lightred,
@@ -559,10 +552,12 @@ export class ObstacleOcclusionTest {
     for ( const [key, obstacleGeoms] of Object.entries(this.obstacleGeometries) ) {
       const color = OBSTACLE_COLORS[key];
       const drawOpts = { draw, color, fillAlpha: 0.1, fill: color };
-      obstacleGeoms.forEach(geom => {
-        if ( geom.constructor.HAS_SUBTYPES ) geom.full.draw2d(drawOpts)
-        else geom.draw2d(drawOpts)
-      });
+      switch ( key ) {
+        case "tiles": obstacleGeoms.forEach(geom => geom[tileSubtype].draw2d(drawOpts)); break;
+        case "levels": obstacleGeoms.forEach(geom => geom[levelSubtype].draw2d(drawOpts)); break;
+        case "tokens": obstacleGeoms.forEach(geom => geom[tokenSubtype].draw2d(drawOpts)); break;
+        default: obstacleGeoms.forEach(geom => geom.draw2d(drawOpts));
+      }
     }
   }
 }
