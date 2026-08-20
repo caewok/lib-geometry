@@ -180,7 +180,9 @@ export class RegionGeometry extends PlaceableGeometry {
     this.shapes.length = 1;
 
     // If there are holes or wall restrictions, use the model polygon shape for the entire region.
-    if ( this.placeableDocument.restriction.enabled || regionShapes.some(regionShape => regionShape.hole) ) {
+    if ( this.regionPolygons.length &&
+      (this.placeableDocument.restriction.enabled
+      || regionShapes.some(regionShape => regionShape.hole)) ) {
       const id = this.placeableId;
       const zElevs = this.elevationZ;
       this.shapes[0] = ExtrudedPolygonPrimitive.fromPolygons(id, this.regionPolygons, zElevs);
