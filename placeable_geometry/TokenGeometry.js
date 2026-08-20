@@ -391,7 +391,7 @@ export class TokenFullGeometry extends mix(PlaceableGeometry).with(TokenDocument
 
     if ( this._updateFlags.positionXY || this._updateFlags.elevation ) {
       const ctr = this.constructor.tokenCenter(this.placeableDocument);
-      console.debug(`${this.constructor.name}|Updating position for ${this.placeableDocument.name} to ${ctr}`);
+      // console.debug(`${this.constructor.name}|Updating position for ${this.placeableDocument.name} to ${ctr}`);
       this.shape.setPosition(ctr);
     }
 

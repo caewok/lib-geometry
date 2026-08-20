@@ -227,7 +227,7 @@ export class PlaceableGeometry {
       shapeUpdated ||= needsUpdate;
     }
     if ( !shapeUpdated ) return false;
-    console.debug(`\n\n${this.constructor.name}|Updating ${this.placeableDocument.name} with keys`, [...updateKeys.values()]);
+    // console.debug(`\n\n${this.constructor.name}|Updating ${this.placeableDocument.name} with keys`, [...updateKeys.values()]);
     this._update(opts);
     return true;
   }
