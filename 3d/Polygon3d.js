@@ -10,7 +10,7 @@ PIXI,
 import { GEOMETRY_CONFIG } from "../const.js";
 import { Point3d } from "./Point3d.js";
 import { Plane } from "./Plane.js";
-import { pointsAreCollinear, almostBetween, cleanPolygonPoints } from "../util.js";
+import { almostBetween, cleanPolygonPoints } from "../util.js";
 import { AABB3d } from "./AABB3d.js";
 import { Draw } from "../Draw.js";
 import { Matrix, MatrixFloat32 } from "../Matrix.js";
@@ -91,18 +91,10 @@ export class Polygon3d {
   setZ(z = 0) { this.points.forEach(pt => pt.z = z); this.clearCache(); return this; }
 
   /**
-   * If orientation is 1, then the plane normal corresponds the polygon's points layout.
-   * If orientation is -1, then the plane normal is multiplied by -1.
-   * @type {1|-1}
-   */
-  #orientation = 1;
-
-  /**
    * Reverse the orientation of this polygon. Done in place.
    */
   reverseOrientation() {
     const plane = this.plane; // Do first in case plane has not been calculated
-    this.#orientation = -this.#orientation;
     plane.normal.multiplyScalar(-1, plane.normal);
     return this;
   }
@@ -126,12 +118,17 @@ export class Polygon3d {
     return this.#aabb;
   }
 
+  set aabb(value) {
+    this.#aabb.copyFrom(value);
+    this.#dirtyAABB = false;
+  }
+
   _calculateAABB(aabb) { aabb.constructor.fromPolygon3d(this, aabb); }
 
   // ----- NOTE: Plane ----- //
 
   /** @type {Plane} */
-  #plane = new Plane();
+  #plane;
 
   #dirtyPlane = true;
 
@@ -141,24 +138,28 @@ export class Polygon3d {
 
   get plane() {
     if ( this.#dirtyPlane ) {
+      this.#plane ??= new Plane();
       this._calculatePlane(this.#plane);
-      if ( !this.#orientation ) this.#plane.normal.multiplyScalar(-1, this.#plane.normal)
 
       // Plane point is linked to the first point here, which helps with transforms.
       this.#plane.point = this.points[0];
-
       this.#dirtyPlane = false;
     }
     return this.#plane;
   }
 
-  _calculatePlane(plane) {
-    // Assumes without testing that points are not collinear.
-    // Construct the plane so the center of the polygon is the origin.
-    Plane.fromMultiplePoints(this.points, plane);
+  set plane(value) {
+    this.#plane ??= new Plane();
+    this.#plane.copyFrom(value);
+    this.#plane.point = this.points[0];
+    this.#dirtyPlane = false;
   }
 
-  set plane(value) { this.#plane = value; }
+  _calculatePlane(plane) {
+    // Construct the plane so the center of the polygon is the origin.
+    if ( !this.cleaned ) this.clean(); // Avoid basing the plane on collinear points.
+    Plane.fromMultiplePoints(this.points, plane);
+  }
 
   /** @type {PIXI.Point[]} */
   #planarPoints = [];
@@ -185,17 +186,23 @@ export class Polygon3d {
 
   #dirtyCentroid = true;
 
+  get dirtyCentroid() { return this.#dirtyCentroid; }
+
+  set dirtyCentroid(value) { this.#dirtyCentroid ||= value; }
+
   /**
    * Centroid (center point) of this polygon.
    * True geometric center.
    * @type {Point3d}
    */
   get centroid() {
-    if ( this.points.length === 0 ) return Point3d.tmp.set(0, 0, 0);
-    if ( this.points.length === 1 ) return this.points[0].clone();
-    if ( this.points.length === 2 ) return Point3d.midpoint(this.points[0], this.points[1]);
-    if ( this.#dirtyCentroid ) this.#centroid = this._calculateCentroid();
+    if ( this.#dirtyCentroid ) this.#centroid.copyFrom(this._calculateCentroid());
     return this.#centroid;
+  }
+
+  set centroid(value) {
+    this.#centroid.copyFrom(value);
+    this.#dirtyCentroid = false;
   }
 
   /**
@@ -204,7 +211,11 @@ export class Polygon3d {
    * @returns {Point3d}
    */
   _calculateCentroid() {
-    if ( this.points.length < 3 ) throw Error("Centroid calculatino requires at least 3 points.");
+    // If less than three points, return but do not mark as clean.
+    if ( this.points.length === 0 ) return Point3d.tmp.set(0, 0, 0);
+    if ( this.points.length === 1 ) return this.points[0].clone();
+    if ( this.points.length === 2 ) return Point3d.midpoint(this.points[0], this.points[1]);
+
 
     // Translate the polygon to the origin using the first point as a reference.
     // Improves floating point precision.
@@ -253,6 +264,7 @@ export class Polygon3d {
     Point3d.release(...crossProducts, ...txPts);
 
     // Add the reference point back to return to the original coordinate space.
+    this.#dirtyCentroid = false;
     return centroid.add(ref);
   }
 
@@ -290,7 +302,6 @@ export class Polygon3d {
   }
 
   static fromPolygon(poly, elevation = 0, out) {
-    const n = Math.floor(poly.points.length * 0.5);
     out ??= new this();
 
     // Clean the points before adding them to the polygon.
@@ -333,7 +344,6 @@ export class Polygon3d {
     const n = this.points.length;
     out ??= new this.constructor(n);
     out.isHole = this.isHole;
-    // Don't copy plane; prefer to recalculate it based on the points.
 
     // If out was supplied, it may be the wrong point length.
     if ( out.points.length > n ) out.points.length = n;
@@ -343,6 +353,11 @@ export class Polygon3d {
       for ( let i = missingIdx; i < n; i += 1 ) out.points[i] = Point3d.tmp;
     }
     this.points.forEach((pt, idx) => out.points[idx].copyFrom(pt));
+
+    if ( !this.#dirtyPlane ) out.plane = this.plane;
+    if ( !this.#dirtyCentroid ) out.centroid = this.centroid;
+    if ( !this.#dirtyAABB ) out.aabb = this.aabb;
+
     return out;
   }
 
@@ -361,7 +376,7 @@ export class Polygon3d {
    * @param {number} [opts.scalingFactor]   How to scale the clipper points
    * @returns {ClipperPaths}
    */
-  toClipperPaths({ omitAxis = "z", scalingFactor = 1 } = {}) {
+  toClipperPaths({ omitAxis = "z", scalingFactor = 100 } = {}) {
     let axes;
     switch ( omitAxis ) {
       case "x": axes = { x: "y", y: "z" }; break;
@@ -667,14 +682,31 @@ export class Polygon3d {
   /**
    * Transform the points using a transformation matrix.
    * @param {Matrix} M
-   * @param {Polygon3d} [poly]    The triangle to modify
+   * @param {Polygon3d} [out]
    * @returns {Polygon3d} The modified tri.
    */
-  transform(M, poly3d) {
-    poly3d = this.clone(poly3d);
-    poly3d.points.forEach((pt, idx) => M.multiplyPoint3d(this.points[idx], pt));
-    poly3d.clearCache();
-    return poly3d;
+  transform(M, out) {
+    out = this.clone(out);
+    out.points.forEach(pt => M.multiplyPoint3d(pt, pt));
+
+    // Use the inverse transpose to transform the matrix.
+    // Use 3x3 because the normal here uses w = 1, not w = 0.
+    // If this moves to homogenous points, could use the 4x4 matrix transpose.
+    const mat3 = M.subset({ rowEnd: 2, colEnd: 2 });
+    const mat3Inv = mat3.invert();
+    const matNormal = MatrixFloat32.fromPoint3d(this.plane.normal, { homogenous: false });
+    mat3Inv.transpose(mat3Inv);
+    matNormal.multiply1x3(mat3Inv, matNormal);
+    out.plane.normal = {
+      x: matNormal.getIndex(0, 0),
+      y: matNormal.getIndex(0, 1),
+      z: matNormal.getIndex(0, 2),
+    }; // Plane setter normalize the values.
+
+    // The AABB and centroid must be recalculated. (Could use the model matrix, but safer to recalculate)
+    out.dirtyAABB = true;
+    out.dirtyCentroid = true;
+    return out;
   }
 
   multiplyScalar(multiplier, poly3d) {
@@ -1009,7 +1041,9 @@ export class Ellipse3d extends Polygon3d {
    * For Ellipse, the plane normal typically must be set, not calculated.
    * By default, the ellipse will face straight up, with normal {0, 0, 1}.
    */
-  _calculatePlane(_plane) {
+  _calculatePlane(plane) {
+    // Default to straight up if not already defined.
+    plane.normal.set(0, 0, 1);
     // plane.point.copyFrom(this.points[0]); // Unneeded b/c get plane does this.
   }
 
@@ -1290,29 +1324,11 @@ export class Ellipse3d extends Polygon3d {
   transform(M, out) {
     if ( !out ) out = new Ellipse3d();
     else if ( out instanceof Circle3d ) out = out.clone(new Ellipse3d());
-    this.clone(out);
-    const { angle, center, radiusX, radiusY } = this;
+    out = super.transform(M, out);
+
+    // Calculate the ellipse-specific parameters.
+    const { angle, radiusX, radiusY } = this;
     using tmp = Point3d.tmp;
-
-    // This approach works even for shearing or other affine transformations.
-    // Applies transformation directly to the 2d basis vectors and resolves skew using
-    // conjugate diameters.
-
-    // Transform the center point.
-    M.multiplyPoint3d(center, out.center);
-
-    // Transform the normal (inverse transpose of 3x3 portion)
-    const mat3 = M.subset({ rowEnd: 2, colEnd: 2 });
-    const mat3Inv = mat3.invert();
-    const matNormal = MatrixFloat32.fromPoint3d(this.plane.normal, { homogenous: false });
-    mat3Inv.transpose(mat3Inv);
-    matNormal.multiply1x3(mat3Inv, matNormal);
-    out.plane.normal = {
-      x: matNormal.getIndex(0, 0),
-      y: matNormal.getIndex(0, 1),
-      z: matNormal.getIndex(0, 2),
-    }; // Plane setter normalize the values.
-    out.plane.point.copyFrom(out.center);
 
     // Find the original major and minor axes as 2d vectors.
     const cosA = Math.cos(angle || 0);
@@ -1329,6 +1345,7 @@ export class Ellipse3d extends Polygon3d {
     // Apply the 3x3 transformation matrix to the vectors.
     using transformedU = MatrixFloat32.fromPoint3d(U, { homogenous: false });
     using transformedV = MatrixFloat32.fromPoint3d(V, { homogenous: false });
+    const mat3 = M.subset({ rowEnd: 2, colEnd: 2 });
     transformedU.multiply1x3(mat3, transformedU);
     transformedV.multiply1x3(mat3, transformedV);
 
@@ -1367,8 +1384,6 @@ export class Ellipse3d extends Polygon3d {
     using newOrigin2d = newTo2dM.multiplyPoint3d(Point3d.tmp.set(0, 0, 0));
     using majorAxis2d = newTo2dM.multiplyPoint3d(majorAxis, tmp).subtract(newOrigin2d);
     out.angle = Math.atan2(majorAxis2d.y, majorAxis2d.x);
-
-    out.clearCache();
 
     if ( out.radiusX.almostEqual(out.radiusY) ) return out.clone(new Circle3d());
     return out;
@@ -2279,10 +2294,30 @@ export class Polygons3d extends Polygon3d {
    * @param {number} [opts.scalingFactor]   How to scale the clipper points
    * @returns {ClipperPaths}
    */
-  toClipperPaths(opts) {
-    const cpObjArr = this.#applyMethodToAllWithReturn("toClipperPaths", opts);
-    const cl = CONFIG.GeometryLib.CONFIG.ClipperPaths;
-    return cl.joinPaths(cpObjArr);
+  toClipperPaths({ omitAxis = "z", scalingFactor = 100, density } = {}) {
+    // Convert all to Polygons3d
+    const polys3d = this.polygons.map(poly => {
+      if ( poly instanceof Ellipse3d ) return poly.toPolygon3d({ scalingFactor, density });
+      return poly;
+    });
+
+    // Convert to PIXI.Polygons. See Polygon3d#toClipperPaths.
+    let axes;
+    switch ( omitAxis ) {
+      case "x": axes = { x: "y", y: "z" }; break;
+      case "y": axes = { x: "x", y: "z" }; break;
+      case "z": axes = { x: "x", y: "y" }; break;
+      default: throw new Error(`${this.constructor.name}|toClipperPaths omitAxis not recognized.`);
+    }
+    const polys2d = polys3d.map(poly3d => new PIXI.Polygon(poly3d.points.map(pt => pt.to2d(axes))));
+
+    // Ensure holes are correctly oriented.
+    polys2d.forEach(poly => {
+      if ( !this.isHole ^ poly.isPositive ) poly.reverseOrientation();
+      poly.clean();
+    });
+
+    return CONFIG.GeometryLib.CONFIG.ClipperPaths.fromPolygons(polys2d, { scalingFactor });
   }
 
   toPolygon2d(opts) { return this.#applyMethodToAllWithReturn("toPolygon2d", opts); }
