@@ -40,10 +40,25 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
    * @param {Point3d} [opts.anchors]
    * @returns {Polygon3d} Prototype faces, which may be same as faces.
    */
-  static canvasToPrototypeFaces(faces, { center, dims, angles, anchors } = {}) {
+  static canvasToPrototypeFaces(faces, opts) {
     // Default approach is that the faces equal the prototype faces; model matrix is identity.
-    if ( !(center || dims || angles || anchors ) ) return faces;
+    if ( !(opts.center || opts.dims || opts.angles || opts.anchors ) ) return faces;
 
+    // Build a matrix to transform each face;
+    const M = this.toPrototypeModel(opts);
+    return faces.map(face => face.transform(M));
+  }
+
+  /**
+   * Build the model used to convert canvas faces to a prototype.
+   * @param {object} [opts]                   Parameters used to translate canvas faces back to prototype
+   * @param {Point3d} [opts.center]
+   * @param {Point3d} [opts.dims]
+   * @param {Point3d} [opts.angles]
+   * @param {Point3d} [opts.anchors]
+   * @returns {Matrix}
+   */
+  static toPrototypeModel({ center, dims, angles, anchors } = {}) {
     // Build a model matrix.
     const modelMatrix = new ModelMatrixAnchor();
     if ( center ) modelMatrix.translation = center;
@@ -53,8 +68,7 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
 
     // Invert the model matrix to construct prototype faces.
     // Use the inverse to construct the prototype faces.
-    const invM = modelMatrix.model.invert();
-    return faces.map(face => face.transform(invM));
+    return modelMatrix.model.invert();
   }
 
   // ----- NOTE: Vertices ----- //
@@ -99,10 +113,10 @@ export class PlanarPolygonPrimitive extends ModelGeometricPrimitive {
     const prototypeFace = this.canvasToPrototypeFaces([poly3d], opts)[0];
 
     // Confirm the prototype faces are oriented same as the original.
-    const ctr = opts.center.clone() || poly3d.center.clone();
-    ctr.z += 1
+    const ctr = poly3d.centroid.clone();
+    ctr.z += 1;
     const protoCenter = Point3d.tmp.set(0, 0, 1); // 1 above the origin.
-    if ( prototypeFace.plane.whichSide(protoCenter) !== poly3d.plane.whichSide(ctr) ) prototypeFace.reverseOrientation();
+    if ( prototypeFace.isFacing(protoCenter) ^ poly3d.isFacing(ctr) ) console.warn(`${this.constructor.name}#fromPolygon3d orientation test failed`, poly3d);
     return new this(id, [prototypeFace]);
   }
 
@@ -115,9 +129,11 @@ export class PlanarPolygonPrimitive extends ModelGeometricPrimitive {
   _generateFaces(faces) {
     // Ensure the model faces face the correct direction.
     super._generateFaces(faces);
-    const center = this.center.clone();
-    center.z += 1;
-    if ( this.prototypeFaces[0].plane.whichSide(center) !== faces[0].plane.whichSide(center) ) faces[0].reverseOrientation();
+
+    const ctr = this.center.clone();
+    ctr.z += 1;
+    const protoCenter = Point3d.tmp.set(0, 0, 1); // 1 above the origin.
+    if ( this.prototypeFaces[0].isFacing(protoCenter) ^ faces[0].isFacing(ctr) ) console.warn(`${this.constructor.name}#fromPolygon3d orientation test failed`, this);
   }
 }
 
@@ -158,12 +174,24 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
     const faces = this.#facesFromPolygon(poly, topZ, bottomZ);
     const prototypeFaces = this.canvasToPrototypeFaces(faces, opts);
 
-    // Ensure the prototype faces are facing outward from the origin.
-    using origin = Point3d.tmp.set(0, 0, 0);
-    for ( const face of prototypeFaces ) {
-      if ( face.isFacing(origin) ) face.reverseOrientation();
-    }
+    // Confirm the polygon orientation for debugging.
+    this._confirmOrientation(poly, faces, prototypeFaces, topZ, bottomZ, opts);
+
     return new this(id, prototypeFaces);
+  }
+
+  static _confirmOrientation(poly, faces, prototypeFaces, topZ, bottomZ, opts) {
+    const M = this.toPrototypeModel(opts);
+    const ctr = Point3d.tmp.set(poly.center.x, poly.center.y, bottomZ + ((topZ - bottomZ) / 2));
+    const protoCenter = M.multiplyPoint3d(ctr);
+
+    // Orientation should be facing inward for holes.
+    for ( let i = 0; i < prototypeFaces.length; i += 1 ) {
+      const prototypeFace = prototypeFaces[i];
+      const face = faces[i];
+      if ( prototypeFace.isFacing(protoCenter) ^ face.isFacing(ctr) ) console.warn(`${this.constructor.name}#fromPolygon orientation test failed`, { poly, prototypeFace, face, ctr });
+      if ( face.isFacing(ctr) ^ !poly.isPositive ) console.warn(`${this.constructor.name}#fromPolygon face is facing center`, { face, poly, ctr });
+    }
   }
 
   /**
@@ -179,14 +207,19 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
     if ( polys.length === 1 ) return this.fromPolygon(id, polys[0], { topZ, bottomZ, ...opts });
     if ( !isFinite(topZ) ) topZ = 1e06;
     if ( !isFinite(bottomZ) ) bottomZ = -1e06;
-    const faces = [];
-    for ( const poly of polys ) faces.push(...this.#facesFromPolygon(poly, topZ, bottomZ));
-    const prototypeFaces = this.canvasToPrototypeFaces(faces, opts);
+    const allProtoFaces = [];
 
-    // Ensure the prototype faces are facing outward from the origin.
-    using origin = Point3d.tmp.set(0, 0, 0);
-    this._faceOutwards(prototypeFaces, origin);
-    return new this(id, prototypeFaces);
+    // Construct extruded 3d shape for each polygon in turn.
+    for ( const poly of polys )  {
+      const faces = this.#facesFromPolygon(poly, topZ, bottomZ);
+      const prototypeFaces = this.canvasToPrototypeFaces(faces, opts);
+      allProtoFaces.push(...prototypeFaces);
+
+      // Confirm the polygon orientation for debugging.
+      this._confirmOrientation(poly, faces, prototypeFaces, topZ, bottomZ, opts);
+    }
+
+    return new this(id, allProtoFaces);
   }
 
   // ----- NOTE: Factory helpers to construct faces ----- //

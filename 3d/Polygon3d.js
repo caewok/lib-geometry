@@ -86,9 +86,15 @@ export class Polygon3d {
   }
 
   /**
-   * Sets the z value in place. Clears the cached properties.
+   * Sets the z value in place. Clears the cached aabb,
    */
-  setZ(z = 0) { this.points.forEach(pt => pt.z = z); this.clearCache(); return this; }
+  setZ(z = 0) {
+    this.points.forEach(pt => pt.z = z);
+    this.#dirtyAABB = true;
+    this.#dirtyCentroid = true;
+    // Plane should be fine because its point is linked.
+    return this;
+  }
 
   /**
    * Reverse the orientation of this polygon. Done in place.
@@ -96,6 +102,10 @@ export class Polygon3d {
   reverseOrientation() {
     const plane = this.plane; // Do first in case plane has not been calculated
     plane.normal.multiplyScalar(-1, plane.normal);
+
+    // Flip the points, for consistency with generating the plane.
+    this.points.reverse();
+
     return this;
   }
 
@@ -1063,7 +1073,11 @@ export class Ellipse3d extends Polygon3d {
 
   clean() { return; }
 
-  setZ(z = 0) { this.center.z = z; super.setZ(z); return this; }
+  setZ(z = 0) {
+    this.center.z = z;
+    super.setZ(z);
+    return this;
+  }
 
   // ----- NOTE: Plane ----- //
 
@@ -2179,11 +2193,14 @@ export class Polygons3d extends Polygon3d {
     super.clearCache();
   }
 
-  clean() { this.#applyMethodToAll("clean"); }
+  clean() {
+    this.#applyMethodToAll("clean");
+    this.polygons = this.polygons.filter(poly => poly.isValid()); // Trim polygons that may have just been collinear lines.
+  }
 
   setZ(z) {
     this.#applyMethodToAll("setZ", z);
-    this.clearCache();
+    super.setZ(z);
     return this;
   }
 
@@ -2203,25 +2220,29 @@ export class Polygons3d extends Polygon3d {
   /** @type {Plane} */
   get plane() { return this.polygons[0].plane; }
 
+  set plane(value) { this.polygons.forEach(poly => poly.plane = value); }
+
   // ----- NOTE: Centroid ----- //
 
-  /** @type {Point3d} */
-  #centroid;
+  _calculateCentroid() {
+    // Assuming flat points, determine plane and then convert to 2d
+    const plane = this.plane;
+    const points = this.polygons.flatMap(poly => poly.points);
+    const M2d = plane.conversion2dMatrix;
+    const points2d = points.map(pt3d => M2d.multiplyPoint3d(pt3d));
 
-  get centroid() {
-    if ( !this.#centroid ) {
-      // Assuming flat points, determine plane and then convert to 2d
-      const plane = this.plane;
-      const points = this.polygons.flatMap(poly => poly.points);
-      const M2d = plane.conversion2dMatrix;
-      const points2d = points.map(pt3d => M2d.multiplyPoint3d(pt3d));
-      const convex2dPoints = convexHull(points2d);
+    // Find the convex hull for all 2d points.
+    const convex2dPoints = convexHull(points2d);
 
-      // Determine the centroid of the 2d convex polygon.
-      const convexPoly2d = new PIXI.Polygon(convex2dPoints);
-      this.#centroid = convexPoly2d.center;
-    }
-    return this.#centroid;
+    // Determine the centroid of the 2d convex polygon.
+    const convexPoly2d = new PIXI.Polygon(convex2dPoints);
+    const center2d = convexPoly2d.center;
+    const centroid = Point3d.tmp.set(center2d.x, center2d.y, 0);
+
+    // Convert back to 3d, and determine the z value.
+    const invM2d = plane.conversion2dMatrixInverse;
+    invM2d.multiplyPoint3d(centroid, centroid);
+    return centroid;
   }
 
   // ----- NOTE: Factory methods ----- //
