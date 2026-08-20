@@ -13,7 +13,7 @@ import { Point3d } from "../3d/Point3d.js";
  * ModelGeometricPrimitives are one-offs.
  * They are not updated; instead they would get destroyed and rebuilt.
  * To facilitate re-use, the prototype faces can be provided or
- * calculated using fromCanvasFaces. Then the model matrix can modify the resulting faces.
+ * calculated using canvasToPrototypeFaces. Then the model matrix can modify the resulting faces.
  */
 export class ModelGeometricPrimitive extends GeometricPrimitive {
 
@@ -23,11 +23,26 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
     this._initializeFaces();
   }
 
-  // ----- NOTE: Factory functions ----- //
 
-  static fromCanvasFaces(id, faces, { center, dims, angles, anchors } = {}) {
+  // ----- NOTE: Faces ----- //
+
+  /** @type {Polygon3d[]} */
+  _prototypeFaces = [];
+
+  get prototypeFaces() { return this._prototypeFaces ?? []; } // Needed for constructor, when _prototypeFaces not yet initialized but this getter is.
+
+  /**
+   * @param {Polygon3d[]} faces
+   * @param {object} [opts]                   Parameters used to translate canvas faces back to prototype
+   * @param {Point3d} [opts.center]
+   * @param {Point3d} [opts.dims]
+   * @param {Point3d} [opts.angles]
+   * @param {Point3d} [opts.anchors]
+   * @returns {Polygon3d} Prototype faces, which may be same as faces.
+   */
+  static canvasToPrototypeFaces(faces, { center, dims, angles, anchors } = {}) {
     // Default approach is that the faces equal the prototype faces; model matrix is identity.
-    if ( !(center || dims || angles || anchors ) ) return new this(id, faces);
+    if ( !(center || dims || angles || anchors ) ) return faces;
 
     // Build a model matrix.
     const modelMatrix = new ModelMatrixAnchor();
@@ -39,35 +54,7 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
     // Invert the model matrix to construct prototype faces.
     // Use the inverse to construct the prototype faces.
     const invM = modelMatrix.model.invert();
-    const prototypeFaces = faces.map(face => face.transform(invM));
-
-    // Ensure the prototype faces are facing outward from the origin.
-    using origin = Point3d.tmp.set(0, 0, 0);
-    for ( const face of prototypeFaces ) {
-      if ( face.isFacing(origin) ) face.reverseOrientation();
-    }
-
-    return new this(id, prototypeFaces);
-  }
-
-  // ----- NOTE: Faces ----- //
-
-  /** @type {Polygon3d[]} */
-  _prototypeFaces = [];
-
-  get prototypeFaces() { return this._prototypeFaces ?? []; } // Needed for constructor, when _prototypeFaces not yet initialized but this getter is.
-
-  /**
-   * Update the faces for this primitive.
-   * Default is to use the model matrix.
-   * Confirms orientation, which the more complex model matrices can screw up (apparently).
-   */
-  _generateFaces(faces) {
-    super._generateFaces(faces);
-    const center = this.center;
-    for ( const face of faces ) {
-      if ( face.isFacing(center) ) face.reverseOrientation();
-    }
+    return faces.map(face => face.transform(invM));
   }
 
   // ----- NOTE: Vertices ----- //
@@ -76,6 +63,7 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
 
   /** @type {VertexObject} */
   instanceVO = new VertexObject();
+
 }
 
 /**
@@ -84,12 +72,53 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
 export class PlanarPolygonPrimitive extends ModelGeometricPrimitive {
 
   /**
+   * Force the face to face outward from a given point.
+   * @param {Polygon3d[]} faces
+   * @param {Point3d} center
+   * @returns {Polygon3d[]} The faces, modified in place
+   */
+  static _faceUp(face) {
+    using ctr = face.center.clone();
+    ctr.z -= 1;
+    if ( face.isFacing(ctr) ) face.reverseOrientation();
+    return face;
+  }
+
+  /**
    * Build a shape from a 3d polygon.
    * @param {string} id           Identifier for this shape
    * @param {Polygon3d} poly3d    3d planar polygon to use
+   * @param {object} [opts]                   Parameters used to translate canvas faces back to prototype
+   * @param {Point3d} [opts.center]
+   * @param {Point3d} [opts.dims]
+   * @param {Point3d} [opts.angles]
+   * @param {Point3d} [opts.anchors]
    * @returns {PlanarPolygonPrimitive}
    */
-  static fromPolygon3d(id, poly3d, opts) { return this.fromCanvasFaces(id, [poly3d], opts); }
+  static fromPolygon3d(id, poly3d, opts) {
+    const prototypeFace = this.canvasToPrototypeFaces([poly3d], opts)[0];
+
+    // Confirm the prototype faces are oriented same as the original.
+    const ctr = opts.center.clone() || poly3d.center.clone();
+    ctr.z += 1
+    const protoCenter = Point3d.tmp.set(0, 0, 1); // 1 above the origin.
+    if ( prototypeFace.plane.whichSide(protoCenter) !== poly3d.plane.whichSide(ctr) ) prototypeFace.reverseOrientation();
+    return new this(id, [prototypeFace]);
+  }
+
+  /**
+   * Update the faces for this primitive.
+   * Default is to use the model matrix.
+   * Confirms orientation, which the more complex model matrices can screw up (apparently).
+   * @param {Polygon3d[]} faces
+   */
+  _generateFaces(faces) {
+    // Ensure the model faces face the correct direction.
+    super._generateFaces(faces);
+    const center = this.center.clone();
+    center.z += 1;
+    if ( this.prototypeFaces[0].plane.whichSide(center) !== faces[0].plane.whichSide(center) ) faces[0].reverseOrientation();
+  }
 }
 
 /**
@@ -100,6 +129,19 @@ export class PlanarPolygonPrimitive extends ModelGeometricPrimitive {
 export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
 
   // ----- NOTE: Factory functions ----- //
+
+  /**
+   * Force each face to face outward from a given point.
+   * @param {Polygon3d[]} faces
+   * @param {Point3d} center
+   * @returns {Polygon3d[]} The faces, modified in place
+   */
+  static _faceOutwards(faces, center) {
+    for ( const face of faces ) {
+      if ( face.isFacing(center) ) face.reverseOrientation();
+    }
+    return faces;
+  }
 
   /**
    * Build an extruded (along the z-axis) shape from a 2d polygon.
@@ -114,7 +156,14 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
     if ( !isFinite(topZ) ) topZ = 1e06;
     if ( !isFinite(bottomZ) ) bottomZ = -1e06;
     const faces = this.#facesFromPolygon(poly, topZ, bottomZ);
-    return this.fromCanvasFaces(id, faces, opts);
+    const prototypeFaces = this.canvasToPrototypeFaces(faces, opts);
+
+    // Ensure the prototype faces are facing outward from the origin.
+    using origin = Point3d.tmp.set(0, 0, 0);
+    for ( const face of prototypeFaces ) {
+      if ( face.isFacing(origin) ) face.reverseOrientation();
+    }
+    return new this(id, prototypeFaces);
   }
 
   /**
@@ -132,7 +181,12 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
     if ( !isFinite(bottomZ) ) bottomZ = -1e06;
     const faces = [];
     for ( const poly of polys ) faces.push(...this.#facesFromPolygon(poly, topZ, bottomZ));
-    return this.fromCanvasFaces(id, faces, opts);
+    const prototypeFaces = this.canvasToPrototypeFaces(faces, opts);
+
+    // Ensure the prototype faces are facing outward from the origin.
+    using origin = Point3d.tmp.set(0, 0, 0);
+    this._faceOutwards(prototypeFaces, origin);
+    return new this(id, prototypeFaces);
   }
 
   // ----- NOTE: Factory helpers to construct faces ----- //
@@ -147,15 +201,7 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    */
   static #facesFromPolygon(poly, topZ, bottomZ) {
     const top = Polygon3d.fromPolygon(poly, topZ);
-    const faces = this._facesFromPolygon3d(top, bottomZ);
-
-    // Ensure orientation faces out from center.
-    using ctr2d = poly.center;
-    using ctr3d = Point3d.tmp.set(ctr2d.x, ctr2d.y, bottomZ + ((topZ - bottomZ) * 0.5));
-    for ( const face of faces ) {
-      if ( face.isFacing(ctr3d) ) face.reverseOrientation();
-    }
-    return faces;
+    return this._facesFromPolygon3d(top, bottomZ);
   }
 
   /**
@@ -170,6 +216,16 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
     bottom.setZ(bottomZ);
     bottom.reverseOrientation();
     return [top, bottom, ...top.buildTopSides(bottomZ)];
+  }
+
+  /**
+   * Update the faces for this primitive.
+   * Default is to use the model matrix.
+   * @param {Polygon3d[]} faces
+   */
+  _generateFaces(faces) {
+    super._generateFaces(faces);
+    this.constructor._faceOutwards(faces, this.center);
   }
 
   /**
