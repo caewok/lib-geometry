@@ -173,7 +173,7 @@ const TokenDocumentCalculationsMixin = superclass => class extends superclass {
     // For tokens, if they either are at the level or at a level viewable by this level, then
     // they would be present.
     const docLevel = placeableDocument.level
-    return docLevel === levelId || lvl.visibility.has(docLevel);
+    return docLevel === levelId || lvl.visibility.levels.has(docLevel);
   }
 
   /**
@@ -408,22 +408,6 @@ export class TokenFullGeometry extends mix(PlaceableGeometry).with(TokenDocument
     const primitiveCl = this.constructor.primitiveClassForToken(this.placeableDocument);
     if ( this.shape instanceof primitiveCl ) return;
     this.initialize();
-  }
-
-  // ----- NOTE: Levels ----- //
-
-  /**
-   * Does this geometry potentially block, from the view of a given level?
-   * @param {string} levelId
-   * @returns {boolean}
-   */
-  blocksFromLevel(levelId) {
-    if ( this.placeableDocument.level === levelId ) return true;
-
-    // If the level can see the token level, than token could block.
-    const lvl = canvas.scene.levels.get(levelId);
-    if ( !lvl ) return false;
-    return lvl.visibility.has(this.placeableDocument.level);
   }
 }
 
