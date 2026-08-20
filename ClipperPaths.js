@@ -301,9 +301,26 @@ export class ClipperPaths {
    * @returns {ClipperPaths}  A new object.
    */
   clean(cleanDelta = 0.1) {
+    // Ensure no near-infinities
+    // Can do this in place b/c near-infinite coordinates will throw errors in Clipper.
+    const MAX_SAFE = 1e15;
+    for ( const path of this.paths ) {
+      path.forEach(pt => {
+        if ( pt.X > MAX_SAFE ) pt.X = MAX_SAFE;
+        else if ( pt.X < -MAX_SAFE ) pt.X = -MAX_SAFE;
+
+        if ( pt.Y > MAX_SAFE ) pt.Y = MAX_SAFE;
+        else if ( pt.Y < -MAX_SAFE ) pt.Y = -MAX_SAFE;
+      });
+    }
+
     const scalingFactor = this.scalingFactor;
     const cleanedPaths = ClipperLib.Clipper.CleanPolygons(this.paths, scalingFactor * cleanDelta);
-    return new this.constructor(cleanedPaths, { scalingFactor });
+    const out = new this.constructor(cleanedPaths, { scalingFactor });
+
+    // Trim any empty paths or broken polygon paths.
+    out.paths = out.paths.filter(path => path.length > 2);
+    return out;
   }
 
 
