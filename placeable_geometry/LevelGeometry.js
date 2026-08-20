@@ -126,7 +126,7 @@ const LevelCalculationsMixin = superclass => class extends superclass {
   static isPresentAtLevel(placeableDocument, levelId) {
     if ( !canvas.scene.levels.has(levelId) ) return !levelId;
     if ( placeableDocument.id === levelId ) return true;
-    return !placeableDocument.visibility.has(levelId);
+    return !placeableDocument.visibility.levels.has(levelId);
   }
 
   /**
@@ -137,7 +137,10 @@ const LevelCalculationsMixin = superclass => class extends superclass {
    * @prop {...}                      Other options used by subclasses
    * @returns {boolean}
    */
-  static couldBlock(placeableDocument, opts) { return PlaceableGeometry.couldBlock(placeableDocument, opts); }
+  static couldBlock(placeableDocument, opts = {}) {
+    return this.blocksSense(placeableDocument, opts.senseType)
+        && this.isPresentAtLevel(placeableDocument, opts.levelId);
+  }
 
   // ----- NOTE: Scene texture characteristics ----- //
 
