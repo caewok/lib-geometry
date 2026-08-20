@@ -264,7 +264,7 @@ export class TileBoundingRectGeometry extends TileFullGeometry {
 
     if ( this._updateFlags.positionXY || this._updateFlags.elevation ) {
       const ctr = rectOrPoly.center;
-      this.shape.setPosition(ctr);
+      this.shape.setPosition({ x: ctr.x, y: ctr.y, z: this.elevationZ });
     }
 
     if ( this._updateFlags.rotation || this._updateFlags.scale ) {
@@ -343,7 +343,9 @@ export class TilePolygonsGeometry extends TileFullGeometry {
   get _polygons() {
     const cache = this.pixelCache;
     if ( !cache ) return this.placeableDocument.shape.bounds;
-    return cache.getCanvasAlphaISOBands(this.alphaThreshold);
+    const polys = cache.getCanvasAlphaISOBands(this.alphaThreshold);
+    polys.forEach(poly => poly.clean());
+    return polys;
   }
 
   createShapes() {
@@ -381,7 +383,9 @@ export class TileTrianglesGeometry extends TileFullGeometry {
   get _polygons() {
     const cache = this.pixelCache;
     if ( !cache ) return this.placeableDocument.shape.bounds;
-    return cache.getCanvasAlphaISOBands(this.alphaThreshold);
+    const polys = cache.getCanvasAlphaISOBands(this.alphaThreshold);
+    polys.forEach(poly => poly.clean());
+    return polys;
   }
 
   createShapes() {
