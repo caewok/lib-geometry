@@ -131,7 +131,7 @@ export class LocalCoordinateCache extends AABB2d {
   // ----- NOTE: Model Matrix ----- //
 
   /** @type {ModelMatrix2d} */
-  modelMatrix = new ModelMatrix2dAnchorInverse();
+  modelMatrix = ModelMatrix2dAnchorInverse.create();
 
   /**
    * Center the local rectangle before applying rotation and scale.
