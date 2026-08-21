@@ -42,14 +42,17 @@ class AbstractMatrix {
   constructor(nrow = 0, ncol = 0) {
     this.nrow = nrow;
     this.ncol = ncol;
-    this.arr.length = nrow * ncol;
   }
 
   /**
    * Create a new point. Meant to be overridden using pooling, but kept here for testing.
    * @returns {PointArrayAbstract}
    */
-  static create(nrow = 0, ncol = 0) { return new this(nrow, ncol); }
+  static create(nrow = 0, ncol = 0) {
+    const out = new this(nrow, ncol);
+    out.arr.length = out.size;
+    return out;
+  }
 
   // ----- NOTE: Getters and indexers ---- //
 
@@ -1685,19 +1688,22 @@ AbstractMatrix.prototype.copyTo = AbstractMatrix.prototype.clone;
 export class Matrix extends mix(AbstractMatrix).with(PoolableMixin) {
 
   // Pooling
+
   /**
-   * Return a temporary matrix of a given size.
+   * Get an object from the pool.
    * @param {number} nrow
    * @param {number} ncol
    * @returns {Matrix}
    */
-  static tmpMatrix(nrow, ncol) {
-    const obj = this.tmp;
+  static create(nrow = 0, ncol = 0) {
+    const obj = super.create();
     obj.nrow = nrow;
     obj.ncol = ncol;
-    obj.arr.length = obj.size;
+    obj.arr.length = obj.nrow * obj.ncol;
     return obj;
   }
+
+  static tmpMatrix = this.create; // Backward-compatibility
 
   /**
    * Callback to release a Matrix object, zeroing out its values.
@@ -1707,6 +1713,11 @@ export class Matrix extends mix(AbstractMatrix).with(PoolableMixin) {
     obj.arr.length = 0;
     obj.nrow = 0;
     obj.ncol = 0;
+  }
+
+  constructor(nrow, ncol) {
+     super(nrow, ncol);
+     this.arr.length = this.nrow * this.ncol;
   }
 }
 
@@ -1732,56 +1743,77 @@ arr6 = mgr.newArray(35)
 
 // Example typed class
 
-export class MatrixFloat32 extends Matrix {
+export class MatrixFloat32 extends mix(AbstractMatrix).with(PoolableMixin) {
 
-  /** @type {Float32Array} */
-  arr = null;
-
-  constructor(nrow, ncol, buffer, offset = 0) {
-    super(nrow, ncol);
-
-    buffer ??= new ArrayBuffer(this.size * Float32Array.BYTES_PER_ELEMENT);
-    const byteOffset = offset * Float32Array.BYTES_PER_ELEMENT;
-    this.arr = new Float32Array(buffer, byteOffset, this.size);
-  }
 
   // ----- NOTE: Buffer manager ----- //
-  /** @type {number} */
-  static BUFFER_DEFAULT_MATRIX_SIZE = 16; // Common size for a single matrix.
 
-  /** @type {number} */
-  static BUFFER_NUM_MATRICES = 10; // How many matrices to allocate before switching buffers.
+  static BUFFER_NUM_MATRICES = 2 ** 4;
+
+  static BUFFER_MAX_NUM_MATRICES = 2 ** 7;
+
+  static BUFFER_DEFAULT_MATRIX_SIZE = 2 ** 4; // 4 x 4 default matrix.
 
   /**
    * Current buffer with usable space to define matrices.
    * @type {BufferManager}
    */
-  static bufferManager = new BufferManager(this.BUFFER_DEFAULT_MATRIX_SIZE, {
+  static bufferManager = new BufferManager(this.BUFFER_NUM_MATRICES * this.BUFFER_DEFAULT_MATRIX_SIZE, {
     typedClass: Float32Array,
-    maxSize: this.BUFFER_NUM_MATRICES * this.BUFFER_DEFAULT_MATRIX_SIZE
+    maxBufferSize: this.BUFFER_MAX_NUM_MATRICES,
   });
 
   /**
-   * Return a temporary matrix of a given size.
+   * Get an object from the pool.
    * Uses an array buffer to allocate the array, which may be reused.
    * @param {number} nrow
    * @param {number} ncol
    * @returns {Matrix}
    */
-  static tmpMatrix(nrow, ncol) {
-    const obj = this.tmp;
+  static create(nrow = 0, ncol = 0) {
+    const obj = super.create();
     obj.nrow = nrow;
     obj.ncol = ncol;
     obj.arr = this.bufferManager.newArray(obj.size);
     return obj;
   }
 
+  static tmpMatrix = this.create; // Backward-compatibility
+
   static onRelease(obj) {
     this.bufferManager.release(obj.arr);
     obj.nrow = 0;
     obj.ncol = 0;
-    obj.arr = null;
+    obj.arr = [];
   }
+
+  /**
+   * Like buildNObjects, but uses a distinct buffer shared only by those n object.
+   * Useful if the intent is to transfer the buffer to a worker or webGPU, for example.
+   * @param {number} n
+   * @returns {HPointAbstract[n]}
+   */
+  static allocateNObjects(n, { nrow = 0, ncol = 0 } = {}) {
+    const bm = this.bufferManager;
+    const nElems = nrow * ncol;
+    const ptBytes = bm.bytesPerElement * nElems;
+    const byteSize = ptBytes * n;
+    const buffer = new ArrayBuffer(byteSize);
+    const objs = Array(n);
+    let byteOffset = 0;
+    for ( let i = 0; i < n; i += 1 ) {
+      const obj = new this(nrow, ncol);
+      obj.arr = new bm.typedClass(buffer, byteOffset, nElems);
+      objs[i] = obj;
+      byteOffset += ptBytes;
+    }
+    return objs;
+  }
+
+  static allocate3x3(n) { return this.allocateNObjects(n, { nrow: 3, ncol: 3 }); }
+
+  static allocate4x4(n) { return this.allocateNObjects(n, { nrow: 4, ncol: 4 }); }
+
 }
 
 
