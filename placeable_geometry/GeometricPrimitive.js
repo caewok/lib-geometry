@@ -85,6 +85,28 @@ Instanced Registry: 1 per geometric primitive, storing model
 
 export class GeometricPrimitive {
 
+  /**
+   * Treat this shape as being:
+   * • double-blocking (double-walled) (NONE)
+   * • blocking in direction of its faces (CULL_BACK)
+   * • blocking in opposite direction of its faces (CULL_FRONT)
+   * In gl.disable(gl.CULL_FACE), corresponds to gl.FRONT, gl.BACK or gl.disable(gl.CULL_FACE).
+   * @type {enum}
+   */
+  static CULL_FACES = {
+    NONE: 0,
+    FRONT: -1,
+    BACK: 1,
+
+    // Synonyms
+    DOUBLE: 0,
+    LEFT: -1,
+    RIGHT: 1
+  };
+
+  /** @type {enum} */
+  direction = this.constructor.CULL_FACES.BACK;
+
   /** @type {string} */
   id;
 
@@ -274,7 +296,8 @@ export class GeometricPrimitive {
    * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
    * @returns {number|null} The distance along the ray, as a multiple of rayDirection
    */
-  rayIntersection(rayOrigin, rayDirection, opts) {
+  rayIntersection(rayOrigin, rayDirection, opts = {}) {
+    opts.direction ??= this.direction;
     for ( const face of this.iterateFaces(opts) ) {
       const t = this.constructor.rayIntersectionForFace(face, rayOrigin, rayDirection, opts);
       if ( t !== null ) return t;
@@ -282,8 +305,8 @@ export class GeometricPrimitive {
     return null;
   }
 
-  static rayIntersectionForFace(face, rayOrigin, rayDirection, { minT = 0, maxT = 1 } = {}) {
-    if ( !face.isFacing(rayOrigin) ) return null;
+  static rayIntersectionForFace(face, rayOrigin, rayDirection, { minT = 0, maxT = 1, direction = this.CULL_FACES.BACK } = {}) {
+    if ( (direction * face.plane.whichSide(rayOrigin)) < 0 ) return null;
     const t = face.intersectionT(rayOrigin, rayDirection);
     if ( t !== null && almostBetween(t, minT, maxT) ) return t;
     return null;

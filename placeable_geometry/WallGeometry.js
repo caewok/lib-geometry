@@ -107,6 +107,7 @@ export class WallGeometry extends PlaceableGeometry {
     shapes.forEach(shape => shape.destroy());
     this.shapes.length = 1;
     this.shapes[0] = new VerticalQuadPrimitive(this.placeableId);
+    this._updateShapeDirection();
   }
 
   _updateShapePosition() {
@@ -127,8 +128,7 @@ export class WallGeometry extends PlaceableGeometry {
   }
 
   _updateShapeDirection() {
-    const dir = this.placeableDocument.dir;
-    this.shapes[0].direction = dir;
+    this.shapes[0].direction = this.constructor.cullFaceForWallDirection(this.placeableDocument.dir);;
   }
 
   // ----- NOTE: Updating ----- //
@@ -166,6 +166,22 @@ export class WallGeometry extends PlaceableGeometry {
   }
 
   // ----- NOTE: Wall characteristics ----- //
+
+  /**
+   * What cull face corresponds with given wall direction?
+   * @param {CONST.WALL_DIRECTIONS} wallDir
+   * @returns {CULL_FACES}
+   */
+  static cullFaceForWallDirection(wallDir = 0) {
+    const CF = VerticalQuadPrimitive.CULL_FACES
+    const WD = CONST.WALL_DIRECTIONS;
+    switch ( wallDir ) {
+      case WD.BOTH: return CF.DOUBLE;
+      case WD.LEFT: return CF.LEFT;
+      case WD.RIGHT: return CF.RIGHT;
+    }
+    return CF.DOUBLE;
+  }
 
   /**
    * Create 2d segment points from a wall document.

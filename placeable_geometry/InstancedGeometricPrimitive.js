@@ -8,7 +8,7 @@ PIXI,
 
 import { GeometricPrimitive } from "./GeometricPrimitive.js";
 import { MatrixFloat32 } from "../Matrix.js";
-import { almostBetween, cutaway } from "../util.js";
+import { cutaway } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
 import { getHexagonalShape } from "../placeable_vertices/BasicVertices.js";
 import { Polygon3d, Quad3d, Ellipse3d, Triangle3d } from "../3d/Polygon3d.js";
@@ -113,62 +113,6 @@ export class QuadPrimitive extends InstancedGeometricPrimitive {
 
   static _instanceVO;
 
-  static CULL_FACES = {
-    NONE: 0,
-    FRONT: 1, // For the prototype, culls if viewed from above.
-    BACK: 2,  // For the prototype, culls if viewed from below.
-
-    // Synonyms
-    DOUBLE: 0,
-    LEFT: 1,
-    RIGHT: 2
-  };
-
-  static DIRECTIONAL = true;
-
-  /** @type {enum} */
-  direction = 0;
-
-  constructor(id, direction = 0) {
-    // TODO: direction could be opts.occlusionFlag if multiple options.
-    // In gl.disable(gl.CULL_FACE), corresponds to CULL_NONE = 0, CULL_FRONT = 1, CULL_BACK = 2.
-    super(id);
-    this.direction = direction;
-  }
-
-  // ----- NOTE: Intersection testing ----- //
-
-  /**
-   * Determine where a ray hits this object in 3d.
-   * Stops at the first hit for a triangle facing the correct direction.
-   * Ignores intersections behind the ray.
-   * @param {Point3d} rayOrigin
-   * @param {Point3d} rayDirection
-   * @param {object} [opts]
-   * @param {number} [opts.minT=0]            Ignore hits earlier in the segment than this (multiple of rayDirection)
-   * @param {number} [opts.maxT=1]            Ignore hits later in the segment than this (multiple of rayDirection)
-   * @param {CULL_FACES} [opts.direction=CULL_FACES.DOUBLE]
-   * @returns {number|null} The distance along the ray, as a multiple of rayDirection
-   */
-  rayIntersection(rayOrigin, rayDirection, opts) {
-    // Only one face; pass the direction.
-    opts.direction ??= this.direction;
-    return this.constructor.rayIntersectionForFace(this.faces[0], rayOrigin, rayDirection, opts);
-  }
-
-  static rayIntersectionForFace(face, rayOrigin, rayDirection, { minT = 0, maxT = 1, direction = this.CULL_FACES.DOUBLE } = {}) {
-    const CF = this.CULL_FACES
-    switch ( direction ) {
-      case CF.FRONT: if ( face.plane.whichSide(rayOrigin ) > 0 ) return null; break;
-      case CF.BACK: if ( face.plane.whichSide(rayOrigin ) < 0 ) return null; break;
-      // DOUBLE: facing doesn't matter.
-      // Default: treat as DOUBLE.
-    }
-    const t = face.intersectionT(rayOrigin, rayDirection);
-    if ( t !== null && almostBetween(t, minT, maxT) ) return t;
-    return null;
-  }
-
   /**
    * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
    * @param {PIXI.Point} start     Starting point of the slice on the XY plane
@@ -249,6 +193,8 @@ export class VerticalQuadPrimitive extends QuadPrimitive {
     return poly.cutaway(start, end, opts);
   }
 }
+
+
 
 /**
  * Quad that includes a texture. (E.g., for tiles)

@@ -180,6 +180,7 @@ export class TileFullGeometry extends mix(PlaceableGeometry).with(TileDocumentCa
     this.shapes.forEach(shape => shape.destroy());
     this.shapes.length = 1;
     this.shapes[0] = new TexturedQuadPrimitive(this.placeableId);
+    this.shapes[0].direction = TexturedQuadPrimitive.CULL_FACES.DOUBLE; // Tiles block on both sides.
   }
 
   // ----- NOTE: Update ----- //
