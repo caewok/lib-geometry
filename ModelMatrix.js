@@ -23,12 +23,8 @@ export class ModelMatrix2d {
 
   static get multiplyName() { return "multiply3x3"; } // Static getter so ModelMatrix can override.
 
-  static get DIM2() { return this.DIM * this.DIM; }; // 9
-
-  static get BUFFER_LENGTH() { return this.DIM2 * 3; }; // 9 values * 3 matrices.
-
   /** @type {DIRTY} */
-  #dirty = true;
+  #dirty = false;
 
   get dirty() { return this.#dirty }
 
@@ -45,42 +41,39 @@ export class ModelMatrix2d {
    */
   dataVersion = 0;
 
-  constructor(modelBuffer, offset = 0) {
-    /** @type {MatrixFloat32} */
-    const byteLength = Float32Array.BYTES_PER_ELEMENT * this.constructor.DIM2;
-    modelBuffer ??= new ArrayBuffer(byteLength);
-    if ( !modelBuffer.byteLength === byteLength ) throw Error("ModelMatrix|Buffer byte length is incorrect.");
-
-    this._model = (new MatrixFloat32(
-      this.constructor.DIM,
-      this.constructor.DIM,
-      modelBuffer,
-      offset)).identity();
+  /**
+   * Initialize the matrices that make up the model.
+   * @param {number} [additionalMatrices=0] Number of matrices to allocate, in addition to the base 4.
+   * @returns {MatrixFloat32[]} The array of unused matrices
+   */
+  initialize(additionalMatrices = 0) {
+    const allocationType = this.constructor.DIM === 4 ? "allocate4x4" : "allocate3x3";
+    const n = 4 + additionalMatrices;
+    const matrices = MatrixFloat32[allocationType](n);
+    this._model = matrices.pop().identity();
+    this._translation = matrices.pop().identity();
+    this._rotation = matrices.pop().identity();
+    this._scale = matrices.pop().identity();
+    return matrices;
   }
 
-  /** @type {ArrayBuffer} */
-  _matrixBuffer = new ArrayBuffer(Float32Array.BYTES_PER_ELEMENT * this.constructor.BUFFER_LENGTH);
+  /**
+   * To avoid weird manipulations of the initialize method, use a create method instead.
+   */
+  static create() {
+    const out = new this();
+    out.initialize();
+    return out;
+  }
 
   /** @type {object<MatrixFloat32>} */
 
   // User must separately set dirty for each if changes are made. Otherwise use the getters/setters below.
-  _rotation = (new MatrixFloat32(
-    this.constructor.DIM,
-    this.constructor.DIM,
-    this._matrixBuffer,
-    0)).identity();
+  _rotation = null;
 
-  _translation = (new MatrixFloat32(
-    this.constructor.DIM,
-    this.constructor.DIM,
-    this._matrixBuffer,
-    this.constructor.DIM2)).identity();
+  _translation = null;
 
-  _scale = (new MatrixFloat32(
-    this.constructor.DIM,
-    this.constructor.DIM,
-    this._matrixBuffer,
-    this.constructor.DIM2 * 2)).identity();
+  _scale = null;
 
   /** @type {Point3d} */
   get rotation() { return this.constructor.extractRotationValues(this._rotation);  }
@@ -213,6 +206,18 @@ export class ModelMatrix2d {
     console.log("Model");
     this._model.print();
   }
+
+  destroy() {
+    this._model.release();
+    this._translation.release();
+    this._rotation.release();
+    this._scale.release();
+
+    this._model = null;
+    this._translation = null;
+    this._rotation = null;
+    this._scale = null;
+  }
 }
 
 /**
@@ -222,6 +227,7 @@ export class ModelMatrix extends ModelMatrix2d {
   static get DIM() { return 4; }
 
   static get multiplyName() { return "multiply4x4"; }
+
 }
 
 /**
@@ -232,16 +238,15 @@ export class ModelMatrix extends ModelMatrix2d {
  */
 export const ModelAnchorMixin = superclass => {
   return class extends superclass {
-    static BUFFER_IDX = super.BUFFER_LENGTH / this.DIM2;
 
-    static get BUFFER_LENGTH() { return super.BUFFER_LENGTH + this.DIM2; } // 1 additional translation matrix.
+    initialize(additionalMatrices = 0) {
+      const matrices = super.initialize(1 + additionalMatrices);
+      this._anchor = matrices.pop().identity();
+      return matrices;
+    }
 
     /** @type {MatrixFloat32} */
-    _anchor = (new MatrixFloat32(
-      this.constructor.DIM,
-      this.constructor.DIM,
-      this._matrixBuffer,
-      this.constructor.DIM2 * this.constructor.BUFFER_IDX)).identity();
+    _anchor = null;
 
     get anchor() {
       return this.constructor.extractTranslationValues(this._anchor);
@@ -276,145 +281,14 @@ export const ModelAnchorMixin = superclass => {
       this._anchor.print();
       super.print();
     }
-  };
-};
 
-/**
- * NOTE: ModelMultipleCentersMixin
- * Define separate centers for translation, scaling, and rotation.
- * Example: regions define x,y as well as a shape center.
- * To scale a unit shape requires the shape center, but they rotate and translate from x,y.
- */
-export const ModelMultipleCentersMixin = superclass => {
-  return class extends superclass {
-
-    static get BUFFER_LENGTH() { return super.BUFFER_LENGTH + (this.DIM2 * 6); } // 3 additional translation matrices, plus inverses.
-
-    static BUFFER_IDX = super.BUFFER_LENGTH / this.DIM2;
-
-    /** @type {MatrixFloat32} */
-    #txTranslationMat = (new MatrixFloat32(
-      this.constructor.DIM,
-      this.constructor.DIM,
-      this._matrixBuffer,
-      this.constructor.DIM2 * this.constructor.BUFFER_IDX)).identity();
-
-    /** @type {MatrixFloat32} */
-    #txRotationMat = (new MatrixFloat32(
-      this.constructor.DIM,
-      this.constructor.DIM,
-      this._matrixBuffer,
-      this.constructor.DIM2 * (this.constructor.BUFFER_IDX + 1))).identity();
-
-    /** @type {MatrixFloat32} */
-    #txScaleMat = (new MatrixFloat32(
-      this.constructor.DIM,
-      this.constructor.DIM,
-      this._matrixBuffer,
-      this.constructor.DIM2 * (this.constructor.BUFFER_IDX + 2))).identity();
-
-    /** @type {MatrixFloat32} */
-    #txInvTranslationMat = (new MatrixFloat32(
-      this.constructor.DIM,
-      this.constructor.DIM,
-      this._matrixBuffer,
-      this.constructor.DIM2 * (this.constructor.BUFFER_IDX + 3))).identity();
-
-    /** @type {MatrixFloat32} */
-    #txInvRotationMat = (new MatrixFloat32(
-      this.constructor.DIM,
-      this.constructor.DIM,
-      this._matrixBuffer,
-      this.constructor.DIM2 * (this.constructor.BUFFER_IDX + 4))).identity();
-
-    /** @type {MatrixFloat32} */
-    #txInvScaleMat = (new MatrixFloat32(
-      this.constructor.DIM,
-      this.constructor.DIM,
-      this._matrixBuffer,
-      this.constructor.DIM2 * (this.constructor.BUFFER_IDX + 5))).identity();
-
-    /** @type {PIXI.Point|Point3d} */
-    get translationCenter() { return this.constructor.extractTranslationValues(this.#txTranslationMat); }
-
-    /** @type {PIXI.Point|Point3d} */
-    get scaleCenter() { return this.constructor.extractTranslationValues(this.#txScaleMat); }
-
-    /** @type {PIXI.Point|Point3d} */
-    get rotationCenter() { return this.constructor.extractTranslationValues(this.#txRotationMat); }
-
-    set translationCenter(value) {
-      this.#setTranslationValues(value, this.#txTranslationMat, this.#txInvTranslationMat);
-    }
-
-    set scaleCenter(value) {
-      this.#setTranslationValues(value, this.#txScaleMat, this.#txInvScaleMat);
-    }
-
-    set rotationCenter(value) {
-      this.#setTranslationValues(value, this.#txRotationMat, this.#txInvRotationMat);
-    }
-
-    /**
-     * Define the translation and inverse translation matrices for a given set of translation coordinates.
-     * @param {PIXI.Point|Point3d|object} value
-     * @param {MatrixFloat32<3x3|4x4>} txMat
-     * @param {MatrixFloat32<3x3|4x4>} txInvMat
-     */
-    #setTranslationValues(value, txMat, txInvMat) {
-      const d3 = this.constructor.DIM === 4;
-      MatrixFloat32.translation(value, { d3, outMatrix: txMat });
-
-      using negValue = Point3d.tmp.set(-value.x, -value.y, -(value.z || 0));
-      MatrixFloat32.translation(negValue, { d3, outMatrix: txInvMat });
-      this.dirty = true;
-    }
-
-    update() {
-      // Use multiple matrices to translate before applying scale, rotation, translate.
-      // Undo each in turn.
-      const M = this._model;
-      const multName = this.constructor.multiplyName;
-
-      M.identity();
-      M[multName](this.#txInvScaleMat, M);
-      M[multName](this._scale, M);
-      M[multName](this.#txScaleMat, M);
-
-      M[multName](this.#txInvRotationMat, M);
-      M[multName](this._rotation, M);
-      M[multName](this.#txRotationMat, M);
-
-      M[multName](this.#txInvTranslationMat, M);
-      M[multName](this._translation, M);
-      M[multName](this.#txTranslationMat, M);
-
-      this._clearDirty();
-
-      super.update(true);
-    }
-
-    clone(out) {
-      out = super.clone(out);
-      out.translationCenter = this.translationCenter;
-      out.scaleCenter = this.scaleCenter;
-      out.rotationCenter = this.rotationCenter;
-      return out;
-    }
-
-    print() {
-      console.log("txTranslation");
-      this.#txTranslationMat.print();
-      console.log("txRotation");
-      this.#txRotationMat.print();
-      console.log("txScale");
-      this.#txScaleMat.print();
-      super.print();
+    destroy() {
+      this._anchor.release();
+      this._anchor = null;
+      super.destroy();
     }
   };
 };
-
-
 
 /**
  * Store the model inverse along with the model matrix.
@@ -423,32 +297,47 @@ export const ModelInverseMixin = superclass => {
 
   return class extends superclass {
     /** @type {MatrixFloat32} */
-    #inverse = MatrixFloat32.identity(this.constructor.DIM);
-
-    get _modelInverse() { return this.#inverse; }
+    _inverse = null
 
     get modelInverse() {
       if ( this.dirty ) this.update();
-      return this.#inverse;
+      return this._inverse;
     }
 
     update() {
       super.update();
-      this._model.invert(this.#inverse);
+      this._model.invert(this._inverse);
+    }
+
+    initialize(additionalMatrices = 0) {
+      const matrices = super.initialize(1 + additionalMatrices);
+      this._inverse = matrices.pop().identity();
+      return matrices;
+    }
+
+    destroy() {
+      this._inverse.release();
+      this._inverse = null;
+      super.destroy();
     }
   };
 };
+
+// --> ModelMatrix
+
 
 export class ModelMatrix2dInverse extends mix(ModelMatrix2d).with(ModelInverseMixin) {}
 
 export class ModelMatrix2dAnchor extends mix(ModelMatrix2d).with(ModelAnchorMixin) {}
 
+// -->
 export class ModelMatrix2dAnchorInverse extends mix(ModelMatrix2d).with(ModelAnchorMixin, ModelInverseMixin) {}
 
 export class ModelMatrixInverse extends mix(ModelMatrix).with(ModelInverseMixin) {}
 
+// -->
 export class ModelMatrixAnchor extends mix(ModelMatrix).with(ModelAnchorMixin) {}
 
+// -->
 export class ModelMatrixAnchorInverse extends mix(ModelMatrix).with(ModelAnchorMixin, ModelInverseMixin) {}
 
-export class ModelMatrixMultipleCenters extends mix(ModelMatrix).with(ModelMultipleCentersMixin) {}
