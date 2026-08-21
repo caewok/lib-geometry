@@ -4,7 +4,7 @@ PIXI,
 "use strict";
 
 import { Point3d } from "./3d/Point3d.js";
-import { PoolableMixin } from "./Pool.js";
+import { PoolableMixin, BufferManager } from "./Pool.js";
 import { mix } from "./mixwith.js";
 
 // Basic matrix operations
@@ -1711,116 +1711,6 @@ export class Matrix extends mix(AbstractMatrix).with(PoolableMixin) {
 }
 
 
-/**
- * Manage a typed array buffer size.
- * Allocate space on a first-fit strategy. (Free List alogrithm.)
- * Tracks contiguous blocks of empty space and allocates accordingly.
- */
-class BufferManager {
-  /** @type {ArrayBuffer} */
-  buffer;
-
-  /** @type {object[]} */
-  freeSegments = [];
-
-  /** @type {TypedArray} */
-  typedClass;
-
-  /** @type {number} */
-  get bytesPerElement() { return this.typedClass.BYTES_PER_ELEMENT; }
-
-  constructor(totalSize = 0, { typedClass = Float32Array, maxSize = totalSize } = {}) {
-    this.typedClass = typedClass;
-    const byteSize = totalSize * this.bytesPerElement;
-    this.buffer = new ArrayBuffer(byteSize, { maxByteLength: maxSize * this.bytesPerElement });
-    this.freeSegments.push({ byteOffset: 0, byteSize });
-  }
-
-  /**
-   * Return a new array of the requested size.
-   * @param {number} size     Number of elements
-   * @returns {TypedArray<size>}
-   */
-  newArray(size) {
-    const byteOffset = this.allocate(size);
-    return new this.typedClass(this.buffer, byteOffset, size);
-  }
-
-  /**
-   * Reserve a block of space.
-   * If out of space, constructs a new buffer.
-   * @param {number} size       Number of elements to reserve
-   * @returns {number} The byte offset.
-   */
-  allocate(size) {
-    const byteSize = size * this.bytesPerElement;
-    for ( let i = 0, iMax = this.freeSegments.length; i < iMax; i += 1 ) {
-      const segment = this.freeSegments[i];
-      if ( segment.byteSize >= byteSize ) {
-        const byteOffset = segment.byteOffset;
-        if ( segment.byteSize === byteSize ) this.freeSegments.splice(i, 1); // Perfect fit: remove the segment entirely.
-        else {
-          // Partial fit: shrink the existing fre segment.
-          segment.byteOffset += byteSize;
-          segment.byteSize -= byteSize;
-        }
-        return byteOffset;
-      }
-    }
-
-    // Insufficient memory left in the buffer.
-    // Expand buffer if possible.
-    const totalBytesNeeded = this.buffer.byteLength + byteSize;
-    if ( this.buffer.maxByteLength > totalBytesNeeded ) {
-      // Grow the buffer and use the resized portion for this allocation.
-      const byteOffset = this.buffer.byteLength;
-      this.buffer.resize(totalBytesNeeded);
-      return byteOffset;
-    } else {
-      // Trash the buffer and start anew.
-      this.freeSegments.length = 1;
-      this.freeSegments[0] = { byteOffset: 0, byteSize: this.buffer.byteLength };
-      this.buffer = new ArrayBuffer(Math.max(this.buffer.byteLength, byteSize), { maxByteLength: Math.max(this.buffer.maxByteLength, byteSize) });
-      return this.allocate(size);
-    }
-  }
-
-  /**
-   * Release a block of space and merges it with adjacent free blocks.
-   * @param {TypedArray} arr        The array being freed.
-   */
-  release(arr) {
-    arr.fill(0); // Good practice to limit caching errors.
-    if ( arr.buffer !== this.buffer ) return;
-    const byteSize = arr.byteLength;
-    const byteOffset = arr.byteOffset;
-    const newSegment = { byteSize, byteOffset };
-
-    // Insert and maintain sorted order by offset to allow merging.
-    const idx = this.freeSegments.findIndex(s => s.byteOffset > byteOffset);
-    if ( ~idx ) this.freeSegments.splice(idx, 0, newSegment);
-    else this.freeSegments.push(newSegment);
-    this._mergeNeighbors();
-  }
-
-  /**
-   * Combines adjacent free blocks to limit fragmentation.
-   */
-  _mergeNeighbors() {
-    for ( let i = 0, iMax = this.freeSegments.length - 1; i < iMax; i += 1 ) {
-      const current = this.freeSegments[i];
-      const next = this.freeSegments[i+1];
-
-      // If current block ends exactly where the next starts, merge.
-      if ( current.byteOffset + current.byteSize === next.byteOffset ) {
-        current.byteSize += next.byteSize;
-        this.freeSegments.splice(i + 1, 1);
-        iMax--;
-        i--; // Check again with the newly merged block.
-      }
-    }
-  }
-}
 
 /** Testing
 mgr = new BufferManager(16, { maxSize: 32 })
