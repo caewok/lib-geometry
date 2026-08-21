@@ -134,8 +134,11 @@ export class GeometricPrimitive {
    * Destroy this geometric primitive, releasing associated memory in buffers.
    */
   destroy() {
+    this.#faces.forEach(face => face.release());
+    this.#faces.length = 0;
+    this.modelMatrix.destroy();
+    this.modelMatrix = null;
     this.id = null;
-    this.#faces.length = null;
   }
 
   // ----- NOTE: Update Flags ----- //
@@ -168,7 +171,7 @@ export class GeometricPrimitive {
   // Model matrix might be used to change instance vertices --> model vertices
 
   /** @type {ModelMatrix} */
-  modelMatrix = new ModelMatrixAnchor();
+  modelMatrix = ModelMatrixAnchor.create();
 
   /**
    * @type {Point3d|object} center
@@ -881,7 +884,7 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
   // ----- NOTE: Model Matrix ----- //
 
   /** @type {ModelMatrix} */
-  modelMatrix = new ModelMatrixAnchor();
+  modelMatrix = ModelMatrixAnchor.create();
 
   /**
    * Mworld = Mlocal x M.container (row-major)

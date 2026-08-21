@@ -68,14 +68,6 @@ export class InstancedGeometricPrimitive extends GeometricPrimitive {
     super(id);
   }
 
-  /**
-   * Destroy this geometric primitive, releasing associated memory in buffers.
-   */
-  destroy() {
-    this.modelMatrix = null;
-    super.destroy();
-  }
-
   // ----- NOTE: FACES ----- //
 
   /** @type {Polygon3d} */

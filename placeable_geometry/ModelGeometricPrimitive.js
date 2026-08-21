@@ -23,6 +23,14 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
     this._initializeFaces();
   }
 
+  /**
+   * Destroy this geometric primitive, releasing associated memory in buffers.
+   */
+  destroy() {
+    this.prototypeFaces.forEach(face => face.release);
+    this.prototypeFaces.length = 0;
+    super.destroy();
+  }
 
   // ----- NOTE: Faces ----- //
 
@@ -60,7 +68,7 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
    */
   static toPrototypeModel({ center, dims, angles, anchors } = {}) {
     // Build a model matrix.
-    const modelMatrix = new ModelMatrixAnchor();
+    const modelMatrix = ModelMatrixAnchor.create();
     if ( center ) modelMatrix.translation = center;
     if ( angles ) modelMatrix.rotation = angles;
     if ( dims ) modelMatrix.scale = dims;
