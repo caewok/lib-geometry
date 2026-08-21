@@ -172,6 +172,128 @@ export const PoolableMixin = superclass => class extends superclass {
 
 }
 
+
+/**
+ * Represent a contiguous block of free memory in an ArrayBuffer.
+ * Used in BufferManager.
+ */
+class FreeSegmentNode {
+  /** @type {number} */
+  byteOffset = 0;
+
+  /** @type {number} */
+  byteSize = 0;
+
+  /** @type {FreeSegmentNode} */
+  prev = null;
+
+  /** @type {FreeSegmentNode} */
+  next = null;
+
+  constructor(byteOffset, byteSize) {
+    this.byteOffset = byteOffset;
+    this.byteSize = byteSize;
+  }
+}
+
+/**
+ * A doubly-linked list to manage free memory segments.
+ * For Buffer Manager, avoids Array.splice overhead.
+ */
+class FreeList {
+  /** @type {FreeSegmentNode} */
+  head = null;
+
+  /**
+   * Insert a newly freed segment in sorted order (by offset) and merge if possible.
+   * @param {number} byteOffset
+   * @param {number} byteSize
+   */
+  addAndMerge(byteOffset, byteSize) {
+    const node = new FreeSegmentNode(byteOffset, byteSize);
+
+    // Base case: set the node to the first slot.
+    if ( !this.head ) {
+      this.head = node;
+      return;
+    }
+
+    // Find the correct insertion point to maintain sorted order.
+    let curr = this.head;
+    while ( curr && curr.byteOffset < node.byteOffset ) curr = curr.next;
+
+    // Insert the node.
+    if ( curr ) {
+      node.prev = curr.prev;
+      node.next = curr;
+      if ( curr.prev ) curr.prev.next = node;
+      else this.head = node;
+      curr.prev = node;
+    } else {
+      // Reached the end, append to tail.
+      let tail = this.head;
+      while ( tail.next ) tail = tail.next;
+      tail.next = node;
+      node.prev = tail;
+    }
+
+    this._merge(node);
+  }
+
+  /**
+   * Check adjacent nodes and combine them if their memory is contiguous.
+   * @param {FreeSegmentNode}
+   */
+  _merge(node) {
+    // Merge with next node.
+    if ( node.next && (node.byteOffset + node.byteSize) === node.next.byteOffset ) {
+      node.byteSize += node.next.byteSize;
+      this._remove(node.next);
+    }
+
+    // Merge with previous node.
+    if ( node.prev && (node.prev.byteOffset + node.prev.byteSize) === node.byteOffset ) {
+      node.prev.byteSize += node.byteSize;
+      this._remove(node);
+    }
+  }
+
+  /**
+   * Find the first segment large enough, adjust or remove it, and return the offset.
+   * @param {number} byteSize       Amount of space to allocate
+   * @returns {number|null}
+   */
+  findAndAllocate(byteSize) {
+    let curr = this.head;
+    while ( curr ) {
+      if ( curr.byteSize >= byteSize ) {
+        const allocatedOffset = curr.byteOffset;
+        if ( curr.byteSize === byteSize ) this._remove(curr); // Perfect fit; O(1) removal instead of Array.splice.
+        else {
+          // Partial fit; shrink the free segment.
+          curr.byteOffset += byteSize;
+          curr.byteSize -= byteSize;
+        }
+        return allocatedOffset;
+      }
+      curr = curr.next;
+    }
+    return null;
+  }
+
+  /**
+   * Internal method to remove a node from the linked list.
+   * @param {FreeSegmentNode}
+   */
+  _remove(node) {
+    if ( node.prev ) node.prev.next = node.next;
+    else this.head = node.next;
+    if ( node.next ) node.next.prev = node.prev;
+  }
+}
+
+
+
 /**
  * Manage a typed array buffer size.
  * Allocate space on a first-fit strategy. (Free List alogrithm.)
@@ -209,7 +331,13 @@ export class BufferManager {
     maxBufferSize ??= this.maxBufferSize;
     maxBufferSize = Math.max(size, maxBufferSize);
     const buffer = new ArrayBuffer(byteSize, { maxByteLength: maxBufferSize * this.bytesPerElement });
-    this.freeSegmentsMap.set(buffer, [{ byteOffset: 0, byteSize }]);
+
+    // Initialize with a linked list instead of array.
+    const freeList = new FreeList();
+    freeList.addAndMerge(0, byteSize);
+
+    // Track each buffer.
+    this.freeSegmentsMap.set(buffer, freeList);
     this.currentBuffer = buffer;
     return buffer;
   }
@@ -236,8 +364,8 @@ export class BufferManager {
     const byteSize = size * this.bytesPerElement;
 
     // Search all buffers for a free segment.
-    for ( const [buffer, segments] of this.freeSegmentsMap ) {
-      const byteOffset = this._findSegmentWithFreeSpace(segments, byteSize);
+    for ( const [buffer, freeList] of this.freeSegmentsMap ) {
+      const byteOffset = freeList.findAndAllocate(byteSize);
       if ( byteOffset !== null ) return { buffer, byteOffset };
     }
 
@@ -254,32 +382,9 @@ export class BufferManager {
 
     // Last resort: Add a new buffer.
     const buffer = this._addNewBuffer(Math.max(size,  2 ** 10));
-    const segments = this.freeSegmentsMap.get(buffer);
-    this._findSegmentWithFreeSpace(segments, byteSize); // Must still process the segment.
+    const freeList = this.freeSegmentsMap.get(buffer);
+    freeList.findAndAllocate(byteSize); // Must still process the segment.
     return { buffer, byteOffset: 0 }; // By definition, because we just added it, offset is 0.
-  }
-
-  /**
-   * Identify a segment with sufficient space.
-   * @param {Array<{byteOffset, byteSize}>} segments      Memory segments to check
-   * @param {number} byteSize                             Target size
-   * @returns {object<byteOffset, byteSize>|null} The first segment with sufficient space
-   */
-  _findSegmentWithFreeSpace(segments, byteSize) {
-    for ( let i = 0, n = segments.length; i < n; i += 1 ) {
-      const segment = segments[i];
-      if ( segment.byteSize >= byteSize ) {
-        const byteOffset = segment.byteOffset;
-        if ( segment.byteSize === byteSize ) segments.splice(i, 1); // Perfect fit: remove the segment entirely.
-        else {
-          // Partial fit: shrink the existing free segment.
-          segment.byteOffset += byteSize;
-          segment.byteSize -= byteSize;
-        }
-        return byteOffset;
-      }
-    }
-    return null;
   }
 
   /**
@@ -287,36 +392,13 @@ export class BufferManager {
    * @param {TypedArray} arr        The array being freed.
    */
   release(arr) {
+    // NOTE: Disable once debugging is finished.
+    // While good practice to limit caching errors, this fill is non-performant.
     arr.fill(0); // Good practice to limit caching errors.
-    if ( !this.freeSegmentsMap.has(arr.buffer) ) return;
 
-    const segments = this.freeSegmentsMap.get(arr.buffer);
-    const newSegment = { byteSize: arr.byteLength, byteOffset: arr.byteOffset };
-
-    // Insert and maintain sorted order by offset to allow merging.
-    const idx = segments.findIndex(s => s.byteOffset > newSegment.byteOffset);
-    if ( ~idx ) segments.splice(idx, 0, newSegment);
-    else segments.push(newSegment);
-
-    // Combine segments that have empty space at their respective borders.
-    this._mergeNeighbors(segments);
+    const freeList = this.freeSegmentsMap.get(arr.buffer);
+    if ( !freeList ) return;
+    freeList.addAndMerge(arr.byteOffset, arr.byteLength);
   }
 
-  /**
-   * Combines adjacent free blocks to limit fragmentation.
-   */
-  _mergeNeighbors(segments) {
-    for ( let i = 0, iMax = segments.length - 1; i < iMax; i += 1 ) {
-      const current = segments[i];
-      const next = segments[i+1];
-
-      // If current block ends exactly where the next starts, merge.
-      if ( current.byteOffset + current.byteSize === next.byteOffset ) {
-        current.byteSize += next.byteSize;
-        segments.splice(i + 1, 1);
-        iMax--;
-        i--; // Check again with the newly merged block.
-      }
-    }
-  }
 }
