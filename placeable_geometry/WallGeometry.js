@@ -169,12 +169,12 @@ export class WallGeometry extends PlaceableGeometry {
 
   /**
    * What cull face corresponds with given wall direction?
-   * @param {CONST.WALL_DIRECTIONS} wallDir
+   * @param {CONST.EDGE_DIRECTIONS.} wallDir
    * @returns {CULL_FACES}
    */
   static cullFaceForWallDirection(wallDir = 0) {
     const CF = VerticalQuadPrimitive.CULL_FACES
-    const WD = CONST.WALL_DIRECTIONS;
+    const WD = CONST.EDGE_DIRECTIONS;
     switch ( wallDir ) {
       case WD.BOTH: return CF.DOUBLE;
       case WD.LEFT: return CF.LEFT;
