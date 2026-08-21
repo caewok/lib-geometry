@@ -12,6 +12,10 @@ import { AABB3d } from "./3d/AABB3d.js";
 import { Draw } from "./Draw.js";
 import { Point3d } from "./3d/Point3d.js";
 
+const tmpPt1 = new Point3d();
+const tmpPt2 = new Point3d();
+const tmpPt3 = new Point3d();
+
 /**
  * An instance that, for a given configuration, tracks potential obstacles.
  * Config handles what is blocking and what sense type is used.
@@ -415,13 +419,13 @@ export class ObstacleOcclusionTest {
    * @returns {boolean}
    */
   #geometriesOcclude(geoms, rayOrigin, rayDirection) {
-    using rayEnd = rayOrigin.add(rayDirection);
+    const rayEnd = rayOrigin.add(rayDirection, tmpPt1);
     return geoms.some(geom => this.#geomWithinRayBounds(geom, rayOrigin, rayEnd)
       && geom.rayIntersection(rayOrigin, rayDirection));
   }
 
   #subGeometriesOcclude(geoms, rayOrigin, rayDirection, geomSubtype = "full") {
-    using rayEnd = rayOrigin.add(rayDirection);
+    const rayEnd = rayOrigin.add(rayDirection, tmpPt1);
     return geoms.some(geom => this.#geomWithinRayBounds(geom, rayOrigin, rayEnd)
       && geom[geomSubtype].rayIntersection(rayOrigin, rayDirection));
   }
@@ -438,7 +442,7 @@ export class ObstacleOcclusionTest {
 
   terrainWallsOcclude(rayOrigin, rayDirection) {
     let limitedOcclusion = 0;
-    using rayEnd = rayOrigin.add(rayDirection);
+    const rayEnd = rayOrigin.add(rayDirection, tmpPt1);
     const geoms = geoms.filter(geom => this.#geomWithinRayBounds(geom, rayOrigin, rayEnd));
     for ( const geom of geoms ) {
       if ( !geom.rayIntersection(rayOrigin, rayDirection) ) continue;
@@ -448,7 +452,7 @@ export class ObstacleOcclusionTest {
   }
 
   proximateWallsOcclude(rayOrigin, rayDirection) {
-    using rayEnd = rayOrigin.add(rayDirection);
+    const rayEnd = rayOrigin.add(rayDirection, tmpPt1);
     const geoms = [
       ...this.obstacleGeometries.proximateWalls,
       ...this.obstacleGeometries.reverseProximateWalls
