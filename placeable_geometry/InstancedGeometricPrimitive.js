@@ -209,10 +209,10 @@ export class TexturedQuadPrimitive extends QuadPrimitive {
   static generateInstanceVertices() {
     // Add vertices from faces.
     const vo = new VertexObject;
-    const vertices = HorizontalQuadVertices.top;
+    vo.vertices = HorizontalQuadVertices.top;
     vo.hasNormals = true;
     vo.hasUVs = true;
-    this.updateVertexObject(vo, vertices);
+    vo.condense(vo);
     return vo;
   }
 }
@@ -418,10 +418,10 @@ export class SpherePrimitive extends InstancedGeometricPrimitive {
     const vo = new VertexObject();
     const pts = this.prototypeFaces[0].pointsLattice(10 / canvas.grid.size);
     const tris = Sphere.triangulate(pts)
-    const vertices = tris.toVertices({ addNormals: true });
+    vo.vertices = tris.toVertices({ addNormals: true });
     vo.hasNormals = true;
     vo.hasUVs = false;
-    this.updateVertexObject(vo, vertices);
+    vo.condense(vo);
     return vo;
   }
 
