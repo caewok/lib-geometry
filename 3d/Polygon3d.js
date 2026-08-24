@@ -974,7 +974,6 @@ export class Polygon3d {
   /**
    * Intersect this Polygon3d against a plane.
    * @param {Plane} plane
-   * @param {object} [opts]
    * @returns {Segment3d[]|null} Empty if no intersections or parallel. If coincident, returns null.
    */
   intersectPlane(plane) {
@@ -1009,6 +1008,68 @@ export class Polygon3d {
       }
     }
     return resultSegments;
+  }
+
+
+  /**
+   * Does a line (ray) intersect this polygon?
+   * Assumes the line is on this plane.
+   * @param {Point3d} origin
+   * @param {Point3d} direction
+   * @returns {number[]} T-values along the line.
+   */
+  _hasPlanarLineIntersections(origin, direction) {
+    // First half from planarLineIntersections
+    const EPSILON = this.constructor.EPSILON;
+    const N = this.plane.normal;
+    using tmpPt = Point3d.tmp;
+
+    // Calculate the starting point.
+    using vA = Point3d.tmp;
+    using vB = Point3d.tmp;
+    this.points[0].subtract(origin, vA);
+    let distA = vA.cross(direction, tmpPt).dot(N);
+
+    for ( const s of this.iterateEdges() ) {
+      // Calculate signed distance for the second point.
+      // (This will repeat the first point at the very end, but caching it seems like overkill.)
+      s.b.subtract(origin, vB);
+      const distB = vB.cross(direction, tmpPt).dot(N);
+
+      // Check if the line crosses the edge.
+      if ( distA * distB <= 0 ) {
+        if ( almostLessThan(distA, 0, EPSILON) && almostLessThan(distB, 0, EPSILON) ) return true;
+        else if ( Math.abs(distA - distB) > EPSILON) return true;
+      }
+
+      // Cache first point for the next edge iteration.
+      vA.copyFrom(vB);
+      distA = distB;
+    }
+
+    return false;
+  }
+
+
+  /**
+   * Does this 3d polygon intersect a plane?
+   * @param {Plane} plane
+   * @returns {boolean}
+   */
+  intersectsPlane(plane) {
+    if ( this.points.length < 3 ) return false;
+    if ( this.plane.isParallelToPlane(plane) ) {
+      return this.plane.isCoincidentWithPlane(plane, { testParallel: false });
+    }
+
+    // Origin and normalized direction of the intersection line of the planes.
+    const res = this.plane.intersectPlane(plane);
+    using origin = res.point;
+    using direction = res.direction;
+    direction.normalize(direction);
+
+    // Find the intersection intervals of the planar intersection with this polygon.
+    return this._hasPlanarLineIntersections(origin, direction);
   }
 
 
@@ -1053,6 +1114,28 @@ export class Polygon3d {
       }
     }
     return resultSegments;
+  }
+
+  /**
+   * Does this 3d polygon intersect a polygon?
+   * @param {Polygon3d} other
+   * @returns {boolean}
+   */
+  intersectsPolygon3d(other) {
+    if ( this.points.length < 3 || other.points.length < 3 ) return false;
+    if ( this.plane.isParallelToPlane(other.plane) ) {
+      return this.plane.isCoincidentWithPlane(other.plane, { testParallel: false });
+    }
+
+    // Origin and normalized direction of the intersection line of the planes.
+    const res = this.plane.intersectPlane(other.plane);
+    using origin = res.point;
+    using direction = res.direction;
+    direction.normalize(direction);
+
+    // Find the intersection intervals of the planar intersection with this polygon.
+    return this._hasPlanarLineIntersections(origin, direction)
+      || other._hasPlanarLineIntersections(origin, direction);
   }
 
   /* ----- NOTE: Debug ----- */
