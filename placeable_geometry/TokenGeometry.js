@@ -117,7 +117,7 @@ export const GeometrySubclassMixin = superclass => class extends superclass {
   updateCount = 0;
 
   _update(_opts) {
-    this._calculateAABB(); // Don't need to reiterate geometries again.
+    this.calculateAABB(); // Don't need to reiterate geometries again.
     this.updateCount += 1;
   }
 
@@ -130,7 +130,7 @@ export const GeometrySubclassMixin = superclass => class extends superclass {
 
   calculateAABB() {
     this._iterateSubclasses("calculateAABB");
-    this._calculateAABB();
+    this.calculateAABB();
   }
 }
 
@@ -502,7 +502,7 @@ export class TokenGeometry extends mix(Object).with(GeometrySubclassMixin, Token
     bright: TokenBrightGeometry,
   };
 
-  _calculateAABB() {
+  calculateAABB() {
     AABB3d.fromTokenDocument(this.placeableDocument, this.aabb);
   }
 }

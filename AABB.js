@@ -270,7 +270,7 @@ export class AABB2d {
     }
     if ( !(textureWidth && textureHeight) ) {
       console.warn(`AABB.fromLevel ${level.name} (${level.id}) ${type} estimated using canvas scene dimensions.`);
-      return AABB2d.fromRectangle(canvas.dimensions.sceneRect);
+      return AABB2d.fromRectangle(canvas.dimensions.sceneRect, out);
     }
 
     const texData = level.textures || {};

@@ -150,7 +150,8 @@ export class AABB3d extends AABB2d {
    * @returns {AABB3d}
    */
   static fromTile(tile, out) {
-    out = super.fromTile(tile, out);
+    out ??= new this();
+    super.fromTile(tile, out);
     const elevZ = tile.elevationZ;
     out.max.z = elevZ;
     out.min.z = elevZ;
@@ -158,7 +159,8 @@ export class AABB3d extends AABB2d {
   }
 
   static fromTileDocument(tileD, out) {
-    out = super.fromTileDocument(tileD, out);
+    out ??= new this();
+    super.fromTileDocument(tileD, out);
     const elevZ = gridUnitsToPixels(tileD.elevation);
     out.max.z = elevZ;
     out.min.z = elevZ;
@@ -166,6 +168,7 @@ export class AABB3d extends AABB2d {
   }
 
   static fromLevel(level, opts) {
+    opts.out ??= new this();
     const out = super.fromLevel(level, opts);
     out.min.z = gridUnitsToPixels(level.elevation.bottom);
     out.max.z = gridUnitsToPixels(level.elevation.top);
@@ -196,7 +199,8 @@ export class AABB3d extends AABB2d {
    * @returns {AABB3d}
    */
   static fromEdge(edge, out) {
-    out = super.fromEdge(edge, out);
+    out ??= new this();
+    super.fromEdge(edge, out);
     const { a, b } = edge.elevationLibGeometry;
     out.min.z = Math.min(a.bottom ?? Number.NEGATIVE_INFINITY, b.bottom ?? Number.NEGATIVE_INFINITY);
     out.max.z = Math.max(a.top ?? Number.POSITIVE_INFINITY, b.top ?? Number.POSITIVE_INFINITY);
@@ -208,7 +212,8 @@ export class AABB3d extends AABB2d {
    * @returns {AABB3d}
    */
   static fromToken(token, out) {
-    out = super.fromToken(token, out);
+    out ??= new this();
+    super.fromToken(token, out);
     const { topZ, bottomZ } = token.document;
     out.min.z = bottomZ;
     out.max.z = topZ;
@@ -220,7 +225,8 @@ export class AABB3d extends AABB2d {
    * @returns {AABB3d}
    */
   static fromTokenDocument(tokenD, out) {
-    out = super.fromTokenDocument(tokenD, out);
+    out ??= new this();
+    super.fromTokenDocument(tokenD, out);
     out.min.z = tokenD.bottomZ;
     out.max.z = tokenD.topZ;
     return out;

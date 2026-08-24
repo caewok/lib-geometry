@@ -7,7 +7,6 @@ PIXI,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { PlaceableGeometry } from "./PlaceableGeometry.js";
 import {
   TileGeometry,
   TileFullGeometry,
@@ -186,6 +185,14 @@ const LevelCalculationsMixin = superclass => class extends superclass {
       1,
     );
   }
+
+  /**
+   * Get the source for a level document.
+   * @param {Level} levelD
+   * @returns {string} The url.
+   */
+  static textureSource(levelD) { return levelD[this.LEVEL_TYPE].src; }
+
 };
 
 const LevelBackgroundMixin = superclass => class extends superclass {
@@ -272,13 +279,14 @@ export class LevelBackgroundGeometry extends mix(TileGeometry).with(LevelCalcula
     triangles: LevelBackgroundTrianglesGeometry,
   };
 
-  _calculateAABB() {
+  calculateAABB() {
     // Check if the asset is loaded. If not, load it and update the aabb again later.
     const type = this.constructor.LEVEL_TYPE;
     const src = this.placeableDocument[type].src;
-    const tex = PIXI.Assets.get(src);
-    if ( !tex ) PIXI.Assets.load(src).then((tex) => {
-      if ( tex ) this._calculateAABB();
+    let tex;
+    if ( src ) tex = PIXI.Assets.get(src); // May return null.
+    if ( src && !tex ) PIXI.Assets.load(src).then((tex) => {
+      if ( tex ) this.calculateAABB();
     });
     AABB3d.fromLevel(this.placeableDocument, { type, out: this.aabb });
   }
@@ -302,8 +310,17 @@ export class LevelForegroundGeometry extends mix(TileGeometry).with(LevelCalcula
     triangles: LevelForegroundTrianglesGeometry,
   };
 
-  _calculateAABB() {
-    AABB3d.fromLevel(this.placeableDocument, { type: this.constructor.LEVEL_TYPE, out: this.aabb });
+
+  calculateAABB() {
+    // Check if the asset is loaded. If not, load it and update the aabb again later.
+    const type = this.constructor.LEVEL_TYPE;
+    const src = this.placeableDocument[type].src;
+    let tex;
+    if ( src ) tex = PIXI.Assets.get(src); // May return null.
+    if ( src && !tex ) PIXI.Assets.load(src).then((tex) => {
+      if ( tex ) this.calculateAABB();
+    });
+    AABB3d.fromLevel(this.placeableDocument, { type, out: this.aabb });
   }
 
   /**

@@ -147,6 +147,13 @@ const TileDocumentCalculationsMixin = superclass => class extends superclass {
   static tileDimensions(tileD) { return Point3d.tmp.set(tileD.width, tileD.height, 1); }
 
   /**
+   * Get the source for a tile document.
+   * @param {TileDocument} tileD
+   * @returns {string} The url.
+   */
+  static textureSource(tileD) { return tileD.texture.src; }
+
+  /**
    * Finite elevation of a tile.
    * @param {PlaceableDocument} placeableD
    * @returns {number}
@@ -181,6 +188,7 @@ export class TileFullGeometry extends mix(PlaceableGeometry).with(TileDocumentCa
     this.shapes.length = 1;
     this.shapes[0] = new TexturedQuadPrimitive(this.placeableId);
     this.shapes[0].direction = TexturedQuadPrimitive.CULL_FACES.DOUBLE; // Tiles block on both sides.
+    this.shapes[0].textureURL = this.constructor.textureSource(this.placeableDocument);
   }
 
   // ----- NOTE: Update ----- //
@@ -434,7 +442,7 @@ export class TileGeometry extends mix(Object).with(GeometrySubclassMixin, TileDo
     triangles: TileTrianglesGeometry,
   };
 
-  _calculateAABB() {
+  calculateAABB() {
     AABB3d.fromTileDocument(this.placeableDocument, this.aabb);
   }
 }
