@@ -105,7 +105,8 @@ export class Pool {
 // Polyfill for environments that don't have it yet
 Symbol.dispose ??= Symbol("Symbol.dispose");
 
-export const PoolableMixin = superclass => class extends superclass {
+export const PoolableMixin = superclass => {
+  const out = class extends superclass {
 
   /**
    * Retrieve the pool for this class.
@@ -145,7 +146,8 @@ export const PoolableMixin = superclass => class extends superclass {
 
   // Flag to track pool status.
   // Added here so the object class is not later modified.
-  _isInPool = false;
+  /** @type {boolean} */
+  // _isInPool = false;
 
   /**
    * Trigger automatic return to the pool if the point is defined with a "using" declaration.
@@ -168,8 +170,16 @@ export const PoolableMixin = superclass => class extends superclass {
     for ( let i = 0; i < n; i += 1 ) arr[i] = new this();
     return arr;
   }
+  }
 
-
+  // Force the _isInPool property to show up last, as getting rid of it entirely is too hard.
+  Object.defineProperty(out.prototype, "_isInPool", {
+    configurable: false,
+    enumerable: false,
+    value: false,
+    writable: true,
+  });
+  return out;
 }
 
 
