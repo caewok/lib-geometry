@@ -471,12 +471,7 @@ export class Frustum {
 
     // Polygon edge intersects 1+ planes and the segment created is within bounds.
     for ( const face of this.iterateFaces() ) {
-      const res = face.intersectPlane(poly3d.plane); // Faces are all triangles, so likely better to use them for the intersection.
-      if ( !res ) continue;
-
-      // Test the resulting point or line that intersects the plane.
-      if ( (res.b && this.overlapsSegment(res.a, res.b)) // Segment intersection
-        || this.containsPoint(res.a) ) return true; // Single point of intersection
+      if ( face.intersectsPolygon3d(poly3d) ) return true;
     }
     return false;
   }
