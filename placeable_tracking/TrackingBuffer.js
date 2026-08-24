@@ -143,7 +143,7 @@ export class VariableLengthAbstractBuffer {
     if ( type ) this.#type = type;
 
     let arrayLength;
-    if ( Number.isNumeric(facetLengths) ) {
+    if ( Number.isFinite(facetLengths) ) {
       numFacets ||= 0;
       arrayLength = facetLengths * numFacets;
       facetLengths = (new Array(numFacets)).fill(facetLengths);
@@ -266,7 +266,7 @@ export class VariableLengthAbstractBuffer {
 
     let idx;
     for ( idx of this.facetIdMap.iterateEmptyIndices() ) {
-      const existingLength = this.facetLengthAtIndex[idx];
+      const existingLength = this.facetLengthAtIndex(idx);
       if ( facetLength === existingLength || !existingLength ) break;
     }
 
@@ -514,7 +514,7 @@ export class FixedLengthTrackingBuffer extends VariableLengthTrackingBuffer {
    * @param {number} [opts.initialMaxFacets]               If set, the buffer will be at least this large; useful if numFacets is 0
    */
   constructor({ facetLengths, numFacets = 0, initialMaxFacets = 1, ...opts } = {}) {
-    const facetLength = (Number.isNumeric(facetLengths) ? facetLengths : facetLengths[0]) || 1;
+    const facetLength = (Number.isFinite(facetLengths) ? facetLengths : facetLengths[0]) || 1;
     const origNumFacets = numFacets || (Array.isArray(facetLengths) ? facetLengths.length : 0);
 
     // Build parent as an empty container, letting this child control layout.
@@ -584,176 +584,157 @@ export class FixedLengthTrackingBuffer extends VariableLengthTrackingBuffer {
  *   indices = [0, 1, 2, |  3, 2, 1, 0 ] <-- Add 3 to the second set of vertices, 6 to the third.
  *     --> indices become [0, 1, 2 | 6, 5, 4, 3]
  */
-export class VerticesIndicesAbstractTrackingBuffer {
+export class VerticesIndicesTrackingBuffer {
   static vBufferClass = VariableLengthAbstractBuffer;
 
   static iBufferClass = VariableLengthAbstractBuffer;
 
-  vertices;
-
-  indices;
-
-  get numFacets() { return this.vertices.numFacets; }
-
-  stride = 3;
-
-  indicesOffsetAtId(id) { return Math.floor(this.vertices.facetOffsetAtId(id) / this.stride); }
-
-  indicesOffsetAtIdx(idx) { return Math.floor(this.vertices.facetOffsetAtIdx(idx) / this.stride); }
-
-  constructor({ verticesType = Float32Array, indicesType = Uint16Array, verticesFacetLengths, indicesFacetLengths, stride = 3, ...opts } = {}) {
-    this.vertices = new this.constructor.vBufferClass({ type: verticesType, facetLengths: verticesFacetLengths, ...opts });
-    this.indices = new this.constructor.iBufferClass({ type: indicesType, facetLengths: indicesFacetLengths, ...opts });
+  constructor({ stride = 3, verticesType = Float32Array, indicesType = Uint16Array } = {}) {
     this.stride = stride;
+
+    // Completely independent tracking buffers
+    this.vertexTracker = new this.constructor.vBufferClass({ type: verticesType });
+    this.indexTracker = new this.constructor.iBufferClass({ type: indicesType });
+
+    // External cache to store unadjusted indices for re-synchronization
+    this.baseIndicesCache = new Map();
   }
 
-  addFacet({ id, verticesLength, newVertices, indicesLength, newIndices } = {}) {
-    if ( !(indicesLength || newIndices) ) {
-      verticesLength ??= newVertices.length;
-      newIndices = Array.fromRange(verticesLength / this.stride);
-    }
-    this.vertices.addFacet({ id, newValues: newVertices, facetLength: verticesLength });
-    return this.indices.addFacet({ id, newValues: newIndices, facetLength: indicesLength });
+
+  /**
+   * Add an array of vertices.
+   */
+  _addVerticesFacet({ id, newValues, facetLength, verticesLength, vertices } = {}) {
+    newValues ??= vertices;
+    facetLength ??= verticesLength ?? newValues.length;
+
+    // Record the layout version before adding vertices.
+    const initialLayoutVersion = this.vertexTracker.layoutVersion;
+
+    // Write to the tracker.
+    const expanded = this.vertexTracker.addFacet({ id, newValues, facetLength });
+
+    // If vertex memory shifted, resync all existing indices.
+    if ( this.vertexTracker.layoutVersion !== initialLayoutVersion ) this._resyncAllIndices();
+
+    return expanded;
   }
 
-  updateFacet(id, { verticesLength, newVertices, indicesLength, newIndices }) {
-    if ( !(indicesLength || newIndices) ) {
-      verticesLength ??= newVertices.length;
-      newIndices = Array.fromRange(verticesLength / this.stride);
-    }
-    this.vertices.updateFacet(id, { newValues: newVertices, facetLength: verticesLength });
-    return this.indices.updateFacet(id, { newValues: newIndices, facetLength: indicesLength });
+  _updateVerticesFacet(id, { newValues, vertices, verticesLength, facetLength } = {}) {
+    newValues ??= vertices;
+    facetLength ??= verticesLength ?? newValues.length;
+    this.vertexTracker.updateFacet(id, { newValues, facetLength });
+  }
+
+  _deleteVerticesFacet(id) { this.vertexTracker.deleteFacet(id); }
+
+  /**
+   * Add an array of indices.
+   * Presumed to be called after addVerticesFacet. Recommended to use addFacet to stay in sync.
+   */
+  _addIndicesFacet({ id, newValues, facetLength, indicesLength, indices } = {}) {
+    newValues ??= indices;
+    facetLength ??= indicesLength ?? newValues.length;
+
+    // Cache the base, unadjusted indices
+    this.baseIndicesCache.set(id, new Uint16Array(newValues));
+
+    // Calculate offset and adjust indices before saving to the index tracker
+    const adjustedIndices = this._applyOffset(id, newValues);
+    return this.indexTracker.addFacet({ id, newValues: adjustedIndices });
+  }
+
+  _updateIndicesFacet(id, { newValues, indices, indicesLength, facetLength } = {}) {
+    newValues ??= indices;
+    facetLength ??= indicesLength ?? newValues.length;
+    this.baseIndicesCache.set(id, new Uint16Array(newValues));
+    const adjustedIndices = this._applyOffset(id, newValues);
+    this.indexTracker.updateFacet(id, { newValues: adjustedIndices });
+  }
+
+  _removeIndicesFacet(id) {
+    this.indexTracker.deleteFacet(id);
+    this.baseIndicesCache.delete(id);
+  }
+
+  addFacet({ id, vertices, indices }) {
+    id ??= this.vertexTracker.facetIdMap.nextIndex;
+
+    // Write to vertex tracker first so it calculates the internal offsets.
+    // Then calculate offset and adjust indices for the index tracker.
+    // TODO: Handle contiguous and expansion.
+    const vExpanded = this._addVerticesFacet({ id, vertices });
+    const iExpanded = this._addIndicesFacet({ id, indices });
+    return vExpanded || iExpanded;
+  }
+
+  updateFacet(id, { vertices, indices }) {
+    this._updateVerticesFacet(id, { vertices });
+    this._updateIndicesFacet(id, { indices });
   }
 
   deleteFacet(id) {
-    this.vertices.deleteFacet(id);
-    this.indices.deleteFacet(id);
+    this._removeVerticesFacet(id);
+    this._removeIndicesFacet(id);
   }
 
-  viewBuffer(verticesBuffer, indicesBuffer) {
-    return {
-      indices: this.indices.viewBuffer(indicesBuffer),
-      vertices: this.vertices.viewBuffer(verticesBuffer)
-    }
-  }
+  /**
+   * Fake tracking interface to mimic a single tracker.
+   * E.g., tracker.addFacet becomes tracker.vertices.addFacet, etc.
+   */
+  vertices = {
+    addFacet: this._addVerticesFacet.bind(this),
+    updateFace: this._updateVerticesFacet.bind(this),
+    deleteFacet: this._deleteVerticesFacet.bind(this),
+  };
 
-  viewWholeBuffer(verticesBuffer, indicesBuffer) {
-    return {
-      indices: this.indices.viewWholeBuffer(indicesBuffer),
-      vertices: this.vertices.viewWholeBuffer(verticesBuffer)
-    }
-  }
+  /**
+   * Fake tracking interface to mimic a single tracker.
+   * E.g., tracker.addFacet becomes tracker.indices.addFacet, etc.
+   */
+  indices = {
+    addFacet: this._addIndicesFacet.bind(this),
+    updateFace: this._updateIndicesFacet.bind(this),
+    deleteFacet: this._deleteIndicesFacet.bind(this),
+  };
 
-  viewFacetById(id, verticesBuffer, indicesBuffer) {
-   return {
-      indices: this.indices.viewFacetById(id, indicesBuffer),
-      vertices: this.vertices.viewFacetById(id, verticesBuffer)
-    }
-  }
+  /**
+   * Helper method to compact memory and re-synchronize.
+   */
+  _resyncAllIndices() {
+    for ( const syncId of this.indexTracker.facetIdMap.keys() ) {
+      const baseIndices = this.baseIndicesCache.get(syncId);
+      if ( !baseIndices ) continue;
 
-  // Copy the index, adjusting by offset.
-  copyToIndicesBuffer(buffer) {
-    for ( const id of this.indices.facetIdMap.keys() ) {
-      this.copyToIndicesBufferById(id, buffer, this.indices.viewFacetById(id, buffer));
-    }
-  }
+      // Offset the base indices.
+      const reAdjustedIndices = this._applyOffset(syncId, baseIndices);
 
-  // Copy the index, adjusting by offset.
-  copyToIndicesBufferById(id, buffer, newValues) {
-    newValues = newValues.map(elem => elem + this.indicesOffsetAtId(id));
-    this.indices.copyToBufferById(id, buffer, newValues);
-  }
-}
-
-export class VerticesIndicesTrackingBuffer extends VerticesIndicesAbstractTrackingBuffer {
-  static vBufferClass = VariableLengthTrackingBuffer;
-
-  static iBufferClass = VariableLengthTrackingBuffer;
-
-  indicesAdjBuffer; // With offset applied.
-
-  constructor(opts = {}) {
-    super(opts);
-    this.indicesAdjBuffer = new ArrayBuffer(this.indices.maxByteLength);
-  }
-
-  addFacet(opts = {}) {
-    opts.id ??= this.indices.facetIdMap.nextIndex;
-    const expanded = super.addFacet(opts);
-    if ( expanded ) this.expand();
-    this.copyToIndicesBufferById(opts.id, this.indicesAdjBuffer, this.indices.viewFacetById(opts.id));
-    return expanded;
-    // No change to other facet indices b/c vertices are added at the end or replace vertex facet of equal length.
-  }
-
-  updateFacet(id, opts = {}) {
-    const expanded = super.updateFacet(id, opts);
-    if ( expanded ) this.expand();
-    this.copyToIndicesBufferById(id, this.indicesAdjBuffer, this.indices.viewFacetById(id));
-    return expanded;
-    // No change to other facet indices b/c vertices are added at the end or replace vertex facet of equal length.
-  }
-
-  expand() {
-    this.indicesAdjBuffer = this.indicesAdjBuffer.transferToFixedLength(this.indices.maxByteLength);
-  }
-
-  viewBuffer(_buffer) {
-    return {
-      indices: this.indices.viewBuffer(),
-      vertices: this.vertices.viewBuffer(),
-      indicesAdj: this.indices.viewBuffer(this.indicesAdjBuffer),
-    };
-  }
-
-  viewWholeBuffer(_buffer) {
-    return {
-      indices: this.indices.viewWholeBuffer(),
-      vertices: this.vertices.viewWholeBuffer(),
-      indicesAdj: this.indices.viewWholeBuffer(this.indicesAdjBuffer),
-    }
-  }
-
-  viewFacetById(id, _buffer) {
-    return {
-      indices: this.indices.viewFacetById(id),
-      vertices: this.vertices.viewFacetById(id),
-      indicesAdj: this.indices.viewFacetById(id, this.indicesAdjBuffer),
-    }
-  }
-
-  viewFacetAtIndex(idx, _buffer) {
-    return {
-      indices: this.indices.viewFacetAtIndex(idx),
-      vertices: this.vertices.viewFacetAtIndex(idx),
-      indicesAdj: this.indices.viewFacetAtIndex(idx, this.indicesAdjBuffer),
+      // Perform an in-place update using the tracker's internal view
+      const indexView = this.indexTracker.viewFacetById(syncId);
+      indexView.set(reAdjustedIndices);
     }
   }
 
   /**
-   * Drop all empty facet slots in the array and make the array contiguous.
-   * @returns {boolean} True if the buffer would have to be modified, false otherwise.
+   * Compacts memory and re-synchronizes index offsets if vertices shifted.
    */
   makeContiguous() {
-    // Compact both underlying buffers.
-    const verticesModified = this.vertices.makeContiguous();
-    const indicesModified = this.indices.makeContiguous();
+    const verticesShifted = this.vertexTracker.makeContiguous();
+    this.indexTracker.makeContiguous(); // Compact index buffer as well
 
-    // If either buffer shifted, adjusted indices are now completely out of sync.
-    if ( verticesModified || indicesModified ) {
-      // Rebuild the indices buffer from scratch using freshly compacted data.
-      for ( const id of this.indices.facetIdMap.keys() ) {
-        const baseIndices = this.indices.viewFacetById(id);
-        this.copyToIndicesBufferById(id, this.indicesAdjBuffer, baseIndices);
-      }
-      return true;
-    }
-    return false;
+    // Re-sync if the manual call actually resulted in a shift.
+    if ( verticesShifted ) this._resyncAllIndices();
+    return verticesShifted;
   }
 
-  // Not yet implemented: makeContiguous.
-  // Requires resetting the indicesAdjBuffer and ensuring indices and vertices stay in sync.
-
+  /**
+   * Calculates the vertex offset and applies it to an array of indices.
+   * Matches the formula: Math.floor(vertexOffset / stride)[span_1](start_span)[span_1](end_span).
+   */
+  _applyOffset(id, baseIndices) {
+    const offset = Math.floor(this.vertexTracker.facetOffsetAtId(id) / this.stride);
+    return baseIndices.map(idx => idx + offset);
+  }
 }
 
 export class VerticesIndicesFixedLengthTrackingBuffer extends VerticesIndicesTrackingBuffer {
@@ -762,7 +743,6 @@ export class VerticesIndicesFixedLengthTrackingBuffer extends VerticesIndicesTra
   static iBufferClass = FixedLengthTrackingBuffer;
 
 }
-
 
 
 
