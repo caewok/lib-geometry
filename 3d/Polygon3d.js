@@ -10,11 +10,12 @@ PIXI,
 import { GEOMETRY_CONFIG } from "../const.js";
 import { Point3d } from "./Point3d.js";
 import { Plane } from "./Plane.js";
-import { almostBetween, cleanPolygonPoints } from "../util.js";
+import { almostBetween, cleanPolygonPoints, almostLessThan } from "../util.js";
 import { AABB3d } from "./AABB3d.js";
 import { Draw } from "../Draw.js";
 import { Matrix, MatrixFloat32 } from "../Matrix.js";
 import { Ellipse } from "../Ellipse.js";
+import { Segment } from "../Segment.js";
 
 /*
 3d Polygon representing a flat polygon plane.
@@ -26,6 +27,8 @@ Points in a Polygon3d are assumed to not be modified in place after creation.
 Symbol.dispose ??= Symbol("Symbol.dispose");
 
 export class Polygon3d {
+
+  static EPSILON = 1e-08;
 
   static [Symbol.hasInstance](instance) {
     return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
@@ -887,37 +890,170 @@ export class Polygon3d {
    */
 
   /**
-   * Intersect this Polygon3d against a plane.
-   * @param {Plane} plane
-   * @returns {null|Point3d[]|Segment3d[]}
+   * Find the intervals of a line (ray) that intersects this polygon.
+   * Assumes the line is on this plane.
+   * @param {Point3d} origin
+   * @param {Point3d} direction
+   * @returns {number[]} T-values along the line.
    */
-  intersectPlane(plane) {
-    const res = this.plane.intersectPlane(plane);
-    if ( !res ) return null;
+  _planarLineIntersections(origin, direction) {
+    const EPSILON = this.constructor.EPSILON;
+    const N = this.plane.normal;
+    using tmpPt = Point3d.tmp;
+    using intersectPt = Point3d.tmp;
+    const tValues = [];
 
-    // Convert the intersecting ray to 2d values on this plane.
-    const to2dM = this.plane.conversion2dMatrix
-    const b3d = res.point.add(res.direction);
-    using tmpPt3d = Point3d.tmp;
-    using a = to2dM.multiplyPoint3d(res.point, tmpPt3d).to2d();
-    using b = to2dM.multiplyPoint3d(b3d, tmpPt3d).to2d();
+    // Calculate the starting point.
+    using vA = Point3d.tmp;
+    using vB = Point3d.tmp;
+    this.points[0].subtract(origin, vA);
+    let distA = vA.cross(direction, tmpPt).dot(N);
 
-    const poly2d = new PIXI.Polygon(this.planarPoints);
-    const ixs = poly2d.lineIntersections(a, b);
-    ixs.sort((a, b) => a.t0 - b.t0);
+    for ( const s of this.iterateEdges() ) {
+      // Calculate signed distance for the second point.
+      // (This will repeat the first point at the very end, but caching it seems like overkill.)
+      s.b.subtract(origin, vB);
+      const distB = vB.cross(direction, tmpPt).dot(N);
 
-    const from2dM = this.plane.conversion2dMatrixInverse;
-    const pts3d = ixs.map(ix => from2dM.multiplyPoint3d(tmpPt3d.set(ix.x, ix.y, 0)));
-    if ( pts3d.length === 1 ) return pts3d[0];
+      // Check if the line crosses the edge.
+      if ( distA * distB <= 0 ) {
+        if ( almostLessThan(distA, 0, EPSILON) && almostLessThan(distB, 0, EPSILON) ) {
+          // Edge is perfectly collinear with intersection line.
+          tValues.push(vA.dot(direction));
+          tValues.push(vB.dot(direction));
+        } else if ( Math.abs(distA - distB) > EPSILON) {
+          // Standard crossing.
+          const tEdge = distA / (distA - distB);
+          s.a.add(s.b.subtract(s.a, tmpPt).multiplyScalar(tEdge, tmpPt), intersectPt);
+          const tLine = intersectPt.subtract(origin, tmpPt).dot(direction);
+          tValues.push(tLine);
+        }
+      }
 
-    // Intersecting poly with a plane, so the first intersection must be outside --> inside.
-    // so ix0 -- ix1, ix1 -- ix2 (hole), ix2 --- ix3, ix3 --- ix4 (hole), ix4 --- ix5, ...
-    const nIxs = pts3d.length;
-    const segments = Array(Math.floor(nIxs * 0.5));
-    for ( let i = 0, j = 0; i < nIxs; i += 2 ) segments[j++] = { a: pts3d[i], b: pts3d[i + 1] };
-    return segments;
+      // Cache first point for the next edge iteration.
+      vA.copyFrom(vB);
+      distA = distB;
+    }
+
+    // Sort raw intersections.
+    tValues.sort((a, b) => a - b);
+
+    // Deduplicate t-values.
+    let t0 = tValues[0];
+    const uniqueT = [t0];
+    for ( let i = 1, n = tValues.length; i < n; i += 1 ) {
+      const t = tValues[i];
+      if ( (t - t0) > EPSILON ) uniqueT.push(t);
+      t0 = t;
+    }
+
+    // Pair entry and exit points, merging any contiguous intervals.
+    const intervals = [];
+    if ( uniqueT.length < 2 ) return intervals;
+
+    let currentStart = uniqueT[0];
+    let currentEnd = uniqueT[1];
+    for ( let i = 2, n = uniqueT.length - 1; i < n; i += 2 ) {
+      const t0 = uniqueT[i];
+      const t1 = uniqueT[i+1]
+      if ( t0 < currentEnd + EPSILON ) currentEnd = Math.max(currentEnd, t1); // Next interval overlaps or is immediately contiguous (within epsilon).
+      else {
+        // Gap found. push the merged interval and start tracking anew.
+        if ( (currentEnd - currentStart) > EPSILON ) intervals.push([currentStart, currentEnd]);
+        currentStart = t0;
+        currentEnd = t1;
+      }
+    }
+
+    // Push the final tracked interval.
+    if ( (currentEnd - currentStart) > EPSILON ) intervals.push([currentStart, currentEnd]);
+    return intervals;
   }
 
+
+  /**
+   * Intersect this Polygon3d against a plane.
+   * @param {Plane} plane
+   * @param {object} [opts]
+   * @returns {Segment3d[]|null} Empty if no intersections or parallel. If coincident, returns null.
+   */
+  intersectPlane(plane) {
+    if ( this.points.length < 3 ) return [];
+
+    if ( this.plane.isParallelToPlane(plane) ) {
+      // If polygon lies flat on the cutting plane, handle explicitly.
+      // Return the polygon's own edges as segments.
+      if ( this.plane.isCoincidentWithPlane(plane, { testParallel: false }) ) return [...this.iterateEdges()];
+      return []; // No intersection.
+    }
+
+    // Origin and normalized direction of the intersection line of the planes.
+    const res = this.plane.intersectPlane(plane);
+    using origin = res.point;
+    using direction = res.direction;
+    direction.normalize(direction);
+
+    // Find the intersection intervals of the planar intersection with this polygon.
+    const intervals = this._planarLineIntersections(origin, direction);
+
+    // Convert intervals back to 3d segments.
+    const EPSILON = this.constructor.EPSILON;
+    const resultSegments = [];
+    for ( const [start, end] of intervals ) {
+      if ( (end - start) > EPSILON ) {
+        const pStart = Point3d.tmp;
+        const pEnd = Point3d.tmp;
+        origin.add(direction.multiplyScalar(start, pStart), pStart);
+        origin.add(direction.multiplyScalar(end, pEnd), pEnd);
+        resultSegments.push(new Segment(pStart, pEnd));
+      }
+    }
+    return resultSegments;
+  }
+
+
+  /**
+   * Intersect this Polygon3d against another.
+   * @param {Polygon3d} other
+   * @returns {Segment[]|null} Array of 3d segments or null if coplanar.
+   * Coplanar objects can be transformed to 2d and intersected or tested for overlap.
+   */
+  intersectPolygon3d(other) {
+    if ( this.points.length < 3 || other.points.length < 3 ) return [];
+    if ( this.plane.isParallelToPlane(other.plane) ) {
+      if ( this.plane.isCoincidentWithPlane(other.plane, { testParallel: false }) ) return null;
+      return []; // No intersection; parallel but not touching.
+    }
+
+    // Origin and normalized direction of the intersection line of the planes.
+    const res = this.plane.intersectPlane(other.plane);
+    using origin = res.point;
+    using direction = res.direction;
+    direction.normalize(direction);
+
+    // Find the intersection intervals of the planar intersection with each polygon.
+    const intervals1 = this._planarLineIntersections(origin, direction);
+    const intervals2 = other._planarLineIntersections(origin, direction);
+
+    // Intersect the intervals and convert back to 3d segments.
+    const resultSegments = [];
+    for ( const [start1, end1] of intervals1 ) {
+      for ( const [start2, end2] of intervals2 ) {
+        const maxStart = Math.max(start1, start2);
+        const minEnd = Math.min(end1, end2);
+
+        if ( maxStart <= minEnd ) {
+          // Valid overlap interval.
+          const pStart = Point3d.tmp;
+          const pEnd = Point3d.tmp;
+          origin.add(direction.multiplyScalar(maxStart, pStart), pStart);
+          origin.add(direction.multiplyScalar(minEnd, pEnd), pEnd);
+          resultSegments.push(new Segment(pStart, pEnd));
+        }
+      }
+    }
+    return resultSegments;
+  }
 
   /* ----- NOTE: Debug ----- */
 
@@ -1322,6 +1458,47 @@ export class Ellipse3d extends Polygon3d {
     return contained;
   }
 
+  /**
+   * Find the intervals of a line (ray) that intersects this polygon.
+   * Assumes the line is on this plane.
+   * @param {Point3d} origin
+   * @param {Point3d} direction
+   * @returns {number[]} T-values along the line.
+   */
+  _planarLineIntersections(origin, direction) {
+    const r2 = this.radiusSquared;
+    const { vx: uAxis, vy: vAxis } = this.radiusVectors();
+
+    // Project 3d origin relative to center onto local 2d axes.
+    using delta = origin.subtract(this.center);
+    const ox = delta.dot(uAxis);
+    const oy = delta.dot(vAxis);
+
+    // Project 3d direction onto local 2d axes.
+    const dx = direction.dot(uAxis);
+    const dy = direction.dot(vAxis);
+
+    // Quadratic coefficients.
+    const a2 = r2.x;
+    const b2 = r2.y;
+    const A = ((dx ** 2) / a2) + ((dy ** 2) / b2);
+    const B = 2 * ((ox * dx) / a2) + ((oy * dy) / b2);
+    const C = ((ox ** 2) / a2) + ((oy ** 2) / b2) - 1;
+    const discriminant = (B ** 2) - (4 * A * C);
+
+    // If the discriminant is zero or negative, the line misses or just grazes the edge.
+    if ( discriminant.almostLessThan(0) ) return [];
+
+    // Calculate the two intersection t-values.
+    const sqrtD = Math.sqrt(discriminant);
+    const t1 = (-B - sqrtD) / (2 * A);
+    const t2 = (-B + sqrtD) / (2 * A);
+
+    // Return sorted interval.
+    return [[t1, t2]];
+  }
+
+
   // ----- NOTE: Transformations ----- //
   isValid() {
     this.clean();
@@ -1452,6 +1629,7 @@ export class Ellipse3d extends Polygon3d {
  */
 export class Circle3d extends Ellipse3d {
 
+  // For numerical consistency, store the radius squared to use when possible.
   get radius() { return this.radiusX; }
 
   get radiusSquared() { return this.radius * this.radius; }
@@ -1811,51 +1989,6 @@ export class Triangle3d extends Polygon3d {
     return out;
   }
 
-  /**
-   * Intersect this Triangle3d against a plane.
-   * @param {Plane} plane
-   * @returns {null|Point3d|Segment3d}
-   */
-  intersectPlane(plane) {
-    // Check for parallel planes.
-    if ( this.plane.isParallelToPlane(plane) ) return null;
-
-    // Instead of intersecting the planes, intersect the triangle segments with the plane directly.
-    let ixs = [];
-    ixs[0] = plane.lineSegmentIntersection(this.a, this.b);
-    ixs[1] = plane.lineSegmentIntersection(this.b, this.c);
-    ixs[2] = plane.lineSegmentIntersection(this.c, this.a);
-
-    // Drop identical intersections. When 0 equals 1 or 2; or 1 equals 2.
-    if ( ixs[0] ) {
-      if ( ixs[1] && ixs[0].almostEqual(ixs[1]) ) ixs[1] = null;
-      if ( ixs[2] && ixs[0].almostEqual(ixs[2]) ) ixs[2] = null;
-    }
-    if ( ixs[1] && ixs[2] && ixs[1].almostEqual(ixs[2]) ) ixs[2] = null;
-    ixs = ixs.filter(ixs => ixs !== null);
-
-    switch ( ixs.length ) {
-      case 0: return null; // Triangle does not touch plane.
-      case 1: return { a: ixs[0], b: null }; // No segment intersects but perhaps a point touches the plane.
-      case 2: return { a: ixs[0], b: ixs[1] };
-      default: console.error(`${this.constructor.name}|intersectPlane|Has three intersections with non-parallel plane.`, plane);
-    }
-    return null; // Should not happen.
-
-    /*
-    api = game.modules.get("tokenvisibility").api
-    Triangle3d = api.geometry.Triangle3d
-    let { Point3d, Plane } = CONFIG.GeometryLib.threeD
-    Draw = CONFIG.GeometryLib.Draw
-    tri3d = Triangle3d.from2dPoints([{ x: -50, y: -50 }, { x: -50, y: 50 }, { x: 50, y: 50 }], 100)
-    plane = Plane.fromPoints(new Point3d(-25, -50, 100), new Point3d(-50, -25, 100), new Point3d(-25, -50, 0))
-    tri3d.draw2d()
-    Draw.point(ixAB, { radius: 2 })
-    Draw.point(ixBC, { radius: 2 })
-    Draw.point(ixCA, { radius: 2 })
-    */
-  }
-
   // ----- NOTE: Property tests ----- //
   isValid() {
     this.clean();
@@ -2029,7 +2162,6 @@ export class Quad3d extends Polygon3d {
     return null;
   }
 
-
   /**
    * Clip this polygon in the z direction.
    * @param {number} z
@@ -2047,41 +2179,6 @@ export class Quad3d extends Polygon3d {
     out.isHole = this.isHole;
     out.points.forEach((pt, idx) => pt.copyFrom(toKeep[idx]));
     return out;
-  }
-
-  /**
-   * Intersect this quad against a plane.
-   * @param {Plane} plane
-   * @returns {null|Point3d|Segment3d}
-   */
-  intersectPlane(plane) {
-    // Check for parallel planes.
-    if ( this.plane.isParallelToPlane(plane) ) return null;
-
-    // Instead of intersecting the planes, intersect the quad segments with the plane directly.
-    const ixAB = plane.lineSegmentIntersection(this.a, this.b);
-    const ixBC = plane.lineSegmentIntersection(this.b, this.c);
-    const ixCD = plane.lineSegmentIntersection(this.c, this.d);
-    const ixDA = plane.lineSegmentIntersection(this.d, this.a);
-    if ( ixAB && ixBC && ixCD && ixDA ) console.error(`${this.constructor.name}|intersectPlane|Has four intersections with non-parallel plane.`, plane);
-    if ( !(ixAB || ixBC || ixCD || ixDA) ) return null; // quad does not touch plane.
-
-    // Most of the time, a quad that touches a plane should create a 3d segment on that plane.
-    for ( const a of [ixAB, ixBC, ixCD, ixDA] ) {
-      for ( const b of [ixAB, ixBC, ixCD, ixDA] ) {
-        if ( a === b ) continue;
-        if ( a && b ) return { a, b };
-      }
-    }
-
-    // No segment intersects but perhaps a point touches the plane.
-    if ( ixAB ) return { a: ixAB, b: null };
-    if ( ixBC ) return { a: ixBC, b: null };
-    if ( ixCD ) return { a: ixCD, b: null };
-    if ( ixDA ) return { a: ixDA, b: null };
-
-    console.error(`${this.constructor.name}|intersectPlane|Reached end of tests.`, plane);
-    return null; // Should not happen.
   }
 
   isValid() {
@@ -2508,30 +2605,38 @@ export class Polygons3d extends Polygon3d {
    * @param {Plane} plane
    * @returns {Segment3d[]} May be empty if no intersecting segments.
    */
-  intersectPlane(plane, { tangents = true } = {}) {
-    const res = this.plane.intersectPlane(plane);
-    if ( !res ) return [];
+  intersectPlane(plane) {
+    if ( this.plane.isParallelToPlane(plane) ) {
+      if ( this.plane.isCoincidentWithPlane(plane, { testParallel: false }) ) return null;
+      return []; // No intersection; parallel but not touching.
+    }
+    const out = this.#applyMethodToAllWithReturn("intersectPlane", plane);
+    return out.flatMap(arr => arr);
+  }
 
-    // Convert the intersecting ray to 2d values on this plane.
-    const to2dM = this.plane.conversion2dMatrix
-    const b3d = res.point.add(res.direction);
-    using tmpPt3d = Point3d.tmp;
-    const a = to2dM.multiplyPoint3d(res.point, tmpPt3d).to2d();
-    const b = to2dM.multiplyPoint3d(b3d, tmpPt3d).to2d();
-
-    // Locate the 2d intersecting segments for each polygon on the plane.
-    const nPolys = this.polygons.length;
-    const out = Array();
-    for ( let i = 0; i < nPolys; i += 1 ) {
-      const poly2d = new PIXI.Polygon(this.polygons[i].planarPoints);
-      const ixs = poly2d.lineIntersections(a, b, { tangents });
-      out[i] = { ixs, isPositive: poly2d.isPositive };
+  /**
+   * Intersect this Polygons3d against another, noting holes.
+   * @param {Plane} plane
+   * @returns {Segment3d[]} May be empty if no intersecting segments.
+   */
+  intersectPolygon3d(other) {
+    if ( this.plane.isParallelToPlane(other.plane) ) {
+      if ( this.plane.isCoincidentWithPlane(other.plane, { testParallel: false }) ) return [];
+      return []; // No intersection; parallel but not touching.
     }
 
-    // Convert back to 3d.
-    const from2dM = this.plane.conversion2dMatrixInverse;
-    out.forEach(elem => elem.ixs.pt3d = from2dM.multiplyPoint3d(tmpPt3d.set(elem.ixs.x, elem.ixs.y, 0)));
-    return out;
+    if ( other instanceof Polygons3d ) {
+      console.warn("Polygons3d|Intersecting two Polygons3d may be resource intensive.");
+      const out = [];
+      for ( const poly1 of this.polygons ) {
+        for ( const poly2 of other.polygons ) out.push(...poly1.intersectPolygon3d(poly2));
+      }
+      return out;
+
+    } else {
+      const out = this.#applyMethodToAllWithReturn("intersectPolygon3d", other);
+      return out.flatMap(arr => arr);
+    }
   }
 
   clipPlanePoints(...args) { this.#applyMethodToAllWithReturn("clipPlanePoints", ...args); }

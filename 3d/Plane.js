@@ -547,17 +547,27 @@ export class Plane {
   /**
    * Is this plane parallel to another?
    * @param {Plane} other   Other plane to intersect
+   * @param {number} [epsilon = 1e-06]
    * @returns {boolean} True if parallel
    */
-  isParallelToPlane(other) {
-    const N1 = this.normal;
-    const N2 = other.normal;
-
-    // Cross product of the two normals is the direction of the line.
-    const direction = N1.cross(N2);
-
+  isParallelToPlane(other, epsilon = 1e-06) {
     // Parallel planes have a cross product with zero magnitude
-    return Boolean(!direction.magnitudeSquared())
+    using direction = this.normal.cross(other.normal);
+    return direction.magnitudeSquared().almostEqual(0, epsilon ** 2);
+  }
+
+  /**
+   * Is this plane coincident with another?
+   * Works regardless of whether normals face the same or opposite direction.
+   * @param {Plane} other
+   * @param {number} [epsilon = 1e-06]
+   * @returns {boolean}
+   */
+  isCoincidentWithPlane(other, { testParallel = true, epsilon = 1e-06 } = {}) {
+    if ( testParallel && !isParallelToPlane(other, epsilon) ) return false;
+
+    // Coincident if one point lies on another.
+    return this.whichSide(other.point).almostEqual(0, epsilon);
   }
 
   /**

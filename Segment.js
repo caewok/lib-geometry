@@ -20,7 +20,7 @@ export class Segment {
   /** @type {PIXI.Point|Point3d} */
   b = null;
 
-  constructor(a, b) {
+  constructor(a = null, b = null) {
     this.a = a;
     this.b = b;
   }
