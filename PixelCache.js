@@ -3301,8 +3301,8 @@ function pointsToPolygonOrRectangle(pts) {
   if ( uniquePoints.size !== 4 ) return PIXI.Polygon(pts);
 
   // Requires exactly two unique x and two unique y points.
-  const xCoords = new Set(points.map(p => p.x));
-  const yCoords = new Set(points.map(p => p.y));
+  const xCoords = new Set(pts.map(p => p.x));
+  const yCoords = new Set(pts.map(p => p.y));
 
   // An axis-aligned rectangle has exactly 2 unique x and 2 unique y.
   if ( !(xCoords.size === 2 && yCoords.size === 2) ) return PIXI.Polygon(pts);
