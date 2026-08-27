@@ -13,7 +13,7 @@ import { ExtrudedPolygonPrimitive } from "./ModelGeometricPrimitive.js";
 // LibGeometry
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { Point3d } from "../3d/Point3d.js";
-import { almostLessThan } from "../util.js";
+import { almostLessThan, NULL_SET } from "../util.js";
 
 /**
   Region will either be a single shape or a group of polygons.
@@ -34,6 +34,9 @@ const TRANSFORM_CHANGES = [
   "width",
   "height",
   "length",
+  "radius",
+  "radiusX",
+  "radiusY",
   "rotation",
   "hole",
   "gridBased",
@@ -51,20 +54,17 @@ Hooks.on("preUpdateRegion", function(regionD, changes, options, _userId) {
 
   const trackingArr = options[GEOMETRY_LIB_ID] = new Array(changes.shapes.length);
   const originalShapes = regionD.shapes;
-  for ( const [index, updatedShape] of Object.entries(changes.shapes) ) {
+  for ( let i = 0, n = changes.shapes.length; i < n; i += 1 ) {
+    const updatedShape = changes.shapes[0];
+
     if ( !updatedShape.type ) {
       console.error("RegionGeometry|updated shape has no type.");
-      trackingArr[index] = structuredClone(updatedShape);
+      trackingArr[i] = NULL_SET;
       continue;
     }
 
-    const trackingSet = trackingArr[index] = new Set();
-    const originalShape = originalShapes[index];
-    const typeChanged = !(originalShape && updatedShape.type === originalShape.type);
-    if ( typeChanged ) {
-      trackingSet.add("type");
-      continue;
-    };
+    const trackingSet = trackingArr[i] = new Set();
+    const originalShape = originalShapes[i];
 
     // Basic values.
     for ( const key of TRANSFORM_CHANGES ) {
@@ -92,6 +92,9 @@ Hooks.on("preUpdateRegion", function(regionD, changes, options, _userId) {
       }
     }
   }
+
+  // Convert from Set so the options will pass through.
+  options[GEOMETRY_LIB_ID] = options[GEOMETRY_LIB_ID].map(s => [...s.values()]);
 });
 
 
@@ -301,7 +304,9 @@ export class RegionGeometry extends PlaceableGeometry {
     }
 
     // Use the passthrough tracking sets to determine updates for each region shape.
-    const trackingArr = opts?.[GEOMETRY_LIB_ID] || [];
+    let trackingArr = opts?.[GEOMETRY_LIB_ID] || [];
+    trackingArr = trackingArr.map(arr => new Set(arr));
+
 
     // Go through each segment array and examine the shapes.
     // If no specific changes, re-do everything but don't rebuild shapes unless we have to.
