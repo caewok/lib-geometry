@@ -505,4 +505,14 @@ export class TokenGeometry extends mix(Object).with(GeometrySubclassMixin, Token
   calculateAABB() {
     AABB3d.fromTokenDocument(this.placeableDocument, this.aabb);
   }
+
+  /** @type {TokenFullGeometry} */
+  get boundarySubtype() { return this.full; }
+
+  // TODO: Should this ever be lit or bright?
+  /** @type {TokenFullGeometry} */
+  get subtype() {
+    const token = this.placeableDocument.object;
+    return token?.isConstrainedTokenBorder ? this.constrained : this.full;
+  }
 }

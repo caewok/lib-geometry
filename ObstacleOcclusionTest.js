@@ -13,8 +13,6 @@ import { Draw } from "./Draw.js";
 import { Point3d } from "./3d/Point3d.js";
 
 const tmpPt1 = new Point3d();
-const tmpPt2 = new Point3d();
-const tmpPt3 = new Point3d();
 
 /**
  * An instance that, for a given configuration, tracks potential obstacles.
@@ -287,21 +285,37 @@ export class ObstacleOcclusionTest {
   /**
    * Helper to get placeable docs within bounds, filter by the 3d aabb, and filter by frustum.
    */
-  #filterDocGeometries(mgr, collisionOpts = {}) {
-    collisionOpts.senseType = this.config.senseType;
-    collisionOpts.levelId = this.levelId;
+  #filterDocGeometries(mgr) {
+    const collisionOpts = {
+      senseType: this.config.senseType,
+      levelId: this.levelId,
+    };
     const collisionTest = o => o.t.constructor.couldBlock(o.t.placeableDocument, collisionOpts);
     const geoms = mgr.quadtree.getObjects(this.aabb, { collisionTest });
     if ( this.frustum ) return geoms.filter(geom => this.#frustum.overlapsGeometry(geom));
     return geoms;
   }
 
-  #filterDocSubGeometries(mgr, collisionOpts = {}) {
+  #filterTileSubGeometries(mgr) {
+    const collisionOpts = {
+      senseType: this.config.senseType,
+      levelId: this.levelId,
+    };
+    const collisionTest = o => o.t.constructor.couldBlock(o.t.placeableDocument, collisionOpts);
+    const geoms = mgr.quadtree.getObjects(this.aabb, { collisionTest });
+    if ( this.frustum ) return geoms.filter(geom => {
+      if ( geom.alphaBlockingType === "ignore" ) return false;
+      return this.#frustum.overlapsGeometry(geom.boundarySubtype);
+    });
+    return geoms;
+  }
+
+  #filterTokenSubGeometries(mgr, collisionOpts = {}) {
     collisionOpts.senseType = this.config.senseType;
     collisionOpts.levelId = this.levelId;
     const collisionTest = o => o.t.constructor.couldBlock(o.t.placeableDocument, collisionOpts);
     const geoms = mgr.quadtree.getObjects(this.aabb, { collisionTest });
-    if ( this.frustum ) return geoms.filter(geom => this.#frustum.overlapsGeometry(geom.full));
+    if ( this.frustum ) return geoms.filter(geom => this.#frustum.overlapsGeometry(geom.boundarySubtype));
     return geoms;
   }
 
@@ -322,7 +336,7 @@ export class ObstacleOcclusionTest {
 
     const blockingCfg = this.config.tokens;
     const subjectToken = this.subjectToken;
-    let tokenGeoms = this.#filterDocSubGeometries(CONFIG.GeometryLib.geometryManager.tokens, { subjectToken, ...blockingCfg });
+    let tokenGeoms = this.#filterTokenSubGeometries(CONFIG.GeometryLib.geometryManager.tokens, { subjectToken, ...blockingCfg });
 
     // Filter out the subject token and other tokens to exclude (such as the target).
     tokenGeoms = tokenGeoms.filter(geom => !(this.subjectToken === geom.placeableDocument || this.tokensToExclude.has(geom.placeableDocument)));
@@ -348,7 +362,7 @@ export class ObstacleOcclusionTest {
    */
   findBlockingTiles() {
     if ( !this.config.tiles ) return NULL_SET;
-    return this.#filterDocSubGeometries(CONFIG.GeometryLib.geometryManager.tiles);
+    return this.#filterTileSubGeometries(CONFIG.GeometryLib.geometryManager.tiles);
   }
 
   /**
@@ -364,7 +378,7 @@ export class ObstacleOcclusionTest {
    * @returns {Set<Level>}
    */
   findBlockingLevels(levelType = "background") {
-    return this.#filterDocSubGeometries(CONFIG.GeometryLib.geometryManager.levels[levelType])
+    return this.#filterTileSubGeometries(CONFIG.GeometryLib.geometryManager.levels[levelType])
       .filter(geom => geom.level[levelType].src); // Must have a defined texture.
   }
 
@@ -541,7 +555,7 @@ export class ObstacleOcclusionTest {
    * For debugging.
    * Draw outlines for the various objects that can be detected on the canvas.
    */
-  _drawDetectedObjects(draw, { tileSubtype = "full", tokenSubtype = "full", levelSubtype = "full" } = {}) {
+  _drawDetectedObjects(draw, { tileSubtype = "boundarySubtype", tokenSubtype = "full", levelSubtype = "boundarySubtype" } = {}) {
     const colors = Draw.COLORS;
     const OBSTACLE_COLORS = {
       walls: colors.lightred,

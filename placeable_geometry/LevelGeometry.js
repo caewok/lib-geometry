@@ -97,7 +97,8 @@ const LevelCalculationsMixin = superclass => class extends superclass {
   static LEVEL_TYPE = "background";
 
   /** @type {number} */
-  get alphaThreshold() { return this.level[this.constructor.LEVEL_TYPE].alphaThreshold; }
+  static alphaThreshold(level) { return level[this.LEVEL_TYPE].alphaThreshold || 0; }
+
 
   get level() { return this.placeableDocument; }
 
