@@ -15,7 +15,7 @@ import { Point3d } from "../3d/Point3d.js";
 import { Segment } from "../Segment.js";
 
 const TRACKER_TYPES = {
-  position2d: [
+  positionXY: [
     "c",
   ],
   elevation: [
@@ -59,7 +59,7 @@ export class WallGeometry extends PlaceableGeometry {
   static UPDATE_KEYS = {
     ...super.UPDATE_KEYS,
     properties: new Set(TRACKER_TYPES.direction),
-    position2d: new Set(TRACKER_TYPES.position2d),
+    positionXY: new Set(TRACKER_TYPES.positionXY),
     elevation: new Set(TRACKER_TYPES.elevation),
     level: new Set(TRACKER_TYPES.level),
   };

@@ -27,13 +27,6 @@ Stored on each placeable.
 
 Once registered, will create tracking objects for each placeable created.
 
-Update methods:
-
-position2dUpdated
-scaleUpdated
-rotationUpdated
-shapeUpdated
-propertiesUpdated
 */
 
 /* Levels visibility
