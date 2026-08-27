@@ -162,7 +162,7 @@ export class WallGeometry extends PlaceableGeometry {
    */
   static couldBlock(placeableDocument, opts) {
     if ( placeableDocument.isOpen ) return false;
-    return super.couldBlock(opts);
+    return super.couldBlock(placeableDocument, opts);
   }
 
   // ----- NOTE: Wall characteristics ----- //
