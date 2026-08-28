@@ -73,83 +73,12 @@ Note: The visibleLevels selection for a given level really controls:
 
 */
 
-
-Hooks.on("updateLevel", function(_level, _changes, _opts, _id) {
-  PlaceableGeometry.calculateLevelSegments();
-});
-
-Hooks.on("canvasReady", function(_canvas) {
-  PlaceableGeometry.calculateLevelSegments();
-});
-
-
 export class PlaceableGeometry {
 
   // ----- NOTE: Static values ----- //
 
   static get PLACEABLE_LABEL_PLURAL() { return this.PLACEABLE_NAME.toLowerCase().concat("s"); }
 
-  // ----- NOTE: Levels ----- //
-
-  /**
-   * Reorganize and split level intervals to cover the low to high range with no overlaps.
-   * Add gap intervals as necessary.
-   * @param {object[]} segments      The intervals
-   *    - @prop {number} bottom       Bottom elevation value
-   *    - @prop {number} top          Top elevation value
-   *    - @prop {string[]} id[]       Id of the levels encountered in this interval
-   */
-  static levelSegments = [];
-
-  /**
-   * Reorganize and split level intervals to cover the low to high range with no overlaps.
-   * Add gap intervals as necessary.
-   * @returns {object[]} segments       The intervals
-   *    - @prop {number} bottom         Bottom elevation value
-   *    - @prop {number} top            Top elevation value
-   *    - @prop {Set<string>} ids       Ids of the levels encountered in this interval
-   */
-  static calculateLevelSegments() {
-    // Create a distinct "event" for every bottom and top point.
-    const events = new Array(canvas.scene.levels.size * 2);
-    let i = 0;
-    for ( const level of canvas.scene.levels ) {
-      const { bottom, top } = level.elevation;
-      events[i++] = { value: bottom, type: "start", id: level.id };
-      events[i++] = { value: top, type: "end", id: level.id };
-    }
-
-    // Sort by value, with end events after start events if equal.
-    events.sort((a, b) => (a.value - b.value) || a.type === "start");
-
-    // Sweep through sorted events, identifying boundary changes.
-    const segments = [];
-    const activeIds = new Set();
-    let currentPosition = events[0].value;
-    for ( const event of events) {
-      // If we have moved forward in space, commit the previous segment.
-      if ( event.value > currentPosition ) {
-        segments.push({
-          bottom: currentPosition,
-          top: event.value,
-          ids: new Set(activeIds), // May be empty if it is a gap.
-        });
-      }
-
-      // Update active ids based on event type.
-      switch ( event.type ) {
-        case "start": activeIds.add(event.id); break;
-        case "end": activeIds.delete(event.id); break;
-        // Nothing to do for elevation additions.
-      }
-
-      // Move forward to the new value on the line.
-      currentPosition = event.value;
-    }
-
-    this.levelSegments = segments;
-    return segments;
-  }
 
   // ----- NOTE: Constructor ----- //
 
