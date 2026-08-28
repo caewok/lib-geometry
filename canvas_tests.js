@@ -394,59 +394,30 @@ export function testTileGeometryContainment(geomType = "full") {
 export function testRegionGeometryContainment() {
   let incorrectRegions = new Set();
   const mgr = CONFIG.GeometryLib.geometryManager;
+  using ctrOrigin = Point3d.tmp.set(0, 0, 0);
   for ( const region of canvas.regions.placeables ) {
     const geom = mgr.geomForPlaceable(region);
-    if ( !geom.faces.top ) continue;
 
-    // Plain circles, ellipses, and rectangles are instanced.
-    if ( geom._prototypeFaces.top ) {
-      using ctr = Point3d.tmp.set(0, 0, 0);
-      if ( geom._prototypeFaces.top.isFacing(ctr) ) console.error(`region ${region.id} prototype top is wrong.`);
-      if ( geom._prototypeFaces.bottom.isFacing(ctr) ) console.error(`region ${region.id} prototype top is wrong.`);
-      for ( const side of geom._prototypeFaces.sides ) {
-        if ( side.isFacing(ctr) ) console.error(`region ${region.id} prototype side is wrong.`);
+    // Region is a 3d object, and should be always facing out from its center.
+    // The exception is that holes would not.
+    for ( const shape of geom.shapes ) {
+      if ( shape.faces.some(face => face.isHole) ) {
+        console.log(`Geom for ${geom.placeableId} has holes, so containment test is skipped for this shape.`, { geom, shape });
+      }
+      for ( const face of shape.prototypeFaces ) {
+        if ( face.isFacing(ctrOrigin) ) {
+          console.error(`region ${region.id} prototype side is wrong.`, { geom, shape });
+          incorrectRegions.add(region);
+        }
+      }
+      const center = shape.center;
+      for ( const face of shape.faces ) {
+        if ( face.isFacing(center) ) {
+          console.error(`region ${region.id} side is wrong.`, { geom, shape });
+          incorrectRegions.add(region);
+        }
       }
     }
-
-    const bottomZ = isFinite(region.bottomZ) ? region.bottomZ : -1e06;
-    const topZ = isFinite(region.topZ) ? region.topZ : 1e06;
-    const midZ = bottomZ + ((topZ - bottomZ) * 0.5);
-    for ( let i = 0; i < region.document.polygons.length; i += 1 ) {
-      const polygon = region.document.polygons[i]
-      const isHole = !polygon.isPositive;
-      const ctr2d = polygon.center;
-      const isContained = polygon.contains(ctr2d.x, ctr2d.y);
-      using ctr = Point3d.tmp.set(ctr2d.x, ctr2d.y, midZ);
-
-      // _polygonFaces should match polygons.
-      const polyTop = geom._polygonFaces.top[i];
-      if ( polyTop.isHole ^ isHole ) console.error(`region ${region.id} poly top holes are wrong at ${i}.`);
-      if ( polyTop.isFacing(ctr) == isContained ) incorrectRegions.add(region);
-
-      const polyBottom = geom._polygonFaces.bottom[i];
-      if ( polyBottom.isHole ^ isHole ) console.error(`region ${region.id} poly bottom holes are wrong at ${i}.`);
-      if ( polyBottom.isFacing(ctr) == isContained ) incorrectRegions.add(region);
-
-      /*
-      contained | facing
-      x           √         contained !== facing
-      √           x
-      */
-
-      for ( const polySide of geom._polygonFaces.sides[i] ) {
-        // Sides should not be holes.
-        if ( polySide.isHole ) console.error(`region ${region.id} poly sides has holes ${i}.`);
-        if ( polySide.isFacing(ctr) == (isHole ^ isContained) ) incorrectRegions.add(region);
-      }
-    }
-
-    // Test the full polygon top/bottom.
-    // Sides are more difficult, as no guarantee that the sides correspond to a given top portion.
-    const ctr = geom.faces.top.centroid;
-    ctr.z = midZ;
-    if ( geom.faces.top.isFacing(ctr) ) incorrectRegions.add(region);
-    if ( geom.faces.bottom.isFacing(ctr) ) incorrectRegions.add(region);
-
   }
   console.log(`${incorrectRegions.size} incorrect regions out of ${canvas.regions.placeables.length}.`);
   return incorrectRegions;
