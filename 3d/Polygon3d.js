@@ -2239,12 +2239,12 @@ export class Quad3d extends Polygon3d {
     if ( detPrime.almostEqual(0) ) return null;
 
     const invDetPrime = 1.0 / detPrime;
-    const tVecPrime = rayOrigin.subtract(v2, tmpPoints[9]); // Vector to ray origin.
+    const tVecPrime = rayOrigin.subtract(v2, tmpPoints[8]); // Vector to ray origin.
 
     const uPrime = tVecPrime.dot(pPrime) * invDetPrime; // Aka alphaPrime.
     if ( uPrime < 0.0 || uPrime > 1.0 ) return null;
 
-    const qPrime = tVecPrime.cross(edge1Prime, tmpPoints[10]);
+    const qPrime = tVecPrime.cross(edge1Prime, tmpPoints[9]);
     const vPrime = rayDirection.dot(qPrime) * invDetPrime;
     if ( vPrime < 0.0 || (uPrime + vPrime) > 1.0 ) return null;
 
