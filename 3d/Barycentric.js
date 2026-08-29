@@ -56,6 +56,8 @@ export class BaryTriangleData {
 
 export class BarycentricPoint extends Point3d {
 
+  static _geoLibType = "BarycentricPoint";
+
   static BaryTriangleData;
 
   get u() { return this.x; }

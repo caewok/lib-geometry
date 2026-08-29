@@ -26,6 +26,9 @@ Points in a Polygon3d are assumed to not be modified in place after creation.
 */
 Symbol.dispose ??= Symbol("Symbol.dispose");
 
+// Temporary points, used for performance in certain methods.
+const tmpPoints = Point3d.createN(10);
+
 export class Polygon3d {
 
   static EPSILON = 1e-08;
@@ -34,7 +37,7 @@ export class Polygon3d {
     return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
   }
 
-  static get _geoLibType() { return this.name; }
+  static _geoLibType = "Polygon3d";
 
 
   // TODO: Cache bounds and plane. Use setter to modify points to reset cache?
@@ -1159,6 +1162,8 @@ function pointFromVertices(i, vertices, indices, stride = 3, offset = 0, outPoin
  */
 export class Ellipse3d extends Polygon3d {
 
+  static _geoLibType = "Ellipse3d";
+
   /** @type {Point3d} */
   get center() { return this.points[0]; }
 
@@ -1712,6 +1717,8 @@ export class Ellipse3d extends Polygon3d {
  */
 export class Circle3d extends Ellipse3d {
 
+  static _geoLibType = "Circle3d";
+
   // For numerical consistency, store the radius squared to use when possible.
   get radius() { return this.radiusX; }
 
@@ -1873,6 +1880,8 @@ export class Circle3d extends Ellipse3d {
  * Planar triangle shape.
  */
 export class Triangle3d extends Polygon3d {
+
+  static _geoLibType = "Triangle3d";
 
   constructor() {
     super(3);
@@ -2085,6 +2094,7 @@ export class Triangle3d extends Polygon3d {
  */
 export class Quad3d extends Polygon3d {
 
+  static _geoLibType = "Quad3d";
 
   constructor() {
     super(4);
@@ -2188,12 +2198,13 @@ export class Quad3d extends Polygon3d {
     */
 
     // --- Triangle 1: V0, V1, V3 ---
+
     // Edge vectors.
-    using edge1 = v1.subtract(v0);
-    using edge2 = v3.subtract(v0);
+    const edge1 = v1.subtract(v0, tmpPoints[0]);
+    const edge2 = v1.subtract(v0, tmpPoints[1]);
 
     // Cross product rayDirection × e03.
-    using p = rayDirection.cross(edge2);
+    const p = rayDirection.cross(edge2, tmpPoints[2]);
 
     // Determinant. If close to 0, ray is parallel to plane.
     const det = edge1.dot(p);
@@ -2202,14 +2213,14 @@ export class Quad3d extends Polygon3d {
     if ( det.almostEqual(0) ) return null;
 
     // Vector to ray origin.
-    using tVec = rayOrigin.subtract(v0);
+    const tVec = rayOrigin.subtract(v0, tmpPoints[3]);
 
     // Calculate Barycentric u (alpha) parameter.
     const invDet = 1.0 / det;
     const u = tVec.dot(p) * invDet;
 
     // Calculate Barycentric v (beta) parameter.
-    using q = tVec.cross(edge1);
+    const q = tVec.cross(edge1, tmpPoints[4]);
     const v = rayDirection.dot(q) * invDet;
 
     // Check Triangle 1 Intersection:
@@ -2220,20 +2231,20 @@ export class Quad3d extends Polygon3d {
     }
 
     // --- Triangle 2: V1, V2, V3 ---
-    using edge1Prime = v1.subtract(v2);
-    using edge2Prime = v3.subtract(v2);
-    using pPrime = rayDirection.cross(edge2Prime);
+    const edge1Prime = v1.subtract(v2, tmpPoints[5]);
+    const edge2Prime = v3.subtract(v2, tmpPoints[6]);
+    const pPrime = rayDirection.cross(edge2Prime, tmpPoints[7]);
     const detPrime = edge1Prime.dot(pPrime);
 
     if ( detPrime.almostEqual(0) ) return null;
 
     const invDetPrime = 1.0 / detPrime;
-    using tVecPrime = rayOrigin.subtract(v2); // Vector to ray origin.
+    const tVecPrime = rayOrigin.subtract(v2, tmpPoints[9]); // Vector to ray origin.
 
     const uPrime = tVecPrime.dot(pPrime) * invDetPrime; // Aka alphaPrime.
     if ( uPrime < 0.0 || uPrime > 1.0 ) return null;
 
-    using qPrime = tVecPrime.cross(edge1Prime);
+    const qPrime = tVecPrime.cross(edge1Prime, tmpPoints[10]);
     const vPrime = rayDirection.dot(qPrime) * invDetPrime;
     if ( vPrime < 0.0 || (uPrime + vPrime) > 1.0 ) return null;
 
@@ -2316,6 +2327,8 @@ export class Quad3d extends Polygon3d {
  * An outer polygon may be contained within a hole. Parent-child structure not maintained.
  */
 export class Polygons3d extends Polygon3d {
+
+  static _geoLibType = "Polygons3d";
 
   /** @type {boolean|null} */
   get isHole() {

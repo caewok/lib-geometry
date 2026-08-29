@@ -15,7 +15,7 @@ export class CenteredPolygonBase extends PIXI.Polygon {
     return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
   }
 
-  static get _geoLibType() { return this.name; }
+  static _geoLibType = "CenteredPolygonBase";
 
   /** @type {PIXI.Point} */
   origin = new PIXI.Point();

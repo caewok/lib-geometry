@@ -110,5 +110,5 @@ export function HexCoordinateMixin(Base) {
  */
 export class HexGridCoordinates extends HexCoordinateMixin(GridCoordinates) {
 
-
+  static _geoLibType = "HexGridCoordinates";
 }

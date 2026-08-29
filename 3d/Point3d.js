@@ -49,7 +49,7 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
     return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
   }
 
-  static get _geoLibType() { return this.name; }
+  static _geoLibType = "Point3d";
 
   z = 0;
 

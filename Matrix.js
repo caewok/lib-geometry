@@ -28,7 +28,7 @@ class AbstractMatrix {
     return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
   }
 
-  static get _geoLibType() { return this.name; }
+  static _geoLibType = "AbstractMatrix";
 
   /** @type {Array} */
   arr = [];
@@ -1687,6 +1687,8 @@ AbstractMatrix.prototype.copyTo = AbstractMatrix.prototype.clone;
 // Pooling
 export class Matrix extends mix(AbstractMatrix).with(PoolableMixin) {
 
+  static _geoLibType = "Matrix";
+
   // Pooling
 
   /**
@@ -1744,7 +1746,7 @@ arr6 = mgr.newArray(35)
 // Example typed class
 
 export class MatrixFloat32 extends mix(AbstractMatrix).with(PoolableMixin) {
-
+  static _geoLibType = "MatrixFloat32";
 
   // ----- NOTE: Buffer manager ----- //
 

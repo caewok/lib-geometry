@@ -16,6 +16,8 @@ import { NULL_SET } from "../util.js";
  */
 export class Hexagon extends RegularPolygon {
 
+  static _geoLibType = "Hexagon";
+
   constructor(origin, radius = 0, { rotation = 0, width = 0, height = 0 } = {}) {
     if ( !(radius || width || height) ) console.error("Hexagon requires radius, width, or height.");
 

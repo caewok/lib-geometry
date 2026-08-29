@@ -76,10 +76,13 @@ export class Pool {
   release(obj) {
     // Basic test that the object belongs.
     const cl = this.cl;
+
+    /* For debugging
     if ( !(obj instanceof cl) ) {
       console.warn("Pool object does not match other instance in the pool.", { cl, obj });
       return;
     }
+    */
 
     // Important that the object here is only added once.
     if ( obj._isInPool ) return;
@@ -108,68 +111,68 @@ Symbol.dispose ??= Symbol("Symbol.dispose");
 export const PoolableMixin = superclass => {
   const out = class extends superclass {
 
-  /**
-   * Retrieve the pool for this class.
-   * @type {Pool}
-   */
-  static get pool() { return Pool.getPool(this); }
+    /**
+     * Retrieve the pool for this class.
+     * @type {Pool}
+     */
+    static get pool() { return Pool.getPool(this); }
 
-  /**
-   * Get a pooled instance of this class.
-   * @type {Poolable}
-   */
-  static get tmp() { return this.pool.acquire(); }
+    /**
+     * Get a pooled instance of this class.
+     * @type {Poolable}
+     */
+    static get tmp() { return this.pool.acquire(); }
 
-  /**
-   * Eventual replacement for tmp getter.
-   * @returns {object}
-   */
-  static create() { return this.pool.acquire(); }
+    /**
+     * Eventual replacement for tmp getter.
+     * @returns {object}
+     */
+    static create() { return this.pool.acquire(); }
 
-  /**
-   * Method for creating multiple objects, using the pool.
-   * @param {number} n
-   * @returns {object[]}
-   */
-  static createN(n) { return this.pool.acquireMultiple(n); }
+    /**
+     * Method for creating multiple objects, using the pool.
+     * @param {number} n
+     * @returns {object[]}
+     */
+    static createN(n) { return this.pool.acquireMultiple(n); }
 
-  /**
-   * Release an instance back to the pool and trigger cleanup.
-   * @param {Poolable} objs
-   */
-  static _release(obj) {
-    this.onRelease(obj); // Optional cleanup hook.
-    this.pool.release(obj);
-  }
+    /**
+     * Release an instance back to the pool and trigger cleanup.
+     * @param {Poolable} objs
+     */
+    static _release(obj) {
+      this.onRelease(obj); // Optional cleanup hook.
+      this.pool.release(obj);
+    }
 
-  static release(...objs) { objs.forEach(obj => this._release(obj)); }
+    static release(...objs) { objs.forEach(obj => this._release(obj)); }
 
-  // Flag to track pool status.
-  // Added here so the object class is not later modified.
-  /** @type {boolean} */
-  // _isInPool = false;
+    // Flag to track pool status.
+    // Added here so the object class is not later modified.
+    /** @type {boolean} */
+    // _isInPool = false;
 
-  /**
-   * Trigger automatic return to the pool if the point is defined with a "using" declaration.
-   * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/using
-   * When the 'using' block ends, this is called automatically.
-   */
-  [Symbol.dispose]() { this.constructor._release(this); }
+    /**
+     * Trigger automatic return to the pool if the point is defined with a "using" declaration.
+     * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/using
+     * When the 'using' block ends, this is called automatically.
+     */
+    [Symbol.dispose]() { this.constructor._release(this); }
 
-  release() { this.constructor._release(this); }
+    release() { this.constructor._release(this); }
 
-  static onRelease(_obj) { }
+    static onRelease(_obj) { }
 
-  /**
-   * Required builder to create multiple objects.
-   * @param {number} n
-   * @returns {Poolable[n]}
-   */
-  static buildNObjects(n) {
-    const arr = new Array(n);
-    for ( let i = 0; i < n; i += 1 ) arr[i] = new this();
-    return arr;
-  }
+    /**
+     * Required builder to create multiple objects.
+     * @param {number} n
+     * @returns {Poolable[n]}
+     */
+    static buildNObjects(n) {
+      const arr = new Array(n);
+      for ( let i = 0; i < n; i += 1 ) arr[i] = new this();
+      return arr;
+    }
   }
 
   // Force the _isInPool property to show up last, as getting rid of it entirely is too hard.

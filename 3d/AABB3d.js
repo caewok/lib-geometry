@@ -21,6 +21,8 @@ Object.freeze(axes.z);
 
 export class AABB3d extends AABB2d {
 
+  static _geoLibType = "AABB3d";
+
   static POINT_CLASS = Point3d;
 
   static axes = ["x", "y", "z"];
