@@ -97,7 +97,7 @@ Hooks.on("preUpdateRegion", function(regionD, changes, options, _userId) {
   options[GEOMETRY_LIB_ID] = options[GEOMETRY_LIB_ID].map(s => [...s.values()]);
 });
 
-
+/*
 const TRACKER_TYPES = {
   elevation: [
     "elevation.bottom",
@@ -112,6 +112,7 @@ const TRACKER_TYPES = {
     "levels",
   ],
 };
+*/
 
 export class RegionGeometry extends PlaceableGeometry {
   /** @type {string} */
@@ -120,12 +121,12 @@ export class RegionGeometry extends PlaceableGeometry {
   /** @type {string} */
   static LAYER = "regions";
 
-  static UPDATE_KEYS = {
-    ...super.UPDATE_KEYS,
-    properties: new Set(TRACKER_TYPES.shapes),
-    level: new Set(TRACKER_TYPES.level),
-    elevation: new Set(TRACKER_TYPES.elevation),
-  };
+  static UPDATE_KEY_MAP = new Map([
+    ...super.UPDATE_KEY_MAP,
+    ["elevation.bottom", "elevation"],
+    ["elevation.top", "elevation"],
+    // ["shapes", "shapes"],
+  ]);
 
   /**
    * Return the shape class for a given region shape type.
@@ -285,6 +286,7 @@ export class RegionGeometry extends PlaceableGeometry {
 
 
   _update(opts) {
+
     /*
     There is currently no (easy) way to tell if a shape is otherwise the same but for a position/rotation/scale change.
     Editing a shape results in a new shape, and the update hook shows all the shape properties as changed.
@@ -296,12 +298,13 @@ export class RegionGeometry extends PlaceableGeometry {
     // Because a change to any shape could change the model polygon for the region, just
     // redo everything.
     // Similarly, if the region's levels changed, redo everything.
-    if ( regionShapes.some(regionShape => regionShape.hole) || this._updateFlags.levels || this.placeableDocument.restriction.enabled ) {
+    if ( regionShapes.some(regionShape => regionShape.hole) || this.placeableDocument.restriction.enabled ) {
       // Each level shape array should contain a single polygon primitive.
       this.initialize();
       this.updateAllShapes();
       return;
     }
+
 
     // Use the passthrough tracking sets to determine updates for each region shape.
     let trackingArr = opts?.[GEOMETRY_LIB_ID] || [];
@@ -331,7 +334,7 @@ export class RegionGeometry extends PlaceableGeometry {
       }
 
       // Trigger elevation changes, which are based on the overall region change.
-      if ( trackingSet && this._updateFlags.elevation ) trackingSet.add("elevation");
+      if ( trackingSet && this.activeUpdates.has("elevation") ) trackingSet.add("elevation");
 
       // If no tracking set, update everything.
       // Otherwise, update selectively based on the tracking set.

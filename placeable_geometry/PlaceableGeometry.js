@@ -101,7 +101,8 @@ export class PlaceableGeometry {
     this.placeableDocument = placeableDocument;
   }
 
-  initialize() { }
+  initialize() {
+  }
 
   destroy() {
     this.iterateShapes().forEach(shape => shape.destroy());
@@ -110,24 +111,21 @@ export class PlaceableGeometry {
 
   // ----- NOTE: Updating ----- //
 
-  static UPDATE_KEYS = {
-    properties: NULL_SET,
-    level: NULL_SET,
-    positionXY: new Set(["x", "y"]),
-    elevation: new Set(["elevation"]),
-    scale: NULL_SET,
-    rotation: NULL_SET,
-  };
+  /**
+   * Map defined by child class(es) linking a changed property with the update category:
+   * E.g.:
+   * UPDATE_KEY_MAP = new Map(["x", "positionXY"]);
+   * Child class: UPDATE_KEY_MAP = new Map([...super.UPDATE_KEY_MAP, ["y", "positionXY"]]);
+   * @type {Map<string, string}
 
-  // Temporary tracking of the updates made for a given update.
-  _updateFlags = {
-    properties: false,
-    level: false,
-    positionXY: false,
-    elevation: false,
-    scale: false,
-    rotation: false,
-  };
+   */
+  static UPDATE_KEY_MAP = new Map();
+
+  /**
+   * Set of active flags that signify properties being updated.
+   * @param {Set<string>}
+   */
+  activeUpdates = new Set();
 
   /**
    * Increment a count of updates, used by things like webGL to know when to update.
@@ -139,23 +137,20 @@ export class PlaceableGeometry {
    * @returns {boolean} True if an update occurred.
    */
   update(updateKeys, opts) {
-    const updateFlags = this._updateFlags;
-    Object.keys(updateFlags).forEach(key => updateFlags[key] = false);
+    this.activeUpdates.clear();
 
-    let shapeUpdated = false;
-    for ( const [type, s] of Object.entries(this.constructor.UPDATE_KEYS) ) {
-      const needsUpdate = s.intersects(updateKeys);
-      updateFlags[type] = needsUpdate
-      shapeUpdated ||= needsUpdate;
+    for ( const key of updateKeys ) {
+      const flag = this.constructor.UPDATE_KEY_MAP.get(key);
+      if ( flag ) this.activeUpdates.add(flag);
     }
-    if ( !shapeUpdated ) return false;
-    // console.debug(`\n\n${this.constructor.name}|Updating ${this.placeableDocument.name} with keys`, [...updateKeys.values()]);
+    if ( !this.activeUpdates.size ) return false;
     this._update(opts);
     return true;
   }
 
   forceUpdate() {
-    Object.keys(this._updateFlags).forEach(key => this._updateFlags[key] = true);
+    // Mark everything as updated.
+    this.constructor.UPDATE_KEY_MAP.values().forEach(flag => this.activeUpdates.add(flag));
     this._update();
     return true;
   }
@@ -204,7 +199,7 @@ export class PlaceableGeometry {
   aabb = new AABB3d();
 
   calculateAABB() {
-    AABB3d.union([...this.iterateShapes()].map(shape => shape.aabb), this.aabb);
+    AABB3d.union(this.shapes.map(shape => shape.aabb), this.aabb);
   }
 
   // ----- NOTE: Geometric shapes and faces ----- //

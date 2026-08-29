@@ -25,6 +25,7 @@ import { getHexagonalShape } from "../placeable_vertices/BasicVertices.js";
 import { AABB3d } from "../3d/AABB3d.js";
 import { mix } from "../mixwith.js";
 
+/*
 const TRACKER_TYPES = {
   shape: [
     "shape",
@@ -47,6 +48,7 @@ const TRACKER_TYPES = {
     "disposition",
   ],
 };
+*/
 
 /**
  * Subclass handler
@@ -68,6 +70,7 @@ export const GeometrySubclassMixin = superclass => class extends superclass {
       Object.defineProperty(this, key, {
         get: () => (this.#subclasses[key] ||= this.constructor._createSubclass(key, this.placeableDocument)),
         enumerable: true,
+        configurable: true,
       });
     }
   }
@@ -148,6 +151,24 @@ const TokenDocumentCalculationsMixin = superclass => class extends superclass {
 
   /** @type {Token} */
   get token() { return this.placeableDocument.object; }
+
+  get isConstrained() {
+    const token = this.token;
+    if ( !token ) return false;
+    return this.token.isConstrainedTokenBorder;
+  }
+
+  get isConstrainedLit() {
+    const token = this.token;
+    if ( !token ) return false;
+    return !token.constrainedTokenBorder.equals(token.litTokenBorder);
+  }
+
+  get isConstrainedBrightLit() {
+    const token = this.token;
+    if ( !token ) return false;
+    return !token.constrainedTokenBorder.equals(token.brightLitTokenBorder);
+  }
 
   // ----- NOTE: Levels ----- //
 
@@ -288,22 +309,28 @@ const TokenDocumentCalculationsMixin = superclass => class extends superclass {
   }
 
 
+
 }
 
 
 /**
  * Geometry that is specific to all tokens.
  */
-export class TokenFullGeometry extends mix(PlaceableGeometry).with(TokenDocumentCalculationsMixin) {
-  static UPDATE_KEYS = {
-    ...super.UPDATE_KEYS,
-    positionXY: new Set(TRACKER_TYPES.positionXY),
-    shape: new Set(TRACKER_TYPES.shpae),
-    elevation: new Set(TRACKER_TYPES.elevation),
-    properties: new Set([...TRACKER_TYPES.shape, ...TRACKER_TYPES.disposition]),
-    level: new Set(TRACKER_TYPES.level),
-    scale: new Set(TRACKER_TYPES.scale),
-  };
+export class TokenSubGeometry extends mix(PlaceableGeometry).with(TokenDocumentCalculationsMixin) {
+  static UPDATE_KEY_MAP = new Map([
+    ["x", "position"],
+    ["y", "position"],
+    ["elevation", "position"],
+    ["refreshElevation", "position"],
+    ["refreshPosition", "position"],
+
+    ["shape", "shape"],
+    ["refreshShape", "shape"],
+
+    ["width", "scale"],
+    ["height", "scale"],
+    ["refreshSize", "scale"],
+  ]);
 
   /** @type {enum<string:number>} */
   static SHAPE_TYPES = {
@@ -349,7 +376,7 @@ export class TokenFullGeometry extends mix(PlaceableGeometry).with(TokenDocument
     }
   }
 
-  get useSimpleHexagon() { return this.placeableDocument.w <= 1 && this.placeableDocument.w === this.placeableDocument.h; }
+  get useSimpleHexagon() { return this.placeableDocument.w <= 1 && this.placeableDocument.width === this.placeableDocument.height; }
 
   get shape() { return this.shapes[0]; } // Tokens currently always only using a single shape.
 
@@ -384,27 +411,26 @@ export class TokenFullGeometry extends mix(PlaceableGeometry).with(TokenDocument
 
   // ----- NOTE: Update ----- //
 
-  _update() {
-    if ( this._updateFlags.properties ) this.propertiesUpdated();
+  _update(opts) {
+    if ( this.activeUpdates.has("shape") ) this.shapeUpdated();
 
     // No changes required if level is updated.
+    // No changes required if token rotates.
 
-    if ( this._updateFlags.positionXY || this._updateFlags.elevation ) {
+    if ( this.activeUpdates.has("position") ) {
       const ctr = this.constructor.tokenCenter(this.placeableDocument);
       // console.debug(`${this.constructor.name}|Updating position for ${this.placeableDocument.name} to ${ctr}`);
       this.shape.setPosition(ctr);
     }
 
-    if ( this._updateFlags.scale ) {
+    if ( this.activeUpdates.has("scale") ) {
       const dims = this.constructor.tokenDimensions(this.placeableDocument);
       this.shape.setScale(dims);
     }
-
-    // No changes required if token rotates.
-    super._update();
+    super._update(opts);
   }
 
-  propertiesUpdated() {
+  shapeUpdated() {
     const primitiveCl = this.constructor.primitiveClassForToken(this.placeableDocument);
     if ( this.shape instanceof primitiveCl ) return;
     this.initialize();
@@ -430,13 +456,17 @@ function createShape(shapeFn = "tokenBorder") {
   this.shapes.push(shape);
 }
 
+export class TokenFullGeometry extends TokenSubGeometry {
+
+  /** @type {string} */
+  get placeableId() { return `${super.placeableId}_full`; }
+}
+
 /**
  * Geometry for the constrained token shape, considering walls.
  * Does not currently consider bottom/top elevation obstacles as constraining.
  */
-export class TokenConstrainedGeometry extends TokenFullGeometry {
-
-  get isConstrained() { return this.token.isConstrainedTokenBorder; }
+export class TokenConstrainedGeometry extends TokenSubGeometry {
 
   /**
    * Create an id used for the model matrix tracking.
@@ -444,17 +474,24 @@ export class TokenConstrainedGeometry extends TokenFullGeometry {
    */
   get placeableId() { return `${super.placeableId}_constrained`; }
 
+  _update(opts) {
+    // If the token is constrained, redraw.
+    // If the token is not constrained, ignore.
+    if ( this.isConstrained ) {
+      this.shapeUpdated();
+      super._update(opts);
+    }
+  }
+
   createShapes() {
-    if ( !this.isConstrained ) return super.createShapes();
-    createShape.call(this, "constrainedTokenBorder");
+    // If unconstrained, ignore.
+    if ( this.isConstrained ) createShape.call(this, "constrainedTokenBorder");
   }
 }
 
-export class TokenLitGeometry extends TokenFullGeometry {
+export class TokenLitGeometry extends TokenSubGeometry {
 
   get isLit() { return Boolean(this.token.litTokenBorder); }
-
-  get isConstrainedLit() { return !this.token.constrainedTokenBorder.equals(this.token.litTokenBorder); }
 
   /**
    * Create an id used for the model matrix tracking.
@@ -462,17 +499,24 @@ export class TokenLitGeometry extends TokenFullGeometry {
    */
   get placeableId() { return `${super.placeableId}_lit`; }
 
+  _update(opts) {
+    // If the token is constrained, redraw.
+    // If the token is not constrained, ignore.
+    if ( this.isConstrainedLit ) {
+      this.shapeUpdated();
+      super._update(opts);
+    }
+  }
+
   createShapes() {
-    if ( !this.isConstrainedLit ) return super.createShapes();
-    createShape.call(this, "litTokenBorder");
+    // If unconstrained, ignore.
+    if ( this.isConstrainedLit ) createShape.call(this, "litTokenBorder");
   }
 }
 
-export class TokenBrightGeometry extends TokenFullGeometry {
+export class TokenBrightGeometry extends TokenSubGeometry {
 
   get isBrightLit() { return Boolean(this.token.brightLitTokenBorder); }
-
-  get isConstrainedBrightLit() { return !this.token.constrainedTokenBorder.equals(this.token.brightLitTokenBorder); }
 
   /**
    * Create an id used for the model matrix tracking.
@@ -480,9 +524,18 @@ export class TokenBrightGeometry extends TokenFullGeometry {
    */
   get placeableId() { return `${super.placeableId}_bright`; }
 
+  _update(opts) {
+    // If the token is constrained, redraw.
+    // If the token is not constrained, ignore.
+    if ( this.isConstrainedLit ) {
+      this.shapeUpdated();
+      super._update(opts);
+    }
+  }
+
   createShapes() {
-    if ( !this.isConstrainedLit ) return super.createShapes();
-    createShape.call(this, "brightLitTokenBorder");
+    // If unconstrained, ignore.
+    if ( this.isConstrainedBrightLit ) createShape.call(this, "brightLitTokenBorder");
   }
 }
 
@@ -506,13 +559,16 @@ export class TokenGeometry extends mix(Object).with(GeometrySubclassMixin, Token
     AABB3d.fromTokenDocument(this.placeableDocument, this.aabb);
   }
 
-  /** @type {TokenFullGeometry} */
+  /** @type {TokenSubGeometry} */
   get boundarySubtype() { return this.full; }
 
-  // TODO: Should this ever be lit or bright?
-  /** @type {TokenFullGeometry} */
-  get subtype() {
-    const token = this.placeableDocument.object;
-    return token?.isConstrainedTokenBorder ? this.constrained : this.full;
-  }
+  /** @type {TokenSubGeometry} */
+  get subtype() { return this.isConstrained ? this.constrained : this.full; }
+
+  /** @type {TokenSubGeometry} */
+  get brightSubtype() { return this.isConstrainedBrightLit ? this.bright : this.full; }
+
+  /** @type {TokenSubGeometry} */l
+  get litSubtype() { return this.isConstrainedLit ? this.lit : this.full; }
+
 }

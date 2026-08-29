@@ -14,12 +14,13 @@ import { VerticalQuadPrimitive } from "./InstancedGeometricPrimitive.js";
 import { Point3d } from "../3d/Point3d.js";
 import { Segment } from "../Segment.js";
 
+/*
 const TRACKER_TYPES = {
   positionXY: [
     "c",
   ],
   elevation: [
-    "flags-wall-height.top",
+    "flags.wall-height.top",
     "flags.wall-height.bottom",
   ],
   direction: [
@@ -47,6 +48,7 @@ const TRACKER_TYPES = {
     "threshold.sound",
   ],
 };
+*/
 
 export class WallGeometry extends PlaceableGeometry {
 
@@ -56,14 +58,14 @@ export class WallGeometry extends PlaceableGeometry {
   /** @type {string} */
   static LAYER = "walls";
 
-  static UPDATE_KEYS = {
-    ...super.UPDATE_KEYS,
-    properties: new Set(TRACKER_TYPES.direction),
-    positionXY: new Set(TRACKER_TYPES.positionXY),
-    elevation: new Set(TRACKER_TYPES.elevation),
-    level: new Set(TRACKER_TYPES.level),
-  };
-
+  static UPDATE_KEY_MAP = new Map([
+    ...super.UPDATE_KEY_MAP,
+    ["c", "position"],
+    ["flags.wall-height.top", "position"],
+    ["flags.wall-height.bottom", "position"],
+    ["dir", "direction"],
+    // ["levels", "level"],
+  ]);
 
   // ----- NOTE: Wall Segments ----- //
 
@@ -133,10 +135,10 @@ export class WallGeometry extends PlaceableGeometry {
 
   // ----- NOTE: Updating ----- //
 
-  _update() {
-    if ( this._updateFlags.positionXY || this._updateFlags.elevation ) this._updateShapePosition();
-    if ( this._updateFlags.properties ) this._updateShapeDirection();
-    super._update();
+  _update(opts) {
+    if ( this.activeUpdates.has("position") ) this._updateShapePosition();
+    if ( this.activeUpdates.has("direction") ) this._updateShapeDirection();
+    super._update(opts);
   }
 
   // ----- NOTE: Levels ----- //

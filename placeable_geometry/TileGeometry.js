@@ -25,6 +25,7 @@ import { Polygon3dVertices } from "../placeable_vertices/BasicVertices.js";
 
 import { GeometrySubclassMixin } from "./TokenGeometry.js";
 
+/*
 const TRACKER_TYPES = {
   position2d: [
     "x",
@@ -59,6 +60,7 @@ const TRACKER_TYPES = {
     "flags.tokenvisibility.tileAlphaShape",
   ],
 };
+*/
 
 /**
  * Mostly static methods used to calculate values from the placeable document.
@@ -168,17 +170,24 @@ const TileDocumentCalculationsMixin = superclass => class extends superclass {
   }
 }
 
-export class TileFullGeometry extends mix(PlaceableGeometry).with(TileDocumentCalculationsMixin) {
+export class TileSubGeometry extends mix(PlaceableGeometry).with(TileDocumentCalculationsMixin) {
 
-  static UPDATE_KEYS = {
-    ...super.UPDATE_KEYS,
-    properties: new Set([...TRACKER_TYPES.texture, ...TRACKER_TYPES.flags]),
-    level: new Set(TRACKER_TYPES.level),
-    position2d: new Set(TRACKER_TYPES.position2d),
-    elevation: new Set(TRACKER_TYPES.elevation),
-    scale: new Set(TRACKER_TYPES.scale),
-    rotation: new Set(TRACKER_TYPES.rotation),
-  };
+  static UPDATE_KEY_MAP = new Map([
+    ...super.UPDATE_KEY_MAP,
+    ["x", "position"],
+    ["y", "position"],
+    ["texture.anchorX", "position"],
+    ["texture.anchorY", "position"],
+    ["elevation", "position"],
+
+    ["width", "scale"],
+    ["height", "scale"],
+    ["texture.scaleX", "scale"],
+    ["texture.scaleY", "scale"],
+
+    ["rotation", "rotation"],
+    ["texture.rotation", "rotation"],
+  ]);
 
   get shape() { return this.shapes[0]; } // Tiles currently always only using a single shape.
 
@@ -198,26 +207,26 @@ export class TileFullGeometry extends mix(PlaceableGeometry).with(TileDocumentCa
 
   // ----- NOTE: Update ----- //
 
-  _update() {
+  _update(opts) {
     // No changes required if properties (texture) is updated. But see mixin classes.
 
     // No changes required if level is updated.
 
-    if ( this._updateFlags.positionXY || this._updateFlags.elevation ) {
+    if ( this.activeUpdates.has("position") ) {
       const ctr = this.constructor.tileCenter(this.placeableDocument);
       this.shape.setPosition(ctr);
     }
 
-    if ( this._updateFlags.rotation ) {
+    if ( this.activeUpdates.has("rotation") ) {
       const angles = this.constructor.tileRotation(this.placeableDocument);
       this.shape.setRotation(angles);
     }
 
-    if ( this._updateFlags.scale ) {
+    if ( this.activeUpdates.has("scale") ) {
       const dims = this.constructor.tileDimensions(this.placeableDocument);
       this.shape.setScale(dims);
     }
-    super._update();
+    super._update(opts);
   }
 
   // ----- NOTE: Faces ---- //
@@ -252,7 +261,27 @@ export class TileFullGeometry extends mix(PlaceableGeometry).with(TileDocumentCa
   }
 }
 
-export class TileBoundingRectGeometry extends TileFullGeometry {
+export class TileFullGeometry extends TileSubGeometry {
+
+  /**
+   * Create an id used for the model matrix tracking.
+   * @type {string}
+   */
+  get placeableId() { return `${super.placeableId}_full`; }
+}
+
+export class TileBoundingRectGeometry extends TileSubGeometry {
+
+  static UPDATE_KEY_MAP = new Map([
+    ...super.UPDATE_KEY_MAP,
+    ["texture.alphaThreshold", "texture"],
+    ["texture.src", "texture"],
+    ["texture.fit", "texture"],
+    ["texture.fill", "texture"],
+    ["texture.offsetX", "texture"],
+    ["texture.offsetY", "texture"],
+    ["flags.tokenvisibility.tileAlphaShape", "texture"],
+  ]);
 
   /**
    * Create an id used for the model matrix tracking.
@@ -273,15 +302,17 @@ export class TileBoundingRectGeometry extends TileFullGeometry {
     this.shapes.push(new QuadPrimitive(this.placeableId));
   }
 
-  _update() {
+  _update(opts) {
+    if ( this.activeUpdates.has("texture") ) this.createShapes();
+
     const rectOrPoly = this._boundingRect;
 
-    if ( this._updateFlags.positionXY || this._updateFlags.elevation ) {
+    if ( this.activeUpdates.has("position") ) {
       const ctr = rectOrPoly.center;
       this.shape.setPosition({ x: ctr.x, y: ctr.y, z: this.elevationZ });
     }
 
-    if ( this._updateFlags.rotation || this._updateFlags.scale ) {
+    if ( this.activeUpdates.has("rotation") || this.activeUpdates.has("scale") ) {
       using dims = Point3d.tmp;
       using angles = Point3d.tmp;
 
@@ -303,12 +334,23 @@ export class TileBoundingRectGeometry extends TileFullGeometry {
       this.shape.setScale(dims);
     }
 
-    PlaceableGeometry.prototype._update.call(this); // Skip super._update.
+    PlaceableGeometry.prototype._update.call(this, opts); // Skip super._update.
   }
-
 }
 
-export class TileBoundingPolygonGeometry extends TileFullGeometry {
+export class TileBoundingPolygonGeometry extends TileSubGeometry {
+
+  static UPDATE_KEY_MAP = new Map([
+    ...super.UPDATE_KEY_MAP,
+    ["texture.alphaThreshold", "texture"],
+    ["texture.src", "texture"],
+    ["texture.fit", "texture"],
+    ["texture.fill", "texture"],
+    ["texture.offsetX", "texture"],
+    ["texture.offsetY", "texture"],
+    ["flags.tokenvisibility.tileAlphaShape", "texture"],
+  ]);
+
   /**
    * Create an id used for the model matrix tracking.
    * @type {string}
@@ -340,13 +382,25 @@ export class TileBoundingPolygonGeometry extends TileFullGeometry {
     this.shapes.push(PlanarPolygonPrimitive.fromPolygon3d(this.placeableId, poly3d, opts));
   }
 
-  _update() {
-    if ( this._updateFlags.texture ) this.createShapes();
-    super._update();
+  _update(opts) {
+    if ( this.activeUpdates.has("texture") ) this.createShapes();
+    super._update(opts);
   }
 }
 
 export class TilePolygonsGeometry extends TileFullGeometry {
+
+  static UPDATE_KEY_MAP = new Map([
+    ...super.UPDATE_KEY_MAP,
+    ["texture.alphaThreshold", "texture"],
+    ["texture.src", "texture"],
+    ["texture.fit", "texture"],
+    ["texture.fill", "texture"],
+    ["texture.offsetX", "texture"],
+    ["texture.offsetY", "texture"],
+    ["flags.tokenvisibility.tileAlphaShape", "texture"],
+  ]);
+
   /**
    * Create an id used for the model matrix tracking.
    * @type {string}
@@ -380,13 +434,25 @@ export class TilePolygonsGeometry extends TileFullGeometry {
     this.shapes.push(shape);
   }
 
-  _update() {
-    if ( this._updateFlags.texture ) this.createShapes();
-    super._update();
+  _update(opts) {
+    if ( this.activeUpdates.has("texture") ) this.createShapes();
+    super._update(opts);
   }
 }
 
-export class TileTrianglesGeometry extends TileFullGeometry {
+export class TileTrianglesGeometry extends TileSubGeometry {
+
+  static UPDATE_KEY_MAP = new Map([
+    ...super.UPDATE_KEY_MAP,
+    ["texture.alphaThreshold", "texture"],
+    ["texture.src", "texture"],
+    ["texture.fit", "texture"],
+    ["texture.fill", "texture"],
+    ["texture.offsetX", "texture"],
+    ["texture.offsetY", "texture"],
+    ["flags.tokenvisibility.tileAlphaShape", "texture"],
+  ]);
+
   /**
    * Create an id used for the model matrix tracking.
    * @type {string}
@@ -431,9 +497,9 @@ export class TileTrianglesGeometry extends TileFullGeometry {
     this.shapes.push(shape);
   }
 
-  _update() {
-    if ( this._updateFlags.texture ) this.createShapes();
-    super._update();
+  _update(opts) {
+    if ( this.activeUpdates.has("texture") ) this.createShapes();
+    super._update(opts);
   }
 }
 
@@ -459,7 +525,7 @@ export class TileGeometry extends mix(Object).with(GeometrySubclassMixin, TileDo
     return this.placeableDocument.flags[MODULE_ID]?.[TILE_ALPHA_SHAPE_FLAG] || "calculated";
   }
 
-  /** @type {TileFullGeometry} */
+  /** @type {TileSubGeometry} */
   get subtype() {
     const alphaBlockingType = this.alphaBlockingType;
     if ( alphaBlockingType === "ignore" ) return this.full;
@@ -467,7 +533,7 @@ export class TileGeometry extends mix(Object).with(GeometrySubclassMixin, TileDo
     return this[alphaBlockingType];
   }
 
-  /** @type {TileFullGeometry} */
+  /** @type {TileSubGeometry} */
   get boundarySubtype() {
     // Don't use polygons for the boundary because too resource intensive.
     const alphaBlockingType = this.alphaBlockingType;

@@ -17,11 +17,12 @@ import {
 } from "./TileGeometry.js";
 
 import { GEOMETRY_LIB_ID } from "../const.js";
-import { gridUnitsToPixels, NULL_SET } from "../util.js";
+import { gridUnitsToPixels } from "../util.js";
 import { AABB3d } from "../3d/AABB3d.js";
 import { Point3d } from "../3d/Point3d.js";
 import { mix } from "../mixwith.js";
 
+/*
 const TRACKER_TYPES = {
   background: [
     "background.alphaThreshold",
@@ -42,8 +43,7 @@ const TRACKER_TYPES = {
   ],
 
   rotation: [
-    "textures.anchorX",
-    "textures.anchorY",
+    "textures.rotation",
   ],
 
   scale: [
@@ -55,7 +55,6 @@ const TRACKER_TYPES = {
     "textures.fit",
     "textures.anchorX",
     "textures.anchorY",
-    "textures.fit",
     "textures.offsetX",
     "textures.offsetY",
     "textures.rotation",
@@ -63,6 +62,7 @@ const TRACKER_TYPES = {
     "textures.scaleY",
   ],
 };
+*/
 
 /**
  * On canvas ready, make sure the level textures are loaded so the dimensions can be determined.
@@ -196,6 +196,46 @@ const LevelCalculationsMixin = superclass => class extends superclass {
 
 };
 
+const LevelGeometrySubclassMixin = superclass => class extends superclass {
+  // Set these from scratch b/c the properties vary from that of the tile
+  static UPDATE_KEY_MAP = new Map([
+    ["textures.offsetX", "position"],
+    ["textures.offsetY", "position"],
+    ["textures.anchorX", "position"],
+    ["textures.anchorY", "position"],
+    ["elevation.bottom", "position"],
+    ["elevation.top", "position"],
+
+    ["textures.rotation", "rotation"],
+
+    ["textures.scaleX", "scale"],
+    ["textures.scaleY", "scale"],
+    ["textures.fit", "scale"],
+  ]);
+
+  // ----- NOTE: AABB ----- //
+  calculateAABB() {
+    const cache = this.pixelCache;
+    const elevationZ = this.elevationZ;
+    if ( !cache ) {
+      // Cannot ascertain width and height without the texture. (At least, it would require a partial load.)
+      // But there is a decent chance that the scene rect would cover the dimensions.
+      AABB3d.fromLevel(this.placeableDocument, { type: this.constructor.LEVEL_TYPE, out: this.aabb });
+
+    } else {
+      // Use the cache to find the boundary points.
+      const { width, height } = cache;
+      using TL = cache._toCanvasCoordinates(0, 0);
+      using BL = cache._toCanvasCoordinates(0, height);
+      using TR = cache._toCanvasCoordinates(width, 0);
+      using BR = cache._toCanvasCoordinates(width, height);
+      AABB3d.fromPoints([TL, BL, TR, BR], this.aabb);
+      this.aabb.min.z = elevationZ;
+      this.aabb.max.z = elevationZ;
+    }
+  }
+};
+
 const LevelBackgroundMixin = superclass => class extends superclass {
   /** @type {string} */
   static LEVEL_TYPE = "background";
@@ -226,51 +266,39 @@ const LevelForegroundMixin = superclass => class extends superclass {
   }
 };
 
-const LevelGeometrySubclassMixin = superclass => class extends superclass {
-  static UPDATE_KEYS = {
-    ...super.UPDATE_KEYS,
-    properties: new Set([...TRACKER_TYPES.texture, ...TRACKER_TYPES[this.LEVEL_TYPE]]),
-    level: NULL_SET,
-    position2d: new Set([...TRACKER_TYPES.elevation, ...TRACKER_TYPES.texture]),
-  };
+const LevelBackgroundAlphaMixin = superclass => class extends superclass {
+  static UPDATE_KEY_MAP = new Map([
+    ...super.UPDATE_KEY_MAP,
+    ["background.alphaThreshold", "texture"],
+    ["background.src", "texture"],
+  ]);
+}
 
-  // ----- NOTE: AABB ----- //
-  calculateAABB() {
-    const cache = this.pixelCache;
-    const elevationZ = this.elevationZ;
-    if ( !cache ) {
-      // Cannot ascertain width and height without the texture. (At least, it would require a partial load.)
-      // But there is a decent chance that the scene rect would cover the dimensions.
-      AABB3d.fromLevel(this.placeableDocument, { type: this.constructor.LEVEL_TYPE, out: this.aabb });
+const LevelForegroundAlphaMixin = superclass => class extends superclass {
+  static UPDATE_KEY_MAP = new Map([
+    ...super.UPDATE_KEY_MAP,
+    ["foreground.alphaThreshold", "texture"],
+    ["foreground.src", "texture"],
+  ]);
+}
 
-    } else {
-      // Use the cache to find the boundary points.
-      const { width, height } = cache;
-      using TL = cache._toCanvasCoordinates(0, 0);
-      using BL = cache._toCanvasCoordinates(0, height);
-      using TR = cache._toCanvasCoordinates(width, 0);
-      using BR = cache._toCanvasCoordinates(width, height);
-      AABB3d.fromPoints([TL, BL, TR, BR], this.aabb);
-      this.aabb.min.z = elevationZ;
-      this.aabb.max.z = elevationZ;
-    }
-  }
-};
 
-export class LevelBackgroundFullGeometry extends mix(TileFullGeometry).with(LevelCalculationsMixin, LevelBackgroundMixin, LevelGeometrySubclassMixin) { }
-export class LevelBackgroundBoundingRectGeometry extends mix(TileBoundingRectGeometry).with(LevelCalculationsMixin, LevelBackgroundMixin, LevelGeometrySubclassMixin) { }
-export class LevelBackgroundBoundingPolygonGeometry  extends mix(TileBoundingPolygonGeometry).with(LevelCalculationsMixin, LevelBackgroundMixin, LevelGeometrySubclassMixin) { }
-export class LevelBackgroundPolygonsGeometry  extends mix(TilePolygonsGeometry).with(LevelCalculationsMixin, LevelBackgroundMixin, LevelGeometrySubclassMixin) { }
-export class LevelBackgroundTrianglesGeometry  extends mix(TileTrianglesGeometry).with(LevelCalculationsMixin, LevelBackgroundMixin, LevelGeometrySubclassMixin) { }
+export class LevelBackgroundFullGeometry extends mix(TileFullGeometry).with(LevelCalculationsMixin, LevelGeometrySubclassMixin, LevelBackgroundMixin) { }
+export class LevelBackgroundBoundingRectGeometry extends mix(TileBoundingRectGeometry).with(LevelCalculationsMixin, LevelGeometrySubclassMixin, LevelBackgroundMixin, LevelBackgroundAlphaMixin) { }
+export class LevelBackgroundBoundingPolygonGeometry  extends mix(TileBoundingPolygonGeometry).with(LevelCalculationsMixin, LevelGeometrySubclassMixin, LevelBackgroundMixin, LevelBackgroundAlphaMixin) { }
+export class LevelBackgroundPolygonsGeometry  extends mix(TilePolygonsGeometry).with(LevelCalculationsMixin, LevelGeometrySubclassMixin, LevelBackgroundMixin, LevelBackgroundAlphaMixin) { }
+export class LevelBackgroundTrianglesGeometry  extends mix(TileTrianglesGeometry).with(LevelCalculationsMixin, LevelGeometrySubclassMixin, LevelBackgroundMixin, LevelBackgroundAlphaMixin) { }
 
-export class LevelForegroundFullGeometry extends mix(TileFullGeometry).with(LevelCalculationsMixin, LevelForegroundMixin, LevelGeometrySubclassMixin) { }
-export class LevelForegroundBoundingRectGeometry extends mix(TileBoundingRectGeometry).with(LevelCalculationsMixin, LevelForegroundMixin, LevelGeometrySubclassMixin) { }
-export class LevelForegroundBoundingPolygonGeometry extends mix(TileBoundingPolygonGeometry).with(LevelCalculationsMixin, LevelForegroundMixin, LevelGeometrySubclassMixin) { }
-export class LevelForegroundPolygonsGeometry extends mix(TilePolygonsGeometry).with(LevelCalculationsMixin, LevelForegroundMixin, LevelGeometrySubclassMixin) { }
-export class LevelForegroundTrianglesGeometry extends mix(TileTrianglesGeometry).with(LevelCalculationsMixin, LevelForegroundMixin, LevelGeometrySubclassMixin) { }
+export class LevelForegroundFullGeometry extends mix(TileFullGeometry).with(LevelCalculationsMixin, LevelGeometrySubclassMixin, LevelForegroundMixin) { }
+export class LevelForegroundBoundingRectGeometry extends mix(TileBoundingRectGeometry).with(LevelCalculationsMixin, LevelGeometrySubclassMixin, LevelForegroundMixin, LevelForegroundAlphaMixin) { }
+export class LevelForegroundBoundingPolygonGeometry extends mix(TileBoundingPolygonGeometry).with(LevelCalculationsMixin, LevelGeometrySubclassMixin, LevelForegroundMixin, LevelForegroundAlphaMixin) { }
+export class LevelForegroundPolygonsGeometry extends mix(TilePolygonsGeometry).with(LevelCalculationsMixin, LevelGeometrySubclassMixin, LevelForegroundMixin, LevelForegroundAlphaMixin) { }
+export class LevelForegroundTrianglesGeometry extends mix(TileTrianglesGeometry).with(LevelCalculationsMixin, LevelGeometrySubclassMixin, LevelForegroundMixin, LevelForegroundAlphaMixin) { }
 
 
 export class LevelBackgroundGeometry extends mix(TileGeometry).with(LevelCalculationsMixin, LevelBackgroundMixin) {
+
+  static UPDATE_KEY_MAP = new Map(); // Only so LevelBackgroundMixin works.
 
   static SUBCLASSES = {
     full: LevelBackgroundFullGeometry,
