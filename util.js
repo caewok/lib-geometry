@@ -1241,7 +1241,7 @@ export function cleanPolygonPoints(points) {
   for ( const curr of points ) {
     if ( result.at(-1).almostEqual(curr) ) continue;
     while ( result.length >= 2
-      && pointsAreCollinear(result.at(-2), result.at(-1), curr) ) result.pop().release();
+      && pointsAreCollinear(result.at(-2), result.at(-1), curr) ) result.pop();
     result.push(curr);
   }
 
@@ -1250,19 +1250,19 @@ export function cleanPolygonPoints(points) {
   while ( result.length >= 3 ) {
     // Is the last point a duplicate of the first?
     if ( result[0].almostEqual(result.at(-1)) ) {
-      result.pop().release();
+      result.pop();
       continue;
     }
 
     // Is the last point redundant? (2nd-to-last -> last -> first)
     if ( pointsAreCollinear(result.at(-2), result.at(-1), result[0]) ) {
-      result.pop().release();
+      result.pop();
       continue;
     }
 
     // Is the first point redundant? (Last -> first -> second)
     if ( pointsAreCollinear(result.at(-1), result.at(0), result[1]) ) {
-      result.shift().release(); // Remove the first point.
+      result.shift(); // Remove the first point.
       continue;
     }
     break;

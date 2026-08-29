@@ -17,6 +17,11 @@ const Poolable = mix(PIXI.Point).with(PoolableMixin);
 function onRelease(obj) {
   obj.x = 0;
   obj.y = 0;
+
+  if( !obj.constructor._geoLibType && Object.hasOwn(obj, "z") ) {
+    console.warn("PIXI.Point pool object has z property.");
+    delete obj.z;
+  }
 }
 
 /**
