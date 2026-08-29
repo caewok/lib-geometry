@@ -132,6 +132,11 @@ export class ObstacleOcclusionTest {
    * - @prop {boolean} background   True if level background texture blocks
    * - @prop {boolean} foreground   True if level foreground texture blocks
    * @prop {TokenBlockingConfig} tokens     Token-specific blocking settings
+   * @prop {object} filters         Optional filters to further restrict what obstacles block.
+   * - @prop {function[]} regions
+   * - @prop {function[]} tiles
+   * - @prop {function[]} tokens
+   * - @prop {function[]} walls
    */
 
   /** @type {BlockingConfig} */
@@ -153,6 +158,15 @@ export class ObstacleOcclusionTest {
       enemies: true,      // False: enemies do not block.
       allies: false,      // False: allies do not block.
       excludedStatuses: NULL_SET,  // If token has status, it does not block
+    },
+
+    // Optional filters.
+    filters: {
+      regions: [],
+      tiles: [],
+      tokens: [],
+      walls: [],
+      levels: [],
     },
   };
 
@@ -285,37 +299,34 @@ export class ObstacleOcclusionTest {
   /**
    * Helper to get placeable docs within bounds, filter by the 3d aabb, and filter by frustum.
    */
-  #filterDocGeometries(mgr) {
-    const collisionOpts = {
-      senseType: this.config.senseType,
-      levelId: this.levelId,
-    };
-    const collisionTest = o => o.t.constructor.couldBlock(o.t.placeableDocument, collisionOpts);
-    const geoms = mgr.quadtree.getObjects(this.aabb, { collisionTest });
-    if ( this.frustum ) return geoms.filter(geom => this.#frustum.overlapsGeometry(geom));
-    return geoms;
-  }
+  #filterDocGeometries(mgr, obstacleKey, collisionOpts = {}) {
+    collisionOpts.senseType ??= this.config.senseType;
+    collisionOpts.levelId ??= this.levelId;
 
-  #filterTileSubGeometries(mgr) {
-    const collisionOpts = {
-      senseType: this.config.senseType,
-      levelId: this.levelId,
-    };
-    const collisionTest = o => o.t.constructor.couldBlock(o.t.placeableDocument, collisionOpts);
-    const geoms = mgr.quadtree.getObjects(this.aabb, { collisionTest });
-    if ( this.frustum ) return geoms.filter(geom => {
-      if ( geom.alphaBlockingType === "ignore" ) return false;
-      return this.#frustum.overlapsGeometry(geom.boundarySubtype);
-    });
-    return geoms;
-  }
+    // Add in custom filters as appropriate, to the collision test.
+    const customFilters = this.config.filters?.[obstacleKey] || [];
+    const collisionTest = customFilters.length
+      ? o => {
+        if ( !o.t.constructor.couldBlock(o.t.placeableDocument, collisionOpts) ) return false;
+        return customFilters.every(fn => fn(o.t.placeableDocument));
+      }
+      : o => o.t.constructor.couldBlock(o.t.placeableDocument, collisionOpts);
 
-  #filterTokenSubGeometries(mgr, collisionOpts = {}) {
-    collisionOpts.senseType = this.config.senseType;
-    collisionOpts.levelId = this.levelId;
-    const collisionTest = o => o.t.constructor.couldBlock(o.t.placeableDocument, collisionOpts);
+    // Get the geometries from the quadtree.
     const geoms = mgr.quadtree.getObjects(this.aabb, { collisionTest });
-    if ( this.frustum ) return geoms.filter(geom => this.#frustum.overlapsGeometry(geom.boundarySubtype));
+    if ( this.frustum ) {
+      switch ( obstacleKey ) {
+        case "levels":
+        case "tiles": return geoms.filter(geom => {
+          if ( geom.alphaBlockingType === "ignore" ) return false;
+          return this.#frustum.overlapsGeometry(geom.boundarySubtype);
+        });
+
+        case "tokens": return geoms.filter(geom => this.#frustum.overlapsGeometry(geom.boundarySubtype));
+
+        default: return geoms.filter(geom => this.#frustum.overlapsGeometry(geom));
+      }
+    }
     return geoms;
   }
 
@@ -324,7 +335,7 @@ export class ObstacleOcclusionTest {
    */
   findBlockingWalls() {
     if ( !this.config.walls ) return NULL_SET;
-    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.walls);
+    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.walls, "walls");
   }
 
   /**
@@ -334,27 +345,39 @@ export class ObstacleOcclusionTest {
     const tokensCfg = this.config.tokens;
     if ( !(tokensCfg.dead || tokensCfg.live) ) return NULL_SET;
 
+    // Temporarily add filters.
+    const tokenFilters = this.config.filters.tokens;
+    const RIDEABLE = OTHER_MODULES.RIDEABLE;
+    tokenFilters.push(this.#filterExcludedToken.bind(this));
+    if ( RIDEABLE ) tokenFilters.push(this.#filterRidingToken.bind(this));
+
     const blockingCfg = this.config.tokens;
     const subjectToken = this.subjectToken;
-    let tokenGeoms = this.#filterTokenSubGeometries(CONFIG.GeometryLib.geometryManager.tokens, { subjectToken, ...blockingCfg });
+    const tokenGeoms = this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.tokens, "tokens", { subjectToken, ...blockingCfg });
 
-    // Filter out the subject token and other tokens to exclude (such as the target).
-    tokenGeoms = tokenGeoms.filter(geom => !(this.subjectToken === geom.placeableDocument || this.tokensToExclude.has(geom.placeableDocument)));
+    // Remove the temporary filters.
+    if ( RIDEABLE ) tokenFilters.pop();
+    tokenFilters.pop();
 
-    // Module-specific
-    const RIDEABLE = OTHER_MODULES.RIDEABLE;
-    if ( RIDEABLE ) {
-      // Cannot iterate the weak set.
-      // This is slower but preserves the weak set.
-      // Drop any token with a riding connection to an excluded token.
-      for ( const tDoc of canvas.scene.tokens ) {
-        if ( !tDoc.object ) continue;
-        if ( this.subjectToken === tDoc || this.tokensToExclude.has(tDoc) ) {
-          tokenGeoms = tokenGeoms.filter(tokenGeom => !(tokenGeom.token && RIDEABLE.API.RidingConnection(tokenGeom.token, tDoc.object)));
-        }
-      }
-    }
     return tokenGeoms;
+  }
+
+  #filterExcludedToken(tokenD) {
+    return !(this.subjectToken === tokenD || this.tokensToExclude.has(tokenD));
+  }
+
+  #filterRidingToken(tokenD) {
+    // Assumes Rideable module is active, for performance.
+    // Drop any token with a riding connection to an excluded token.
+    const RIDEABLE = OTHER_MODULES.RIDEABLE;
+    const ridingToken = tokenD.object;
+    if ( !ridingToken ) return true;
+    for ( const token of canvas.tokens.placeables ) {
+      const tDoc = token.document;
+      if ( this.subjectToken === tDoc
+        || this.tokensToExclude.has(tDoc) ) return !(ridingToken && RIDEABLE.API.RidingConnection(ridingToken, token))
+    }
+    return true;
   }
 
   /**
@@ -362,7 +385,7 @@ export class ObstacleOcclusionTest {
    */
   findBlockingTiles() {
     if ( !this.config.tiles ) return NULL_SET;
-    return this.#filterTileSubGeometries(CONFIG.GeometryLib.geometryManager.tiles);
+    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.tiles, "tiles");
   }
 
   /**
@@ -370,7 +393,7 @@ export class ObstacleOcclusionTest {
    */
   findBlockingRegions() {
     if ( !this.config.regions || !canvas.regions.placeables.length ) return NULL_SET;
-    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.regions);
+    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.regions, "regions");
   }
 
   /**
@@ -378,7 +401,7 @@ export class ObstacleOcclusionTest {
    * @returns {Set<Level>}
    */
   findBlockingLevels(levelType = "background") {
-    return this.#filterTileSubGeometries(CONFIG.GeometryLib.geometryManager.levels[levelType])
+    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.levels[levelType], "levels")
       .filter(geom => geom.level[levelType].src); // Must have a defined texture.
   }
 
