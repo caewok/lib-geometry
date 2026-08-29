@@ -245,7 +245,7 @@ export class RegionGeometry extends PlaceableGeometry {
       default: {  /* eslint-disable-line no-fallthrough */
         // Pass the center, rotation, and dimensions so a prototype can be created.
         const opts = this._polygonPrimitiveTransforms(regionShape);
-        if ( almostLessThan(opts.dims.z, 0) ) opts.dim.z = 1; // zHeight must be positive.
+        if ( almostLessThan(opts.dims.z, 0) ) opts.dims.z = 1; // zHeight must be positive.
         shape = ExtrudedPolygonPrimitive.fromPolygons(id, regionShape.polygons, opts);
         opts.center.release();
         opts.dims.release();

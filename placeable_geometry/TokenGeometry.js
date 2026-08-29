@@ -133,7 +133,6 @@ export const GeometrySubclassMixin = superclass => class extends superclass {
 
   calculateAABB() {
     this._iterateSubclasses("calculateAABB");
-    this.calculateAABB();
   }
 }
 
@@ -193,7 +192,7 @@ const TokenDocumentCalculationsMixin = superclass => class extends superclass {
 
     // For tokens, if they either are at the level or at a level viewable by this level, then
     // they would be present.
-    const docLevel = placeableDocument.level
+    const docLevel = placeableDocument.level;
     return docLevel === levelId || lvl.visibility.levels.has(docLevel);
   }
 
@@ -556,6 +555,7 @@ export class TokenGeometry extends mix(Object).with(GeometrySubclassMixin, Token
   };
 
   calculateAABB() {
+    super.calculateAABB();
     AABB3d.fromTokenDocument(this.placeableDocument, this.aabb);
   }
 

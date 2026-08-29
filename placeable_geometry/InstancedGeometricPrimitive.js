@@ -175,7 +175,7 @@ export class VerticalQuadPrimitive extends QuadPrimitive {
     using pt3 = b.subtract(normal);
 
     const poly = new PIXI.Polygon(pt0, pt1, pt2, pt3);
-    const topZ = face.points[0].z
+    const topZ = face.points[0].z;
     const bottomZ = face.points[1].z;
 
     const opts = {

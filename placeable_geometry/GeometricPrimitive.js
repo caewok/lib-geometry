@@ -150,6 +150,7 @@ export class GeometricPrimitive {
     FACE_POINTS:      1 << 2, // 4
     INTERNAL_POINTS:  1 << 3, // 8
     MODEL_VERTICES:   1 << 5, // 32
+    INSTANCE_VERTICES: 1 << 6, // 64
     ALL:              ~0,     // All bits set
   };
 
@@ -311,7 +312,7 @@ export class GeometricPrimitive {
   static rayIntersectionForFace(face, rayOrigin, rayDirection, { minT = 0, maxT = 1, direction = this.CULL_FACES.BACK } = {}) {
     if ( (direction * face.plane.whichSide(rayOrigin)) < 0 ) return null;
     const t = face.intersectionT(rayOrigin, rayDirection);
-    if ( t !== null && almostBetween(t, minT, maxT) ) return t;
+    if ( t !== null && t >= minT && t <= maxT ) return t;
     return null;
   }
 
@@ -621,7 +622,7 @@ export class GeometricPrimitive {
     };
     for ( let i = 0; i < n; i += 1 ) {
       middle.corners[i] = Point3d.midPoint(top.corners[i], bottom.corners[i]);
-      middle.mids[i] = Point3d.midPoint(top.mid[i], bottom.mid[i]);
+      middle.mids[i] = Point3d.midPoint(top.mids[i], bottom.mids[i]);
     }
 
     return {
@@ -694,7 +695,7 @@ export class GeometricPrimitive {
           // Linear interpolation to find the exact intersection point.
           const t = distA / (distA - distB);
           const pInter = Point3d.tmp;
-          b.subtract(a, pInter).multiplyScalar(t, pInter).add(a, pInter); a + (t * (b - a))
+          b.subtract(a, pInter).multiplyScalar(t, pInter).add(a, pInter); // a + (t * (b - a))
           interPoints3d.push(pInter);
         } else if ( distA.almostEqual(0) ) interPoints3d.push(a);
 
@@ -822,7 +823,7 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
    *
    */
   removeShapeByIndex(idx) {
-    const shape = this.shape.splice(idx, 1)[0] || null;
+    const shape = this.shapes.splice(idx, 1)[0] || null;
     if ( shape ) {
       this.dirty = this.constructor.DIRTY.ALL;
       this._initializeFaces();

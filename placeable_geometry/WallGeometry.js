@@ -130,7 +130,7 @@ export class WallGeometry extends PlaceableGeometry {
   }
 
   _updateShapeDirection() {
-    this.shapes[0].direction = this.constructor.cullFaceForWallDirection(this.placeableDocument.dir);;
+    this.shapes[0].direction = this.constructor.cullFaceForWallDirection(this.placeableDocument.dir);
   }
 
   // ----- NOTE: Updating ----- //

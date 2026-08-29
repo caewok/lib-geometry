@@ -410,7 +410,7 @@ export class TilePolygonsGeometry extends TileFullGeometry {
   /** @type {PIXI.Polygon[]} */
   get _polygons() {
     const cache = this.pixelCache;
-    if ( !cache ) return this.placeableDocument.shape.bounds;
+    if ( !cache ) return [this.placeableDocument.shape.bounds];
     const polys = cache.getCanvasAlphaISOBands(this.alphaThreshold);
     polys.forEach(poly => poly.clean());
     return polys;
@@ -462,7 +462,7 @@ export class TileTrianglesGeometry extends TileSubGeometry {
   /** @type {PIXI.Polygon[]} */
   get _polygons() {
     const cache = this.pixelCache;
-    if ( !cache ) return this.placeableDocument.shape.bounds;
+    if ( !cache ) return [this.placeableDocument.shape.bounds];
     const polys = cache.getCanvasAlphaISOBands(this.alphaThreshold);
     polys.forEach(poly => poly.clean());
     return polys;
@@ -514,6 +514,7 @@ export class TileGeometry extends mix(Object).with(GeometrySubclassMixin, TileDo
   };
 
   calculateAABB() {
+    super.calculateAABB();
     AABB3d.fromTileDocument(this.placeableDocument, this.aabb);
   }
 
