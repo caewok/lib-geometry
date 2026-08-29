@@ -180,7 +180,7 @@ export class RegionGeometry extends PlaceableGeometry {
   createShapes() {
     const regionShapes = this.regionShapes;
     const shapes = this.shapes;
-    this.iterateShapes().forEach(subshape => subshape.destroy());
+    this.shapes.forEach(subshape => subshape.destroy());
     this.shapes.length = 1;
 
     // If there are holes or wall restrictions, use the model polygon shape for the entire region.

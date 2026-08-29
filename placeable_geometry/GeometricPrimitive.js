@@ -253,22 +253,6 @@ export class GeometricPrimitive {
   }
 
   /**
-   * Iterate over the prototype faces.
-   * @yields {Polygon3d}
-   */
-  *iteratePrototypeFaces() {
-    yield *this.prototypeFaces;
-  }
-
-  /**
-   * Iterate over the faces.
-   * @yields {Polygon3d}
-   */
-  *iterateFaces() {
-    yield *this.#faces;
-  }
-
-  /**
    * Trigger update of the faces.
    */
   updateFaces() {
@@ -302,7 +286,7 @@ export class GeometricPrimitive {
    */
   rayIntersection(rayOrigin, rayDirection, opts = {}) {
     opts.direction ??= this.direction;
-    for ( const face of this.iterateFaces(opts) ) {
+    for ( const face of this.faces ) {
       const t = this.constructor.rayIntersectionForFace(face, rayOrigin, rayDirection, opts);
       if ( t !== null ) return t;
     }
@@ -322,7 +306,7 @@ export class GeometricPrimitive {
    * Draw face, omitting an axis.
    */
   draw2d(opts) {
-    for ( const face of this.iterateFaces() ) face.draw2d(opts);
+    for ( const face of this.faces ) face.draw2d(opts);
   }
 
   // ----- NOTE: Vertices ----- //
@@ -385,7 +369,7 @@ export class GeometricPrimitive {
    */
   _generateModelVertices(vo) {
     this.modelVerticesVersion += 1;
-    return this.constructor.generateVerticesForFaces(this.iterateFaces(), vo);
+    return this.constructor.generateVerticesForFaces(this.faces, vo);
   }
 
   /**
@@ -679,7 +663,7 @@ export class GeometricPrimitive {
     using dirA = PIXI.Point.tmp;
     using dirB = PIXI.Point.tmp;
     const segments2d = [];
-    for ( const face of this.iterateFaces() ) {
+    for ( const face of this.faces ) {
       const interPoints3d = [];
       for ( const edge of face.iterateEdges() ) {
         const { a, b } = edge;
@@ -766,13 +750,13 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
   /**
    * Initialize the values for this geometric primitive.
    */
-  initialize() { this.iterateShapes().forEach(shape => shape.initialize); }
+  initialize() { this.shapes.forEach(shape => shape.initialize); }
 
   /**
    * Destroy this geometric primitive, releasing associated memory in buffers.
    */
   destroy() {
-    this.iterateShapes().forEach(shape => shape.destroy());
+    this.shapes.forEach(shape => shape.destroy());
     this.shapes.length = 0;
   }
 
@@ -780,17 +764,17 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
 
   get dirtyShapes() {
     let dirty = 0;
-    this.iterateShapes().forEach(shape => dirty |= shape.dirty);
+    this.shapes.forEach(shape => dirty |= shape.dirty);
     return dirty;
   }
 
-  set dirtyShapes(flag) { this.iterateShapes().forEach(shape => shape.dirty = flag); }
+  set dirtyShapes(flag) { this.shapes.forEach(shape => shape.dirty = flag); }
 
   isDirtyShapes(flag = this.constructor.DIRTY.ALL) {
-    return this.iterateShapes().some(shape => shape.isDirty(flag));
+    return this.shapes.some(shape => shape.isDirty(flag));
   }
 
-  _clearDirtyShapes(flag) { this.iterateShapes().forEach(shape => shape._clearDirty(flag)) }
+  _clearDirtyShapes(flag) { this.shapes.forEach(shape => shape._clearDirty(flag)) }
 
   // ----- NOTE: Add/remove shapes ----- //
 
@@ -831,39 +815,6 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
     return shape;
   }
 
-  // ----- NOTE: Iteration ----- //
-
-  /**
-   * Iterate over the shapes.
-   */
-  *iterateShapes() {
-    for ( const shape of this.shapes ) {
-      if ( shape ) yield shape;
-    }
-  }
-
-  /**
-   * Iterate over the world faces of the shapes.
-   * @yields {Polygon3d}
-   */
-  *iterateFaces() {
-    for ( const faceArr of this.faces ) {
-      if ( !faceArr ) continue;
-      yield *faceArr;
-    }
-  }
-
-  /**
-   * Iterate over the world faces of the shapes.
-   * @yields {Polygon3d}
-   */
-  *iteratePrototypeFaces() {
-    for ( const faceArr of this.prototypeFaces ) {
-      if ( !faceArr ) continue;
-      yield *faceArr;
-    }
-  }
-
   // ----- NOTE: AABB ----- //
 
   /**
@@ -871,7 +822,7 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
    * Defaults to union of all model faces AABB.
    */
   _calculateAABB(aabb) {
-    const shapeAABBs = [...this.iterateShapes()].map(shape => shape.aabb);
+    const shapeAABBs = this.shapes.map(shape => shape.aabb);
     AABB3d.union(shapeAABBs, aabb);
   }
 
@@ -895,26 +846,29 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
 
   // ----- NOTE: Faces ----- //
 
-  #prototypeFaces = [];
 
-  get prototypeFaces() { return this.#prototypeFaces; }
+  // Return as a flat array.
+  get prototypeFaces() { return super.prototypeFaces.flatMap(arr => arr); }
 
   _initializeFaces() {
     const n = this.shapes.length;
-    this.#prototypeFaces = new Array(n);
+    super.prototypeFaces = new Array(n);
     for ( let i = 0; i < n; i += 1 ) {
       const shape = this.shapes[i];
       if ( !shape ) continue;
-      this.#prototypeFaces[i] = shape.prototypeFaces;
+      super.prototypeFaces[i] = shape.prototypeFaces;
     }
   }
+
+  // Return as a flat array.
+  get faces() { return super.faces.flatMap(arr => arr); }
 
   /**
    * Update the faces for this primitive.
    * Default is to use the world matrix on the prototypes.
    */
   _generateFaces(faces) {
-    const protoFaces = this.prototypeFaces;
+    const protoFaces = super.prototypeFaces;
     for ( let i = 0, numShapes = this.shapes.length; i < numShapes; i += 1 ) {
       const shape = this.shapes[i];
       if ( !shape ) continue;
@@ -937,7 +891,7 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
    */
   _generateFacePoints(fp) {
     fp.length = 0;
-    for ( const shape of this.iterateShapes() ) {
+    for ( const shape of this.shapes ) {
       fp.push(...shape.facePoints);
     }
   }

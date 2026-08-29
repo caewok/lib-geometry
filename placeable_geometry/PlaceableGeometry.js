@@ -1,6 +1,5 @@
 /* globals
 canvas,
-Hooks,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
@@ -10,7 +9,6 @@ import { GeometricPrimitive } from "./GeometricPrimitive.js";
 
 // LibGeometry
 import { AABB3d } from "../3d/AABB3d.js";
-import { NULL_SET } from "../util.js";
 
 
 /* Store key geometry information for each placeable, in 3d.
@@ -105,7 +103,7 @@ export class PlaceableGeometry {
   }
 
   destroy() {
-    this.iterateShapes().forEach(shape => shape.destroy());
+    this.shapes.forEach(shape => shape.destroy());
     this.shapes.length = 0;
   }
 
@@ -207,19 +205,10 @@ export class PlaceableGeometry {
   shapes = [];
 
   /**
-   * Iterate over the shapes.
-   * @param {object} [opts]
-   * @param {CONST.WALL_RESTRICTION_TYPES} [opts.senseType]   If provided, will return early if geometry does not block this sense type.
-   * @param {string} [opts.levelId]                           If provided, will return early if geometry does not affect this level.
-   * @yields {GeometricPrimitive}
-   */
-  *iterateShapes() { yield *this.shapes; }
-
-  /**
    * Iterate over the shapes' faces.
    * @yields {Polygon3d}
    */
-  *iterateFaces() { for ( const shape of this.iterateShapes() ) yield* shape.faces; }
+  *iterateFaces() { for ( const shape of this.shapes ) yield* shape.faces; }
 
   /**
    * Determine where a ray hits this object in 3d.
@@ -233,7 +222,7 @@ export class PlaceableGeometry {
    * @returns {number|null} The distance along the ray, as a multiple of rayDirection
    */
   rayIntersection(rayOrigin, rayDirection, opts) {
-    for ( const shape of this.iterateShapes() ) {
+    for ( const shape of this.shapes ) {
       const t = shape.rayIntersection(rayOrigin, rayDirection, opts);
       if ( t !== null ) return t;
     }
@@ -241,7 +230,7 @@ export class PlaceableGeometry {
   }
 
   draw2d(opts) {
-    this.iterateShapes().forEach(shape => shape.draw2d(opts));
+    this.shapes.forEach(shape => shape.draw2d(opts));
   }
 
   // ----- NOTE: Face points ----- //
@@ -250,16 +239,16 @@ export class PlaceableGeometry {
    * @param {object} [opts]   See iterateShape
    * @yields {Point3d}
    */
-  *iterateFacePoints(opts) {
-    for ( const shape of this.iterateShapes(opts) ) yield* shape.iterateFacePoints();
+  *iterateFacePoints() {
+    for ( const shape of this.shapes ) yield* shape.iterateFacePoints();
   }
 
   // ----- NOTE: Internal points ----- //
 
   static POINT_INDICES = GeometricPrimitive.POINT_INDICES;
 
-  *iterateInternalPoints(opts) {
-    for ( const shape of this.iterateShapes(opts) ) yield shape.internalPoints;
+  *iterateInternalPoints() {
+    for ( const shape of this.shapes ) yield shape.internalPoints;
   }
 
   // ----- NOTE: Static helpers ----- //

@@ -26,7 +26,7 @@ describe("Walls", () => {
     it("should have numeric values", () => {
       canvas.walls.placeables.forEach(wall => {
         const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.walls.geomForPlaceable(wall);
-        for ( const shape of geom.iterateShapes() ) {
+        for ( const shape of geom.shapes ) {
           expect(shape.modelMatrix.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
         }
       });
@@ -59,7 +59,7 @@ describe("Tokens", () => {
     it("should have numeric values", () => {
       canvas.tokens.placeables.forEach(token => {
         const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.tokens.geomForPlaceable(token).full;
-        for ( const shape of geom.iterateShapes() ) {
+        for ( const shape of geom.shapes ) {
           expect(shape.modelMatrix.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
         }
       });
@@ -92,7 +92,7 @@ describe("Tiles", () => {
     it("should have numeric values", () => {
       canvas.tiles.placeables.forEach(tile => {
         const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.tiles.geomForPlaceable(tile).full;
-        for ( const shape of geom.iterateShapes() ) {
+        for ( const shape of geom.shapes ) {
           expect(shape.modelMatrix.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
         }
       });
@@ -126,7 +126,7 @@ describe("Regions", () => {
     it("should have numeric values", () => {
       canvas.regions.placeables.forEach(region => {
         const geom = mgr.regions.geomForPlaceable(region);
-        for ( const shape of geom.iterateShapes() ) {
+        for ( const shape of geom.shapes ) {
           expect(shape.modelMatrix.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
         }
       });
@@ -161,7 +161,7 @@ describe("Levels", () => {
     it("should have numeric values", () => {
       canvas.scene.levels.forEach(levelD => {
         const geom = mgr.levels.background.geomForDocument(levelD).full;
-        for ( const shape of geom.iterateShapes() ) {
+        for ( const shape of geom.shapes ) {
           expect(shape.modelMatrix.model.arr.every(elem => Number.isNumeric(elem))).to.be.true;
         }
       });
