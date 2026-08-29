@@ -34,7 +34,7 @@ export class Polygon3d {
     return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
   }
 
-  static get _geoLibType() { return this.name; }
+  static _geoLibType = "Polygon3d";
 
 
   // TODO: Cache bounds and plane. Use setter to modify points to reset cache?
@@ -1159,6 +1159,8 @@ function pointFromVertices(i, vertices, indices, stride = 3, offset = 0, outPoin
  */
 export class Ellipse3d extends Polygon3d {
 
+  static _geoLibType = "Ellipse3d";
+
   /** @type {Point3d} */
   get center() { return this.points[0]; }
 
@@ -1712,6 +1714,8 @@ export class Ellipse3d extends Polygon3d {
  */
 export class Circle3d extends Ellipse3d {
 
+  static _geoLibType = "Circle3d";
+
   // For numerical consistency, store the radius squared to use when possible.
   get radius() { return this.radiusX; }
 
@@ -1873,6 +1877,8 @@ export class Circle3d extends Ellipse3d {
  * Planar triangle shape.
  */
 export class Triangle3d extends Polygon3d {
+
+  static _geoLibType = "Triangle3d";
 
   constructor() {
     super(3);
@@ -2085,6 +2091,7 @@ export class Triangle3d extends Polygon3d {
  */
 export class Quad3d extends Polygon3d {
 
+  static _geoLibType = "Quad3d";
 
   constructor() {
     super(4);
@@ -2316,6 +2323,8 @@ export class Quad3d extends Polygon3d {
  * An outer polygon may be contained within a hole. Parent-child structure not maintained.
  */
 export class Polygons3d extends Polygon3d {
+
+  static _geoLibType = "Polygons3d";
 
   /** @type {boolean|null} */
   get isHole() {

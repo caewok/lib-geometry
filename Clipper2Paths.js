@@ -55,7 +55,7 @@ export class Clipper2Paths {
     return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
   }
 
-  static get _geoLibType() { return this.name; }
+  static _geoLibType = "Clipper2Paths";
 
   // ----- NOTE: Object properties ----- //
 

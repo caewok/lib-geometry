@@ -59,6 +59,8 @@ drawing.drawShape(bounds)
  */
 export class CenteredPolygon extends CenteredPolygonBase {
 
+  static _geoLibType = "CenteredPolygon";
+
   /**
    * @param {Point} origin    Center point of the polygon.
    * @param {number[]} pts  Points of the polygon, where 0,0 is the center

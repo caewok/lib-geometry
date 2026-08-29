@@ -35,7 +35,7 @@ export class AABB2d {
     return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
   }
 
-  static get _geoLibType() { return this.name; }
+  static _geoLibType = "AABB2d";
 
   static POINT_CLASS = PIXI.Point;
 

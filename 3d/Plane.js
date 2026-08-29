@@ -21,7 +21,7 @@ export class Plane {
     return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
   }
 
-  static get _geoLibType() { return this.name; }
+  static _geoLibType = "Plane";
 
   /** @type {Point3d} */
   #normal = new Point3d(0, 0, 1);

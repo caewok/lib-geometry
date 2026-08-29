@@ -43,6 +43,8 @@ drawing.drawShape(bounds)
  */
 export class CenteredRectangle extends CenteredPolygonBase {
 
+  static _geoLibType = "CenteredRectangle";
+
   /**
    * @param {Point} origin   Center point of the rectangle. Can be left undefined if leftCorner is provided.
    * @param {number} width   Length of the sides in the X direction
