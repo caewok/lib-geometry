@@ -26,7 +26,6 @@ Points in a Polygon3d are assumed to not be modified in place after creation.
 */
 Symbol.dispose ??= Symbol("Symbol.dispose");
 
-// Temporary points, used for performance in certain methods.
 const tmpPoints = Point3d.createN(10);
 
 export class Polygon3d {
@@ -2201,7 +2200,7 @@ export class Quad3d extends Polygon3d {
 
     // Edge vectors.
     const edge1 = v1.subtract(v0, tmpPoints[0]);
-    const edge2 = v1.subtract(v0, tmpPoints[1]);
+    const edge2 = v3.subtract(v0, tmpPoints[1]);
 
     // Cross product rayDirection × e03.
     const p = rayDirection.cross(edge2, tmpPoints[2]);
