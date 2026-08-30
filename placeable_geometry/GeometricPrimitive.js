@@ -284,19 +284,13 @@ export class GeometricPrimitive {
    * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
    * @returns {number|null} The distance along the ray, as a multiple of rayDirection
    */
-  rayIntersection(rayOrigin, rayDirection, opts = {}) {
-    opts.direction ??= this.direction;
+  rayIntersection(rayOrigin, rayDirection, { minT = 0, maxT = 1, direction = this.constructor.CULL_FACES.BACK } = {}) {
     for ( const face of this.faces ) {
-      const t = this.constructor.rayIntersectionForFace(face, rayOrigin, rayDirection, opts);
-      if ( t !== null ) return t;
+      if ( (direction * face.plane.whichSide(rayOrigin)) >= 0 ) {
+         const t = face.intersectionT(rayOrigin, rayDirection);
+         if ( t !== null && t >= minT && t <= maxT ) return t;
+      }
     }
-    return null;
-  }
-
-  static rayIntersectionForFace(face, rayOrigin, rayDirection, { minT = 0, maxT = 1, direction = this.CULL_FACES.BACK } = {}) {
-    if ( (direction * face.plane.whichSide(rayOrigin)) < 0 ) return null;
-    const t = face.intersectionT(rayOrigin, rayDirection);
-    if ( t !== null && t >= minT && t <= maxT ) return t;
     return null;
   }
 
