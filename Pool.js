@@ -76,10 +76,13 @@ export class Pool {
   release(obj) {
     // Basic test that the object belongs.
     const cl = this.cl;
+
+    /* For debugging
     if ( !(obj instanceof cl) ) {
       console.warn("Pool object does not match other instance in the pool.", { cl, obj });
       return;
     }
+    */
 
     // Important that the object here is only added once.
     if ( obj._isInPool ) return;
