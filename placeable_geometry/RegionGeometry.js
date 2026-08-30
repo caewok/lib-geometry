@@ -114,6 +114,9 @@ const TRACKER_TYPES = {
 };
 */
 
+// Some temporary points to use.
+const tmpPoints = Point3d.createN(4);
+
 export class RegionGeometry extends PlaceableGeometry {
   /** @type {string} */
   static PLACEABLE_NAME = "Region";
@@ -150,10 +153,6 @@ export class RegionGeometry extends PlaceableGeometry {
   get regionShapes() { return this.placeableDocument.shapes; }
 
   get regionPolygons() { return this.placeableDocument.polygons; }
-
-  get bottomZ() { return this.placeable.bottomZ; }
-
-  get topZ() { return this.placeable.topZ; }
 
   /**
    * Id, taking into account the shape index
@@ -345,7 +344,6 @@ export class RegionGeometry extends PlaceableGeometry {
     super._update();
   }
 
-
   /**
    * Update a specific shape.
    * @param {GeometricPrimitive} shape
@@ -354,14 +352,28 @@ export class RegionGeometry extends PlaceableGeometry {
    *   Adding a "elevation" key will update the position and scale.
    */
   _updateShape(shape, regionShape, changes) {
-    const { topZ, bottomZ } = this.elevationZ;
-    const { z, zHeight } = this.constructor.zDimensions(topZ, bottomZ);
+    const { modifyCenter, modifyAngles, modifyDims, modifyAnchors } = this._shapeDimensionModificationsNeeded(regionShape, changes);
+    if ( !(modifyCenter || modifyAngles || modifyDims || modifyAnchors) ) return;
+    const [center, angles, dims, anchors] = this._shapeDimensions(regionShape);
 
-    let center;
-    let angles;
-    let dims;
-    let anchors;
+    if ( modifyCenter ) shape.setPosition(center);
+    if ( modifyAngles ) shape.setRotation(angles);
+    if ( modifyDims ) shape.setScale(dims);
+    if ( modifyAnchors ) shape.setAnchor(anchors);
+  }
 
+  /**
+   * Determine what dimensions of the shape require modification.
+   * @param {ShapeData} regionShape      The region shape; assumed to have been already updated
+   * @param {Set<string>} [changes]   Optional change keys; if not provided everything will be updated
+   *   Adding a "elevation" key will update the position and scale.
+   * @returns {object}
+   *   - @prop {boolean} modifyCenter
+   *   - @prop {boolean} modifyAngles
+   *   - @prop {boolean} modifyDims
+   *   - @prop {boolean} modifyAnchors
+   */
+  _shapeDimensionModificationsNeeded(regionShape, changes) {
     // If changes not provided, modify all parameters.
     if ( !changes ) {
       changes = new Set(Object.keys(regionShape));
@@ -372,65 +384,81 @@ export class RegionGeometry extends PlaceableGeometry {
       if ( changes.has("base") ) Object.keys(regionShape.base).forEach(key => changes.add(`base.${key}`));
     }
 
-    // Use regionShape.origin to set the position.
-    if ( changes.has("x") || changes.has("y") || changes.has("elevation") ) {
-      const origin = regionShape.origin;
-      center = Point3d.tmp.set(origin.x, origin.y, z);
+    const modifyCenter = changes.has("x") || changes.has("y") || changes.has("elevation");
+    const modifyAngles = changes.has("rotation");
+    let modifyDims = false;
+    let modifyAnchors = false;
+
+    switch ( regionShape.type ) {
+      case "circle": modifyDims = changes.has("radius") || changes.has("elevation"); break;
+      case "ellipse": modifyDims = changes.has("radiusX") || changes.has("radiusY") || changes.has("elevation"); break;
+      case "line":
+        modifyDims = changes.has("length") || changes.has("width") || changes.has("elevation");
+        modifyAnchors = changes.has("anchorX");
+        break;
+      case "rectangle":
+        modifyDims = changes.has("width") || changes.has("height") || changes.has("elevation")
+        modifyAnchors = changes.has("anchorX") || changes.has("anchorY");
+        break;
+      case "emanation": modifyDims = changes.has("base.width") || changes.has("base.height") || changes.has("elevation"); break;
+      case "ring":
+      case "cone": modifyDims = changes.has("radius") || changes.has("elevation"); break;
+
+      case "polygon": break; // Obv. use the polygon. Dimensions set by the points.
+      case "grid": break; // Unclear what this is.
+      case "token": break; // Unclear what this is.
     }
+    return { modifyCenter, modifyAngles, modifyDims, modifyAnchors };
+  }
 
-    // All shapes have rotation, so can set here.
-    if ( changes.has("rotation") ) angles = Point3d.tmp.set(0, 0, Math.toRadians(regionShape.rotation));
+  /**
+   * Determine the dimensions for a given shape.
+   * @param {ShapeData} regionShape      The region shape; assumed to have been already updated
+   * @returns {Point3d[4]} Center (position), angles, dims, anchors, using the temporary points.
+   */
+  _shapeDimensions(regionShape) {
+    const { topZ, bottomZ } = this.elevationZ;
+    const { z, zHeight } = this.constructor.zDimensions(topZ, bottomZ);
+    const [center, angles, dims, anchors] = tmpPoints;
 
-    // Anchors default to 0, 0, 0, which is already the default value.
+    // Center/Position: Use regionShape.origin
+    const origin = regionShape.origin;
+    center.set(origin.x, origin.y, z);
+
+    // All shapes have rotation.
+    angles.set(0, 0, Math.toRadians(regionShape.rotation));
+
+    // Set defaults for dims and anchors.
+    dims.set(1, 1, 1);
+    anchors.set(0, 0, 0);
 
     // Update dims by shape type. Update anchor for specific shapes.
     switch ( regionShape.type ) {
-      case "circle":
-        if ( changes.has("radius")
-          || changes.has("elevation") ) dims = Point3d.tmp.set(regionShape.radius * 2, regionShape.radius * 2, zHeight);
+      case "circle": dims.set(regionShape.radius * 2, regionShape.radius * 2, zHeight); break;
+      case "ellipse": dims.set(regionShape.radiusX * 2, regionShape.radiusY * 2, zHeight); break;
+      case "line":
+        dims.set(regionShape.length, regionShape.width, zHeight);
+        anchors.set(0.5, 0.0, 0.0); // Line anchors from middle left.
         break;
-
-      case "ellipse":
-        if ( changes.has("radiusX")
-          || changes.has("radiusY")
-          || changes.has("elevation") ) dims = Point3d.tmp.set(regionShape.radiusX * 2, regionShape.radiusY * 2, zHeight);
-        break;
-
-      case "line": {
-        if ( changes.has("length")
-          || changes.has("width")
-          || changes.has("elevation") ) dims = Point3d.tmp.set(regionShape.length, regionShape.width, zHeight);
-
-        // Line anchors from middle left.
-        if ( changes.has("anchorX") ) anchors = Point3d.tmp.set(0.5, 0.0, 0.0);
-        break;
-      }
-
-      case "rectangle": {
-        if ( changes.has("width")
-          || changes.has("height")
-          || changes.has("elevation") ) dims = Point3d.tmp.set(regionShape.width, regionShape.height, zHeight);
+      case "rectangle":
+        dims.set(regionShape.width, regionShape.height, zHeight);
 
         // Rectangle anchors from user-defined position.
         // Those represent percentage anchors from 0–1. Conform to the unit cube from -0.5 to 0.5.
-        if ( changes.has("anchorX")
-          || changes.has("anchorY") ) anchors = Point3d.tmp.set(0.5 - regionShape.anchorX, 0.5 - regionShape.anchorY, 0);
+        anchors.set(0.5 - regionShape.anchorX, 0.5 - regionShape.anchorY, 0);
+        break;
+
+      // Rest use polygons
+      case "emanation": { // Use the polygon b/c corner radiuses can vary.
+        const { width, height } = regionShape.base;
+        const s = canvas.grid.size;
+        dims.set(width * s, height * s, zHeight);
         break;
       }
 
-      // Rest are using polygons.
-      case "emanation": // Use the polygon b/c corner radiuses can vary.
-        if ( changes.has("base.width") || changes.has("base.height") || changes.has("elevation")  ) {
-          const { width, height } = regionShape.base;
-          const s = canvas.grid.size;
-          dims = Point3d.tmp.set(width * s, height * s, zHeight);
-        }
-        break;
-
       case "ring": // Use the polygon(s) b/c of the hole.
       case "cone": // Use the polygon b/c no unit cone shape b/c angle varies.
-        if ( changes.has("radius")
-          || changes.has("elevation") ) dims = Point3d.tmp.set(regionShape.radius, regionShape.radius, zHeight);
+        dims.set(regionShape.radius, regionShape.radius, zHeight);
         break;
 
       case "polygon": break; // Obv. use the polygon. Dimensions set by the points.
@@ -438,27 +466,11 @@ export class RegionGeometry extends PlaceableGeometry {
       case "grid": break; // Unclear what this is.
 
       case "token": break; // Unclear what this is.
-
     }
 
-    if ( center ) {
-      shape.setPosition(center);
-      center.release();
-    }
-    if ( angles ) {
-      shape.setRotation(angles);
-      angles.release();
-    }
-    if ( dims ) {
-      shape.setScale(dims);
-      dims.release();
-    }
-    if ( anchors ) {
-      shape.setAnchor(anchors);
-      anchors.release();
-    }
-
+    return tmpPoints;
   }
+
 
   // ----- NOTE: Levels ----- //
 
