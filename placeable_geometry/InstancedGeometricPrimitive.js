@@ -352,14 +352,24 @@ export class HexagonCylinderPrimitive extends InstancedGeometricPrimitive {
 export class CylinderPrimitive extends InstancedGeometricPrimitive {
 
   /**
+   * Assumed number of sides for the polygon approximation of the cylinder.
+   * Used to construct the sides.
+   */
+  static DENSITY = PIXI.Circle.approximateVertexDensity(100);
+
+  /**
    * Create the faces for a unit cylinder.
    * @returns {Ellipse3d|Polygon3d[]}
    */
-  static createUnitCylinder(radiusDensity = 100) {
+  static createUnitCylinder() {
     const top = Ellipse3d.fromCenterPoint({ x: 0, y: 0, z: 0.5 }, { radiusX: 0.5, radiusY: 0.5 });
     const bottom = Ellipse3d.fromCenterPoint({ x: 0, y: 0, z: -0.5 }, { radiusX: 0.5, radiusY: 0.5 });
     bottom.reverseOrientation();
-    const density = PIXI.Circle.approximateVertexDensity(radiusDensity);
+
+    // Build the sides.
+    const density = this.DENSITY;
+    top._density = density;
+    bottom._density = density;
     return [top, bottom, ...top.buildTopSides(-0.5, { density })];
   }
 

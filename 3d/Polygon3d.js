@@ -1163,6 +1163,9 @@ export class Ellipse3d extends Polygon3d {
 
   static _geoLibType = "Ellipse3d";
 
+  // Assumed density for transforms. If zero, will use PIXI.Circle.approximateVertexDensity based on the major radius.
+  _density = 0;
+
   /** @type {Point3d} */
   get center() { return this.points[0]; }
 
@@ -1454,7 +1457,7 @@ export class Ellipse3d extends Polygon3d {
   toPolygon2d(opts) {  return this.toPolygon3d(opts).toPolygon2d(opts); }
 
   // opts: { density, includeEndpoints = true }
-  toPolygon3d(opts ) {
+  toPolygon3d(opts) {
     const poly2d = this.toPlanarPolygon(opts);
     return Polygon3d.fromPlanarPolygon(poly2d, this.plane);
   }
@@ -1476,7 +1479,8 @@ export class Ellipse3d extends Polygon3d {
   /**
    * @returns {Polygon3d}
    */
-  toPlanarPolygon(opts) {
+  toPlanarPolygon(opts = {}) {
+    if ( this._density ) opts.density = this._density;
     const ellipse = this.toPlanarEllipse();
     return ellipse.toPolygon(opts);
   }
@@ -1784,7 +1788,8 @@ export class Circle3d extends Ellipse3d {
     return new PIXI.Circle(center.x, center.y, this.radius);
   }
 
-  toPlanarPolygon(opts) {
+  toPlanarPolygon(opts = {}) {
+    if ( this._density ) opts.density = this._density;
     const cir = this.toPlanarCircle();
     return cir.toPolygon(opts);
   }
