@@ -54,7 +54,7 @@ export class ObstacleOcclusionTest {
   *iterateObstacleShapes({ geomSubtype = "full", ...opts } = {}) {
     for ( const geom of this.iterateObstacleGeoms(opts) ) {
       if ( geom.constructor.HAS_SUBTYPES ) yield* geom[geomSubtype].shapes;
-      else yield* geom.iterateShapes();
+      else yield* geom.shapes;
     }
   }
 
