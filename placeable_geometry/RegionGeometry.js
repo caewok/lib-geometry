@@ -244,47 +244,14 @@ export class RegionGeometry extends PlaceableGeometry {
 
       default: {  /* eslint-disable-line no-fallthrough */
         // Pass the center, rotation, and dimensions so a prototype can be created.
-        const opts = this._polygonPrimitiveTransforms(regionShape);
+        const opts = this._shapeDimensions(regionShape);
         if ( almostLessThan(opts.dims.z, 0) ) opts.dims.z = 1; // zHeight must be positive.
         shape = ExtrudedPolygonPrimitive.fromPolygons(id, regionShape.polygons, opts);
-        opts.center.release();
-        opts.dims.release();
-        opts.angles.release();
       }
     }
     shape.initialize();
     return shape;
   }
-
-  /**
-   * Calculate the transform information for a region shape represented by a model polygon.
-   * @param {RegionShape} regionShape
-   * @param {number} levelSegmentIdx
-   * @returns {object}
-   *   - @prop {Point3d} center     The translation information
-   *   - @prop {Point3d} dims       The scaling information
-   *   - @prop {Point3d} angles     The rotation information
-   */
-  _polygonPrimitiveTransforms(regionShape) {
-    const { topZ, bottomZ } = this.elevationZ;
-    const { z, zHeight } = this.constructor.zDimensions(topZ, bottomZ);
-    const opts = {
-      center: Point3d.tmp,
-      dims: Point3d.tmp,
-      angles: Point3d.tmp,
-    }
-
-    const origin = regionShape.origin;
-    opts.center.set(origin.x, origin.y, z);
-    if ( regionShape.rotation ) opts.angles.set(0, 0, Math.toRadians(regionShape.rotation));
-    else opts.angles.set(0, 0, 0);
-    if ( regionShape.radius ) opts.dims.set(regionShape.radius, regionShape.radius, zHeight);
-    else if ( regionShape.base?.width ) opts.dims.set(regionShape.base.width * canvas.grid.size, regionShape.base.height * canvas.grid.size, zHeight)
-    else opts.dims.set(1, 1, zHeight);
-
-    return opts;
-  }
-
 
   _update(opts) {
 
@@ -356,12 +323,12 @@ export class RegionGeometry extends PlaceableGeometry {
   _updateShape(shape, regionShape, changes) {
     const { modifyCenter, modifyAngles, modifyDims, modifyAnchors } = this._shapeDimensionModificationsNeeded(regionShape, changes);
     if ( !(modifyCenter || modifyAngles || modifyDims || modifyAnchors) ) return;
-    const [center, angles, dims, anchors] = this._shapeDimensions(regionShape);
+    const opts = this._shapeDimensions(regionShape);
 
-    if ( modifyCenter ) shape.setPosition(center);
-    if ( modifyAngles ) shape.setRotation(angles);
-    if ( modifyDims ) shape.setScale(dims);
-    if ( modifyAnchors ) shape.setAnchor(anchors);
+    if ( modifyCenter ) shape.setPosition(opts.center);
+    if ( modifyAngles ) shape.setRotation(opts.angles);
+    if ( modifyDims ) shape.setScale(opts.dims);
+    if ( modifyAnchors ) shape.setAnchor(opts.anchors);
   }
 
   /**
@@ -470,7 +437,7 @@ export class RegionGeometry extends PlaceableGeometry {
       case "token": break; // Unclear what this is.
     }
 
-    return tmpPoints;
+    return { center, angles, dims, anchors };
   }
 
 

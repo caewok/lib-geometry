@@ -175,21 +175,27 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    * @param {number} [opts.bottomZ]     Bottom elevation
    * @returns {ExtrudedPolygonPrimitive}
    */
-  static fromPolygon(id, poly, { topZ = Number.POSITIVE_INFINITY, bottomZ = Number.NEGATIVE_INFINITY, ...opts } = {}) {
-    if ( !isFinite(topZ) ) topZ = 1e06;
-    if ( !isFinite(bottomZ) ) bottomZ = -1e06;
-    const faces = this.#facesFromPolygon(poly, topZ, bottomZ);
+  static fromPolygon(id, poly, opts = {}) {
+    opts.topZ ??= Number.POSITIVE_INFINITY;
+    opts.bottomZ ??= Number.NEGATIVE_INFINITY;
+    if ( !isFinite(opts.topZ) ) opts.topZ = 1e06;
+    if ( !isFinite(opts.bottomZ) ) opts.bottomZ = -1e06;
+    const faces = this._facesFromPolygon(poly, opts);
     const prototypeFaces = this.canvasToPrototypeFaces(faces, opts);
 
     // Confirm the polygon orientation for debugging.
-    this._confirmOrientation(poly, faces, prototypeFaces, topZ, bottomZ, opts);
+    this._confirmOrientation(poly, faces, prototypeFaces, opts);
 
     return new this(id, prototypeFaces);
   }
 
-  static _confirmOrientation(poly, faces, prototypeFaces, topZ, bottomZ, opts) {
+  static _confirmOrientation(poly, faces, prototypeFaces, opts) {
+    const { topZ, bottomZ } = opts;
     const M = this.toPrototypeModel(opts);
-    const ctr = Point3d.tmp.set(poly.center.x, poly.center.y, bottomZ + ((topZ - bottomZ) / 2));
+
+    // Instead of center in the z direction, just move up 1 from bottom. This works better with ramps/steps/hills.
+    const ctr = Point3d.tmp.set(poly.center.x, poly.center.y, bottomZ + 1);
+    // const ctr = Point3d.tmp.set(poly.center.x, poly.center.y, bottomZ + ((topZ - bottomZ) / 2));
     const protoCenter = M.multiplyPoint3d(ctr);
 
     // Orientation should be facing inward for holes.
@@ -204,26 +210,28 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
   /**
    * Extrudes multiple polygons for a single shape, handles holes.
    * @param {string} id                 Identifier for this shape.
-   * @param {PIXI.Polygon[]} poly       2d polygons to use.
+   * @param {PIXI.Polygon[]} polys       2d polygons to use.
    * @param {object} [opts]
    * @param {number} [opts.topZ]        Top elevation
    * @param {number} [opts.bottomZ]     Bottom elevation
    * @returns {ExtrudedPolygonPrimitive}
    */
-  static fromPolygons(id, polys, { topZ = Number.POSITIVE_INFINITY, bottomZ = Number.NEGATIVE_INFINITY, ...opts } = {}) {
-    if ( polys.length === 1 ) return this.fromPolygon(id, polys[0], { topZ, bottomZ, ...opts });
-    if ( !isFinite(topZ) ) topZ = 1e06;
-    if ( !isFinite(bottomZ) ) bottomZ = -1e06;
+  static fromPolygons(id, polys, opts = {}) {
+    if ( polys.length === 1 ) return this.fromPolygon(id, polys[0], opts);
+    opts.topZ ??= Number.POSITIVE_INFINITY;
+    opts.bottomZ ??= Number.NEGATIVE_INFINITY;
+    if ( !isFinite(opts.topZ) ) opts.topZ = 1e06;
+    if ( !isFinite(opts.bottomZ) ) opts.bottomZ = -1e06;
     const allProtoFaces = [];
 
     // Construct extruded 3d shape for each polygon in turn.
     for ( const poly of polys )  {
-      const faces = this.#facesFromPolygon(poly, topZ, bottomZ);
+      const faces = this._facesFromPolygon(poly, opts);
       const prototypeFaces = this.canvasToPrototypeFaces(faces, opts);
       allProtoFaces.push(...prototypeFaces);
 
       // Confirm the polygon orientation for debugging.
-      this._confirmOrientation(poly, faces, prototypeFaces, topZ, bottomZ, opts);
+      this._confirmOrientation(poly, faces, prototypeFaces, opts);
     }
 
     return new this(id, allProtoFaces);
@@ -237,9 +245,9 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    * @param {PIXI.Polygon} poly       Polygon shape to use for top and bottom faces.
    * @param {number} topZ             The top elevation
    * @param {number} bottomZ          The bottom elevation
-   * @returns {Polygon3d[]} Array of top, bottom, and 1+ sides.
+   * @returns {Polygon3d[]} Array of top, bottom, and 3+ sides.
    */
-  static #facesFromPolygon(poly, topZ, bottomZ) {
+  static _facesFromPolygon(poly, { topZ, bottomZ } = {}) {
     const top = Polygon3d.fromPolygon(poly, topZ);
     return this._facesFromPolygon3d(top, bottomZ);
   }

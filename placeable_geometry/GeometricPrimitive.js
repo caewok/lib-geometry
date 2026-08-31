@@ -8,7 +8,7 @@ PIXI,
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { VertexObject } from "../placeable_vertices/VertexObject.js";
 import { AABB3d } from "../3d/AABB3d.js";
-import { almostBetween, cutaway } from "../util.js";
+import { cutaway } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
 import { combineTypedArrays } from "../util.js";
 import { ModelMatrixAnchor } from "../ModelMatrix.js";
@@ -120,6 +120,7 @@ export class GeometricPrimitive {
 
   initialize() {
     this._initializeFaces();
+    this.#calculatePrototypeAABB();
   }
 
   static create(...args) {
@@ -213,6 +214,8 @@ export class GeometricPrimitive {
   /** @type {AABB3d} */
   #aabb = new AABB3d();
 
+  #prototypeAABB = new AABB3d();
+
   get aabb() {
     if ( this.isDirty(this.constructor.DIRTY.AABB) ) this.updateAABB();
     return this.#aabb;
@@ -227,10 +230,17 @@ export class GeometricPrimitive {
   }
 
   /**
-   * Method for child class to define how the AABB is defined.
-   * Defaults to union of all model faces AABB.
+   * Define the prototype aabb based on prototype.
+   * @param {AABB3d} aabb       The prototype AABB object to modify
    */
-  _calculateAABB(aabb) { AABB3d.union(this.faces.map(face => face.aabb), aabb); }
+  #calculatePrototypeAABB() {
+    const aabb = this.#prototypeAABB;
+    AABB3d.union(this.prototypeFaces.map(face => face.aabb), aabb);
+  }
+
+  _calculateAABB(aabb) {
+    this.#prototypeAABB.transform(this.modelMatrix.model, aabb);
+  }
 
   // ----- NOTE: Faces ----- //
 
@@ -334,7 +344,7 @@ export class GeometricPrimitive {
    * Default approach uses the prototype faces.
    */
   _generateInstanceVertices(vo) {
-    return this.constructor.generateVerticesForFaces(this.iteratePrototypeFaces(), vo);
+    return this.constructor.generateVerticesForFaces(this.prototypeFaces, vo);
   }
 
   /** @type {VertexObject} */
@@ -749,7 +759,7 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
   /**
    * Initialize the values for this geometric primitive.
    */
-  initialize() { this.shapes.forEach(shape => shape.initialize); }
+  initialize() { this.shapes.forEach(shape => shape.initialize()); }
 
   /**
    * Destroy this geometric primitive, releasing associated memory in buffers.
@@ -786,8 +796,8 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
    */
   addShape(shape) {
     this.shapes.push(shape);
+    this._initializeFaces();
     this.dirty = this.constructor.DIRTY.ALL;
-    if ( this.initialized ) this._initializeFaces();
   }
 
   /**
@@ -798,6 +808,7 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
   removeShapeById(id) {
     const idx = this.shapes.findIndex(shape => shape.id === id);
     if ( !~idx ) return null;
+    this._initializeFaces();
     return this.removeShapeByIndex(idx);
   }
 
@@ -807,32 +818,42 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
    */
   removeShapeByIndex(idx) {
     const shape = this.shapes.splice(idx, 1)[0] || null;
-    if ( shape ) {
-      this.dirty = this.constructor.DIRTY.ALL;
-      this._initializeFaces();
-    }
+    if ( shape ) this.dirty = this.constructor.DIRTY.ALL;
+    this.initialize();
     return shape;
   }
 
   // ----- NOTE: AABB ----- //
 
   /**
-   * Method for child class to define how the AABB is defined.
-   * Defaults to union of all model faces AABB.
+   * Trigger update of shape AABB
    */
+  updateAABB() {
+    this.shapes.forEach(shape => shape.updateAABB());
+    super.updateAABB();
+  }
+
   _calculateAABB(aabb) {
-    const shapeAABBs = this.shapes.map(shape => shape.aabb);
-    AABB3d.union(shapeAABBs, aabb);
+    const M = this.modelMatrix.model;
+    const aabbs = this.shapes.map(shape => {
+      shape.updateAABB();
+      return shape.aabb.transform(M);
+    });
+    AABB3d.union(aabbs, aabb);
   }
 
   /** @type {Point3d} */
   get center() {
     const centers = this.shapes.map(shape => shape.center);
-    const poly3d = new Polygon3d.from3dPoints(centers);
+
+    const M = this.modelMatrix.model;
+    const txCenters = centers.map(center => M.multiplyPoint3d(center));
+    const poly3d = new Polygon3d.from3dPoints(txCenters);
     return poly3d.centroid;
   }
 
   // ----- NOTE: Model Matrix ----- //
+
 
   /** @type {ModelMatrix} */
   modelMatrix = ModelMatrixAnchor.create();
@@ -841,64 +862,71 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
    * Mworld = Mlocal x M.container (row-major)
    * @returns {Matrix}
    */
-  worldModelForShape(shape) { return shape.modelMatrix.model.multiply4x4(this.modelMatrix.model); }
+  #worldModel = MatrixFloat32.create(4, 4);
+
+  worldModelForShape(shape) { return shape.modelMatrix.model.multiply4x4(this.modelMatrix.model, this.#worldModel); }
 
   // ----- NOTE: Faces ----- //
 
+  // Prototype faces and faces are stored as a combined set of faces, modified by the world matrix.
+  #prototypeFaces = [];
 
-  // Return as a flat array.
-  get prototypeFaces() { return super.prototypeFaces.flatMap(arr => arr); }
+  get prototypeFaces() { return this.#prototypeFaces; }
 
   _initializeFaces() {
-    const n = this.shapes.length;
-    super.prototypeFaces = new Array(n);
-    for ( let i = 0; i < n; i += 1 ) {
-      const shape = this.shapes[i];
-      if ( !shape ) continue;
-      super.prototypeFaces[i] = shape.prototypeFaces;
-    }
+    this.shapes.forEach(shape => shape._initializeFaces());
+    this.#prototypeFaces = this.shapes.flatMap(shape => shape.prototypeFaces);
+    super._initializeFaces();
   }
 
-  // Return as a flat array.
-  get faces() { return super.faces.flatMap(arr => arr); }
+//   updateFaces() {
+//     this.shapes.forEach(shape => shape.updateFaces());
+//     super.updateFaces(); // This will trigger _generateFaces and clear the dirty tag.
+//   }
 
   /**
    * Update the faces for this primitive.
    * Default is to use the world matrix on the prototypes.
    */
   _generateFaces(faces) {
-    const protoFaces = super.prototypeFaces;
-    for ( let i = 0, numShapes = this.shapes.length; i < numShapes; i += 1 ) {
-      const shape = this.shapes[i];
-      if ( !shape ) continue;
-
+    let i = 0;
+    for ( const shape of this.shapes ) {
       // Calculate each face from the world model.
       const worldM = this.worldModelForShape(shape);
-      const protoArr = protoFaces[i];
-      const faceArr = faces[i];
-      for ( let j = 0, numProtos = protoArr.length; j < numProtos; j += 1 ) {
-        protoArr[j].transform(worldM, faceArr[j]);
-      }
+      for ( const protoFace of shape.prototypeFaces ) protoFace.transform(worldM, faces[i++]);
     }
   }
+
+  // ----- NOTE: Vertices ----- //
+
+  updateInstanceVertices() {
+    this.shapes.forEach(shape => shape.updateInstanceVertices()); // Triggers _generateVerticesForFaces for each shape.
+    super.updateInstanceVertices();
+  }
+
+//   updateModelVertices() {
+//     this.shapes.forEach(shape => shape.updateModelVertices());
+//     super.updateModelVertices();
+//   }
 
   // ----- NOTE: Face points ----- //
 
-  /**
-   * For each face, generate points encompassed by its surface.
-   * @param {Point3d[]} fp
-   */
-  _generateFacePoints(fp) {
-    fp.length = 0;
-    for ( const shape of this.shapes ) {
-      fp.push(...shape.facePoints);
-    }
-  }
+//   updateFacePoints() {
+//     this.shapes.forEach(shape => shape.updateFacePoints());
+//     super.updateFacePoints();
+//   }
+
 
   // ----- NOTE: Internal points ----- //
 
   // Default is a single set of points based on AABB.
   // TODO: More sophisticated version testing for containment.
+
+//   updateInternalPoints() {
+//     this.shapes.forEach(shape => shape.updateInternalPoints());
+//   }
+
+
 
 }
 
