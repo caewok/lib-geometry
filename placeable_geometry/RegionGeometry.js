@@ -189,6 +189,7 @@ export class RegionGeometry extends PlaceableGeometry {
       const id = this.placeableId;
       const zElevs = this.elevationZ;
       this.shapes[0] = ExtrudedPolygonPrimitive.fromPolygons(id, this.regionPolygons, zElevs);
+      this.shapes[0].initialize();
       return;
     }
 
@@ -251,6 +252,7 @@ export class RegionGeometry extends PlaceableGeometry {
         opts.angles.release();
       }
     }
+    shape.initialize();
     return shape;
   }
 

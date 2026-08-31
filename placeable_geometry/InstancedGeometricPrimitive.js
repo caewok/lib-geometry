@@ -64,10 +64,6 @@ const QUADS = {
 
 export class InstancedGeometricPrimitive extends GeometricPrimitive {
 
-  constructor(id) {
-    super(id);
-  }
-
   // ----- NOTE: FACES ----- //
 
   /** @type {Polygon3d} */

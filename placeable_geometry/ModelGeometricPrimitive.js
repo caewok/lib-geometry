@@ -20,7 +20,6 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
   constructor(id, prototypeFaces) {
     super(id);
     this._prototypeFaces = prototypeFaces;
-    this._initializeFaces();
   }
 
   /**

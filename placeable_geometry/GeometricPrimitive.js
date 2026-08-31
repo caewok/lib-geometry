@@ -116,11 +116,16 @@ export class GeometricPrimitive {
    */
   constructor(id) {
     this.id = id;
-    this.initialize();
   }
 
   initialize() {
     this._initializeFaces();
+  }
+
+  static create(...args) {
+    const out = new this(...args);
+    out.initialize();
+    return out;
   }
 
   #center = new Point3d();

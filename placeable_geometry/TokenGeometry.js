@@ -396,16 +396,19 @@ export class TokenSubGeometry extends mix(PlaceableGeometry).with(TokenDocumentC
     const tokenD = this.placeableDocument;
     const type = this.constructor.shapeTypeForToken(tokenD);
     const primitiveCl = this.constructor.primitiveClassForToken(tokenD)
+    let shape;
     if ( type === TYPES.HEXAGONAL && !this.useSimpleHexagon ) {
       const res = getHexagonalShape(tokenD.w, tokenD.h, tokenD.shape, canvas.scene.grid.columns ?? false);
       const poly2d = new PIXI.Polygon(res.points);
       const elevs = this.elevationZ;
-      this.shapes.push(ExtrudedPolygonPrimitive.fromPolygon(this.placeableId, poly2d, {
+      shape = ExtrudedPolygonPrimitive.fromPolygon(this.placeableId, poly2d, {
         ...elevs,
         dims: this.constructor.tokenDimensions(this.placeableDocument),
         center: this.constructor.tokenCenter(this.placeableDocument),
-      }));
-    } else this.shapes.push(new primitiveCl(this.placeableId));
+      });
+    } else shape = new primitiveCl(this.placeableId);
+    shape.initialize();
+    this.shapes.push(shape);
   }
 
   // ----- NOTE: Update ----- //
