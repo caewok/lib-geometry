@@ -624,6 +624,8 @@ export class Plane {
 
   /**
    * Projects a point onto the plane.
+   * Orthogonal projection, casting a perpendicular line from the point to the plane.
+   * Casts orthogonal to the plane normal.
    * @param {Point3d} pt           Point to project
    * @returns {Point3d} The projected point
    */
@@ -639,6 +641,26 @@ export class Plane {
     // Subtract the distance times the normal vector from the original point.
     const vScaled = this.normal.multiplyScalar(dist, tmpPt2);
     return pt.subtract(vScaled, outPoint);
+  }
+
+  /**
+   * Find the z point on a plane from x and y coordinates.
+   * Projects points vertically straight down along the z-axis
+   * @param {number} x
+   * @param {number} y
+   * @param {number} [epsilon=1e-08] Tolerance for determining if the plane is vertical
+   * @returns {number|undefined} Z coordinate, or undefined if the plane is vertical.
+   */
+  getZ(x, y, epsilon = 1e-08) {
+    // A plane is vertical if its normal has no z component.
+    const N = this.normal;
+    if ( N.z.almostEqual(0, epsilon) ) {
+      console.warn("Cannot calculate Z for a vertical plane; Z is undefined.");
+      return undefined;
+    }
+
+    // Solves the plane equation (Ax + By + Cz + D = 0) for z.
+    return -((N.x * x)+ (N.y * y) + this.constant) / N.z;
   }
 }
 
