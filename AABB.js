@@ -21,6 +21,8 @@ Object.freeze(axes.x);
 Object.freeze(axes.y);
 Object.freeze(axes.z);
 
+// Temporary points. Need 4 to accommodate the transform method.
+const tmpPoints = Point3d.createN(4);
 
 /**
  * Axis-aligned bounding box
@@ -167,14 +169,14 @@ export class AABB2d {
    * @returns {AABB2d}
    */
   static fromPoints(pts = [], out) {
-    if ( out ) out._clear();
-    else out = new this();
-    const { min, max } = out;
-    for ( const pt of pts ) {
-      for ( const axis of this.axes ) {
-        min[axis] = Math.min(pt[axis] ?? 0, min[axis]);
-        max[axis] = Math.max(pt[axis] ?? 0, max[axis]);
-      }
+    out ??= new this();
+    const n = pts.length;
+    for ( const axis of this.axes ) {
+      const values = new Array(n);
+      for ( let i = 0; i < n; i += 1 ) values[i] = pts[i][axis] || 0;
+      const minMax = Math.minMax(...values);
+      out.min[axis] = minMax.min;
+      out.max[axis] = minMax.max;
     }
     return out;
   }
@@ -281,12 +283,11 @@ export class AABB2d {
     using dims = PIXI.Point.tmp.set(textureWidth, textureHeight);
     using scale = PIXI.Point.tmp.set(scaleX, scaleY);
     using offset = PIXI.Point.tmp.set(offsetX, offsetY);
-    const corners = [
-      PIXI.Point.tmp.set(-anchorX, -anchorY),
-      PIXI.Point.tmp.set(1 - anchorX, -anchorY),
-      PIXI.Point.tmp.set(1 - anchorX, 1 - anchorX),
-      PIXI.Point.tmp.set(-anchorX, 1 - anchorY),
-    ];
+    const corners = tmpPoints; // NOTE: Already defined as 4 points.
+    corners[0].set(-anchorX, -anchorY);
+    corners[1].set(1 -anchorX, -anchorY);
+    corners[2].set(1 -anchorX, 1 -anchorY);
+    corners[3].set(-anchorX, 1 -anchorY);
     const cos = Math.cos(rotationRadians);
     const sin = Math.sin(rotationRadians);
 
@@ -295,19 +296,15 @@ export class AABB2d {
     // res.x = corner.x * cos - corner.y * sin
     // res.y = corner.x * sin - corner.y * cos
     // res + offset
-    const worldPoints = corners.map(corner => {
+    corners.forEach(corner => {
       corner.multiply(dims, corner).multiply(scale, corner);
-      const res = PIXI.Point.tmp;
-      res.x = corner.x * cos - corner.y * sin;
-      res.y = corner.x * cos - corner.y * sin;
-      return res.add(offset, res);
+      const x = corner.x * cos - corner.y * sin;
+      const y = corner.x * cos - corner.y * sin;
+      corner.set(x, y);
     });
 
     // Extract min/max coordinates.
-    out = this.fromPoints(worldPoints, out);
-    PIXI.Point.release(...corners);
-    PIXI.Point.release(...worldPoints);
-    return out;
+    return this.fromPoints(corners, out);
   }
 
   /**
@@ -319,8 +316,8 @@ export class AABB2d {
   }
 
   static fromWallDocument(wallD, out) {
-    using a = PIXI.Point.tmp.set(wallD.c[0], wallD.c[1]);
-    using b = PIXI.Point.tmp.set(wallD.c[2], wallD.c[3]);
+    const a = tmpPoints[0].set(wallD.c[0], wallD.c[1]);
+    const b = tmpPoints[1].set(wallD.c[2], wallD.c[3]);
     return this.fromPoints([a, b], out);
   }
 
@@ -374,7 +371,6 @@ export class AABB2d {
     this.max.copyFrom(other.max);
     return this;
   }
-
 
   // ----- NOTE: Containment tests ----- //
 
@@ -487,7 +483,7 @@ export class AABB2d {
    */
   overlapsSegment(a, b, axes) {
     axes ??= this.constructor.axes;
-    using rayDirection = b.subtract(a);
+    const rayDirection = b.subtract(a, tmpPoints[0]);
     const epsilon = 1e-06;
 
     // Initialize t-interval for the infinite line's intersection with the AABB.
@@ -641,6 +637,30 @@ export class AABB2d {
     using absAxis = axis.abs();
     const radius = extents.dot(absAxis);
     return { min: centerProj - radius, max: centerProj + radius };
+  }
+
+  /**
+   * Transform using a 3x3 matrix.
+   * @param {Matrix<3x3>} M
+   * @param {AABB2d} out
+   * @returns {AABB2d}
+   */
+  transform(M, out) {
+    const { min, max } = this;
+
+    // Generate all 4 points of the current AABB.
+    const corners = [
+      tmpPoints[0].set(min.x, min.y),
+      tmpPoints[1].set(min.x, max.y),
+      tmpPoints[2].set(max.x, min.y),
+      tmpPoints[3].set(max.x, max.y),
+    ];
+
+    // Transform each corner using the matrix.
+    corners.forEach(pt => M.multiplyPoint2d(pt, pt));
+
+    // Build the new axis-aligned bounds.
+    return this.constructor.fromPoints(corners, out);
   }
 
   // ----- NOTE: Equality ----- //
