@@ -808,7 +808,6 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
   removeShapeById(id) {
     const idx = this.shapes.findIndex(shape => shape.id === id);
     if ( !~idx ) return null;
-    this._initializeFaces();
     return this.removeShapeByIndex(idx);
   }
 
@@ -819,7 +818,7 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
   removeShapeByIndex(idx) {
     const shape = this.shapes.splice(idx, 1)[0] || null;
     if ( shape ) this.dirty = this.constructor.DIRTY.ALL;
-    this.initialize();
+    this._initializeFaces();
     return shape;
   }
 
