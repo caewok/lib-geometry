@@ -514,22 +514,27 @@ export class Polygon3d {
    * @param {number} [density]        If provided, used instead of result of approximateVertexDensity for circles and ellipses
    * @returns {Quad3d[]}
    */
-  buildTopSides(bottomZ, { heightZ = 0 } = {}) {
+  buildTopSides(bottomZ, _opts) {
     const ctr = this.centroid;
     const numSides = this.points.length;
     const sides = new Array(numSides);
     let i = 0;
     using a = Point3d.tmp;
     using b = Point3d.tmp;
+    let filterSides = false;
     for ( const edge of this.iterateEdges({ close: true }) ) {
-      const z0 = bottomZ ?? edge.a.z - heightZ;
-      const z1 = bottomZ ?? edge.b.z - heightZ;
-      const side = Quad3d.from4Points(edge.b, edge.a, a.set(edge.a.x, edge.a.y, z0), b.set(edge.b.x, edge.b.y, z1));
+      // Cannot form a quad without 4 distinct points (this is rare).
+      if ( edge.a.z.almostEqual(bottomZ) || edge.b.z.almostEqual(bottomZ) ) {
+        filterSides = true;
+        continue;
+      }
+      const side = Quad3d.from4Points(edge.b, edge.a, a.set(edge.a.x, edge.a.y, bottomZ), b.set(edge.b.x, edge.b.y, bottomZ));
       if ( side.isFacing(ctr) ^ this.isHole ) side.reverseOrientation(); // Face outwards.
       sides[i++] = side;
       // Usually we don't want sides to be holes, just reversed orientation.
       // Example: hole inside a rectangle. We want the interior sides to block when at the center.
     }
+    if ( filterSides ) return sides.filter(elem => Boolean(elem));
     return sides;
   }
 
