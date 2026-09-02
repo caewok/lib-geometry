@@ -182,29 +182,7 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
     if ( !isFinite(opts.bottomZ) ) opts.bottomZ = -1e06;
     const faces = this._facesFromPolygon(poly, opts);
     const prototypeFaces = this.canvasToPrototypeFaces(faces, opts);
-
-    // Confirm the polygon orientation for debugging.
-    this._confirmOrientation(poly, faces, prototypeFaces, opts);
-
     return new this(id, prototypeFaces);
-  }
-
-  static _confirmOrientation(poly, faces, prototypeFaces, opts) {
-    const { topZ, bottomZ } = opts;
-    const M = this.toPrototypeModel(opts);
-
-    // Instead of center in the z direction, just move up 1 from bottom. This works better with ramps/steps/hills.
-    const ctr = Point3d.tmp.set(poly.center.x, poly.center.y, bottomZ + 1);
-    // const ctr = Point3d.tmp.set(poly.center.x, poly.center.y, bottomZ + ((topZ - bottomZ) / 2));
-    const protoCenter = M.multiplyPoint3d(ctr);
-
-    // Orientation should be facing inward for holes.
-    for ( let i = 0; i < prototypeFaces.length; i += 1 ) {
-      const prototypeFace = prototypeFaces[i];
-      const face = faces[i];
-      if ( prototypeFace.isFacing(protoCenter) ^ face.isFacing(ctr) ) console.warn(`${this.constructor.name}#fromPolygon orientation test failed`, { poly, prototypeFace, face, ctr });
-      if ( face.isFacing(ctr) ^ !poly.isPositive ) console.warn(`${this.constructor.name}#fromPolygon face is facing center`, { face, poly, ctr });
-    }
   }
 
   /**
@@ -229,13 +207,10 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
       const faces = this._facesFromPolygon(poly, opts);
       const prototypeFaces = this.canvasToPrototypeFaces(faces, opts);
       allProtoFaces.push(...prototypeFaces);
-
-      // Confirm the polygon orientation for debugging.
-      this._confirmOrientation(poly, faces, prototypeFaces, opts);
     }
-
     return new this(id, allProtoFaces);
   }
+
 
   // ----- NOTE: Factory helpers to construct faces ----- //
 

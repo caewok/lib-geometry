@@ -131,9 +131,26 @@ export class GeometricPrimitive {
 
   #center = new Point3d();
 
+  /**
+   * Center is defined as the origin for the prototype shape.
+   */
   get center() {
     // Multiply the origin (0, 0, 0) by the translation to find the new center.
     return this.modelMatrix._translation.multiplyPoint3d(this.#center);
+  }
+
+  /**
+   * Centroid is the center of mass of all the face points.
+   * @returns {Point3d}
+   */
+  calculateCentroid() {
+    const faces = this.faces;
+    if ( !faces || faces.length === 0 ) return this.center;
+
+    using centroid = Point3d.tmp.set(0, 0, 0);
+    for ( const face of faces ) centroid.add(face.centroid, centroid);
+    const scale = 1 / faces.length;
+    return centroid.multiplyScalar(scale);
   }
 
   /**
@@ -272,6 +289,7 @@ export class GeometricPrimitive {
    */
   updateFaces() {
     this._generateFaces(this.#faces);
+    if ( !this.validateShape() ) console.warn(`${this.constructor.name}|Shape fails validation!`, this);
     this._clearDirty(this.constructor.DIRTY.FACES);
   }
 
@@ -316,6 +334,34 @@ export class GeometricPrimitive {
    */
   draw2d(opts) {
     for ( const face of this.faces ) face.draw2d(opts);
+  }
+
+  /**
+   * Validate aspects of this shape, to be defined by child class.
+   * At a minimum, calls validateFacesOutward
+   * @returns {boolean} True if valid (tests pass).
+   */
+  validateShape() {
+    return this.validateFacesOutward();
+  }
+
+  /**
+   * Test whether all faces of this shape face outward as expected.
+   * Outward means from an outside viewer, the face is counter-clockwise.
+   * @returns {boolean} True if all faces point outward.
+   */
+  validateFacesOutward() {
+    // Default approach is to test each face against the centroid of the shape.
+    // This will fail for flat objects or complex convex objects (like steps)
+    const faces = this.faces;
+    if ( !faces || faces.length < 3 ) return false;
+
+    // Test each face against the centroid.
+    const centroid = this.calculateCentroid();
+    for ( const face of faces ) {
+      if ( face.isFacing(centroid) ) return false;
+    }
+    return true;
   }
 
   // ----- NOTE: Vertices ----- //
