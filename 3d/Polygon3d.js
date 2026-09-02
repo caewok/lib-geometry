@@ -210,7 +210,10 @@ export class Polygon3d {
    * @type {Point3d}
    */
   get centroid() {
-    if ( this.#dirtyCentroid ) this.#centroid.copyFrom(this._calculateCentroid());
+    if ( this.#dirtyCentroid ) {
+      this.#centroid.copyFrom(this._calculateCentroid());
+      this.#dirtyCentroid = false;
+    }
     return this.#centroid;
   }
 
@@ -220,11 +223,26 @@ export class Polygon3d {
   }
 
   /**
-   * Calculates the centroid of a 3d planar polygon.
-   * Presumes
+   * Calculates the centroid (average/center point) of a 3d planar polygon.
    * @returns {Point3d}
    */
   _calculateCentroid() {
+    // If less than three points, return but do not mark as clean.
+    if ( this.points.length === 0 ) return Point3d.tmp.set(0, 0, 0);
+    if ( this.points.length === 1 ) return this.points[0].clone();
+    if ( this.points.length === 2 ) return Point3d.midpoint(this.points[0], this.points[1]);
+
+    using centroid = Point3d.tmp.set(0, 0, 0);
+    for ( const p of this.points ) centroid.add(p, centroid);
+    const scale = 1 / this.points.length;
+    return centroid.multiplyScalar(scale);
+  }
+
+  /**
+   * Calculates the area-weighted centroid of a 3d planar polygon.
+   * @returns {Point3d}
+   */
+  _calculateAreaWeightedCentroid() {
     // If less than three points, return but do not mark as clean.
     if ( this.points.length === 0 ) return Point3d.tmp.set(0, 0, 0);
     if ( this.points.length === 1 ) return this.points[0].clone();
@@ -278,7 +296,6 @@ export class Polygon3d {
     Point3d.release(...crossProducts, ...txPts);
 
     // Add the reference point back to return to the original coordinate space.
-    this.#dirtyCentroid = false;
     return centroid.add(ref);
   }
 
