@@ -231,7 +231,7 @@ export class AABB2d {
    */
   static fromPolygon(poly, out) {
     // Iterating the points will determine the min/max values.
-    return this.fromPoints(poly.iteratePoints(), out);
+    return this.fromPoints([...poly.iteratePoints()], out);
   }
 
   /**
