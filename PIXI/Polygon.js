@@ -260,14 +260,14 @@ function* reverseIteratePoints() {
  * @returns {PIXI.Polygon}
  */
 function transform(M, out) {
-  out ??= new this();
+  out ??= new this.constructor();
   out.points.length = this.points.length;
   let i = 0;
   for ( using pt of this.iteratePoints() ) {
     M.multiplyPoint2d(pt, pt);
-    
+
     // Either overwrites this.points at that position or at a new out.
-    out.points[i++] = pt.x; 
+    out.points[i++] = pt.x;
     out.points[i++] = pt.y;
   }
   return out;
@@ -376,10 +376,10 @@ function lineIntersections(a, b, { indices = false, tangents = true } = {}) {
   const ixs = [];
   this.iterateEdges().forEach((edge, i) => {
     // Test if the line intersects the edge segment (first half of lineSegmentIntersects test)
-    const xa = foundry.utils.orient2dFast(a, b, edge.a);  
+    const xa = foundry.utils.orient2dFast(a, b, edge.a);
     const xb = foundry.utils.orient2dFast(a, b, edge.b);
     if ( (xa * xb) > 0 ) return;
-    
+
     // Determine the actual intersection.
     const ix = foundry.utils.lineLineIntersection(a, b, edge.a, edge.b);
     if ( !ix ) return;
