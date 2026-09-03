@@ -190,7 +190,7 @@ export class VerticalQuadPrimitive extends QuadPrimitive {
 
   validateFacesOutward() {
     // Should face north before any rotations.
-    using ctr = Point3d.tmp.set(0, 1, 0);
+    using ctr = Point3d.tmp.set(0, -1, 0);
     this.modelMatrix.model.multiplyPoint3d(ctr, ctr);
     return this.faces[0].isFacing(ctr);
   }

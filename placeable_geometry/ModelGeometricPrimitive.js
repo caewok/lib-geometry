@@ -118,29 +118,17 @@ export class PlanarPolygonPrimitive extends ModelGeometricPrimitive {
    */
   static fromPolygon3d(id, poly3d, opts) {
     const prototypeFace = this.canvasToPrototypeFaces([poly3d], opts)[0];
-
-    // Confirm the prototype faces are oriented same as the original.
-    const ctr = poly3d.centroid.clone();
-    ctr.z += 1;
-    const protoCenter = Point3d.tmp.set(0, 0, 1); // 1 above the origin.
-    if ( prototypeFace.isFacing(protoCenter) ^ poly3d.isFacing(ctr) ) console.warn(`${this.constructor.name}#fromPolygon3d orientation test failed`, poly3d);
     return new this(id, [prototypeFace]);
   }
 
-  /**
-   * Update the faces for this primitive.
-   * Default is to use the model matrix.
-   * Confirms orientation, which the more complex model matrices can screw up (apparently).
-   * @param {Polygon3d[]} faces
-   */
-  _generateFaces(faces) {
-    // Ensure the model faces face the correct direction.
-    super._generateFaces(faces);
-
-    const ctr = this.center.clone();
+  validateFacesOutward() {
+    // Confirm the prototype face is oriented same as the original.
+    const prototypeFace = this.prototypeFaces[0];
+    const poly3d = this.faces[0];
+    const ctr = poly3d.centroid.clone();
     ctr.z += 1;
     const protoCenter = Point3d.tmp.set(0, 0, 1); // 1 above the origin.
-    if ( this.prototypeFaces[0].isFacing(protoCenter) ^ faces[0].isFacing(ctr) ) console.warn(`${this.constructor.name}#fromPolygon3d orientation test failed`, this);
+    return !(prototypeFace.isFacing(protoCenter) ^ poly3d.isFacing(ctr));
   }
 }
 
