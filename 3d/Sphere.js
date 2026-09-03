@@ -10,7 +10,7 @@ import { Polygon3d, Circle3d, Ellipse3d, Triangle3d } from "./Polygon3d.js";
 import { Point3d } from "./Point3d.js";
 import { Matrix, MatrixFloat32 } from "../Matrix.js";
 import { almostBetween } from "../util.js";
-import * as Delaunay from "../d3-delaunay.js";
+import { Delaunay } from "../d3-delaunay.js";
 
 /* Sphere
 Represent a 3d sphere, with some functions to manipulate it.
@@ -647,7 +647,7 @@ export class Sphere {
     });
 
     // Perform 2d Delaunay Triangulation on the spherical grid.
-    const delaunay = Delaunay.from(pts2d);
+    const delaunay = Delaunay.from(pts2d); // Note that pts2d is the required array/tuple: [x, y]
     const triangles = delaunay.triangles; // Array of indices pointing to our original array.
 
     // Construct the final triangles
