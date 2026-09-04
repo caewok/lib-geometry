@@ -289,8 +289,11 @@ export class GeometricPrimitive {
    */
   updateFaces() {
     this._generateFaces(this.#faces);
-    if ( !this.validateShape() ) console.warn(`${this.constructor.name}|Shape fails validation!`, this);
     this._clearDirty(this.constructor.DIRTY.FACES);
+
+    // Must come afte clearing faces to avoid calling updateFaces again when this.faces is accessed.
+    if ( !this.validateShape() ) console.warn(`${this.constructor.name}|Shape fails validation!`, this);
+
   }
 
   /**
@@ -970,6 +973,8 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
 //   updateInternalPoints() {
 //     this.shapes.forEach(shape => shape.updateInternalPoints());
 //   }
+
+  validateShape() { return this.shapes.every(shape => shape.validateShape()); }
 
 
 
