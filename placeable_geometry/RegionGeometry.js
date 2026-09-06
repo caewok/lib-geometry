@@ -87,13 +87,13 @@ export class ConePrimitive extends CombinedGeometricPrimitive {
       }
     }
 
-    const triShape = ExtrudedTrianglePrimitive.fromTriangle(`baseTri_${id}`, apex, baseSegment.b, baseSegment.a, opts);
+    const triShape = ExtrudedTrianglePrimitive.fromTriangle(`baseTri_${id}`, apex, baseSegment.a, baseSegment.b, opts);
     out.addShape(triShape);
     if ( regionShape.curvature === "flat" ) return;
 
     // Build the extruded polygon arc piece.
     const arcPoints = arcCircle.pointsForArc(arcStartAngle, arcEndAngle, { density, includeEndpoints: false });
-    const poly = new PIXI.Polygon(baseSegment.b, ...arcPoints.reverse(), baseSegment.a);
+    const poly = new PIXI.Polygon(baseSegment.a, ...arcPoints, baseSegment.b);
     const arcShape = ExtrudedPolygonPrimitive.fromPolygon(`${regionShape.curvature}_${id}`, poly, opts);
     out.addShape(arcShape);
     return out;
@@ -380,20 +380,19 @@ export class RegionGeometry extends PlaceableGeometry {
   _shapeIndex(shape) { return Number(shape.id.split("_").at(-1)); }
 
   initialize() {
+    console.debug(`RegionGeometry|initialize ${this.placeableDocument.name} (${this.placeableId})`);
     this.createShapes();
     super.initialize();
   }
 
   updateAllShapes() {
+    console.debug(`RegionGeometry|updateAllShapes ${this.placeableDocument.name} (${this.placeableId})`);
     const { shapes, regionShapes } = this;
-    for ( let i = 0, iMax = shapes.length; i < iMax; i += 1 ) {
-      const shape = shapes[i];
-      const regionShape = regionShapes[i];
-      this._updateShape(i);
-    }
+    for ( let i = 0, iMax = shapes.length; i < iMax; i += 1 ) this._updateShape(i);
   }
 
   createShapes() {
+    console.debug(`RegionGeometry|createShapes ${this.placeableDocument.name} (${this.placeableId})`);
     const regionShapes = this.regionShapes;
     const shapes = this.shapes;
     this.shapes.forEach(subshape => subshape.destroy());
@@ -425,6 +424,7 @@ export class RegionGeometry extends PlaceableGeometry {
    * @returns {GeometricPrimitive[]}
    */
   _buildEntireRegionShapes() {
+    console.debug(`RegionGeometry|_buildEntireRegionShapes ${this.placeableDocument.name} (${this.placeableId})`);
     const id = this.placeableId;
     const zElevs = this.elevationZ;
     const shape = ExtrudedPolygonPrimitive.fromPolygons(id, this.regionPolygons, zElevs);
@@ -438,6 +438,7 @@ export class RegionGeometry extends PlaceableGeometry {
    * @returns {GeometricPrimitive[]}
    */
   _buildRegionShapes(shapeIdx) {
+    console.debug(`RegionGeometry|_buildRegionShapes ${this.placeableDocument.name} (${this.placeableId})`);
     const regionShape = this.regionShapes[shapeIdx];
     const id = this._shapeId(shapeIdx);
     const zElevs = this.elevationZ;
@@ -489,6 +490,10 @@ export class RegionGeometry extends PlaceableGeometry {
   }
 
   _update(opts) {
+    console.debug(`RegionGeometry|_update ${this.placeableDocument.name} (${this.placeableId})`);
+
+    // If no opts object, then just update all without rebuilding anything.
+    if ( !opts ) return this.updateAllShapes();
 
     /*
     There is currently no (easy) way to tell if a shape is otherwise the same but for a position/rotation/scale change.
@@ -503,7 +508,7 @@ export class RegionGeometry extends PlaceableGeometry {
     if ( this.regionShapes.some(regionShape => regionShape.hole) || this.placeableDocument.restriction.enabled ) {
       // Each level shape array should contain a single polygon primitive.
       this.initialize();
-      this.updateAllShapes(opts);
+      this.updateAllShapes();
       return;
     }
 
@@ -517,12 +522,12 @@ export class RegionGeometry extends PlaceableGeometry {
    * Remove shapes when region shapes have been removed.
    */
   _updateShapes(opts) {
+    console.debug(`RegionGeometry|_updateShapes ${this.placeableDocument.name} (${this.placeableId})`);
     let trackingArr = opts?.[GEOMETRY_LIB_ID] || [];
     trackingArr = trackingArr.map(arr => new Set(arr));
 
     const { shapes, regionShapes } = this;
     const numRegionShapes = regionShapes.length;
-    if ( numRegionShapes === this.shapes.length ) return;
 
     // For each shape, a mis-matched class indicates either the shape was changed
     // or a shape prior to it was deleted. Reuse shapes where possible, creating new as needed and
@@ -571,6 +576,7 @@ export class RegionGeometry extends PlaceableGeometry {
    * @param {number} i          The index of the shape in the array.
    */
   _rebuildShape(i) {
+    console.debug(`RegionGeometry|_rebuildShape ${i} ${this.placeableDocument.name} (${this.placeableId})`);
     const shapes = this.shapes;
     if ( shapes[i] )  shapes[i].destroy();
     shapes[i] = this._buildRegionShape(i);
@@ -585,6 +591,7 @@ export class RegionGeometry extends PlaceableGeometry {
    *   Adding a "elevation" key will update the position and scale.
    */
   _updateShape(shapeIdx, changes) {
+    console.debug(`RegionGeometry|_updateShape ${shapeIdx} ${this.placeableDocument.name} (${this.placeableId})`);
     const shape = this.shapes[shapeIdx];
     const regionShape = this.regionShapes[shapeIdx];
     changes ??= this._allChanges(regionShape);
@@ -676,7 +683,7 @@ export class RegionGeometry extends PlaceableGeometry {
   /**
    * Determine the dimensions for a given shape.
    * @param {ShapeData} regionShape      The region shape; assumed to have been already updated
-   * @returns {Point3d[4]} Center (position), angles, dims, anchors, using the temporary points.
+   * @returns {object} Center (position), angles, dims, anchors, using the temporary points.
    */
   _shapeDimensions(regionShape) {
     const { topZ, bottomZ } = this.elevationZ;
@@ -730,7 +737,7 @@ export class RegionGeometry extends PlaceableGeometry {
       case "token": break; // Unclear what this is.
     }
 
-    return { center, angles, dims, anchors };
+    return { center, angles, dims, anchors, topZ, bottomZ };
   }
 
 

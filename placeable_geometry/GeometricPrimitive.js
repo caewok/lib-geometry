@@ -135,22 +135,27 @@ export class GeometricPrimitive {
    * Center is defined as the origin for the prototype shape.
    */
   get center() {
+    // If anchor is at 0, 0, then the center is the origin (0, 0, 0).
     // Multiply the origin (0, 0, 0) by the translation to find the new center.
-    return this.modelMatrix._translation.multiplyPoint3d(this.#center);
+    if ( this.modelMatrix.anchor.equals({ x: 0, y: 0, z: 0 }) ) {
+      return this.modelMatrix._translation.multiplyPoint3d(this.#center);
+    }
+    return this.calculateCentroid(this.#center);
   }
 
   /**
    * Centroid is the center of mass of all the face points.
    * @returns {Point3d}
    */
-  calculateCentroid() {
+  calculateCentroid(out) {
     const faces = this.faces;
     if ( !faces || faces.length === 0 ) return this.center;
 
-    using centroid = Point3d.tmp.set(0, 0, 0);
-    for ( const face of faces ) centroid.add(face.centroid, centroid);
+    out ??= Point3d.tmp;
+    out.set(0, 0, 0);
+    for ( const face of faces ) out.add(face.centroid, out);
     const scale = 1 / faces.length;
-    return centroid.multiplyScalar(scale);
+    return out.multiplyScalar(scale, out);
   }
 
   /**
@@ -292,7 +297,7 @@ export class GeometricPrimitive {
     this._clearDirty(this.constructor.DIRTY.FACES);
 
     // Must come afte clearing faces to avoid calling updateFaces again when this.faces is accessed.
-    if ( !this.validateShape() ) console.warn(`${this.constructor.name}|Shape fails validation!`, this);
+    if ( !this.validate() ) console.warn(`${this.constructor.name}|Shape fails validation!`, this);
 
   }
 
@@ -303,7 +308,8 @@ export class GeometricPrimitive {
   _generateFaces(faces) {
     const M = this.modelMatrix.model;
     const numSides = this.prototypeFaces.length;
-    for ( let i = 0; i < numSides; i += 1 ) this.prototypeFaces[i].transform(M, faces[i]);
+    const invTransposeM = M.invert().transpose();
+    for ( let i = 0; i < numSides; i += 1 ) this.prototypeFaces[i].transform(M, faces[i], invTransposeM);
     this._clearDirty(this.constructor.DIRTY.FACES);
   }
 
@@ -344,8 +350,8 @@ export class GeometricPrimitive {
    * At a minimum, calls validateFacesOutward
    * @returns {boolean} True if valid (tests pass).
    */
-  validateShape() {
-    return this.validateFacesOutward();
+  validate() {
+    return this.facesOutward();
   }
 
   /**
@@ -353,7 +359,7 @@ export class GeometricPrimitive {
    * Outward means from an outside viewer, the face is counter-clockwise.
    * @returns {boolean} True if all faces point outward.
    */
-  validateFacesOutward() {
+  facesOutward() {
     // Default approach is to test each face against the centroid of the shape.
     // This will fail for flat objects or complex convex objects (like steps)
     const faces = this.faces;
@@ -903,7 +909,7 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
 
     const M = this.modelMatrix.model;
     const txCenters = centers.map(center => M.multiplyPoint3d(center));
-    const poly3d = new Polygon3d.from3dPoints(txCenters);
+    const poly3d = Polygon3d.from3dPoints(txCenters);
     return poly3d.centroid;
   }
 
@@ -948,7 +954,8 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
     for ( const shape of this.shapes ) {
       // Calculate each face from the world model.
       const worldM = this.worldModelForShape(shape);
-      for ( const protoFace of shape.prototypeFaces ) protoFace.transform(worldM, faces[i++]);
+      const invTransposeM = worldM.invert().transpose();
+      for ( const protoFace of shape.prototypeFaces ) protoFace.transform(worldM, faces[i++], invTransposeM);
     }
   }
 
@@ -981,7 +988,7 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
 //     this.shapes.forEach(shape => shape.updateInternalPoints());
 //   }
 
-  validateShape() { return this.shapes.every(shape => shape.validateShape()); }
+  validate() { return this.shapes.every(shape => shape.validate()); }
 
 
 

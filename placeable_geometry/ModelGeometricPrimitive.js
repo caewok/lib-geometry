@@ -54,7 +54,8 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
 
     // Build a matrix to transform each face;
     const M = this.toPrototypeModel(opts);
-    return faces.map(face => face.transform(M));
+    const invTransposeM = M.invert().transpose();
+    return faces.map(face => face.transform(M, undefined, invTransposeM));
   }
 
   /**

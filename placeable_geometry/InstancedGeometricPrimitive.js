@@ -605,6 +605,8 @@ export class WedgeRectangularBasePrimitive extends InstancedGeometricPrimitive {
     translateM
       .multiply4x4(scaleM, transformM)
       .multiply4x4(invTranslateM, transformM);
+
+    // TODO: Need to finish this. Multiply the prototype faces?
   }
 }
 
