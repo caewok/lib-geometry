@@ -1,11 +1,12 @@
 /* globals
+PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
 import { GeometricPrimitive } from "./GeometricPrimitive.js";
 import { VertexObject } from "../placeable_vertices/VertexObject.js";
-import { Polygon3d  } from "../3d/Polygon3d.js";
+import { Polygon3d, Triangle3d  } from "../3d/Polygon3d.js";
 import { ModelMatrixAnchor } from "../ModelMatrix.js";
 import { Point3d } from "../3d/Point3d.js";
 
@@ -26,7 +27,7 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
    * Destroy this geometric primitive, releasing associated memory in buffers.
    */
   destroy() {
-    this.prototypeFaces.forEach(face => face.release);
+    this.prototypeFaces.forEach(face => face.release());
     this.prototypeFaces.length = 0;
     super.destroy();
   }
@@ -271,3 +272,38 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
   }
 }
 
+/**
+ * Extruded triangle primitive.
+ * A 2d planar triangle parallel to the XY axis is extruded along the z axis, with vertical sides.
+ * Typical for a cone region.
+ */
+export class ExtrudedTrianglePrimitive extends ExtrudedPolygonPrimitive {
+
+  /**
+   * Build an extruded (along the z-axis) shape from a 2d polygon.
+   * @param {string} id           Identifier for this shape.
+   * @param {PIXI.Point} a        First point of triangle
+   * @param {PIXI.Point} b        Second point of triangle
+   * @param {PIXI.Point} c        Third point of triangle
+   * @param {object} [opts]       See fromPolygon method.
+   * @returns {ExtrudedTrianglePrimitive}
+   */
+  static fromTriangle(id, a, b, c, opts) {
+    const poly = new PIXI.Polygon(a, b, c);
+    return this.fromPolygon(id, poly, opts);
+  }
+
+
+  /**
+   * Helper to create a 3d extruded shape from a triangle polygon, with a top and bottom polygon
+   * shapes and vertical sides.
+   * @param {PIXI.Polygon} poly       Polygon shape to use for top and bottom faces.
+   * @param {number} topZ             The top elevation
+   * @param {number} bottomZ          The bottom elevation
+   * @returns {Polygon3d[]} Array of top, bottom, and 3+ sides.
+   */
+  static _facesFromPolygon(tri, { topZ, bottomZ } = {}) {
+    const top = Triangle3d.fromPolygon(tri, topZ);
+    return this._facesFromPolygon3d(top, bottomZ);
+  }
+}
