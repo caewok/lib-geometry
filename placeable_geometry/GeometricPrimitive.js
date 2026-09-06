@@ -849,6 +849,13 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
     this.dirty = this.constructor.DIRTY.ALL;
   }
 
+  replaceShapeAtIndex(newShape, idx) {
+    if ( this.shapes[idx] ) this.shapes[idx].destroy();
+    this.shapes[idx] = newShape;
+    this._initializeFaces();
+    this.dirty = this.constructor.DIRTY.ALL;
+  }
+
   /**
    * Remove a primitive shape from this container by id.
    * @param {string} id
