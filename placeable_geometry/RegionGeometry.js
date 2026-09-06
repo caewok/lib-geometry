@@ -1,18 +1,21 @@
 /* globals
 canvas,
 Hooks,
+PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
 // Geometry
 import { PlaceableGeometry } from "./PlaceableGeometry.js";
-import { CubePrimitive, CylinderPrimitive,  } from "./InstancedGeometricPrimitive.js";
-import { ExtrudedPolygonPrimitive } from "./ModelGeometricPrimitive.js";
+import { CombinedGeometricPrimitive } from "./GeometricPrimitive.js";
+import { CubePrimitive, CylinderPrimitive } from "./InstancedGeometricPrimitive.js";
+import { ExtrudedPolygonPrimitive, ExtrudedTrianglePrimitive } from "./ModelGeometricPrimitive.js";
 
 // LibGeometry
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { Point3d } from "../3d/Point3d.js";
+import { Segment } from "../Segment.js";
 import { almostLessThan, NULL_SET } from "../util.js";
 
 /**
@@ -24,6 +27,205 @@ import { almostLessThan, NULL_SET } from "../util.js";
 
   Regions store combined shapes as region.polygons.
 */
+
+
+/**
+ * A ConePrimitive can represent a 3d extruded cone that is either flat, round, or semicircular.
+ * Represents it as 1 or 2 pieces: the triangle base and arc shape, if any.
+ */
+export class ConePrimitive extends CombinedGeometricPrimitive {
+
+  /** @type {"flat"|"round"|"semicircle"} */
+  type = "flat";
+
+  /** @type {number<radians>} */
+  theta = 0; // Angle of the cone at the apex.
+
+  /** @type {number} */
+  radius = 0;
+
+  // ----- NOTE: Static factory methods ----- //
+
+  /**
+   * Cone is built from extruded triangle + extruded arc.
+   */
+  static fromRegionShape(id, regionShape, { density, ...opts } = {}) {
+    if ( regionShape.type !== "cone" ) throw Error("ConePrimitive|Only cone types may be used.", { regionShape });
+
+    using apex = PIXI.Point.tmp.copyFrom(regionShape);
+    const rotation = Math.toRadians(regionShape.rotation);
+    const theta = Math.toRadians(regionShape.angle);
+    const radius = regionShape.radius;
+    density ??= PIXI.Circle.approximateVertexDensity(regionShape.radius);
+
+    // Track shape parameters, primarily for debugging.
+    const out = new this(id);
+    out.type = regionShape.curvature;
+    out.radius = radius;
+    out.theta = theta;
+
+    let baseSegment;
+    let arcCircle;
+    let arcStartAngle;
+    let arcEndAngle;
+    switch ( regionShape.curvature ) {
+      case "flat":
+        baseSegment = this.flatConeBase(apex, radius, theta, rotation);
+        break;
+      case "semicircle": {
+        baseSegment = this.semiCircleConeBase(apex, radius, theta, rotation);
+        arcCircle = this.semiCircleConeCircle(regionShape, regionShape.radius, theta, rotation);
+        arcStartAngle = Math.normalizeRadians(-Math.PI_1_2 + rotation);
+        arcEndAngle = Math.normalizeRadians(Math.PI_1_2 + rotation);
+        break;
+      }
+      case "round": {
+        baseSegment = this.roundConeBase(apex, radius, theta, rotation);
+        arcCircle = this.roundConeCircle(regionShape, regionShape.radius);
+        arcStartAngle = Math.normalizeRadians(-(theta / 2) + rotation);
+        arcEndAngle = Math.normalizeRadians((theta / 2) + rotation)
+      }
+    }
+
+    const triShape = ExtrudedTrianglePrimitive.fromTriangle(`baseTri_${id}`, apex, baseSegment.b, baseSegment.a, opts);
+    out.addShape(triShape);
+    if ( regionShape.curvature === "flat" ) return;
+
+    // Build the extruded polygon arc piece.
+    const arcPoints = arcCircle.pointsForArc(arcStartAngle, arcEndAngle, { density, includeEndpoints: false });
+    const poly = new PIXI.Polygon(baseSegment.b, ...arcPoints.reverse(), baseSegment.a);
+    const arcShape = ExtrudedPolygonPrimitive.fromPolygon(`${regionShape.curvature}_${id}`, poly, opts);
+    out.addShape(arcShape);
+    return out;
+  }
+
+  // ----- NOTE: Math helpers ----- //
+
+  /**
+   * Base points for a flat cone.
+   * @param {PIXI.Point} apex         Origin (top point) of the cone
+   * @param {number} radius           Radius of the cone arc
+   * @param {number} theta            Cone angle, in radians
+   * @param {number} [rotation=0]     Cone rotation, in radians
+   * @returns {Segment}
+   */
+  static flatConeBase(apex, radius, theta, rotation = 0) {
+    // Find the length of a leg.
+    const halfAngle = theta / 2;
+    const sideLength = radius / Math.cos(halfAngle); // Hypotenuse
+
+    // Project the base points using the side length and angles.
+    const b = apex.fromAngle(rotation - halfAngle, sideLength);
+    const c = apex.fromAngle(rotation + halfAngle, sideLength);
+    return new Segment(b, c);
+  }
+
+  /**
+   * Base points for a semicircle cone.
+   * @param {PIXI.Point} apex         Origin (top point) of the cone
+   * @param {number} radius           Radius of the cone arc
+   * @param {number} theta            Cone angle, in radians
+   * @param {number} [rotation=0]     Cone rotation, in radians
+   * @returns {Segment}
+   */
+  static semiCircleConeBase(apex, totalLength, theta, rotation = 0) {
+    // Find the length of a leg.
+    // l = h / cos(theta / 2)
+    const halfAngle = theta / 2;
+    const h = totalLength / (1 + Math.tan(halfAngle));
+    const sideLength = h / ( Math.cos(halfAngle));
+
+    // Project the base points using the side length and angles.
+    const b = apex.fromAngle(rotation - halfAngle, sideLength);
+    const c = apex.fromAngle(rotation + halfAngle, sideLength);
+    return new Segment(b, c);
+  }
+
+  /**
+   * Base points for a round cone.
+   * @param {PIXI.Point} apex         Origin (top point) of the cone
+   * @param {number} radius           Radius of the cone arc
+   * @param {number} theta            Cone angle, in radians
+   * @param {number} [rotation=0]     Cone rotation, in radians
+   * @returns {Segment}
+   */
+  static roundConeBase(apex, radius, theta) {
+    const halfAngle = theta / 2;
+    const b = PIXI.Point.tmp.set(
+      apex.x + (radius * Math.cos(theta - halfAngle)),
+      apex.y + (radius * Math.sin(theta - halfAngle)),
+    );
+    const c = PIXI.Point.tmp.set(
+      apex.x + (radius * Math.cos(theta + halfAngle)),
+      apex.y + (radius * Math.sin(theta + halfAngle)),
+    );
+    return new Segment(b, c);
+  }
+
+
+  /**
+   * Get the circle shape the forms the round cone arc.
+   * @param {PIXI.Point} apex         Origin (top point) of the cone
+   * @param {number} radius           Radius of the cone arc
+   * @returns {PIXI.Circle}
+   */
+  static roundConeCircle(apex, radius) { return new PIXI.Circle(apex.x, apex.y, radius); }
+
+
+  /**
+   * Get the circle shape the forms the semicircle cone arc.
+   * @param {PIXI.Point} apex         Origin (top point) of the cone
+   * @param {number} totalLength      Length from apex to the arc along the middle line of the cone
+   * @param {number} theta            Cone angle, in radians
+   * @param {number} [rotation=0]     Cone rotation, in radians
+   * @returns {PIXI.Circle}
+   */
+  static semiCircleConeCircle(apex, totalLength, theta, rotation = 0 ) {
+/*
+                     .---.
+                 . '       ' .
+               /               \  <-- Half-circle arc
+              |------- C -------| <-- Base line (Diameter = 2 * l * sin(φ/2))
+               \       |       /
+                \      | h    /
+                 \     |     /
+                  \    |    /
+                   \   |   /  Total length t = h + r
+                    \  |  /   Side length = l
+                     \ | /    Cone Angle = φ
+                       P (Apex)
+*/
+    // Base of cone is flat line segment that forms the diameter of the circle.
+    // arc radius = h / 2 = l * sin(theta / 2)
+    // Two straight sides of cone form isoceles triangle.
+    // base length (h) = 2 * l * sin(theta / 2)
+    // totalLength = h + radius
+    // h = totalLength / (1 + tan(theta / 2))
+    // cx = apex.x + h * cos(rotation)
+    // cy = apex.y + h * sin(rotation)
+
+    // tan = opp / adj
+    // Math.tan(theta/2) = r / h
+    // r = h * Math.tan(theta/2)
+    // t = h + r
+    // t = h + h *  Math.tan(theta/2) = h * (1 + Math.tan(theta/2))
+    // h = t / (1 + Math.tan(theta/2))
+
+    // Altitude of the triangle (distance from P to C).
+    const halfAngle = theta / 2;
+    const h = totalLength / (1 + Math.tan(halfAngle));
+
+    // Radius of the half-circle arc
+    const arcRadius = h * Math.tan(halfAngle);
+
+    // Construct circle that creates the arc.
+    const x = apex.x + (h * Math.cos(rotation));
+    const y = apex.y + (h * Math.sin(rotation));
+    return new PIXI.Circle(x, y, arcRadius)
+  }
+
+
+}
 
 /**
  * Hook the region preupdate to pass through shape-specific updates.
@@ -134,8 +336,10 @@ export class RegionGeometry extends PlaceableGeometry {
   /**
    * Return the shape class for a given region shape type.
    * May also be dependent on the region (e.g., plateaus, steps, etc.)
+   * @param {number} i      Index of the shape
    */
-  shapeClass(regionShape) {
+  shapeClass(i) {
+    const regionShape = this.regionShapes[i];
     if ( regionShape.gridBased ) return ExtrudedPolygonPrimitive;
     switch ( regionShape.type ) {
       case "circle":
@@ -143,6 +347,8 @@ export class RegionGeometry extends PlaceableGeometry {
 
       case "line":
       case "rectangle": return CubePrimitive;
+
+      case "cone": return ConePrimitive;
 
       default: return ExtrudedPolygonPrimitive;
     }
@@ -155,12 +361,23 @@ export class RegionGeometry extends PlaceableGeometry {
   get regionPolygons() { return this.placeableDocument.polygons; }
 
   /**
+   * Multiple shapes may be used to construct region shapes. If so, CombinedGeometricPrimitive should be used.
+   * Shapes are linked to a given region shape by their shape id.
+   */
+
+  /**
    * Id, taking into account the shape index
    * @param {number} shapeIdx
    * @returns {string}
    */
   _shapeId(shapeIdx) { return `${this.placeableId}_${shapeIdx}`; }
 
+  /**
+   * Get the shape index for a shape. Uses the id.
+   * @param {GeometricPrimitive}
+   * @returns {number}
+   */
+  _shapeIndex(shape) { return Number(shape.id.split("_").at(-1)); }
 
   initialize() {
     this.createShapes();
@@ -172,7 +389,7 @@ export class RegionGeometry extends PlaceableGeometry {
     for ( let i = 0, iMax = shapes.length; i < iMax; i += 1 ) {
       const shape = shapes[i];
       const regionShape = regionShapes[i];
-       this._updateShape(shape, regionShape);
+      this._updateShape(i);
     }
   }
 
@@ -180,31 +397,47 @@ export class RegionGeometry extends PlaceableGeometry {
     const regionShapes = this.regionShapes;
     const shapes = this.shapes;
     this.shapes.forEach(subshape => subshape.destroy());
-    this.shapes.length = 1;
+
+    // If no shapes for this region, return.
+    const n = regionShapes.length;
+    if ( n === 0 ) {
+      shapes.length = 0;
+      return;
+    }
 
     // If there are holes or wall restrictions, use the model polygon shape for the entire region.
     if ( this.regionPolygons.length &&
       (this.placeableDocument.restriction.enabled
       || regionShapes.some(regionShape => regionShape.hole)) ) {
-      const id = this.placeableId;
-      const zElevs = this.elevationZ;
-      this.shapes[0] = ExtrudedPolygonPrimitive.fromPolygons(id, this.regionPolygons, zElevs);
-      this.shapes[0].initialize();
+      this.shapes.length = 1;
+      this.shapes[0] = this._buildEntireRegionShape();
       return;
     }
 
-    const n = regionShapes.length;
+    // Create a primitive shape for each region shape.
     this.shapes.length = n;
-    for ( let i = 0, iMax = n; i < iMax; i += 1 ) shapes[i] = this._buildRegionShape(i);
+    for ( let i = 0; i < n; i += 1 ) shapes[i] = this._buildRegionShapes(i);
     return shapes;
   }
 
   /**
-   * Construct a primitive shape for a given region shape.
-   * @param {number} idx        Index of the region shape in the region.document.shapes array
-   * @returns {GeometricPrimitive|null}
+   * Construct a primitive shape using the polygons for the entire region.
+   * @returns {GeometricPrimitive[]}
    */
-  _buildRegionShape(shapeIdx) {
+  _buildEntireRegionShapes() {
+    const id = this.placeableId;
+    const zElevs = this.elevationZ;
+    const shape = ExtrudedPolygonPrimitive.fromPolygons(id, this.regionPolygons, zElevs);
+    shape.initialize();
+    return shape;
+  }
+
+  /**
+   * Construct primitive shapes for a given region shape.
+   * @param {number} idx        Index of the region shape in the region.document.shapes array
+   * @returns {GeometricPrimitive[]}
+   */
+  _buildRegionShapes(shapeIdx) {
     const regionShape = this.regionShapes[shapeIdx];
     const id = this._shapeId(shapeIdx);
     const zElevs = this.elevationZ;
@@ -219,6 +452,13 @@ export class RegionGeometry extends PlaceableGeometry {
       case "line":
       case "rectangle": shape = new CubePrimitive(id); break;
 
+      case "cone": {
+        const opts = this._shapeDimensions(regionShape);
+        if ( almostLessThan(opts.dims.z, 0) ) opts.dims.z = 1; // zHeight must be positive.
+        shape = ConePrimitive.fromRegionShape(id, regionShape, opts);
+        break;
+      }
+
       case "emanation":
         // Use the polygon b/c corner radiuses can vary.
         // base.x, base.y, rotation, base.width (# grid spaces), base.height (# grid spaces), origin
@@ -230,11 +470,6 @@ export class RegionGeometry extends PlaceableGeometry {
       case "polygon": /* eslint-disable-line no-fallthrough */
         // Obv. use the polygon.
         // rotation, although not user-set, origin
-
-      case "cone": /* eslint-disable-line no-fallthrough */
-        // Use the polygon b/c no unit cone shape b/c angle varies.
-        // rotation, x, y, radius as width, origin
-
 
       case "grid": /* eslint-disable-line no-fallthrough */
         // Unclear what this is.
@@ -260,67 +495,102 @@ export class RegionGeometry extends PlaceableGeometry {
     Editing a shape results in a new shape, and the update hook shows all the shape properties as changed.
     The current work-around is a preupdate hook that passes through an array of changes to the specific shapes.
     */
-    const { shapes, regionShapes } = this;
 
     // If there are holes, use the model polygon shape for the entire region.
     // Because a change to any shape could change the model polygon for the region, just
     // redo everything.
     // Similarly, if the region's levels changed, redo everything.
-    if ( regionShapes.some(regionShape => regionShape.hole) || this.placeableDocument.restriction.enabled ) {
+    if ( this.regionShapes.some(regionShape => regionShape.hole) || this.placeableDocument.restriction.enabled ) {
       // Each level shape array should contain a single polygon primitive.
       this.initialize();
-      this.updateAllShapes();
+      this.updateAllShapes(opts);
       return;
     }
 
+    this._updateShapes(opts);
 
-    // Use the passthrough tracking sets to determine updates for each region shape.
+    // Handle parent updates last.
+    super._update(opts);
+  }
+
+  /**
+   * Remove shapes when region shapes have been removed.
+   */
+  _updateShapes(opts) {
     let trackingArr = opts?.[GEOMETRY_LIB_ID] || [];
     trackingArr = trackingArr.map(arr => new Set(arr));
 
+    const { shapes, regionShapes } = this;
+    const numRegionShapes = regionShapes.length;
+    if ( numRegionShapes === this.shapes.length ) return;
 
-    // Go through each segment array and examine the shapes.
-    // If no specific changes, re-do everything but don't rebuild shapes unless we have to.
-    if ( trackingArr.length && shapes.length > regionShapes.length  ) {
-      // Remove the extra shapes.
-      for ( let i = regionShapes.length, iMax = shapes.length; i < iMax; i += 1 ) shapes[i].destroy();
-      shapes.length = regionShapes.length;
-    }
+    // For each shape, a mis-matched class indicates either the shape was changed
+    // or a shape prior to it was deleted. Reuse shapes where possible, creating new as needed and
+    // deleting shapes as necessary.
 
-    for ( let i = 0, iMax = regionShapes.length; i < iMax; i += 1 ) {
-      // Don't rebuild shapes unless we have to.
-      const trackingSet = trackingArr[i]; // May be undefined.
-      const needsRebuild = !shapes[i]
-        || !(shapes[i] instanceof this.shapeClass(regionShapes[i]))
-        || (trackingSet && (trackingSet.has("type") || trackingSet.has("points")));
-      if ( needsRebuild ) {
-        if ( shapes[i] ) shapes[i].destroy();
-        shapes[i] = this._buildRegionShape(i);
-        shapes[i].initialize();
-        this._updateShape(shapes[i], regionShapes[i]);
+    let i = 0;
+    while ( true ) {
+      // If we reach the end of the region shapes, truncate leftover elements.
+      if ( i >= numRegionShapes ) {
+        for ( let j = numRegionShapes, n = shapes.length; j < n; j += 1 ) this.shapes[j].destroy();
+        shapes.length = i;
+        break;
+      }
+
+      // Check if the current element is already correct.
+      if ( !this.rebuildNeeded(shapes[i], regionShapes[i], trackingArr[i]) ) {
+        this._updateShape(i, trackingArr[i]);
+        i++;
         continue;
       }
 
-      // Trigger elevation changes, which are based on the overall region change.
-      if ( trackingSet && this.activeUpdates.has("elevation") ) trackingSet.add("elevation");
+      // Look ahead in the remaining array to see if the target exists.
+      // Reuse instead of deleting.
+      let foundIndex = -1;
+      for ( let j = i + 1, n = shapes.length; j < n; j++ ) {
+        if ( !this.rebuildNeeded(shapes[j], regionShapes[i], trackingArr[i]) ) {
+          foundIndex = j;
+          break;
+        }
+      }
 
-      // If no tracking set, update everything.
-      // Otherwise, update selectively based on the tracking set.
-      this._updateShape(shapes[i], regionShapes[i], trackingSet);
+      if ( ~foundIndex ) {
+        shapes.splice(i, foundIndex - i);
+        this.shape[i].id = this._shapeId(i); // Relabel to track the new shape index.
+        this._updateShape(i, trackingArr[i]);
+      } else {
+        // Target class is not present downstream, so create anew.
+        this._rebuildShape(i);
+        continue;
+      }
     }
+  }
 
-    // Handle parent updates last.
-    super._update();
+  /**
+   * Rebuild an existing shape.
+   * @param {number} i          The index of the shape in the array.
+   */
+  _rebuildShape(i) {
+    const shapes = this.shapes;
+    if ( shapes[i] )  shapes[i].destroy();
+    shapes[i] = this._buildRegionShape(i);
+    shapes[i].initialize();
+    this._updateShape(i);
   }
 
   /**
    * Update a specific shape.
-   * @param {GeometricPrimitive} shape
-   * @param {ShapeData} regionShape      The region shape; assumed to have been already updated
+   * @param {number} shapeIdx
    * @param {Set<string>} [changeKeys]   Optional change keys; if not provided everything will be updated
    *   Adding a "elevation" key will update the position and scale.
    */
-  _updateShape(shape, regionShape, changes) {
+  _updateShape(shapeIdx, changes) {
+    const shape = this.shapes[shapeIdx];
+    const regionShape = this.regionShapes[shapeIdx];
+    changes ??= this._allChanges(regionShape);
+
+    if ( this.activeUpdates.has("elevation") ) changes.add("elevation");
+
     const { modifyCenter, modifyAngles, modifyDims, modifyAnchors } = this._shapeDimensionModificationsNeeded(regionShape, changes);
     if ( !(modifyCenter || modifyAngles || modifyDims || modifyAnchors) ) return;
     const opts = this._shapeDimensions(regionShape);
@@ -331,10 +601,42 @@ export class RegionGeometry extends PlaceableGeometry {
     if ( modifyAnchors ) shape.setAnchor(opts.anchors);
   }
 
+  _
+
+  /**
+   * For a given shape index and change set, does this shape need to be rebuilt entirely?
+   * @param {number} shapeIdx
+   * @param {Set<string>} [changeKeys]   Optional change keys; if not provided everything will be updated
+   *   Adding a "elevation" key will update the position and scale.
+   * @returns {boolean}
+   */
+  rebuildNeeded(shape, regionShape, changes) {
+    if ( changes.has("type") || changes.has("points") ) return true;
+    if ( !(shape instanceof this.shapeClass(regionShape)) ) return true;
+
+    // Some types need to be rebuilt when certain parameters change, causing the underlying shape to warp.
+    switch ( regionShape.type ) {
+      case "cone": return changes.has("angle") || changes.has("curvature") || changes.has("radius");
+      case "emanation": return changes.has("radius");
+      case "ring": return changes.has("innerWidth") || changes.has("outerWidth") || changes.has("radius");
+    }
+    return false;
+  }
+
+  _allChanges(regionShape) {
+    const changes = new Set(Object.keys(regionShape));
+    changes.add("elevation");
+    changes.add("anchorX"); // Only used for some.
+
+    // Emanation has a base with additional values.
+    if ( changes.has("base") ) Object.keys(regionShape.base).forEach(key => changes.add(`base.${key}`));
+    return changes;
+  }
+
   /**
    * Determine what dimensions of the shape require modification.
-   * @param {ShapeData} regionShape      The region shape; assumed to have been already updated
-   * @param {Set<string>} [changes]   Optional change keys; if not provided everything will be updated
+   * @param {ShapeData} regionShape       The region shape; assumed to have been already updated
+   * @param {Set<string>} [changes]         Optional change keys; if not provided everything will be updated
    *   Adding a "elevation" key will update the position and scale.
    * @returns {object}
    *   - @prop {boolean} modifyCenter
@@ -343,16 +645,7 @@ export class RegionGeometry extends PlaceableGeometry {
    *   - @prop {boolean} modifyAnchors
    */
   _shapeDimensionModificationsNeeded(regionShape, changes) {
-    // If changes not provided, modify all parameters.
-    if ( !changes ) {
-      changes = new Set(Object.keys(regionShape));
-      changes.add("elevation");
-      changes.add("anchorX"); // Only used for some.
-
-      // Emanation has a base with additional values.
-      if ( changes.has("base") ) Object.keys(regionShape.base).forEach(key => changes.add(`base.${key}`));
-    }
-
+    changes ??= this._allChanges(regionShape);
     const modifyCenter = changes.has("x") || changes.has("y") || changes.has("elevation");
     const modifyAngles = changes.has("rotation");
     let modifyDims = false;
