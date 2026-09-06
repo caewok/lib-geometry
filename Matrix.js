@@ -1247,9 +1247,17 @@ class AbstractMatrix {
     return outMatrix;
   }
 
-  multiplyPoint(point, outPoint) {
-    if ( Object.hasOwn(point, "z") ) return this.multiplyPoint2d(point, outPoint);
-    else return this.multiplyPoint3d(point, outPoint);
+  multiplyPoint(point, outPoint, pointW = 1) {
+    if ( this.nrow === 4 && this.ncol === 4 ) {
+      if ( !Object.hasOwn(point, "z") ) console.warn("Matrix#multiplyPoint|Attempting to multiply a 4x4 matrix with a 2d point.");
+      return this.multiplyPoint3d(point, outPoint, pointW);
+    }
+    if ( this.nrow === 3 && this.ncol === 3 ) {
+      if ( Object.hasOwn(point, "z") ) console.warn("Matrix#multiplyPoint|Attempting to multiply a 3x3 matrix with a 3d point.");
+      return this.multiplyPoint2d(point, outPoint, pointW);
+    }
+    console.warn("Matrix#multiplyPoint|Attempting to multiply a point with a non-3x3, non-4x4 matrix.");
+    return this.multiplyPoint3d(point, outPoint, pointW);
   }
 
   /**
@@ -1257,12 +1265,11 @@ class AbstractMatrix {
    * For speed, the input is not checked against the matrix for correct dimensionality.
    * Foundry bench puts this at ~ 68% of multiply.
    * @param {Point3d} point    The point to multiply
-   * @param {Point3d} outPoint Optional point in which to store the result.
+   * @param {boolean|number} [pointW=1]    Default is to treat as normal point (1); set to 0 to treat as vector
    * @returns {Point3d}
    */
-  multiplyPoint2d(point, outPoint = new PIXI.Point()) {
-    // For speed, assume _idx is (col * this.nrow) + row
-    // Array organized col0, row0, row1, row2, ... col1, row0, row1, ...
+  multiplyPoint2d(point, outPoint = new PIXI.Point(), pointW = 1) {
+    // Assumes row-major order.
     const a00 = this.arr[0]; // aRC
     const a01 = this.arr[1];
     const a02 = this.arr[2];
@@ -1277,14 +1284,16 @@ class AbstractMatrix {
 
     const b00 = point.x;
     const b01 = point.y;
-    const b02 = 1;
+    const b02 = pointW; // 1 if point, 0 if vector (w value).
 
     outPoint.x = a00 * b00 + a10 * b01 + a20 * b02;
     outPoint.y = a01 * b00 + a11 * b01 + a21 * b02;
     const w = a02 * b00 + a12 * b01 + a22 * b02;
 
-    outPoint.x /= w;
-    outPoint.y /= w;
+    if ( w && pointW ) { // Only perspective divide finite points, not vectors.
+      outPoint.x /= w;
+      outPoint.y /= w;
+    }
 
     return outPoint;
   }
@@ -1293,14 +1302,13 @@ class AbstractMatrix {
    * Multiply a Point3d by this matrix and output a different Point3d.
    * For speed, the input is not checked against the matrix for correct dimensionality.
    * Foundry bench puts this at ~ 68% of multiply.
-   * @param {Point3d} point    The point to multiply
-   * @param {Point3d} outPoint Optional point in which to store the result.
+   * @param {Point3d} point       The point to multiply
+   * @param {Point3d} [outPoint]  Optional point in which to store the result.
+   * @param {boolean|number} [pointW=1]    Default is to treat as normal point (1); set to 0 to treat as vector
    * @returns {Point3d}
    */
-  multiplyPoint3d(point, outPoint = Point3d.tmp) {
-
-    // For speed, assume _idx is (col * this.nrow) + row
-    // Array organized col0, row0, row1, row2, ... col1, row0, row1, ...
+  multiplyPoint3d(point, outPoint = Point3d.tmp, pointW = 1) {
+    // Assume row-major array order.
     const a00 = this.arr[0]; // aRC
     const a01 = this.arr[1];
     const a02 = this.arr[2];
@@ -1324,16 +1332,18 @@ class AbstractMatrix {
     const b00 = point.x;
     const b01 = point.y;
     const b02 = point.z;
-    const b03 = 1;
+    const b03 = pointW; // 1 if point, 0 if vector (w value).
 
     outPoint.x = a00 * b00 + a10 * b01 + a20 * b02 + a30 * b03;
     outPoint.y = a01 * b00 + a11 * b01 + a21 * b02 + a31 * b03;
     outPoint.z = a02 * b00 + a12 * b01 + a22 * b02 + a32 * b03;
     const w = a03 * b00 + a13 * b01 + a23 * b02 + a33 * b03;
 
-    outPoint.x /= w;
-    outPoint.y /= w;
-    outPoint.z /= w;
+    if ( w && pointW ) { // Only perspective divide finite points, not vectors.
+      outPoint.x /= w;
+      outPoint.y /= w;
+      outPoint.z /= w;
+    }
 
     return outPoint;
   }
