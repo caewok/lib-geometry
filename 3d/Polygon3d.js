@@ -90,13 +90,17 @@ export class Polygon3d {
   }
 
   /**
-   * Sets the z value in place. Clears the cached aabb,
+   * Sets the z value in place. Update plane, aabb. Clears centroid, cleaned flag.
    */
   setZ(z = 0) {
     this.points.forEach(pt => pt.z = z);
-    this.#dirtyAABB = true;
+    if ( !this.dirtyPlane ) this.plane.point.z = z;
+    if ( !this.dirtyAABB ) {
+      this.aabb.min.z = z;
+      this.aabb.max.z = z;
+    }
     this.#dirtyCentroid = true;
-    // Plane should be fine because its point is linked.
+    this.#cleaned = false;
     return this;
   }
 
@@ -104,12 +108,8 @@ export class Polygon3d {
    * Reverse the orientation of this polygon. Done in place.
    */
   reverseOrientation() {
-    const plane = this.plane; // Do first in case plane has not been calculated
-    plane.normal.multiplyScalar(-1, plane.normal);
-
-    // Flip the points, for consistency with generating the plane.
+    if ( !this.dirtyPlane ) this.plane.normal.multiplyScalar(-1, this.plane.normal);
     this.points.reverse();
-
     return this;
   }
 
@@ -155,8 +155,8 @@ export class Polygon3d {
       this.#plane ??= new Plane();
       this._calculatePlane(this.#plane);
 
-      // Plane point is linked to the first point here, which helps with transforms.
-      this.#plane.point = this.points[0];
+      // Set the plane point to the first point of the polygon.
+      this.#plane.point.copyFrom(this.points[0] || { x: 0, y: 0, z: 0 });
       this.#dirtyPlane = false;
     }
     return this.#plane;
@@ -165,7 +165,7 @@ export class Polygon3d {
   set plane(value) {
     this.#plane ??= new Plane();
     this.#plane.copyFrom(value);
-    this.#plane.point = this.points[0];
+    if ( this.points[0] ) this.#plane.point.copyFrom(this.points[0]);
     this.#dirtyPlane = false;
   }
 
@@ -224,29 +224,34 @@ export class Polygon3d {
 
   /**
    * Calculates the centroid (average/center point) of a 3d planar polygon.
+   * @param {Point3d} [out]
    * @returns {Point3d}
    */
-  _calculateCentroid() {
-    // If less than three points, return but do not mark as clean.
-    if ( this.points.length === 0 ) return Point3d.tmp.set(0, 0, 0);
-    if ( this.points.length === 1 ) return this.points[0].clone();
-    if ( this.points.length === 2 ) return Point3d.midpoint(this.points[0], this.points[1]);
+  _calculateCentroid(out) {
+    out ??= Point3d.tmp;
 
-    using centroid = Point3d.tmp.set(0, 0, 0);
-    for ( const p of this.points ) centroid.add(p, centroid);
+    // If less than three points, return but do not mark as clean.
+    if ( this.points.length === 0 ) return out.set(0, 0, 0);
+    if ( this.points.length === 1 ) return this.points[0].clone(out);
+    if ( this.points.length === 2 ) return out.clone(Point3d.midpoint(this.points[0], this.points[1]));
+
+    out.set(0, 0, 0);
+    for ( const p of this.points ) out.add(p, out);
     const scale = 1 / this.points.length;
-    return centroid.multiplyScalar(scale);
+    return out.multiplyScalar(scale, out);
   }
 
   /**
    * Calculates the area-weighted centroid of a 3d planar polygon.
    * @returns {Point3d}
    */
-  _calculateAreaWeightedCentroid() {
+  _calculateAreaWeightedCentroid(out) {
+    out ??= Point3d.tmp;
+
     // If less than three points, return but do not mark as clean.
-    if ( this.points.length === 0 ) return Point3d.tmp.set(0, 0, 0);
-    if ( this.points.length === 1 ) return this.points[0].clone();
-    if ( this.points.length === 2 ) return Point3d.midpoint(this.points[0], this.points[1]);
+    if ( this.points.length === 0 ) return out.set(0, 0, 0);
+    if ( this.points.length === 1 ) return this.points[0].clone(out);
+    if ( this.points.length === 2 ) return out.clone(Point3d.midpoint(this.points[0], this.points[1]));
 
 
     // Translate the polygon to the origin using the first point as a reference.
@@ -275,7 +280,7 @@ export class Polygon3d {
     }
 
     // Calculate the area-weighted centroid.
-    using centroid = Point3d.tmp.set(0, 0, 0);
+    out.set(0, 0, 0);
     const denom1_3 = 1/3;
     using tmp = Point3d.tmp;
     for ( let i = 0, j = 0; j < numPoints; ) {
@@ -291,12 +296,12 @@ export class Polygon3d {
 
       // Accumulate the weighted triangle centroids.
       a.add(b, tmp).multiplyScalar(denom1_3 * weight, tmp);
-      centroid.add(tmp, centroid);
+      out.add(tmp, out);
     }
     Point3d.release(...crossProducts, ...txPts);
 
     // Add the reference point back to return to the original coordinate space.
-    return centroid.add(ref);
+    return out.add(ref, out);
   }
 
   /**
@@ -385,9 +390,9 @@ export class Polygon3d {
     }
     this.points.forEach((pt, idx) => out.points[idx].copyFrom(pt));
 
-    if ( !this.#dirtyPlane ) out.plane = this.plane;
-    if ( !this.#dirtyCentroid ) out.centroid = this.centroid;
-    if ( !this.#dirtyAABB ) out.aabb = this.aabb;
+    if ( !this.#dirtyPlane ) out.plane = this.plane;  // Uses a setter to copy from, unset dirty value.
+    if ( !this.#dirtyCentroid ) out.centroid = this.centroid; // Uses a setter to copy from, unset dirty value.
+    if ( !this.#dirtyAABB ) out.aabb = this.aabb; // Uses a setter to copy from, unset dirty value.
 
     return out;
   }
@@ -719,25 +724,21 @@ export class Polygon3d {
    * Transform the points using a transformation matrix.
    * @param {Matrix} M
    * @param {Polygon3d} [out]
+   * @param {Matrix} [invTransposeM]          The inverse transpose of M, when doing repeated calculations.
    * @returns {Polygon3d} The modified tri.
    */
-  transform(M, out) {
+  transform(M, out, invTransposeM) {
     out = this.clone(out);
     out.points.forEach(pt => M.multiplyPoint3d(pt, pt));
 
-    // Use the inverse transpose to transform the matrix.
-    // Use 3x3 because the normal here uses w = 1, not w = 0.
-    // If this moves to homogenous points, could use the 4x4 matrix transpose.
-    const mat3 = M.subset({ rowEnd: 2, colEnd: 2 });
-    const mat3Inv = mat3.invert();
-    const matNormal = MatrixFloat32.fromPoint3d(this.plane.normal, { homogenous: false });
-    mat3Inv.transpose(mat3Inv);
-    matNormal.multiply1x3(mat3Inv, matNormal);
-    out.plane.normal = {
-      x: matNormal.getIndex(0, 0),
-      y: matNormal.getIndex(0, 1),
-      z: matNormal.getIndex(0, 2),
-    }; // Plane setter normalize the values.
+    // Use the inverse transpose to calculate the normal
+    invTransposeM ??= M.invert().transpose();
+
+    // Transform the normal vector as a direction (w = 0).
+    const txN = out.plane.normal;
+    invTransposeM.multiplyPoint3d(this.plane.normal, txN, 0); // Set w = 0 to treat as vector.
+    txN.normalize(txN);
+    out.plane.point.copyFrom(out.points[0]);
 
     // The AABB and centroid must be recalculated. (Could use the model matrix, but safer to recalculate)
     out.dirtyAABB = true;
@@ -1622,12 +1623,13 @@ export class Ellipse3d extends Polygon3d {
    * Transform this ellipse using a transformation matrix.
    * @param {Matrix} M
    * @param {Ellipse3d} [out]
+   * @param {Matrix} [invTransposeM]          The inverse transpose of M, when doing repeated calculations.
    * @returns {Ellipse3d} The modified ellipse.
    */
-  transform(M, out) {
+  transform(M, out, invTransposeM) {
     if ( !out ) out = new Ellipse3d();
     else if ( out instanceof Circle3d ) out = out.clone(new Ellipse3d());
-    out = super.transform(M, out);
+    out = super.transform(M, out, invTransposeM);
 
     // Calculate the ellipse-specific parameters.
     const { angle, radiusX, radiusY } = this;
@@ -1884,9 +1886,9 @@ export class Circle3d extends Ellipse3d {
    * @param {Ellipse3d} [poly]    The circle to modify
    * @returns {Polygon3d} The modified tri.
    */
-  transform(M, circle3d) {
+  transform(M, circle3d, invTransposeM) {
     circle3d ??= this._cloneEmpty();
-    return super.transform(M, circle3d);
+    return super.transform(M, circle3d, invTransposeM);
   }
 
   multiplyScalar(multiplier, circle3d) {

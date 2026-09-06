@@ -266,7 +266,7 @@ export const ModelAnchorMixin = superclass => {
       const M = this._model;
       const multName = this.constructor.multiplyName;
 
-      // Center prior to applying the model matrix.
+      // Apply anchor prior to applying the model matrix.
       this._anchor[multName](M, M);
     }
 
