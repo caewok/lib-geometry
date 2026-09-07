@@ -136,9 +136,9 @@ export class ConePrimitive extends CombinedGeometricPrimitive {
     const sideLength = h / ( Math.cos(halfAngle));
 
     // Project the base points using the side length and angles.
-    const b = apex.fromAngle(rotation - halfAngle, sideLength);
-    const c = apex.fromAngle(rotation + halfAngle, sideLength);
-    return new Segment(b, c);
+    const a = apex.fromAngle(rotation - halfAngle, sideLength);
+    const b = apex.fromAngle(rotation + halfAngle, sideLength);
+    return new Segment(a, b);
   }
 
   /**
@@ -149,17 +149,13 @@ export class ConePrimitive extends CombinedGeometricPrimitive {
    * @param {number} [rotation=0]     Cone rotation, in radians
    * @returns {Segment}
    */
-  static roundConeBase(apex, radius, theta) {
+  static roundConeBase(apex, radius, theta, rotation) {
     const halfAngle = theta / 2;
-    const b = PIXI.Point.tmp.set(
-      apex.x + (radius * Math.cos(theta - halfAngle)),
-      apex.y + (radius * Math.sin(theta - halfAngle)),
-    );
-    const c = PIXI.Point.tmp.set(
-      apex.x + (radius * Math.cos(theta + halfAngle)),
-      apex.y + (radius * Math.sin(theta + halfAngle)),
-    );
-    return new Segment(b, c);
+
+    // Project a and b by the radius along the half angle.
+    const a = apex.fromAngle(rotation - halfAngle, radius);
+    const b = apex.fromAngle(rotation + halfAngle, radius);
+    return new Segment(a, b);
   }
 
 
@@ -170,6 +166,23 @@ export class ConePrimitive extends CombinedGeometricPrimitive {
    * @returns {PIXI.Circle}
    */
   static roundConeCircle(apex, radius) { return new PIXI.Circle(apex.x, apex.y, radius); }
+
+/* Round cone
+
+                   ...---...
+               .•'     |d    '•.  <-- Arc
+              |------- C -------| <-- Base line
+               \       |       /
+                \      | h    /
+                a\     |     /b
+                  \    |    /
+                   \   |   /  Total length t = h + d = a = b
+                    \  |  /   Side length = l
+                     \ | /    Cone Angle = φ
+                       P (Apex)
+
+
+*/
 
 
   /**
