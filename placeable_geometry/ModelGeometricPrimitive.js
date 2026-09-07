@@ -123,7 +123,9 @@ export class PlanarPolygonPrimitive extends ModelGeometricPrimitive {
     return new this(id, [prototypeFace]);
   }
 
-  validateFacesOutward() {
+  prototypeFacesOutward() { return true; } // Handled with facesOutward.
+
+  facesOutward() {
     // Confirm the prototype face is oriented same as the original.
     const prototypeFace = this.prototypeFaces[0];
     const poly3d = this.faces[0];
@@ -142,19 +144,6 @@ export class PlanarPolygonPrimitive extends ModelGeometricPrimitive {
 export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
 
   // ----- NOTE: Factory functions ----- //
-
-  /**
-   * Force each face to face outward from a given point.
-   * @param {Polygon3d[]} faces
-   * @param {Point3d} center
-   * @returns {Polygon3d[]} The faces, modified in place
-   */
-  static _faceOutwards(faces, center) {
-    for ( const face of faces ) {
-      if ( face.isFacing(center) ) face.reverseOrientation();
-    }
-    return faces;
-  }
 
   /**
    * Build an extruded (along the z-axis) shape from a 2d polygon.
@@ -231,15 +220,7 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
     return [top, bottom, ...top.buildTopSides(bottomZ)];
   }
 
-  /**
-   * Update the faces for this primitive.
-   * Default is to use the model matrix.
-   * @param {Polygon3d[]} faces
-   */
-  _generateFaces(faces) {
-    super._generateFaces(faces);
-    this.constructor._faceOutwards(faces, this.center);
-  }
+
 
   /**
    * Determine all top, bottom, and mid corners along with midpoints between for the

@@ -296,7 +296,7 @@ export class GeometricPrimitive {
     this._generateFaces(this.#faces);
     this._clearDirty(this.constructor.DIRTY.FACES);
 
-    // Must come afte clearing faces to avoid calling updateFaces again when this.faces is accessed.
+    // Must come after clearing faces to avoid calling updateFaces again when this.faces is accessed.
     if ( !this.validate() ) console.warn(`${this.constructor.name}|Shape fails validation!`, this);
 
   }
@@ -351,7 +351,21 @@ export class GeometricPrimitive {
    * @returns {boolean} True if valid (tests pass).
    */
   validate() {
-    return this.facesOutward();
+    return this.prototypeFacesOutward() && this.facesOutward();
+  }
+
+  prototypeFacesOutward() {
+    // Default approach is to test each face against the centroid of the shape.
+    // This will fail for flat objects or complex convex objects (like steps)
+    const faces = this.prototypeFaces;
+    if ( !faces || faces.length < 3 ) return false;
+
+    // Test each face against the centroid.
+    const centroid = this.constructor.calculateCentroid(faces);
+    for ( const face of faces ) {
+      if ( face.isFacing(centroid) ) return false;
+    }
+    return true;
   }
 
   /**
@@ -366,7 +380,7 @@ export class GeometricPrimitive {
     if ( !faces || faces.length < 3 ) return false;
 
     // Test each face against the centroid.
-    const centroid = this.calculateCentroid();
+    const centroid = this.constructor.calculateCentroid(faces);
     for ( const face of faces ) {
       if ( face.isFacing(centroid) ) return false;
     }
@@ -940,10 +954,10 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
     super._initializeFaces();
   }
 
-//   updateFaces() {
-//     this.shapes.forEach(shape => shape.updateFaces());
-//     super.updateFaces(); // This will trigger _generateFaces and clear the dirty tag.
-//   }
+  updateFaces() {
+    this.shapes.forEach(shape => shape.updateFaces());
+    super.updateFaces(); // This will trigger _generateFaces and clear the dirty tag.
+  }
 
   /**
    * Update the faces for this primitive.

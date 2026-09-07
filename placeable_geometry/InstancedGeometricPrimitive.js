@@ -124,7 +124,13 @@ export class QuadPrimitive extends InstancedGeometricPrimitive {
     return poly.cutaway(start, end, opts);
   }
 
-  validateFacesOutward() {
+  prototypeFacesOutward() {
+    // Should face up before any rotations.
+    using ctr = Point3d.tmp.set(0, 0, 1);
+    return this.prototypeFaces[0].isFacing(ctr);
+  }
+
+  facesOutward() {
     // Should face up before any rotations.
     using ctr = Point3d.tmp.set(0, 0, 1);
     this.modelMatrix.model.multiplyPoint3d(ctr, ctr);
@@ -188,7 +194,13 @@ export class VerticalQuadPrimitive extends QuadPrimitive {
     return poly.cutaway(start, end, opts);
   }
 
-  validateFacesOutward() {
+  prototypeFacesOutward() {
+    // Should face north before any rotations.
+    using ctr = Point3d.tmp.set(0, -1, 0);
+    return this.prototypeFaces[0].isFacing(ctr);
+  }
+
+  facesOutward() {
     // Should face north before any rotations.
     using ctr = Point3d.tmp.set(0, -1, 0);
     this.modelMatrix.model.multiplyPoint3d(ctr, ctr);
@@ -528,7 +540,17 @@ export class SpherePrimitive extends InstancedGeometricPrimitive {
    * Outward means from an outside viewer, the face is counter-clockwise.
    * @returns {boolean} True if all faces point outward.
    */
-  validateFacesOutward() {
+  prototypeFacesOutward() {
+    using origin = Point3d.tmp.set(0, 0, 0);
+    return !this.prototypeFaces[0].isFacing(origin);
+  }
+
+  /**
+   * Test whether all faces of this shape face outward as expected.
+   * Outward means from an outside viewer, the face is counter-clockwise.
+   * @returns {boolean} True if all faces point outward.
+   */
+  facesOutward() {
     return !this.faces[0].isFacing(this.center)
   }
 }
