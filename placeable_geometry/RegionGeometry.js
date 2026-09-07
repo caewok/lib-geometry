@@ -89,7 +89,7 @@ export class ConePrimitive extends CombinedGeometricPrimitive {
 
     const triShape = ExtrudedTrianglePrimitive.fromTriangle(`baseTri_${id}`, apex, baseSegment.a, baseSegment.b, opts);
     out.addShape(triShape);
-    if ( regionShape.curvature === "flat" ) return;
+    if ( regionShape.curvature === "flat" ) return out;
 
     // Build the extruded polygon arc piece.
     const arcPoints = arcCircle.pointsForArc(arcStartAngle, arcEndAngle, { density, includeEndpoints: false });
