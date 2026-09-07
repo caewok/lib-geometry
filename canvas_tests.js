@@ -211,7 +211,7 @@ export function drawTokenSoundBorder({ tokens, ...drawingOpts } = {}) {
 
 // ----- NOTE: Placeable Geometry ----- //
 
-export function drawGeometry(geom,  placeableColor, { aabb = false, faces = "faces", faceTypes = "all", ...drawingOpts } = {}) {
+export function drawGeometry(geom,  placeableColor, { aabb = false, faceTypes = "all", ...drawingOpts } = {}) {
   let color = Draw.COLORS[placeableColor];
   if ( aabb ) {
     let color = Draw.COLORS[`light${placeableColor}`];
@@ -323,13 +323,10 @@ export function testTokenGeometryContainment(geomType = "full") {
   const mgr = CONFIG.GeometryLib.geometryManager;
   for ( const token of canvas.tokens.placeables ) {
     const geom = mgr.geomForPlaceable(token)[geomType];
-    using ctr = Point3d.fromTokenCenter(token);
-    for ( const face of geom.iterateFaces() ) {
-      if ( face.isFacing(ctr) ) {
-        incorrectTokens.add(token);
-        break;
-      }
-    }
+    const valid = geom.shapes.every(shape => shape.validate());
+    const color = valid ? "green" : "red";
+    drawGeometry(geom, color);
+    if ( !valid ) incorrectTokens.add(token);
   }
   console.log(`${incorrectTokens.size} incorrect tokens out of ${canvas.tokens.placeables.length}.`, incorrectTokens);
   return incorrectTokens;
@@ -394,30 +391,12 @@ export function testTileGeometryContainment(geomType = "full") {
 export function testRegionGeometryContainment() {
   let incorrectRegions = new Set();
   const mgr = CONFIG.GeometryLib.geometryManager;
-  using ctrOrigin = Point3d.tmp.set(0, 0, 0);
   for ( const region of canvas.regions.placeables ) {
     const geom = mgr.geomForPlaceable(region);
-
-    // Region is a 3d object, and should be always facing out from its center.
-    // The exception is that holes would not.
-    for ( const shape of geom.shapes ) {
-      if ( shape.faces.some(face => face.isHole) ) {
-        console.log(`Geom for ${geom.placeableId} has holes, so containment test is skipped for this shape.`, { geom, shape });
-      }
-      for ( const face of shape.prototypeFaces ) {
-        if ( face.isFacing(ctrOrigin) ) {
-          console.error(`region ${region.id} prototype side is wrong.`, { geom, shape });
-          incorrectRegions.add(region);
-        }
-      }
-      const center = shape.center;
-      for ( const face of shape.faces ) {
-        if ( face.isFacing(center) ) {
-          console.error(`region ${region.id} side is wrong.`, { geom, shape });
-          incorrectRegions.add(region);
-        }
-      }
-    }
+    const valid = geom.shapes.every(shape => shape.validate());
+    const color = valid ? "green" : "red";
+    drawGeometry(geom, color);
+    if ( !valid ) incorrectRegions.add(region);
   }
   console.log(`${incorrectRegions.size} incorrect regions out of ${canvas.regions.placeables.length}.`);
   return incorrectRegions;
