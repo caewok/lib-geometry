@@ -140,19 +140,19 @@ export class GeometricPrimitive {
     if ( this.modelMatrix.anchor.equals({ x: 0, y: 0, z: 0 }) ) {
       return this.modelMatrix._translation.multiplyPoint3d(this.#center);
     }
-    return this.calculateCentroid(this.#center);
+    return this.constructor.calculateCentroid(this.faces, this.#center);
   }
 
   /**
    * Centroid is the center of mass of all the face points.
+   * @param {Polygon3d[]} faces
    * @returns {Point3d}
    */
-  calculateCentroid(out) {
-    const faces = this.faces;
-    if ( !faces || faces.length === 0 ) return this.center;
-
+  static calculateCentroid(faces, out) {
     out ??= Point3d.tmp;
     out.set(0, 0, 0);
+    if ( !faces || faces.length === 0 ) return out;
+
     for ( const face of faces ) out.add(face.centroid, out);
     const scale = 1 / faces.length;
     return out.multiplyScalar(scale, out);
