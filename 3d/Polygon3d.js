@@ -390,9 +390,9 @@ export class Polygon3d {
     }
     this.points.forEach((pt, idx) => out.points[idx].copyFrom(pt));
 
-    if ( !this.#dirtyPlane ) out.plane = this.plane;  // Uses a setter to copy from, unset dirty value.
-    if ( !this.#dirtyCentroid ) out.centroid = this.centroid; // Uses a setter to copy from, unset dirty value.
-    if ( !this.#dirtyAABB ) out.aabb = this.aabb; // Uses a setter to copy from, unset dirty value.
+    if ( !this.dirtyPlane ) out.plane = this.plane;  // Uses a setter to copy from, unset dirty value.
+    if ( !this.dirtyCentroid ) out.centroid = this.centroid; // Uses a setter to copy from, unset dirty value.
+    if ( !this.dirtyAABB ) out.aabb = this.aabb; // Uses a setter to copy from, unset dirty value.
 
     return out;
   }
@@ -1274,7 +1274,16 @@ export class Ellipse3d extends Polygon3d {
 
 
   /** @type {number<radians>} */
-  angle = 0;
+  #angle = 0;
+
+  get angle() { return this.#angle; }
+
+  set angle(value) {
+    if ( this.#angle === value ) return;
+    this.#angle = angle;
+    this.dirtyCentroid = true;
+    this.dirtyAABB = true;
+  }
 
   // ----- NOTE: Synonyms/Aliases -----
 
@@ -1305,6 +1314,16 @@ export class Ellipse3d extends Polygon3d {
     // plane.point.copyFrom(this.points[0]); // Unneeded b/c get plane does this.
   }
 
+  /**
+   * Reverse the orientation of this polygon. Done in place.
+   */
+  reverseOrientation() {
+    // Unlike the polygon, the ellipse's orientation is entirely dependent on its plane.
+    // With only 1 point, no reason to reverse the points array.
+    this.plane.normal.multiplyScalar(-1, this.plane.normal);
+    return this;
+  }
+
   _setDimensions({ center, radius, radiusSquared, radiusX, radiusY, angle } = {}) {
     if ( center ) this.center = center;
     if ( radius ) this.radius = radius;
@@ -1320,12 +1339,6 @@ export class Ellipse3d extends Polygon3d {
   }
 
   clean() { return; }
-
-  setZ(z = 0) {
-    this.center.z = z;
-    super.setZ(z);
-    return this;
-  }
 
   // ----- NOTE: Plane ----- //
 
@@ -1448,7 +1461,6 @@ export class Ellipse3d extends Polygon3d {
     out.radiusX = this.radiusX;
     out.radiusY = this.radiusY;
     out.angle = this.angle;
-    out.plane.copyFrom(this.plane);
     return out;
   }
 
