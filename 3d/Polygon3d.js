@@ -206,12 +206,11 @@ export class Polygon3d {
 
   /**
    * Centroid (center point) of this polygon.
-   * True geometric center.
    * @type {Point3d}
    */
   get centroid() {
     if ( this.#dirtyCentroid ) {
-      this.#centroid.copyFrom(this._calculateCentroid());
+      this.#centroid.copyFrom(this._calculateAreaWeightedCentroid());
       this.#dirtyCentroid = false;
     }
     return this.#centroid;
@@ -224,10 +223,11 @@ export class Polygon3d {
 
   /**
    * Calculates the centroid (average/center point) of a 3d planar polygon.
+   * Geometric center of the vertices.
    * @param {Point3d} [out]
    * @returns {Point3d}
    */
-  _calculateCentroid(out) {
+  _calculateAverageVertexCentroid(out) {
     out ??= Point3d.tmp;
 
     // If less than three points, return but do not mark as clean.
@@ -537,7 +537,8 @@ export class Polygon3d {
    * @returns {Quad3d[]}
    */
   buildTopSides(bottomZ, _opts) {
-    const ctr = this.centroid;
+    using ctr = this.centroid.clone();
+    ctr.z = bottomZ + ((this.points[0].z - bottomZ) * 0.5);
     const numSides = this.points.length;
     const sides = new Array(numSides);
     let i = 0;
@@ -2456,7 +2457,7 @@ export class Polygons3d extends Polygon3d {
 
   // ----- NOTE: Centroid ----- //
 
-  _calculateCentroid() {
+  _calculateAreaWeightedCentroid() {
     // Assuming flat points, determine plane and then convert to 2d
     const plane = this.plane;
     const points = this.polygons.flatMap(poly => poly.points);
