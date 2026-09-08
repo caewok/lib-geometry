@@ -1,5 +1,6 @@
 /* globals
 canvas,
+CONFIG,
 Hooks,
 PIXI,
 */
@@ -281,84 +282,88 @@ export class RegionGeometry extends PlaceableGeometry {
 
     // If holes, use ExtrudedPolygonPrimitiveWithHoles.
     const id = this._shapeId(shapeIdx);
-    const opts = this._shapeDimensions(regionShape);
-    let shape;
+    const shape = this._instantiateShape(regionShape, holeShapes, id);
+    shape.initialize();
+    return shape;
 
+  }
+
+  /**
+   * Instantiate the correct primitive shape based on constraints and type.
+   * @param {RegionShape} regionShape
+   * @param {RegionShape[]} holeShapes
+   * @param {string} id
+   */
+  _instantiateShape(regionShape, holeShapes, id) {
+    const opts = this._shapeDimensions(regionShape);
+
+    // 1. Wall Restricted.
     // If grid-restricted or wall-restricted, use ExtrudedPolygonPrimitive.
     if ( this.isWallRestricted && this.constructor.shapeIsWallRestricted(regionShape, this.placeableDocument) ) {
       // Must intersect the polygon against the constraints. Only the region.document.polygons are already constrained.
-      // TODO: Convert all this to ClipperPaths to avoid the back-and-forth conversions.
-      let ixPolys = [...regionShape.polygons];
-      const constraintPoly = new PIXI.Polygon();
-      for ( let i = 0, n = ixPolys.length; i < n; i += 1 ) {
-        for ( const constraintArr of this.placeableDocument._shapeConstraints ) {
-          constraintPoly.points = constraintArr;
-          ixPolys[i] = ixPolys[i].intersectPolygon(constraintPoly);
-        }
+      // Batch all constraints into a single clipper object.
+      const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
+      const constraintPolys = this.placeableDocument._shapeConstraints.map(arr => new PIXI.Polygon(arr));
+      const constraintPaths = ClipperPaths.fromPolygons(constraintPolys);
+
+      // Intersect base polygons with constraints and clean.
+      const ixPolys = ClipperPaths
+        .fromPolygons(regionShape.polygons)
+        .intersectPaths(constraintPaths)
+        .clean()
+        .toPolygons()
+        .filter(poly => poly.points.length > 7);
+
+      // Intersect hole polygons with constraints and clean, if applicable.
+      let ixHolePolys = [];
+      if ( holeShapes.length ) {
+        const allHolePolygons = holeShapes.flatMap(h => h.polygons);
+        ixHolePolys = ClipperPaths
+          .fromPolygons(allHolePolygons)
+          .intersectPaths(constraintPaths)
+          .clean()
+          .toPolygons
+          .filter(poly => poly.points.length > 7);
       }
 
-      // Clean polygons.
-      ixPolys = ixPolys.filter(poly => {
-        poly.clean();
-        return poly.points.length > 7;
-      });
+      // Instantiate the appropriate primitive.
+      // 1a. With holes.
+      if ( ixHolePolys.length ) return ExtrudedPolygonPrimitiveWithHoles.fromPolygons(id, [ixPolys, ...ixHolePolys], opts);
 
-      if ( holeShapes.length ) {
-        for ( let i = 0, n = holeShapes.length; i < n; i += 1 ) {
-          for ( const constraintArr of this.placeableDocument._shapeConstraints ) {
-            constraintPoly.points = constraintArr;
-            holeShapes[i] = holeShapes[i].intersectPolygon(constraintPoly);
-          }
-        }
-        shape = ExtrudedPolygonPrimitiveWithHoles.fromPolygons(
-          id,
-          [ixPolys, ...holeShapes.flatMap(shape => shape.polygons)],
-          opts
-        );
-
-      } else shape = ExtrudedPolygonPrimitive.fromPolygons(id, ixPolys, opts);
+      // 1b. Without holes.
+      return ExtrudedPolygonPrimitive.fromPolygons(id, ixPolys, opts);
     }
 
-    else if ( holeShapes.length ) shape = ExtrudedPolygonPrimitiveWithHoles.fromPolygons(
-      id,
-      [regionShape.polygons, ...holeShapes.flatMap(shape => shape.polygons)],
-      opts
-    );
+    // 2. Contains holes.
+    if ( holeShapes.length ) {
+      const combinedPolys = [...regionShape.polygons, ...holeShapes.flatMap(shape => shape.polygons)];
+      return ExtrudedPolygonPrimitiveWithHoles.fromPolygons(id, combinedPolys, opts);
+    }
 
-    else if ( this.constructor.shapeIsGridConstrained(regionShape) ) shape = ExtrudedPolygonPrimitive.fromPolygons(id, regionShape.polygons, opts);
+    // 3. Grid constrained.
+    if ( this.constructor.shapeIsGridConstrained(regionShape) ) return ExtrudedPolygonPrimitive.fromPolygons(id, regionShape.polygons, opts);
 
-    // Otherwise, select a shape.
-    else switch ( regionShape.type ) {
-      // See shape.constructor.TYPES
+    // 4. Base primitive types. See shape.constructor.TYPES
+    switch ( regionShape.type ) {
       case "circle":
-      case "ellipse": shape = new CylinderPrimitive(id); break;
+      case "ellipse": return new CylinderPrimitive(id);
 
       case "line":
-      case "rectangle": shape = new CubePrimitive(id); break;
+      case "rectangle": return new CubePrimitive(id);
 
-      case "cone": shape = ConePrimitive.fromRegionShape(id, regionShape, opts); break;
+      case "cone": return ConePrimitive.fromRegionShape(id, regionShape, opts);
 
        // Rings have holes built in, so use ExtrudedPolygonPrimitiveWithHoles.
-      case "ring": shape = ExtrudedPolygonPrimitiveWithHoles.fromPolygons(id, regionShape.polygons, opts); break;
+      case "ring": return ExtrudedPolygonPrimitiveWithHoles.fromPolygons(id, regionShape.polygons, opts);
 
+      // Other shapes use the basic extruded polygon shape.
       case "emanation":
-        // Use the polygon b/c corner radiuses can vary.
-        // base.x, base.y, rotation, base.width (# grid spaces), base.height (# grid spaces), origin
+      case "polygon":
+      case "grid":
+      case "token":
 
-      case "polygon": /* eslint-disable-line no-fallthrough */
-        // Obv. use the polygon.
-        // rotation, although not user-set, origin
-
-      case "grid": /* eslint-disable-line no-fallthrough */
-        // Unclear what this is.
-
-      case "token": /* eslint-disable-line no-fallthrough */
-        // Unclear what this is.
-
-      default: shape = ExtrudedPolygonPrimitive.fromPolygons(id, regionShape.polygons, opts); /* eslint-disable-line no-fallthrough */
+      default: return ExtrudedPolygonPrimitive.fromPolygons(id, regionShape.polygons, opts); /* eslint-disable-line no-fallthrough */
     }
-    shape.initialize();
-    return shape;
   }
 
   _update(opts) {
@@ -372,17 +377,6 @@ export class RegionGeometry extends PlaceableGeometry {
     Editing a shape results in a new shape, and the update hook shows all the shape properties as changed.
     The current work-around is a preupdate hook that passes through an array of changes to the specific shapes.
     */
-
-    // If there are holes, use the model polygon shape for the entire region.
-    // Because a change to any shape could change the model polygon for the region, just
-    // redo everything.
-    // Similarly, if the region's levels changed, redo everything.
-    if ( this.regionShapes.some(regionShape => regionShape.hole) || this.placeableDocument.restriction.enabled ) {
-      // Each level shape array should contain a single polygon primitive.
-      this.initialize();
-      this.updateAllShapes();
-      return;
-    }
 
     this._updateShapes(opts);
 
