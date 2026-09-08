@@ -335,3 +335,188 @@ export class ExtrudedTrianglePrimitive extends ExtrudedPolygonPrimitive {
     return this._facesFromPolygon3d(top, bottomZ);
   }
 }
+
+export class ExtrudedPolygonPrimitiveWithHoles extends ExtrudedPolygonPrimitive {
+
+  /**
+   * Build an extruded (along the z-axis) shape from a 2d polygon.
+   * @param {string} id           Identifier for this shape.
+   * @param {PIXI.Polygon} poly   Polygon to use.
+   * @param {object} [opts]
+   * @param {number} [opts.topZ]        Top elevation
+   * @param {number} [opts.bottomZ]     Bottom elevation
+   * @returns {ExtrudedPolygonPrimitive}
+   */
+  static fromPolygon(id, poly, opts) { return ExtrudedPolygonPrimitive.fromPolygon(id, poly, opts); }
+
+  /**
+   * Extrudes multiple polygons for a single shape, handles holes.
+   * @param {string} id                 Identifier for this shape.
+   * @param {PIXI.Polygon[]} polys      2d polygons to use.
+   * @param {object} [opts]
+   * @param {number} [opts.topZ]        Top elevation
+   * @param {number} [opts.bottomZ]     Bottom elevation
+   * @param {number} [opts.density]     Density when dealing with circles, ellipses
+   * @returns {ExtrudedPolygonPrimitive}
+   */
+  static fromPolygons(id, polys, opts = {}) {
+    if ( polys.length === 1 ) return super.fromPolygon(id, polys[0], opts);
+    const isHole = poly => poly.isHole ?? !poly.isPositive;
+    if ( !polys.some(isHole) ) return super.fromPolygons(id, polys, opts);
+    this._makeElevationFinite(opts);
+
+    const islands = this._buildIslands(polys);
+
+    const allProtoFaces = [];
+    for ( const { solid, holes } of islands ) {
+      const top = Polygons3d.fromPolygons([solid, ...holes], opts.topZ);
+      const faces = this._facesFromPolygon3d(top, opts.bottomZ, opts);
+      allProtoFaces.push(...this.canvasToPrototypeFaces(faces, opts));
+    }
+    return new this(id, allProtoFaces);
+  }
+
+  /**
+   * From 3d polygons, construct a recursive tree of solid + holes
+   * A root solid pairs with its direct hole children only.
+   * Each o those holes' direct solid children become new island roots one level down.
+   * @param {PIXI.Polygon[]} rings
+   * @returns {object[]}
+   * - @prop {PIXI.Polygon} solid
+   * - @prop {PIXI.Polygon[]} holes
+   */
+  static _buildIslands(rings) {
+    const parent = this._buildRingParents(rings);
+    const children = rings.map(() => []);
+    parent.forEach((p, i) => {
+      if ( p !== null ) children[p].push(i);
+    });
+
+    const islands = []; // { solid: Polygon3d, holes: Polygon3d[] }
+
+    function processSolid(solidIdx) {
+      const holeIdxs = children[solidIdx].filter(c => rings[c].isHole);
+      islands.push({ solid: rings[solidIdx], holes: holeIdxs.map(h => rings[h]) });
+
+      // Recurse: Any solid ring nested inside one of these holes starts a new island.
+      for ( const holeIdx of holeIdxs ) children[holeIdx]
+        .filter(c => !rings[c].isHole)
+        .forEach(processSolid);
+    }
+
+    rings.forEach((ring, i) => {
+      if ( !ring.isHole && parent[i] === null ) processSolid(i);
+    });
+
+    return islands;
+  }
+
+  /**
+   * Find each ring's immediate parent: the smallest other ring (solid or hole)
+   * that contains it. Assumes clean, non-self-intersecting rings that are either
+   * disjoint or fully nested (true for Clipper-cleaned region shapes).
+   * @param {PIXI.Polygon[]} rings
+   * @returns {number[]} Index of parent polygon for each ring
+   */
+  static _buildRingParents(planarRings) {
+    const areas = planarRings.map(r => Math.abs(r.signedArea()));
+    const testPoints = planarRings.map(r => r.interiorPoint());
+    return planarRings.map((ring, i) => {
+      let parent = null;
+      let parentArea = Number.POSITIVE_INFINITY;
+      for ( let j = 0, n = planarRings.length; j < n; j += 1 ) {
+        if ( i === j || areas[j] >= parentArea ) continue;
+        if ( planarRings[j].contains(testPoints[i].x, testPoints[i].y) ) {
+          parent = j;
+          parentArea = areas[j];
+        }
+      }
+      return parent;
+    });
+  }
+
+  // ----- NOTE: Face creation ----- //
+
+  /**
+   * @param {Polygon3d[]} faces
+   * @param {object} [opts]                   Parameters used to translate canvas faces back to prototype
+   * @param {Point3d} [opts.center]
+   * @param {Point3d} [opts.dims]
+   * @param {Point3d} [opts.angles]
+   * @param {Point3d} [opts.anchors]
+   * @returns {Polygon3d} Prototype faces, which may be same as faces.
+   */
+  static canvasToPrototypeFaces(faces, opts) {
+    // Default approach is that the faces equal the prototype faces; model matrix is identity.
+    if ( !(opts.center || opts.dims || opts.angles || opts.anchors ) ) return faces;
+
+    // After updating the faces, also transform the _refCentroid, if any.
+
+    // Build a matrix to transform each face;
+    const M = this.toPrototypeModel(opts);
+    const protoFaces = super.canvasToPrototypeFaces(faces, opts);
+    const numSides = protoFaces.length;
+    for ( let i = 0; i < numSides; i += 1 ) {
+      const protoFace = protoFaces[i];
+      const face = faces[i];
+      M.multiplyPoint3d(face._refCentroid, protoFace._refCentroid);
+    }
+    return protoFaces;
+  }
+
+  /**
+   * Update the faces for this primitive.
+   */
+  _generateFaces(faces) {
+    super._generateFaces(faces);
+
+    // After updating the faces, also transform the _refCentroid, if any.
+    const M = this.modelMatrix.model;
+    const numSides = this.prototypeFaces.length;
+    const protoFaces = this.prototypeFaces;
+    for ( let i = 0; i < numSides; i += 1 ) {
+      const protoFace = protoFaces[i];
+      const face = faces[i];
+      M.multiplyPoint3d(protoFace._refCentroid, face._refCentroid);
+    }
+  }
+
+  // ----- NOTE: Debugging ----- //
+
+  /**
+   * Handle local centroid validation for orientation.
+   * @param {Polygon3d} face
+   * @returns {boolean} True if not facing the local center or is hole.
+   */
+  static validateFaceOrientation(face) {
+    // Side walls: refCentroid = the ring (solid or hole) they belong to.
+    // Cap faces (Polygons3d, possibly with holes): their own centroid already reflects
+    // just that one island's rings, since each Polygons3d is build per-island.
+    const testPoint = face.refCentroid ?? face.centroid;
+    return face.isFacing(testPoint) === Boolean(face.isHole);
+  }
+
+
+  // TODO: Probably need to preserve refCentroid when cloning/copying Polygon3d
+  // When transforming, need to transform that refCentroid
+
+  /**
+   * Test whether all faces of this shape face outward as expected.
+   * Outward means from an outside viewer, the face is counter-clockwise.
+   * @returns {boolean} True if all faces point outward.
+   */
+  prototypeFacesOutward() {
+    const faces = this.prototypeFaces;
+    return faces.length >= 3 && faces.every(face => this.constructor.validateFaceOrientation(face));
+  }
+
+  /**
+   * Test whether all faces of this shape face outward as expected.
+   * Outward means from an outside viewer, the face is counter-clockwise.
+   * @returns {boolean} True if all faces point outward.
+   */
+  facesOutward() {
+    const faces = this.faces;
+    return faces.length >= 3 && faces.every(face => this.constructor.validateFaceOrientation(face));
+  }
+}
