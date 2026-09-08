@@ -15,7 +15,7 @@ import { ExtrudedPolygonPrimitive, ExtrudedPolygonPrimitiveWithHoles } from "./M
 // LibGeometry
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { Point3d } from "../3d/Point3d.js";
-import { almostLessThan, NULL_SET } from "../util.js";
+import { NULL_SET } from "../util.js";
 
 /**
   Region will either be a single shape or a group of polygons.
@@ -131,35 +131,65 @@ export class RegionGeometry extends PlaceableGeometry {
     ...super.UPDATE_KEY_MAP,
     ["elevation.bottom", "elevation"],
     ["elevation.top", "elevation"],
-    // ["shapes", "shapes"],
+    ["elevation.top.inclusive", "elevation"],
+
+    ["restriction.enabled", "wallRestriction"],
+    ["restriction.type", "wallRestriction"],
+    ["restriction.priority", "wallRestriction"],
+
+    ["_shapeConstraints", "shapeConstraints"],
   ]);
-
-  /**
-   * Return the shape class for a given region shape type.
-   * May also be dependent on the region (e.g., plateaus, steps, etc.)
-   * @param {number} i      Index of the shape
-   */
-  shapeClass(i) {
-    const regionShape = this.regionShapes[i];
-    if ( regionShape.gridBased ) return ExtrudedPolygonPrimitive;
-    switch ( regionShape.type ) {
-      case "circle":
-      case "ellipse": return CylinderPrimitive;
-
-      case "line":
-      case "rectangle": return CubePrimitive;
-
-      case "cone": return ConePrimitive;
-
-      default: return ExtrudedPolygonPrimitive;
-    }
-  }
 
   get region() { return this.placeable; }
 
   get regionShapes() { return this.placeableDocument.shapes; }
 
   get regionPolygons() { return this.placeableDocument.polygons; }
+
+  /**
+   * Is this region currently restricted by walls? Ignores the scene rect.
+   * @returns {boolean} True if restricted.
+   */
+  get isWallRestricted() {
+    const regionD = this.placeableDocument;
+    if ( !this.constructor.wallRestricted(regionD) ) return false;
+
+    const sc = regionD._shapeConstraints;
+    if ( sc.length !== 1 || sc[0].length !== 8 ) return true; // Simple canvas bounds would be 8 points.
+    const canvasArr = canvas.scene.dimensions.rect.toPolygon().points;
+    return !sc[0].equals(canvasArr);
+  }
+
+  /**
+   * Is this shape currently restricted by walls?
+   * Presumes without test that isWallRestricted returns true; test this separately.
+   * @param {RegionShape} regionShape
+   * @returns {boolean} True if restricted.
+   */
+  static shapeIsWallRestricted(regionShape, regionD) {
+    if ( !regionD._shapeConstraints ) return false;
+    const restrictionBounds = regionD._shapeConstraints.map(constraintArr => new PIXI.Polygon(constraintArr));
+    for ( const r of restrictionBounds ) {
+      for ( const poly of regionShape.polygons ) {
+        if ( poly.overlaps(r) ) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Is this shape a hole?
+   * @param {RegionShape} regionShape
+   * @returns {boolean} True if hole.
+   */
+  static shapeIsHole(regionShape) { return regionShape.hole; }
+
+  /**
+   * Is this shape constrained by the grid?
+   * @param {RegionShape} regionShape
+   * @returns {boolean} True if restricted.
+   */
+  static shapeIsGridConstrained(regionShape) { return regionShape.isAffectedByGrid; }
 
   /**
    * Multiple shapes may be used to construct region shapes. If so, CombinedGeometricPrimitive should be used.
@@ -188,15 +218,14 @@ export class RegionGeometry extends PlaceableGeometry {
 
   updateAllShapes() {
     console.debug(`RegionGeometry|updateAllShapes ${this.placeableDocument.name} (${this.placeableId})`);
-    const { shapes, regionShapes } = this;
-    for ( let i = 0, iMax = shapes.length; i < iMax; i += 1 ) this._updateShape(i);
+    for ( let i = 0, iMax = this.shapes.length; i < iMax; i += 1 ) this._updateShapeDimensions(i);
   }
 
   createShapes() {
     console.debug(`RegionGeometry|createShapes ${this.placeableDocument.name} (${this.placeableId})`);
     const regionShapes = this.regionShapes;
     const shapes = this.shapes;
-    this.shapes.forEach(subshape => subshape.destroy());
+    this.shapes.forEach(subshape => subshape?.destroy());
 
     // If no shapes for this region, return.
     const n = regionShapes.length;
@@ -205,47 +234,100 @@ export class RegionGeometry extends PlaceableGeometry {
       return;
     }
 
-    // If there are holes or wall restrictions, use the model polygon shape for the entire region.
-    if ( this.regionPolygons.length &&
-      (this.placeableDocument.restriction.enabled
-      || regionShapes.some(regionShape => regionShape.hole)) ) {
-      this.shapes.length = 1;
-      this.shapes[0] = this._buildEntireRegionShape();
-      return;
-    }
+    // Identify holes, if any.
+    const groupedShapes = this._groupShapesAndHoles();
 
     // Create a primitive shape for each region shape.
     this.shapes.length = n;
-    for ( let i = 0; i < n; i += 1 ) shapes[i] = this._buildRegionShapes(i);
+    for ( let i = 0; i < n; i += 1 ) {
+      const holes = groupedShapes[i];
+      shapes[i] = holes ? this._buildRegionShape(i, holes) : null;
+    }
     return shapes;
   }
 
   /**
-   * Construct a primitive shape using the polygons for the entire region.
-   * @returns {GeometricPrimitive[]}
+   * Parses region shapes to group base shapes with their associated holes
+   * @returns {object[RegionShape[]|null]} Array of arrays, with each subarray holding
+   *   holes for the shape at that index. If no shape for that index, null.
    */
-  _buildEntireRegionShapes() {
-    console.debug(`RegionGeometry|_buildEntireRegionShapes ${this.placeableDocument.name} (${this.placeableId})`);
-    const id = this.placeableId;
-    const zElevs = this.elevationZ;
-    const shape = ExtrudedPolygonPrimitive.fromPolygons(id, this.regionPolygons, zElevs);
-    shape.initialize();
-    return shape;
+  _groupShapesAndHoles() {
+    const n = this.regionShapes.length;
+    const grouped = new Array(n).fill(null);
+    let currentBaseIdx = -1;
+    for ( let i = 0; i < n; i += 1 ){
+      const regionShape = this.regionShapes[i];
+      if ( this.constructor.shapeIsHole(regionShape) ) {
+        if ( ~currentBaseIdx ) grouped[currentBaseIdx].push(regionShape);
+      } else {
+        currentBaseIdx = i;
+        grouped[i] = [];
+      }
+    }
+    return grouped;
   }
 
   /**
    * Construct primitive shapes for a given region shape.
    * @param {number} idx        Index of the region shape in the region.document.shapes array
+   * @param {object} shapeGroup
+   *   - @prop {RegionShape} shape
+   *   - @prop {RegionShape[]} holes
    * @returns {GeometricPrimitive[]}
    */
-  _buildRegionShapes(shapeIdx) {
-    console.debug(`RegionGeometry|_buildRegionShapes ${this.placeableDocument.name} (${this.placeableId})`);
+  _buildRegionShape(shapeIdx, holeShapes = []) {
+    console.debug(`RegionGeometry|_buildRegionShape ${this.placeableDocument.name} (${this.placeableId})`);
     const regionShape = this.regionShapes[shapeIdx];
-    const id = this._shapeId(shapeIdx);
-    const zElevs = this.elevationZ;
 
+    // If holes, use ExtrudedPolygonPrimitiveWithHoles.
+    const id = this._shapeId(shapeIdx);
+    const opts = this._shapeDimensions(regionShape);
     let shape;
-    if ( regionShape.gridBased ) shape = ExtrudedPolygonPrimitive.fromPolygons(id, regionShape.polygons, zElevs);
+
+    // If grid-restricted or wall-restricted, use ExtrudedPolygonPrimitive.
+    if ( this.isWallRestricted && this.constructor.shapeIsWallRestricted(regionShape, this.placeableDocument) ) {
+      // Must intersect the polygon against the constraints. Only the region.document.polygons are already constrained.
+      // TODO: Convert all this to ClipperPaths to avoid the back-and-forth conversions.
+      let ixPolys = [...regionShape.polygons];
+      const constraintPoly = new PIXI.Polygon();
+      for ( let i = 0, n = ixPolys.length; i < n; i += 1 ) {
+        for ( const constraintArr of this.placeableDocument._shapeConstraints ) {
+          constraintPoly.points = constraintArr;
+          ixPolys[i] = ixPolys[i].intersectPolygon(constraintPoly);
+        }
+      }
+
+      // Clean polygons.
+      ixPolys = ixPolys.filter(poly => {
+        poly.clean();
+        return poly.points.length > 7;
+      });
+
+      if ( holeShapes.length ) {
+        for ( let i = 0, n = holeShapes.length; i < n; i += 1 ) {
+          for ( const constraintArr of this.placeableDocument._shapeConstraints ) {
+            constraintPoly.points = constraintArr;
+            holeShapes[i] = holeShapes[i].intersectPolygon(constraintPoly);
+          }
+        }
+        shape = ExtrudedPolygonPrimitiveWithHoles.fromPolygons(
+          id,
+          [ixPolys, ...holeShapes.flatMap(shape => shape.polygons)],
+          opts
+        );
+
+      } else shape = ExtrudedPolygonPrimitive.fromPolygons(id, ixPolys, opts);
+    }
+
+    else if ( holeShapes.length ) shape = ExtrudedPolygonPrimitiveWithHoles.fromPolygons(
+      id,
+      [regionShape.polygons, ...holeShapes.flatMap(shape => shape.polygons)],
+      opts
+    );
+
+    else if ( this.constructor.shapeIsGridConstrained(regionShape) ) shape = ExtrudedPolygonPrimitive.fromPolygons(id, regionShape.polygons, opts);
+
+    // Otherwise, select a shape.
     else switch ( regionShape.type ) {
       // See shape.constructor.TYPES
       case "circle":
@@ -254,20 +336,14 @@ export class RegionGeometry extends PlaceableGeometry {
       case "line":
       case "rectangle": shape = new CubePrimitive(id); break;
 
-      case "cone": {
-        const opts = this._shapeDimensions(regionShape);
-        if ( almostLessThan(opts.dims.z, 0) ) opts.dims.z = 1; // zHeight must be positive.
-        shape = ConePrimitive.fromRegionShape(id, regionShape, opts);
-        break;
-      }
+      case "cone": shape = ConePrimitive.fromRegionShape(id, regionShape, opts); break;
+
+       // Rings have holes built in, so use ExtrudedPolygonPrimitiveWithHoles.
+      case "ring": shape = ExtrudedPolygonPrimitiveWithHoles.fromPolygons(id, regionShape.polygons, opts); break;
 
       case "emanation":
         // Use the polygon b/c corner radiuses can vary.
         // base.x, base.y, rotation, base.width (# grid spaces), base.height (# grid spaces), origin
-
-      case "ring": /* eslint-disable-line no-fallthrough */
-         // Use the polygon(s) b/c of the hole.
-        // rotation, x, y, radius as width, origin
 
       case "polygon": /* eslint-disable-line no-fallthrough */
         // Obv. use the polygon.
@@ -279,12 +355,7 @@ export class RegionGeometry extends PlaceableGeometry {
       case "token": /* eslint-disable-line no-fallthrough */
         // Unclear what this is.
 
-      default: {  /* eslint-disable-line no-fallthrough */
-        // Pass the center, rotation, and dimensions so a prototype can be created.
-        const opts = this._shapeDimensions(regionShape);
-        if ( almostLessThan(opts.dims.z, 0) ) opts.dims.z = 1; // zHeight must be positive.
-        shape = ExtrudedPolygonPrimitive.fromPolygons(id, regionShape.polygons, opts);
-      }
+      default: shape = ExtrudedPolygonPrimitive.fromPolygons(id, regionShape.polygons, opts); /* eslint-disable-line no-fallthrough */
     }
     shape.initialize();
     return shape;
@@ -330,59 +401,64 @@ export class RegionGeometry extends PlaceableGeometry {
     const { shapes, regionShapes } = this;
     const numRegionShapes = regionShapes.length;
 
+    // Determine the shape/hole grouping.
+    const groupedShapes = this._groupShapesAndHoles();
+
     // For each shape, a mis-matched class indicates either the shape was changed
     // or a shape prior to it was deleted. Reuse shapes where possible, creating new as needed and
     // deleting shapes as necessary.
+    // Create a pool of existing shapes available for reuse, and reset this.shapes.
+    const oldShapes = new Set(shapes);
+    shapes.length = numRegionShapes;
+    shapes.fill(null);
 
-    let i = 0;
-    while ( true ) {
-      // If we reach the end of the region shapes, truncate leftover elements.
-      if ( i >= numRegionShapes ) {
-        for ( let j = numRegionShapes, n = shapes.length; j < n; j += 1 ) this.shapes[j].destroy();
-        shapes.length = i;
-        break;
-      }
+    for ( let i = 0; i < numRegionShapes; i += 1 ) {
+
+      // If the shape is just a hole, no primary shape to create or update.
+      if ( !groupedShapes[i] ) continue;
+
 
       // Check if the current element is already correct.
-      if ( !this.rebuildNeeded(shapes[i], regionShapes[i], trackingArr[i]) ) {
-        this._updateShape(i, trackingArr[i]);
-        i++;
-        continue;
-      }
+      const regionShape = regionShapes[i];
+      const mustRebuild = this._mustRebuild(regionShape, trackingArr[i]);
+      let reusedShape;
 
-      // Look ahead in the remaining array to see if the target exists.
-      // Reuse instead of deleting.
-      let foundIndex = -1;
-      for ( let j = i + 1, n = shapes.length; j < n; j++ ) {
-        if ( !this.rebuildNeeded(shapes[j], regionShapes[i], trackingArr[i]) ) {
-          foundIndex = j;
-          break;
+      if ( !mustRebuild ) {
+        for ( const potentialMatch of oldShapes ) {
+          if ( this._shapeClassMatchesRegionShape(potentialMatch, regionShape) ) {
+            reusedShape = potentialMatch;
+            oldShapes.delete(potentialMatch);
+            break;
+          }
         }
       }
 
-      if ( ~foundIndex ) {
-        shapes.splice(i, foundIndex - i);
-        this.shape[i].id = this._shapeId(i); // Relabel to track the new shape index.
-        this._updateShape(i, trackingArr[i]);
-      } else {
-        // Target class is not present downstream, so create anew.
-        this._rebuildShape(i);
-        continue;
-      }
+      if ( reusedShape ) {
+        shapes[i] = reusedShape;
+        shapes[i].id = this._shapeId(i); // Relabel to track the new shape index.
+      } else shapes[i] = this._rebuildShape(i, groupedShapes[i]);
+
+      // Apply dimensional updates to the shape.
+      this._updateShapeDimensions(i, trackingArr[i]);
     }
+
+    // Clean up any remaining unused shapes from the pool.
+    oldShapes.forEach(shape => shape.destroy());
   }
 
   /**
    * Rebuild an existing shape.
    * @param {number} i          The index of the shape in the array.
    */
-  _rebuildShape(i) {
+  _rebuildShape(i, holes) {
     console.debug(`RegionGeometry|_rebuildShape ${i} ${this.placeableDocument.name} (${this.placeableId})`);
     const shapes = this.shapes;
     if ( shapes[i] )  shapes[i].destroy();
-    shapes[i] = this._buildRegionShape(i);
-    shapes[i].initialize();
-    this._updateShape(i);
+
+    if ( !holes ) holes = this._groupShapesAndHoles()[i];
+
+    shapes[i] = holes ? this._buildRegionShape(i, holes) : null;
+    this._updateShapeDimensions(i);
   }
 
   /**
@@ -391,9 +467,11 @@ export class RegionGeometry extends PlaceableGeometry {
    * @param {Set<string>} [changeKeys]   Optional change keys; if not provided everything will be updated
    *   Adding a "elevation" key will update the position and scale.
    */
-  _updateShape(shapeIdx, changes) {
-    console.debug(`RegionGeometry|_updateShape ${shapeIdx} ${this.placeableDocument.name} (${this.placeableId})`);
+  _updateShapeDimensions(shapeIdx, changes) {
+    console.debug(`RegionGeometry|_updateShapeDimensions ${shapeIdx} ${this.placeableDocument.name} (${this.placeableId})`);
     const shape = this.shapes[shapeIdx];
+    if ( !shape ) return;
+
     const regionShape = this.regionShapes[shapeIdx];
     changes ??= this._allChanges(regionShape);
 
@@ -409,26 +487,49 @@ export class RegionGeometry extends PlaceableGeometry {
     if ( modifyAnchors ) shape.setAnchor(opts.anchors);
   }
 
-  _
-
   /**
-   * For a given shape index and change set, does this shape need to be rebuilt entirely?
-   * @param {number} shapeIdx
-   * @param {Set<string>} [changeKeys]   Optional change keys; if not provided everything will be updated
-   *   Adding a "elevation" key will update the position and scale.
-   * @returns {boolean}
+   * For a given set of changes for a region shape, is a rebuild needed no matter what?
+   * In other words, could we simply update or swap shapes or does this shape need to be rebuilt entirely from scratch?
+   * @param {RegionShape} regionShape
+   * @param {Set<string>} changes
    */
-  rebuildNeeded(shape, regionShape, changes) {
-    if ( changes.has("type") || changes.has("points") ) return true;
-    if ( !(shape instanceof this.shapeClass(regionShape)) ) return true;
+  _mustRebuild(regionShape, changes) {
+    // If the shape is grid-based or wall-restricted, it is a polygon that must be rebuilt.
+    if ( this.activeUpdates.has("shapeConstraints")
+      && this.isWallRestricted && this.constructor.shapeIsWallRestricted(regionShape) ) return true;
+
+    if ( this.constructor.shapeIsGridConstrained(regionShape) && changes.has("gridBased") ) return true;
 
     // Some types need to be rebuilt when certain parameters change, causing the underlying shape to warp.
     switch ( regionShape.type ) {
       case "cone": return changes.has("angle") || changes.has("curvature") || changes.has("radius");
       case "emanation": return changes.has("radius");
       case "ring": return changes.has("innerWidth") || changes.has("outerWidth") || changes.has("radius");
+
+
+      case "polygon": return changes.has("points");
     }
     return false;
+  }
+
+  /**
+   * For a given shape index and change set, does this shape need to be rebuilt entirely?
+   * @param {number} shapeIdx
+   * @param {Set<string>} changes
+   * @returns {boolean}
+   */
+  _shapeClassMatchesRegionShape(shape, regionShape) {
+    switch ( regionShape.type ) {
+      case "circle":
+      case "ellipse": return shape instanceof CylinderPrimitive;
+
+      case "line":
+      case "rectangle": return shape instanceof CubePrimitive;
+
+      case "cone": return shape instanceof ConePrimitive;
+
+      default: return false;
+    }
   }
 
   _allChanges(regionShape) {
@@ -514,7 +615,7 @@ export class RegionGeometry extends PlaceableGeometry {
         dims.set(regionShape.width, regionShape.height, zHeight);
 
         // Rectangle anchors from user-defined position.
-        // Those represent percentage anchors from 0â€“1. Conform to the unit cube from -0.5 to 0.5.
+        // Those represent percentage anchors from 0Ð1. Conform to the unit cube from -0.5 to 0.5.
         anchors.set(0.5 - regionShape.anchorX, 0.5 - regionShape.anchorY, 0);
         break;
 
@@ -554,16 +655,31 @@ export class RegionGeometry extends PlaceableGeometry {
 
   /**
    * Top and bottom elevation of a region.
-   * @param {RegionDocument} regionDocument
    * @returns {object}
    * - @prop {number} topZ
    * - @prop {number} bottomZ
    */
   get elevationZ() {
     const elevs = super.elevationZ
-    if ( !this.placeableDocument.elevation.topInclusive ) elevs.topZ -= 1; // Subtract 1 pixel if not inclusive.
+    if ( !this.constructor.topInclusive(this.placeableDocument) ) elevs.topZ -= 1; // Subtract 1 pixel if not inclusive.
     return elevs;
   }
+
+  // ------ NOTE: Static property retrieval ----- //
+
+  /**
+   * Is this region restricted by walls?
+   * @param {RegionDocument} regionD
+   * @returns {boolean}
+   */
+  static wallRestricted(regionD) { return regionD.restriction.enabled; }
+
+  /**
+   * Does this region include its top elevation?
+   * @param {RegionDocument} regionD
+   * @returns {boolean}
+   */
+  static topInclusive(regionD) { return regionD.elevation.topInclusive; }
 }
 
 
