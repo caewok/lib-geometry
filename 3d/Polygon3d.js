@@ -38,13 +38,6 @@ export class Polygon3d {
 
   static _geoLibType = "Polygon3d";
 
-
-  // TODO: Cache bounds and plane. Use setter to modify points to reset cache?
-  //       Or just only allow points set once?
-  //       Could have set points(pts) and set them all at once.
-  //       Difficult b/c of transform and scale, along with the fact that each point can be
-  //       modified in place.
-
   /** @type {Point3d} */
   points = [];
 
@@ -1290,7 +1283,7 @@ export class Ellipse3d extends Polygon3d {
 
   set angle(value) {
     if ( this.#angle === value ) return;
-    this.#angle = angle;
+    this.#angle = value;
     this.dirtyCentroid = true;
     this.dirtyAABB = true;
   }
@@ -2012,7 +2005,7 @@ export class Triangle3d extends Polygon3d {
    * @param {boolean} [opts.useNormal=false]      Add triangle normal to each vertex?
    * @param {Float32Array[]} [opts.outArr]        Array large enough to hold the triangles
    * @param {number} [opts.outIdx=0]              Copy triangle vertices to array starting here
-   * @returns {Float32Array[]}
+   * @returns {Float32Array}
    */
   static trianglesToVertices(tris, { addNormals = false, outArr, outIdx = 0 } = {}) {
     const { NUM_POSITION_COORDS, NUM_NORMAL_COORDS, NUM_POINTS } = this;
@@ -2587,15 +2580,70 @@ export class Polygons3d extends Polygon3d {
 
   toPerspectivePolygon() { return this.#applyMethodToAllWithReturn("toPerspectivePolygon"); }
 
+  /**
+   * Convert these polygons to vertices.
+   * @param {object} [opts]     Passed to Triangle3d.trianglesToVertices
+   * @returns {Float32Array}
+   */
   toVertices(opts) {
-    const tris = [];
-    this.polygons.forEach(poly => tris.push(...poly.triangulate()));
-    return Triangle3d.trianglesToVertices(tris, opts);
+    const tris = this.triangulate();
+    return Triangle3d.trianglesToVertices(tris.polygons, opts);
   }
 
+  /**
+   * Triangulate the polygons, converting to array of Triangle3d.
+   * Currently handles either all solid polygons or a single solid polygon plus 1+ holes.
+   * @returns {Polygons3d} A new polygons3d that is solely triangles
+   */
   triangulate(opts) {
-    const out = new this();
-    this.polygons.forEach(poly => out.polygons.push(...poly.triangulate(opts)));
+    const solids = [];
+    const holes = [];
+    for ( const poly of this.polygons ) {
+      const arr = poly.isHole ? holes : solids;
+      arr.push(poly);
+    }
+    if ( !solids.length ) return new this.constructor();
+    if ( solids.length > 1 && !holes.length ) {
+      const out = new this();
+      this.polygons.forEach(poly => out.polygons.push(...poly.triangulate(opts)));
+      return out;
+    } else if ( solids.length > 1 ) console.warn("Polygons3d#triangulate|Expects one solid per instance if holes are present.");
+
+    const outer = solids[0];
+    const plane = this.plane;
+    const to2dM = plane.conversion2dMatrix;
+
+    // Flat [x, y, x, y, ...] coordinate list + starting index of each hole, per earcut's format.
+    const vertsFlat = [];
+    const holeIndices = [];
+    const allPts3d = [];
+    const addRing = ring => {
+      for ( const pt of ring.points ) {
+        const pt2d = to2dM.multiplyPoint3d(pt);
+        vertsFlat.push(pt2d.x, pt2d.y);
+        allPts3d.push(pt);
+      }
+    }
+    addRing(outer);
+    for ( const ring of holes ) {
+      holeIndices.push(vertsFlat.length / 2);
+      addRing(ring);
+    }
+
+    // One triangulation pass, holes subtracted.
+    const triIndices = PIXI.utils.earcut(vertsFlat, holeIndices, 2);
+
+    // Build the triangles.
+    const n = triIndices.length;
+    const out = new this.constructor(n);
+    for ( let i = 0; i < n; i += 1 ) {
+      const tri = Triangle3d.from3Points(
+        allPts3d[triIndices[i]],
+        allPts3d[triIndices[i+1]],
+        allPts3d[triIndices[i+2]],
+      );
+      out.polygons[i] = tri;
+    }
     return out;
   }
 
