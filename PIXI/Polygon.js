@@ -374,7 +374,8 @@ function _ixToPoint(ix) {
 function lineIntersections(a, b, { indices = false, tangents = true } = {}) {
   const ixIndices = [];
   const ixs = [];
-  this.iterateEdges().forEach((edge, i) => {
+  const edges = [...this.iterateEdges()];
+  edges.forEach((edge, i) => {
     // Test if the line intersects the edge segment (first half of lineSegmentIntersects test)
     const xa = foundry.utils.orient2dFast(a, b, edge.a);
     const xb = foundry.utils.orient2dFast(a, b, edge.b);
@@ -1191,6 +1192,54 @@ function pointsLattice({ spacing = 1, startAtEdge = false } = {}) {
   return pts.filter(pt => this.contains(pt.x, pt.y));
 }
 
+/**
+ * Compute a point guaranteed to lie inside a simple polygon (convex or convcave)
+ * Unlike a vertex-average or area-weighted centroid, this cannot fall outside the ring.
+ * @returns {PIXI.Point}
+ */
+function interiorPoint() {
+  // Pick a scanline y that doesn't pass exactly through a vertex to avoid degenerate crossings.
+  let yMin = Number.POSITIVE_INFINITY;
+  let yMax = Number.NEGATIVE_INFINITY;
+  const vertexYs = new Set();
+  for ( const pt of this.iteratePoints() ) {
+    const y = pt.y;
+    yMin = Math.min(yMin, y);
+    yMax = Math.max(yMax, y);
+    vertexYs.add(y);
+  }
+
+  // Slowly move y until it misses the vertex.
+  let y = (yMin + yMax) / 2;
+  const eps = (yMax - yMin) * 1e-06 || 1e-06;
+  while ( vertexYs.has(y) ) y += eps;
+
+  // Collect every x where an edge crosses the scanline.
+  const xs = [];
+  const a = PIXI.Point.tmp.set(this.points.at(-2), this.points.at(-1));
+  for ( const b of this.iteratePoints() ) {
+    const x0 = a.x;
+    const y0 = a.y;
+    const x1 = b.x;
+    const y1 = b.y;
+    if ( (y0 > y) !== (y1 > y) ) xs.push(x0 + ((y - y0) / (y1 - y0)) * (x1 - x0));
+    xs.sort((a, b) => a - b);
+  }
+
+  // Take the widest interior span's midpoint. More robust than always taking the first pair.
+  // (A thin sliver near the boundary is a valid crossing but a fragile test point.)
+  let bestSpan = Number.NEGATIVE_INFINITY;
+  let bestMid = (xs[0] + xs[1]) / 2;
+  for ( let i = 0, n = xs.length; (i + 1) < n; i += 2 ) {
+    const span = xs[i + 1] - xs[i];
+    if ( span > bestSpan ) {
+      bestSpan = span;
+      bestMid = (xs[i] + xs[i + 1]) / 2;
+    }
+  }
+  return PIXI.Point.tmp.set(bestMid, y);
+}
+
 
 PATCHES.PIXI.GETTERS = {
   area,
@@ -1234,6 +1283,7 @@ PATCHES.PIXI.METHODS = {
   pointsBetween,
   viewablePoints,
   pointsLattice,
+  interiorPoint,
 
   // Overlap methods
   overlaps,
