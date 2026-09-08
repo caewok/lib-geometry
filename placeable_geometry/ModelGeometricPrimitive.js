@@ -209,11 +209,19 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    * @param {PIXI.Polygon} poly       Polygon shape to use for top and bottom faces.
    * @param {number} topZ             The top elevation
    * @param {number} bottomZ          The bottom elevation
+   * @param {number} [opts.density]     Density when dealing with circles, ellipses
    * @returns {Polygon3d[]} Array of top, bottom, and 3+ sides.
    */
-  static _facesFromPolygon(poly, { topZ, bottomZ } = {}) {
-    const top = Polygon3d.fromPolygon(poly, topZ);
-    return this._facesFromPolygon3d(top, bottomZ);
+  static _facesFromPolygon(poly, { topZ, bottomZ, ...opts } = {}) {
+    let top;
+    if ( poly instanceof PIXI.Circle ) top = Circle3d.fromCircle(poly, topZ);
+    else if ( poly instanceof PIXI.Ellipse ) top = Ellipse3d.fromEllipse(poly, topZ);
+    else if ( poly instanceof PIXI.Rectangle ) top = Quad3d.fromRectangle(poly, topZ);
+    else if ( poly.points.length === 6 ) top =  Triangle3d.fromPolygon(poly, opts.topZ);
+    else if ( poly.points.lenght === 8 ) top =  Quad3d.fromPolygon(poly, opts, topZ);
+    else top = Polygon3d.fromPolygon(poly, topZ);
+
+    return this._facesFromPolygon3d(top, bottomZ, opts);
   }
 
   /**
@@ -223,14 +231,12 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    * @param {number} bottomZ      The bottom elevation
    * @returns {Polygon3d[]}
    */
-  static _facesFromPolygon3d(top, bottomZ) {
+  static _facesFromPolygon3d(top, bottomZ, opts) {
     const bottom = top.clone();
     bottom.setZ(bottomZ);
     bottom.reverseOrientation();
-    return [top, bottom, ...top.buildTopSides(bottomZ)];
+    return [top, bottom, ...top.buildTopSides(bottomZ, opts)];
   }
-
-
 
   /**
    * Determine all top, bottom, and mid corners along with midpoints between for the
