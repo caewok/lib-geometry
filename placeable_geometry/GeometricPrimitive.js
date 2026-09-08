@@ -354,29 +354,21 @@ export class GeometricPrimitive {
     return this.prototypeFacesOutward() && this.facesOutward();
   }
 
-  prototypeFacesOutward() {
-    // Default approach is to test each face against the centroid of the shape.
-    // This will fail for flat objects or complex convex objects (like steps)
-    const faces = this.prototypeFaces;
-    if ( !faces || faces.length < 3 ) return false;
-
-    // Test each face against the centroid.
-    const centroid = this.constructor.calculateCentroid(faces);
-    for ( const face of faces ) {
-      if ( face.isFacing(centroid) ) return false;
-    }
-    return true;
-  }
+  /**
+   * Test whether all faces of this shape's prototype face outward as expected.
+   * Outward means from an outside viewer, the face is counter-clockwise.
+   * @returns {boolean} True if all faces point outward.
+   */
+  prototypeFacesOutward() { return this._testFacesOutward(this.prototypeFaces); }
 
   /**
    * Test whether all faces of this shape face outward as expected.
    * Outward means from an outside viewer, the face is counter-clockwise.
    * @returns {boolean} True if all faces point outward.
    */
-  facesOutward() {
-    // Default approach is to test each face against the centroid of the shape.
-    // This will fail for flat objects or complex convex objects (like steps)
-    const faces = this.faces;
+  facesOutward() { return this._testFacesOutward(this.faces); }
+
+  _testFacesOutward(faces) {
     if ( !faces || faces.length < 3 ) return false;
 
     // Test each face against the centroid.
