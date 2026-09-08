@@ -6,7 +6,7 @@ PIXI,
 
 import { GeometricPrimitive } from "./GeometricPrimitive.js";
 import { VertexObject } from "../placeable_vertices/VertexObject.js";
-import { Polygon3d, Triangle3d  } from "../3d/Polygon3d.js";
+import { Polygon3d, Triangle3d, Circle3d, Ellipse3d, Quad3d, Polygons3d } from "../3d/Polygon3d.js";
 import { ModelMatrixAnchor } from "../ModelMatrix.js";
 import { Point3d } from "../3d/Point3d.js";
 
@@ -152,13 +152,11 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    * @param {object} [opts]
    * @param {number} [opts.topZ]        Top elevation
    * @param {number} [opts.bottomZ]     Bottom elevation
+   * @param {number} [opts.density]     Density when dealing with circles, ellipses
    * @returns {ExtrudedPolygonPrimitive}
    */
   static fromPolygon(id, poly, opts = {}) {
-    opts.topZ ??= Number.POSITIVE_INFINITY;
-    opts.bottomZ ??= Number.NEGATIVE_INFINITY;
-    if ( !isFinite(opts.topZ) ) opts.topZ = 1e06;
-    if ( !isFinite(opts.bottomZ) ) opts.bottomZ = -1e06;
+    this._makeElevationFinite(opts);
     const faces = this._facesFromPolygon(poly, opts);
     const prototypeFaces = this.canvasToPrototypeFaces(faces, opts);
     return new this(id, prototypeFaces);
@@ -171,14 +169,12 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    * @param {object} [opts]
    * @param {number} [opts.topZ]        Top elevation
    * @param {number} [opts.bottomZ]     Bottom elevation
+   * @param {number} [opts.density]     Density when dealing with circles, ellipses
    * @returns {ExtrudedPolygonPrimitive}
    */
   static fromPolygons(id, polys, opts = {}) {
     if ( polys.length === 1 ) return this.fromPolygon(id, polys[0], opts);
-    opts.topZ ??= Number.POSITIVE_INFINITY;
-    opts.bottomZ ??= Number.NEGATIVE_INFINITY;
-    if ( !isFinite(opts.topZ) ) opts.topZ = 1e06;
-    if ( !isFinite(opts.bottomZ) ) opts.bottomZ = -1e06;
+    this._makeElevationFinite(opts);
     const allProtoFaces = [];
 
     // Construct extruded 3d shape for each polygon in turn.
@@ -193,6 +189,20 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
 
   // ----- NOTE: Factory helpers to construct faces ----- //
 
+  /**
+   * Make elevation top and bottom options finite.
+   * @param {object} [opts]
+   * @param {number} [opts.topZ]        Top elevation
+   * @param {number} [opts.bottomZ]     Bottom elevation
+   * @returns {object} The options, modified in place if present already
+   */
+  static _makeElevationFinite(opts = {}) {
+    opts.topZ ??= Number.POSITIVE_INFINITY;
+    opts.bottomZ ??= Number.NEGATIVE_INFINITY;
+    if ( !isFinite(opts.topZ) ) opts.topZ = 1e06;
+    if ( !isFinite(opts.bottomZ) ) opts.bottomZ = -1e06;
+    return opts;
+  }
   /**
    * Helper to create a 3d extruded shape from a polygon, with a top and bottom polygon
    * shapes and vertical sides.
