@@ -65,6 +65,8 @@ export class RegionGeometry extends PlaceableGeometry {
     ["restriction.priority", "wallRestriction"],
 
     ["_shapeConstraints", "shapeConstraints"],
+
+    ["shapes", "shapes"],
   ]);
 
   get region() { return this.placeable; }
@@ -295,7 +297,13 @@ export class RegionGeometry extends PlaceableGeometry {
 
   _update() {
     console.debug(`RegionGeometry|_update ${this.placeableDocument.name} (${this.placeableId})`);
-    this._updateShapes();
+
+    if ( this.activeUpdates.has("shapes")
+      || this.activeUpdates.has("wallRestriction")
+      || this.activeUpdates.has("shapeConstraints") ) this._updateShapes();
+    else if ( this.activeUpdates.has("elevation") ) {
+      this.shapes.forEach((_shape, i) => this._updateShapeDimensions(i));
+    }
     super._update();
   }
 
@@ -318,7 +326,7 @@ export class RegionGeometry extends PlaceableGeometry {
     // or a shape prior to it was deleted. Reuse shapes where possible, creating new as needed and
     // deleting shapes as necessary.
     // Create a pool of existing shapes available for reuse, and reset this.shapes.
-    const oldShapes = new Set(shapes.filter(s => s !== null));
+    const oldShapes = new Set(shapes);
     shapes.length = numRegionShapes;
     shapes.fill(null);
 
@@ -353,7 +361,7 @@ export class RegionGeometry extends PlaceableGeometry {
       if ( reusedShape ) {
         shapes[i] = reusedShape;
         shapes[i].id = this._shapeId(i); // Relabel to track the new shape index.
-      } else shapes[i] = this._rebuildShape(i, groupedShapes[i]); // rebuild handles structural signature.
+      } else shapes[i] = this._buildRegionShape(i, holeGroup);
 
       // Apply dimensional updates to the shape.
       this._updateShapeDimensions(i);
@@ -364,21 +372,6 @@ export class RegionGeometry extends PlaceableGeometry {
 
     // Should not be any nulls in the shape array.
     if ( this.shapes.some(shape => !shape) ) console.error(`RegionGeometry#_updateShapes|Some shapes in region ${this.placeableDocument.name} (${this.placeableDocument.id}) are null.`);
-  }
-
-  /**
-   * Rebuild an existing shape.
-   * @param {number} i          The index of the shape in the array.
-   */
-  _rebuildShape(i, holes) {
-    console.debug(`RegionGeometry|_rebuildShape ${i} ${this.placeableDocument.name} (${this.placeableId})`);
-    const shapes = this.shapes;
-    if ( shapes[i] )  shapes[i].destroy();
-
-    if ( !holes ) holes = this._groupShapesAndHoles()[i];
-
-    shapes[i] = holes ? this._buildRegionShape(i, holes) : null;
-    this._updateShapeDimensions(i);
   }
 
   /**
