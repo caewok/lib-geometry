@@ -208,9 +208,22 @@ export class RegionGeometry extends PlaceableGeometry {
     // If holes, use ExtrudedPolygonPrimitiveWithHoles.
     const id = this._shapeId(shapeIdx);
     const shape = this._instantiateShape(regionShape, holeShapes, id);
+    this.structuralSignatureMap.set(shape, this._getStructuralSignature(regionShape, holeShapes));
     shape.initialize();
     return shape;
+  }
 
+  /**
+   * Intersect polygons against constraints
+   * @param {PIXI.Polygon[]} polys
+   * @param {PIXI.Polygon[]} constraints
+   * @returns {PIXI.Polygon[]}
+   */
+  #intersectConstraints(polys, constraints) {
+    const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
+    let polyPaths = ClipperPaths.fromPolygons(polys);
+    for ( const constraint of constraints ) polyPaths = polyPaths.intersectPolygon(constraint);
+    return polyPaths.clean().toPolygons();
   }
 
   /**
@@ -218,6 +231,7 @@ export class RegionGeometry extends PlaceableGeometry {
    * @param {RegionShape} regionShape
    * @param {RegionShape[]} holeShapes
    * @param {string} id
+   * @param {GeometricPrimitive} Null if the shape cannot be instantiated (e.g., is empty)
    */
   _instantiateShape(regionShape, holeShapes, id) {
     const opts = this._shapeDimensions(regionShape);
@@ -227,28 +241,15 @@ export class RegionGeometry extends PlaceableGeometry {
     if ( this.isWallRestricted && this.constructor.shapeIsWallRestricted(regionShape, this.placeableDocument) ) {
       // Must intersect the polygon against the constraints. Only the region.document.polygons are already constrained.
       // Batch all constraints into a single clipper object.
-      const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
       const constraintPolys = this.placeableDocument._shapeConstraints.map(arr => new PIXI.Polygon(arr));
-      const constraintPaths = ClipperPaths.fromPolygons(constraintPolys);
-
-      // Intersect base polygons with constraints and clean.
-      const ixPolys = ClipperPaths
-        .fromPolygons(regionShape.polygons)
-        .intersectPaths(constraintPaths)
-        .clean()
-        .toPolygons()
-        .filter(poly => poly.points.length > 7);
+      const ixPolys = this.#intersectConstraints(regionShape.polygons, constraintPolys)
+      if ( !ixPolys.length ) return null;
 
       // Intersect hole polygons with constraints and clean, if applicable.
       let ixHolePolys = [];
       if ( holeShapes.length ) {
         const allHolePolygons = holeShapes.flatMap(h => h.polygons);
-        ixHolePolys = ClipperPaths
-          .fromPolygons(allHolePolygons)
-          .intersectPaths(constraintPaths)
-          .clean()
-          .toPolygons
-          .filter(poly => poly.points.length > 7);
+        ixHolePolys = this.#intersectConstraints(allHolePolygons, constraintPolys);
       }
 
       // Instantiate the appropriate primitive.
@@ -426,7 +427,7 @@ export class RegionGeometry extends PlaceableGeometry {
         dims.set(regionShape.width, regionShape.height, zHeight);
 
         // Rectangle anchors from user-defined position.
-        // Those represent percentage anchors from 0ï¿½1. Conform to the unit cube from -0.5 to 0.5.
+        // Those represent percentage anchors from 0Ð1. Conform to the unit cube from -0.5 to 0.5.
         anchors.set(0.5 - regionShape.anchorX, 0.5 - regionShape.anchorY, 0);
         break;
 
