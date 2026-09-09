@@ -59,7 +59,7 @@ Hooks.on("preUpdateRegion", function(regionD, changes, options, _userId) {
   const trackingArr = options[GEOMETRY_LIB_ID] = new Array(changes.shapes.length);
   const originalShapes = regionD.shapes;
   for ( let i = 0, n = changes.shapes.length; i < n; i += 1 ) {
-    const updatedShape = changes.shapes[0];
+    const updatedShape = changes.shapes[i];
 
     if ( !updatedShape.type ) {
       console.error("RegionGeometry|updated shape has no type.");
@@ -389,11 +389,11 @@ export class RegionGeometry extends PlaceableGeometry {
    */
   _updateShapes(opts) {
     console.debug(`RegionGeometry|_updateShapes ${this.placeableDocument.name} (${this.placeableId})`);
-    let trackingArr = opts?.[GEOMETRY_LIB_ID] || [];
-    trackingArr = trackingArr.map(arr => new Set(arr));
 
     const { shapes, regionShapes } = this;
     const numRegionShapes = regionShapes.length;
+    let trackingArr = opts?.[GEOMETRY_LIB_ID] || new Array(numRegionShapes);
+    trackingArr = trackingArr.map(arr => new Set(arr));
 
     // Determine the shape/hole grouping.
     const groupedShapes = this._groupShapesAndHoles();
@@ -414,7 +414,8 @@ export class RegionGeometry extends PlaceableGeometry {
 
       // Check if the current element is already correct.
       const regionShape = regionShapes[i];
-      const mustRebuild = this._mustRebuild(regionShape, trackingArr[i]);
+      const changes = trackingArr[i];
+      const mustRebuild = this._mustRebuild(regionShape, changes);
       let reusedShape;
 
       if ( !mustRebuild ) {
@@ -433,7 +434,7 @@ export class RegionGeometry extends PlaceableGeometry {
       } else shapes[i] = this._rebuildShape(i, groupedShapes[i]);
 
       // Apply dimensional updates to the shape.
-      this._updateShapeDimensions(i, trackingArr[i]);
+      this._updateShapeDimensions(i, changes);
     }
 
     // Clean up any remaining unused shapes from the pool.
@@ -488,6 +489,7 @@ export class RegionGeometry extends PlaceableGeometry {
    * @param {Set<string>} changes
    */
   _mustRebuild(regionShape, changes) {
+
     // If the shape is grid-based or wall-restricted, it is a polygon that must be rebuilt.
     if ( this.activeUpdates.has("shapeConstraints")
       && this.isWallRestricted && this.constructor.shapeIsWallRestricted(regionShape) ) return true;
