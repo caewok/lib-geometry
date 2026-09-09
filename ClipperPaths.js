@@ -349,6 +349,19 @@ export class ClipperPaths {
   }
 
   /**
+   * Execute a specific Clipper.clipType combination using this path as the subject
+   * @param {ClipperPaths} clip             What to clip
+   * @param {ClipperLib.ClipType} clipType  ctIntersection: 0, ctUnion: 1, ctDifference: 2, ctXor: 3
+   * @param {object} [options]              Options passed to ClipperLib.Clipper().Execute
+   * @param {number} [subjFillType]         Fill type for the subject. Defaults to pftEvenOdd.
+   * @param {number} [clipFillType]         Fill type for the clip. Defaults to pftEvenOdd.
+   * @returns {ClipperPaths} New ClipperPaths object
+   */
+  clip(subject, clipType, opts = {}) { return this.constructor.clip(this, subject, { clipType, ...opts}); }
+
+
+
+  /**
    * Intersect this set of paths with a polygon as subject.
    * @param {PIXI.Polygon}
    * @returns {ClipperPaths}
@@ -501,7 +514,7 @@ export class ClipperPaths {
    * @param {ClipperPaths} clip             What to clip
    * @param {ClipperLib.ClipType} clipType  ctIntersection: 0, ctUnion: 1, ctDifference: 2, ctXor: 3
    * @param {object} [options]              Options passed to ClipperLib.Clipper().Execute
-   * @param {number} [subjFillType]         Fill type for the subject. Defaults to pftEvenOdd.
+   * @param {number} [subjFillType]         Fill type for the subject. Defaults to pftEvenOdd: 0. Also pftNonZero: 1, pftPositive: 2, pftNegative: 3
    * @param {number} [clipFillType]         Fill type for the clip. Defaults to pftEvenOdd.
    * @returns {ClipperPaths} New ClipperPaths object
    */
