@@ -6,7 +6,7 @@ PIXI,
 "use strict";
 
 // Geometry
-import { CombinedGeometricPrimitive } from "./GeometricPrimitive.js";
+import { CombinedGeometricPrimitive } from "./CombinedGeometricPrimitive.js";
 import { ExtrudedPolygonPrimitive, ExtrudedTrianglePrimitive } from "./ModelGeometricPrimitive.js";
 
 // LibGeometry

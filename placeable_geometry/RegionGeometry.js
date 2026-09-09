@@ -9,8 +9,9 @@ PIXI,
 // Geometry
 import { PlaceableGeometry } from "./PlaceableGeometry.js";
 import { CubePrimitive, CylinderPrimitive } from "./InstancedGeometricPrimitive.js";
-import { ConePrimitive } from "./ConePrimitive.js";
+import { ConePrimitive } from "./ConeGeometricPrimitive.js";
 import { ExtrudedPolygonPrimitive, ExtrudedPolygonPrimitiveWithHoles } from "./ModelGeometricPrimitive.js";
+import { EmptyGeometricPrimitive } from "./EmptyGeometricPrimitive.js";
 
 // LibGeometry
 import { GEOMETRY_LIB_ID } from "../const.js";
@@ -167,7 +168,7 @@ export class RegionGeometry extends PlaceableGeometry {
     this.shapes.length = n;
     for ( let i = 0; i < n; i += 1 ) {
       const holes = groupedShapes[i];
-      shapes[i] = holes ? this._buildRegionShape(i, holes) : null;
+      shapes[i] = holes ? this._buildRegionShape(i, holes) : new EmptyGeometricPrimitive(this._shapeId(i));
     }
     return shapes;
   }
@@ -243,7 +244,7 @@ export class RegionGeometry extends PlaceableGeometry {
       // Batch all constraints into a single clipper object.
       const constraintPolys = this.placeableDocument._shapeConstraints.map(arr => new PIXI.Polygon(arr));
       const ixPolys = this.#intersectConstraints(regionShape.polygons, constraintPolys)
-      if ( !ixPolys.length ) return null;
+      if ( !ixPolys.length ) return new EmptyGeometricPrimitive(id);
 
       // Intersect hole polygons with constraints and clean, if applicable.
       let ixHolePolys = [];
@@ -324,7 +325,10 @@ export class RegionGeometry extends PlaceableGeometry {
     for ( let i = 0; i < numRegionShapes; i += 1 ) {
       // If the shape is just a hole, no primary shape to create or update.
       const holeGroup = groupedShapes[i];
-      if ( !holeGroup ) continue;
+      if ( !holeGroup ) {
+        shapes[i] = new EmptyGeometricPrimitive(this._shapeId(i));
+        continue;
+      };
 
       // Check if the current shape is already correct.
       const regionShape = regionShapes[i];
@@ -334,7 +338,10 @@ export class RegionGeometry extends PlaceableGeometry {
       let reusedShape = null;
       for ( const potentialMatch of oldShapes ) {
         const oldSignature = this.structuralSignatureMap.get(potentialMatch);
-        if ( !oldSignature ) continue;
+        if ( !oldSignature ) { // Should not happen.
+          console.warn(`RegionGeometry#_updateShapes|No old signature for ${potentialMatch.id}`, { newSignature, potentialMatch });
+          continue;
+        };
         if ( newSignature === oldSignature ) {
           reusedShape = potentialMatch;
           oldShapes.delete(potentialMatch);
@@ -354,6 +361,9 @@ export class RegionGeometry extends PlaceableGeometry {
 
     // Clean up any remaining unused shapes from the pool.
     oldShapes.forEach(shape => shape.destroy());
+
+    // Should not be any nulls in the shape array.
+    if ( this.shapes.some(shape => !shape) ) console.error(`RegionGeometry#_updateShapes|Some shapes in region ${this.placeableDocument.name} (${this.placeableDocument.id}) are null.`);
   }
 
   /**
