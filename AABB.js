@@ -146,17 +146,15 @@ export class AABB2d {
   static union(bounds, out) {
     if ( out ) out._clear();
     else out = new this();
-    const n = bounds.length;
-    const tmpArr = Array(n * 2);
     for ( const axis of this.axes ) {
-      let i = 0;
+      let min = Number.POSITIVE_INFINITY;
+      let max = Number.NEGATIVE_INFINITY;
       for ( const b of bounds ) {
-        tmpArr[i++] = b.min[axis];
-        tmpArr[i++] = b.max[axis];
+        min = Math.min(b.min[axis], min);
+        max = Math.max(b.max[axis], max);
       }
-      const minMaxAxis = Math.minMax(...tmpArr);
-      out.min[axis] = minMaxAxis.min;
-      out.max[axis] = minMaxAxis.max;
+      out.min[axis] = min;
+      out.max[axis] = max;
     }
     return out;
   }
@@ -298,8 +296,8 @@ export class AABB2d {
     // res + offset
     corners.forEach(corner => {
       corner.multiply(dims, corner).multiply(scale, corner);
-      const x = corner.x * cos - corner.y * sin;
-      const y = corner.x * cos - corner.y * sin;
+      const x = corner.x * cos - corner.y * sin + offset.x
+      const y = corner.x * cos - corner.y * sin + offset.y;
       corner.set(x, y);
     });
 
