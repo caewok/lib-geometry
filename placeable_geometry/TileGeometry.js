@@ -387,9 +387,9 @@ export class TileBoundingPolygonGeometry extends TileSubGeometry {
     this.shapes.push(shape);
   }
 
-  _update(opts) {
+  _update() {
     if ( this.activeUpdates.has("texture") ) this.createShapes();
-    super._update(opts);
+    super._update();
   }
 }
 
@@ -440,9 +440,9 @@ export class TilePolygonsGeometry extends TileFullGeometry {
     this.shapes.push(shape);
   }
 
-  _update(opts) {
+  _update() {
     if ( this.activeUpdates.has("texture") ) this.createShapes();
-    super._update(opts);
+    super._update();
   }
 }
 
@@ -504,9 +504,9 @@ export class TileTrianglesGeometry extends TileSubGeometry {
     this.shapes.push(shape);
   }
 
-  _update(opts) {
+  _update() {
     if ( this.activeUpdates.has("texture") ) this.createShapes();
-    super._update(opts);
+    super._update();
   }
 }
 

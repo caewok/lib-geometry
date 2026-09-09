@@ -113,13 +113,13 @@ export const GeometrySubclassMixin = superclass => class extends superclass {
     this.#subclasses = {};
   }
 
-  update(updateKeys, opts) {
-    if ( this._iterateGeometriesBoolean("update", updateKeys, opts) ) this._update(opts); // For AABB and updateCount.
+  update(updateKeys) {
+    if ( this._iterateGeometriesBoolean("update", updateKeys) ) this._update(); // For AABB and updateCount.
   }
 
   updateCount = 0;
 
-  _update(_opts) {
+  _update() {
     this.calculateAABB(); // Don't need to reiterate geometries again.
     this.updateCount += 1;
   }
@@ -413,7 +413,7 @@ export class TokenSubGeometry extends mix(PlaceableGeometry).with(TokenDocumentC
 
   // ----- NOTE: Update ----- //
 
-  _update(opts) {
+  _update() {
     if ( this.activeUpdates.has("shape") ) this.shapeUpdated();
 
     // No changes required if level is updated.
@@ -429,7 +429,7 @@ export class TokenSubGeometry extends mix(PlaceableGeometry).with(TokenDocumentC
       const dims = this.constructor.tokenDimensions(this.placeableDocument);
       this.shape.setScale(dims);
     }
-    super._update(opts);
+    super._update();
   }
 
   shapeUpdated() {
@@ -476,12 +476,12 @@ export class TokenConstrainedGeometry extends TokenSubGeometry {
    */
   get placeableId() { return `${super.placeableId}_constrained`; }
 
-  _update(opts) {
+  _update() {
     // If the token is constrained, redraw.
     // If the token is not constrained, ignore.
     if ( this.isConstrained ) {
       this.shapeUpdated();
-      super._update(opts);
+      super._update();
     }
   }
 
@@ -501,12 +501,12 @@ export class TokenLitGeometry extends TokenSubGeometry {
    */
   get placeableId() { return `${super.placeableId}_lit`; }
 
-  _update(opts) {
+  _update() {
     // If the token is constrained, redraw.
     // If the token is not constrained, ignore.
     if ( this.isConstrainedLit ) {
       this.shapeUpdated();
-      super._update(opts);
+      super._update();
     }
   }
 
@@ -526,12 +526,12 @@ export class TokenBrightGeometry extends TokenSubGeometry {
    */
   get placeableId() { return `${super.placeableId}_bright`; }
 
-  _update(opts) {
+  _update() {
     // If the token is constrained, redraw.
     // If the token is not constrained, ignore.
     if ( this.isConstrainedLit ) {
       this.shapeUpdated();
-      super._update(opts);
+      super._update();
     }
   }
 

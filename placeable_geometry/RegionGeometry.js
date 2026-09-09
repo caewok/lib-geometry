@@ -1,7 +1,6 @@
 /* globals
 canvas,
 CONFIG,
-Hooks,
 PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
@@ -16,7 +15,6 @@ import { ExtrudedPolygonPrimitive, ExtrudedPolygonPrimitiveWithHoles } from "./M
 // LibGeometry
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { Point3d } from "../3d/Point3d.js";
-import { NULL_SET } from "../util.js";
 
 /**
   Region will either be a single shape or a group of polygons.
@@ -27,79 +25,6 @@ import { NULL_SET } from "../util.js";
 
   Regions store combined shapes as region.polygons.
 */
-
-
-/**
- * Hook the region preupdate to pass through shape-specific updates.
- */
-const TRANSFORM_CHANGES = [
-  "x",
-  "y",
-  "width",
-  "height",
-  "length",
-  "radius",
-  "radiusX",
-  "radiusY",
-  "rotation",
-  "hole",
-  "gridBased",
-];
-
-Hooks.on("preUpdateRegion", function(regionD, changes, options, _userId) {
-  if ( !changes.shapes ) return;
-
-  /* Track changes in an array in options:
-  Array index: Index of the new shapes array.
-  Changes to a polygon number of sides is treated as new.
-  Changes to a polygon area treated as new.
-  Otherwise, object indicating changes made.
-  */
-
-  const trackingArr = options[GEOMETRY_LIB_ID] = new Array(changes.shapes.length);
-  const originalShapes = regionD.shapes;
-  for ( let i = 0, n = changes.shapes.length; i < n; i += 1 ) {
-    const updatedShape = changes.shapes[i];
-
-    if ( !updatedShape.type ) {
-      console.error("RegionGeometry|updated shape has no type.");
-      trackingArr[i] = NULL_SET;
-      continue;
-    }
-
-    const trackingSet = trackingArr[i] = new Set();
-    const originalShape = originalShapes[i];
-
-    // Basic values.
-    for ( const key of TRANSFORM_CHANGES ) {
-      if ( !(Object.hasOwn(originalShape, key) && Object.hasOwn(updatedShape, key)) ) continue;
-      if ( originalShape[key] !== updatedShape[key] ) trackingSet.add(key);
-    }
-
-    // Polygon-specific
-    if ( updatedShape.type === "polygon"
-      && !originalShape.points.equals(updatedShape.points) ) trackingSet.add("points");
-
-    // Base (emanation) specific
-    if ( !Object.hasOwn(updatedShape, "base") && Object.hasOwn(originalShape, "base") ) {
-      console.error("RegionGeometry|updated shape has no base.");
-      continue;
-    } else if ( Object.hasOwn(updatedShape, "base") && !Object.hasOwn(originalShape, "base") ) {
-      console.error("RegionGeometry|original shape has no base.");
-      continue;
-    } else if ( Object.hasOwn(updatedShape, "base") ) {
-      for ( const key of TRANSFORM_CHANGES ) {
-        const orig = originalShape.base;
-        const updated = updatedShape.base;
-        if ( !(Object.hasOwn(orig, key) && Object.hasOwn(updated, key)) ) continue;
-        if ( orig[key] !== updated[key] ) trackingSet.add(`base.${key}`);
-      }
-    }
-  }
-
-  // Convert from Set so the options will pass through.
-  options[GEOMETRY_LIB_ID] = options[GEOMETRY_LIB_ID].map(s => [...s.values()]);
-});
 
 /*
 const TRACKER_TYPES = {
@@ -366,34 +291,23 @@ export class RegionGeometry extends PlaceableGeometry {
     }
   }
 
-  _update(opts) {
+  _update() {
     console.debug(`RegionGeometry|_update ${this.placeableDocument.name} (${this.placeableId})`);
-
-    // If no opts object, then just update all without rebuilding anything.
-    if ( !opts ) return this.updateAllShapes();
-
-    /*
-    There is currently no (easy) way to tell if a shape is otherwise the same but for a position/rotation/scale change.
-    Editing a shape results in a new shape, and the update hook shows all the shape properties as changed.
-    The current work-around is a preupdate hook that passes through an array of changes to the specific shapes.
-    */
-
-    this._updateShapes(opts);
-
-    // Handle parent updates last.
-    super._update(opts);
+    this._updateShapes();
+    super._update();
   }
+
+  /** @type {Map<GeometricPrimitive, string>} */
+  structuralSignatureMap = new WeakMap();
 
   /**
    * Remove shapes when region shapes have been removed.
    */
-  _updateShapes(opts) {
+  _updateShapes() {
     console.debug(`RegionGeometry|_updateShapes ${this.placeableDocument.name} (${this.placeableId})`);
 
     const { shapes, regionShapes } = this;
     const numRegionShapes = regionShapes.length;
-    let trackingArr = opts?.[GEOMETRY_LIB_ID] || new Array(numRegionShapes);
-    trackingArr = trackingArr.map(arr => new Set(arr));
 
     // Determine the shape/hole grouping.
     const groupedShapes = this._groupShapesAndHoles();
@@ -402,39 +316,39 @@ export class RegionGeometry extends PlaceableGeometry {
     // or a shape prior to it was deleted. Reuse shapes where possible, creating new as needed and
     // deleting shapes as necessary.
     // Create a pool of existing shapes available for reuse, and reset this.shapes.
-    const oldShapes = new Set(shapes);
+    const oldShapes = new Set(shapes.filter(s => s !== null));
     shapes.length = numRegionShapes;
     shapes.fill(null);
 
     for ( let i = 0; i < numRegionShapes; i += 1 ) {
-
       // If the shape is just a hole, no primary shape to create or update.
-      if ( !groupedShapes[i] ) continue;
+      const holeGroup = groupedShapes[i];
+      if ( !holeGroup ) continue;
 
-
-      // Check if the current element is already correct.
+      // Check if the current shape is already correct.
       const regionShape = regionShapes[i];
-      const changes = trackingArr[i];
-      const mustRebuild = this._mustRebuild(regionShape, changes);
-      let reusedShape;
+      const newSignature = this._getStructuralSignature(regionShape, holeGroup);
 
-      if ( !mustRebuild ) {
-        for ( const potentialMatch of oldShapes ) {
-          if ( this._shapeClassMatchesRegionShape(potentialMatch, regionShape) ) {
-            reusedShape = potentialMatch;
-            oldShapes.delete(potentialMatch);
-            break;
-          }
+      // Check pool for a matching structural signature.
+      let reusedShape = null;
+      for ( const potentialMatch of oldShapes ) {
+        const oldSignature = this.structuralSignatureMap.get(potentialMatch);
+        if ( !oldSignature ) continue;
+        if ( newSignature === oldSignature ) {
+          reusedShape = potentialMatch;
+          oldShapes.delete(potentialMatch);
+          break;
         }
       }
 
+      // Reuse or rebuild.
       if ( reusedShape ) {
         shapes[i] = reusedShape;
         shapes[i].id = this._shapeId(i); // Relabel to track the new shape index.
-      } else shapes[i] = this._rebuildShape(i, groupedShapes[i]);
+      } else shapes[i] = this._rebuildShape(i, groupedShapes[i]); // rebuild handles structural signature.
 
       // Apply dimensional updates to the shape.
-      this._updateShapeDimensions(i, changes);
+      this._updateShapeDimensions(i);
     }
 
     // Clean up any remaining unused shapes from the pool.
@@ -462,121 +376,22 @@ export class RegionGeometry extends PlaceableGeometry {
    * @param {Set<string>} [changeKeys]   Optional change keys; if not provided everything will be updated
    *   Adding a "elevation" key will update the position and scale.
    */
-  _updateShapeDimensions(shapeIdx, changes) {
+  _updateShapeDimensions(shapeIdx) {
     console.debug(`RegionGeometry|_updateShapeDimensions ${shapeIdx} ${this.placeableDocument.name} (${this.placeableId})`);
     const shape = this.shapes[shapeIdx];
     if ( !shape ) return;
 
     const regionShape = this.regionShapes[shapeIdx];
-    changes ??= this._allChanges(regionShape);
-
-    if ( this.activeUpdates.has("elevation") ) changes.add("elevation");
-
-    const { modifyCenter, modifyAngles, modifyDims, modifyAnchors } = this._shapeDimensionModificationsNeeded(regionShape, changes);
-    if ( !(modifyCenter || modifyAngles || modifyDims || modifyAnchors) ) return;
     const opts = this._shapeDimensions(regionShape);
-
-    if ( modifyCenter ) shape.setPosition(opts.center);
-    if ( modifyAngles ) shape.setRotation(opts.angles);
-    if ( modifyDims ) shape.setScale(opts.dims);
-    if ( modifyAnchors ) shape.setAnchor(opts.anchors);
+    shape.setPosition(opts.center);
+    shape.setRotation(opts.angles);
+    shape.setScale(opts.dims);
+    shape.setAnchor(opts.anchors);
   }
 
-  /**
-   * For a given set of changes for a region shape, is a rebuild needed no matter what?
-   * In other words, could we simply update or swap shapes or does this shape need to be rebuilt entirely from scratch?
-   * @param {RegionShape} regionShape
-   * @param {Set<string>} changes
-   */
-  _mustRebuild(regionShape, changes) {
 
-    // If the shape is grid-based or wall-restricted, it is a polygon that must be rebuilt.
-    if ( this.activeUpdates.has("shapeConstraints")
-      && this.isWallRestricted && this.constructor.shapeIsWallRestricted(regionShape) ) return true;
+  // ----- NOTE: Shape dimensions ----- //
 
-    if ( this.constructor.shapeIsGridConstrained(regionShape) && changes.has("gridBased") ) return true;
-
-    // Some types need to be rebuilt when certain parameters change, causing the underlying shape to warp.
-    switch ( regionShape.type ) {
-      case "cone": return changes.has("angle") || changes.has("curvature") || changes.has("radius");
-      case "emanation": return changes.has("radius");
-      case "ring": return changes.has("innerWidth") || changes.has("outerWidth") || changes.has("radius");
-
-
-      case "polygon": return changes.has("points");
-    }
-    return false;
-  }
-
-  /**
-   * For a given shape index and change set, does this shape need to be rebuilt entirely?
-   * @param {number} shapeIdx
-   * @param {Set<string>} changes
-   * @returns {boolean}
-   */
-  _shapeClassMatchesRegionShape(shape, regionShape) {
-    switch ( regionShape.type ) {
-      case "circle":
-      case "ellipse": return shape instanceof CylinderPrimitive;
-
-      case "line":
-      case "rectangle": return shape instanceof CubePrimitive;
-
-      case "cone": return shape instanceof ConePrimitive;
-
-      default: return false;
-    }
-  }
-
-  _allChanges(regionShape) {
-    const changes = new Set(Object.keys(regionShape));
-    changes.add("elevation");
-    changes.add("anchorX"); // Only used for some.
-
-    // Emanation has a base with additional values.
-    if ( changes.has("base") ) Object.keys(regionShape.base).forEach(key => changes.add(`base.${key}`));
-    return changes;
-  }
-
-  /**
-   * Determine what dimensions of the shape require modification.
-   * @param {ShapeData} regionShape       The region shape; assumed to have been already updated
-   * @param {Set<string>} [changes]         Optional change keys; if not provided everything will be updated
-   *   Adding a "elevation" key will update the position and scale.
-   * @returns {object}
-   *   - @prop {boolean} modifyCenter
-   *   - @prop {boolean} modifyAngles
-   *   - @prop {boolean} modifyDims
-   *   - @prop {boolean} modifyAnchors
-   */
-  _shapeDimensionModificationsNeeded(regionShape, changes) {
-    changes ??= this._allChanges(regionShape);
-    const modifyCenter = changes.has("x") || changes.has("y") || changes.has("elevation");
-    const modifyAngles = changes.has("rotation");
-    let modifyDims = false;
-    let modifyAnchors = false;
-
-    switch ( regionShape.type ) {
-      case "circle": modifyDims = changes.has("radius") || changes.has("elevation"); break;
-      case "ellipse": modifyDims = changes.has("radiusX") || changes.has("radiusY") || changes.has("elevation"); break;
-      case "line":
-        modifyDims = changes.has("length") || changes.has("width") || changes.has("elevation");
-        modifyAnchors = changes.has("anchorX");
-        break;
-      case "rectangle":
-        modifyDims = changes.has("width") || changes.has("height") || changes.has("elevation")
-        modifyAnchors = changes.has("anchorX") || changes.has("anchorY");
-        break;
-      case "emanation": modifyDims = changes.has("base.width") || changes.has("base.height") || changes.has("elevation"); break;
-      case "ring":
-      case "cone": modifyDims = changes.has("radius") || changes.has("elevation"); break;
-
-      case "polygon": break; // Obv. use the polygon. Dimensions set by the points.
-      case "grid": break; // Unclear what this is.
-      case "token": break; // Unclear what this is.
-    }
-    return { modifyCenter, modifyAngles, modifyDims, modifyAnchors };
-  }
 
   /**
    * Determine the dimensions for a given shape.
@@ -611,7 +426,7 @@ export class RegionGeometry extends PlaceableGeometry {
         dims.set(regionShape.width, regionShape.height, zHeight);
 
         // Rectangle anchors from user-defined position.
-        // Those represent percentage anchors from 0Ð1. Conform to the unit cube from -0.5 to 0.5.
+        // Those represent percentage anchors from 0ï¿½1. Conform to the unit cube from -0.5 to 0.5.
         anchors.set(0.5 - regionShape.anchorX, 0.5 - regionShape.anchorY, 0);
         break;
 
@@ -636,6 +451,58 @@ export class RegionGeometry extends PlaceableGeometry {
     }
 
     return { center, angles, dims, anchors, topZ, bottomZ };
+  }
+
+  // ----- NOTE: Shape change tracking ----- //
+
+  /**
+   * For each shape type, what properties force a rebuild?
+   * Can ignore gridBased; handled elsewhere
+   * If none, the shape is omitted.
+   * @type {object<string[]>}
+   */
+  static STRUCTURAL_SIGNATURE_KEYS = {
+    circle: [],
+    ellipse: [],
+    line: [],
+    rectangle: [],
+    emanation: ["radius"],
+    ring: ["innerWidth", "outerWidth", "radius"],
+    cone: ["angle", "curvature", "radius"],
+    polygon: ["points"],
+    grid: [],
+    token: [],
+  };
+
+
+  /**
+   * Generates a deterministic signature of properties that dictate shape geometry construction.
+   * If this string changes, the geometry must be fully rebuilt.
+   * Dimensional properties (x, y, rotation, scale, anchors) are intentionally excluded and
+   * instead handled by the model matrix and the _shapeDimensions method.
+   *
+   * @param {RegionShape} regionShape
+   * @param {RegionShape[]} holes
+   * @returns {string}
+   */
+  _getStructuralSignature(regionShape, holes = []) {
+    // Note: Translation (x, y) might change overlap status, correctly forcing a rebuild.
+    const isRestricted = this.isWallRestricted && this.constructor.shapeIsWallRestricted(regionShape, this.placeableDocument);
+    const parts = [
+      regionShape.type,
+      regionShape.isAffectedByGrid ? "grid" : "gridless",
+      isRestricted ? "restricted" : "unrestricted",
+    ];
+
+    // Append type-specific properties that fundamentally alter the underlying geometry.
+    parts.push(...this.constructor.STRUCTURAL_SIGNATURE_KEYS[regionShape.type].map(key => `${key}:${regionShape[key]}`));
+
+    // Recursively append hole signatures.
+    if ( holes.length ) {
+      const holeStrings = holes.map(hole => this._getStructuralSignature(hole)); // eslint-disable-line no-unused-vars
+      parts.push("holes:(${holeStrings.join('|')})");
+    }
+    return parts.join("|");
   }
 
 

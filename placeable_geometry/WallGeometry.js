@@ -137,10 +137,10 @@ export class WallGeometry extends PlaceableGeometry {
 
   // ----- NOTE: Updating ----- //
 
-  _update(opts) {
+  _update() {
     if ( this.activeUpdates.has("position") ) this._updateShapePosition();
     if ( this.activeUpdates.has("direction") ) this._updateShapeDirection();
-    super._update(opts);
+    super._update();
   }
 
   // ----- NOTE: Levels ----- //

@@ -134,7 +134,7 @@ export class PlaceableGeometry {
    * @param {Set<string>} updateKeys      Flattened keys that were updated
    * @returns {boolean} True if an update occurred.
    */
-  update(updateKeys, opts) {
+  update(updateKeys) {
     this.activeUpdates.clear();
 
     for ( const key of updateKeys ) {
@@ -142,7 +142,7 @@ export class PlaceableGeometry {
       if ( flag ) this.activeUpdates.add(flag);
     }
     if ( !this.activeUpdates.size ) return false;
-    this._update(opts);
+    this._update();
     return true;
   }
 
@@ -154,7 +154,7 @@ export class PlaceableGeometry {
   }
 
   // Triggered second.
-  _update(_opts) {
+  _update() {
     this.calculateAABB();
     this.updateCount += 1;
   }
