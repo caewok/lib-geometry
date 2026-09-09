@@ -275,10 +275,11 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
     if ( !faces || faces.length < 3 ) return false;
 
     // Must account for concave polygons, where the face could be facing opposite a centroid.
-    // Get the 2d polygon of the shape. For each face, move slightly along the normal and check
-    // if the point is contained by the polygon. If it is, the normal is facing the wrong way.
+    // For each face, moving opposite the normal should intersect an odd number of other faces.
+    // (Draw line from face through the polygon, out the other side.)
 
     // By default, the first face is the top, second is the bottom. See _facesFromPolygon3d.
+    // Top and bottom can still use the centroid.
     const centroid = this.constructor.calculateCentroid(faces);
     const iter = faces.values();
     const top = iter.next().value;
@@ -287,14 +288,18 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
     const bottom = iter.next().value;
     if ( bottom.isFacing(centroid) ) return false;
 
-    // Check each side face, testing containment using the bottom polygon.
-    const to2dM = bottom.plane.conversion2dMatrix;
-    const poly2d = bottom.toPolygon2d();
-    using testPt3d = Point3d.tmp;
+    // Check each side face
+    using dir = Point3d.tmp;
+    const isEven = (num) => (num & 1) === 0;
     for ( const face of iter ) {
-      face.points[0].add(face.plane.normal, testPt3d);
-      to2dM.multiplyPoint3d(testPt3d, testPt3d);
-      if ( poly2d.contains(testPt3d.x, testPt3d.y) ) return false;
+      const origin = face.centroid;
+      face.plane.normal.multiplyScalar(-1, dir);
+      let numIx = 0;
+      for ( const otherFace of faces ) {
+        if ( otherFace === face ) continue;
+        numIx += Boolean(otherFace.intersection(origin, dir, { maxT: Number.POSITIVE_INFINITY, holesBlock: true }));
+      }
+      if ( isEven(numIx) ) return false;
     }
     return true;
   }
