@@ -206,6 +206,7 @@ export class GeometricPrimitive {
    * @type {Point3d|object} center
    */
   setPosition(center) {
+    if ( this.modelMatrix.translation.almostEqual(center) ) return;
     this.modelMatrix.translation = center;
     this.dirty = this.constructor.DIRTY.ALL;
   }
@@ -214,6 +215,7 @@ export class GeometricPrimitive {
    * @type {Point3d|object} angles
    */
   setRotation(angles) {
+    if ( this.modelMatrix.rotation.almostEqual(angles) ) return;
     this.modelMatrix.rotation = angles;
     this.dirty = this.constructor.DIRTY.ALL;
   }
@@ -222,11 +224,13 @@ export class GeometricPrimitive {
    * @type {Point3d|object} dims
    */
   setScale(dims) {
+    if ( this.modelMatrix.scale.almostEqual(dims) ) return;
     this.modelMatrix.scale = dims;
     this.dirty = this.constructor.DIRTY.ALL;
   }
 
   setAnchor(anchors) {
+    if ( this.modelMatrix.anchor.almostEqual(anchors) ) return;
     this.modelMatrix.anchor = anchors;
     this.dirty = this.constructor.DIRTY.ALL;
   }
