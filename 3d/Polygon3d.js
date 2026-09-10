@@ -547,7 +547,6 @@ export class Polygon3d {
       const side = Quad3d.from4Points(edge.b, edge.a, a.set(edge.a.x, edge.a.y, bottomZ), b.set(edge.b.x, edge.b.y, bottomZ));
       if ( side.isFacing(ctr) ^ this.isHole ) side.reverseOrientation(); // Face outwards.
       side.isHole = this.isHole;
-      side._refCentroid.copyFrom(ctr); // Remember the local center for later debugging/validation.
       sides[i++] = side;
 
       // Usually we don't want sides to be holes, just reversed orientation.
@@ -672,11 +671,6 @@ export class Polygon3d {
 
   // ----- NOTE: Property tests ----- //
 
-  /**
-   * A placeholder used to remember the local center point when this 3d polygon is a face of a larger 3d shape.
-   * @type {Point3d}
-   */
-  _refCentroid = new Point3d();
 
   /** @type {boolean} */
   isHole = false;
