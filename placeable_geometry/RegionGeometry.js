@@ -170,7 +170,7 @@ export class RegionGeometry extends PlaceableGeometry {
     this.shapes.length = n;
     for ( let i = 0; i < n; i += 1 ) {
       const holes = groupedShapes[i];
-      shapes[i] = holes ? this._buildRegionShape(i, holes) : new EmptyGeometricPrimitive(this._shapeId(i));
+      shapes[i] = this._buildRegionShape(i, holes);
     }
     return shapes;
   }
@@ -207,8 +207,6 @@ export class RegionGeometry extends PlaceableGeometry {
   _buildRegionShape(shapeIdx, holeShapes = []) {
     console.debug(`RegionGeometry|_buildRegionShape ${this.placeableDocument.name} (${this.placeableId})`);
     const regionShape = this.regionShapes[shapeIdx];
-
-    // If holes, use ExtrudedPolygonPrimitiveWithHoles.
     const id = this._shapeId(shapeIdx);
     const shape = this._instantiateShape(regionShape, holeShapes, id);
     this.structuralSignatureMap.set(shape, this._getStructuralSignature(regionShape, holeShapes));
@@ -237,6 +235,8 @@ export class RegionGeometry extends PlaceableGeometry {
    * @param {GeometricPrimitive} Null if the shape cannot be instantiated (e.g., is empty)
    */
   _instantiateShape(regionShape, holeShapes, id) {
+    if ( regionShape.hole || regionShape.isEmpty ) return new EmptyGeometricPrimitive(id);
+
     const opts = this._shapeDimensions(regionShape);
 
     // 1. Wall Restricted.
@@ -269,7 +269,13 @@ export class RegionGeometry extends PlaceableGeometry {
     }
 
     // 3. Grid constrained.
-    if ( this.constructor.shapeIsGridConstrained(regionShape) ) return ExtrudedPolygonPrimitive.fromPolygons(id, regionShape.polygons, opts);
+    if ( this.constructor.shapeIsGridConstrained(regionShape) ) {
+      if ( regionShape.type === "ring" && (regionShape.radius - regionShape.innerWidth > 0) ) {
+        // By convention, the first polygon is the solid ring, the second is the hole.
+        ExtrudedPolygonPrimitiveWithHoles.fromPolygons(id, [regionShape.polygons[0]], [regionShape.polygons[1]], opts);
+      }
+      return ExtrudedPolygonPrimitive.fromPolygons(id, regionShape.polygons, opts);
+    }
 
     // 4. Base primitive types. See shape.constructor.TYPES
     switch ( regionShape.type ) {
@@ -282,7 +288,19 @@ export class RegionGeometry extends PlaceableGeometry {
       case "cone": return ConePrimitive.fromRegionShape(id, regionShape, opts);
 
        // Rings have holes built in, so use ExtrudedPolygonPrimitiveWithHoles.
-      case "ring": return ExtrudedPolygonPrimitiveWithHoles.fromPolygons(id, regionShape.polygons, opts);
+      case "ring": {
+        // Radius is the circle between the inner and outer portions.
+        // radius + outerwidth defines the outermost circle radius.
+        // radius - innerwidth defines the innermost circle radius (the hole)
+        const innerRadius = regionShape.radius - regionShape.innerWidth;
+        const outerRadius = regionShape.radius + regionShape.outerWidth;
+        const outer = new PIXI.Circle(regionShape.x, regionShape.y, outerRadius);
+        if ( innerRadius > 0 ) {
+          const inner = new PIXI.Circle(regionShape.x, regionShape.y, innerRadius);
+          return ExtrudedPolygonPrimitiveWithHoles.fromPolygons(id, [outer], [inner], opts);
+        }
+        return new CylinderPrimitive(id);
+      }
 
       // Other shapes use the basic extruded polygon shape.
       case "emanation":
@@ -334,7 +352,7 @@ export class RegionGeometry extends PlaceableGeometry {
       const holeGroup = groupedShapes[i];
       if ( !holeGroup ) {
         console.debug(`RegionGeometry|_updateShapes ${this.placeableDocument.name} (${this.placeableId})|Using empty (hole) for ${i}`);
-        shapes[i] = new EmptyGeometricPrimitive(this._shapeId(i));
+        shapes[i] = this._buildRegionShape(i);
         continue;
       };
 
@@ -446,12 +464,15 @@ export class RegionGeometry extends PlaceableGeometry {
         break;
       }
 
-      case "ring": // Use the polygon(s) b/c of the hole.
-      case "cone": // Use the polygon b/c no unit cone shape b/c angle varies.
-        dims.set(regionShape.radius, regionShape.radius, zHeight);
+      case "ring": {
+        const outerRadius = regionShape.radius + regionShape.outerWidth;
+        dims.set(outerRadius * 2, outerRadius * 2, zHeight);
         break;
+      }
 
-      case "polygon": break; // Obv. use the polygon. Dimensions set by the points.
+      case "cone": dims.set(regionShape.radius, regionShape.radius, zHeight); break;
+
+      case "polygon": break; // Dimensions set by the points.
 
       case "grid": break; // Unclear what this is.
 
@@ -464,26 +485,6 @@ export class RegionGeometry extends PlaceableGeometry {
   // ----- NOTE: Shape change tracking ----- //
 
   /**
-   * For each shape type, what properties force a rebuild?
-   * Can ignore gridBased; handled elsewhere
-   * If none, the shape is omitted.
-   * @type {object<string[]>}
-   */
-  static STRUCTURAL_SIGNATURE_KEYS = {
-    circle: [],
-    ellipse: [],
-    line: [],
-    rectangle: [],
-    emanation: ["radius"],
-    ring: ["innerWidth", "outerWidth", "radius"],
-    cone: ["angle", "curvature", "radius"],
-    polygon: ["points"],
-    grid: [],
-    token: [],
-  };
-
-
-  /**
    * Generates a deterministic signature of properties that dictate shape geometry construction.
    * If this string changes, the geometry must be fully rebuilt.
    * Dimensional properties (x, y, rotation, scale, anchors) are intentionally excluded and
@@ -494,6 +495,9 @@ export class RegionGeometry extends PlaceableGeometry {
    * @returns {string}
    */
   _getStructuralSignature(regionShape, holes = []) {
+    // Holes can all get the same signature.
+    if ( regionShape.hole || regionShape.isEmpty ) return "empty";
+
     // Note: Translation (x, y) might change overlap status, correctly forcing a rebuild.
     const isRestricted = this.isWallRestricted && this.constructor.shapeIsWallRestricted(regionShape, this.placeableDocument);
     const parts = [
@@ -503,7 +507,18 @@ export class RegionGeometry extends PlaceableGeometry {
     ];
 
     // Append type-specific properties that fundamentally alter the underlying geometry.
-    parts.push(...this.constructor.STRUCTURAL_SIGNATURE_KEYS[regionShape.type].map(key => `${key}:${regionShape[key]}`));
+    const keys = [];
+    switch ( regionShape.type ) {
+      case "emanation": keys.push("radius"); break;
+      case "cone": keys.push("angle", "curvature", "radius"); break;
+      case "polygon": keys.push("points"); break;
+      case "ring": {
+        if ( (regionShape.radius - regionShape.innerWidth) > 0 ) keys.push("innerWidth", "outerWidth", "radius");
+        else keys.push("innerWidth", "outerWidth"); // Treat as cylinder, so radius handled via dimensions.
+        break;
+      }
+    }
+    parts.push(...keys.map(key => `${key}:${regionShape[key]}`));
 
     // Recursively append hole signatures.
     if ( holes.length ) {
