@@ -257,7 +257,7 @@ export class RegionGeometry extends PlaceableGeometry {
 
       // Instantiate the appropriate primitive.
       // 1a. With holes.
-      if ( ixHolePolys.length ) return ExtrudedPolygonPrimitiveWithHoles.fromPolygons(id, [ixPolys, ...ixHolePolys], opts);
+      if ( ixHolePolys.length ) return ExtrudedPolygonPrimitiveWithHoles.fromPolygons(id, ixPolys, ixHolePolys, opts);
 
       // 1b. Without holes.
       return ExtrudedPolygonPrimitive.fromPolygons(id, ixPolys, opts);
@@ -265,8 +265,7 @@ export class RegionGeometry extends PlaceableGeometry {
 
     // 2. Contains holes.
     if ( holeShapes.length ) {
-      const combinedPolys = [...regionShape.polygons, ...holeShapes.flatMap(shape => shape.polygons)];
-      return ExtrudedPolygonPrimitiveWithHoles.fromPolygons(id, combinedPolys, opts);
+      return ExtrudedPolygonPrimitiveWithHoles.fromPolygons(id, regionShape.polygons, holeShapes.flatMap(shape => shape.polygons), opts);
     }
 
     // 3. Grid constrained.
@@ -334,6 +333,7 @@ export class RegionGeometry extends PlaceableGeometry {
       // If the shape is just a hole, no primary shape to create or update.
       const holeGroup = groupedShapes[i];
       if ( !holeGroup ) {
+        console.debug(`RegionGeometry|_updateShapes ${this.placeableDocument.name} (${this.placeableId})|Using empty (hole) for ${i}`);
         shapes[i] = new EmptyGeometricPrimitive(this._shapeId(i));
         continue;
       };
@@ -359,9 +359,13 @@ export class RegionGeometry extends PlaceableGeometry {
 
       // Reuse or rebuild.
       if ( reusedShape ) {
+        console.debug(`RegionGeometry|_updateShapes ${this.placeableDocument.name} (${this.placeableId})|Reusing shape for ${i}`);
         shapes[i] = reusedShape;
         shapes[i].id = this._shapeId(i); // Relabel to track the new shape index.
-      } else shapes[i] = this._buildRegionShape(i, holeGroup);
+      } else {
+        console.debug(`RegionGeometry|_updateShapes ${this.placeableDocument.name} (${this.placeableId})|Rebuilding shape for ${i}`);
+        shapes[i] = this._buildRegionShape(i, holeGroup);
+      }
 
       // Apply dimensional updates to the shape.
       this._updateShapeDimensions(i);
