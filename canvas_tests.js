@@ -393,10 +393,16 @@ export function testRegionGeometryContainment() {
   const mgr = CONFIG.GeometryLib.geometryManager;
   for ( const region of canvas.regions.placeables ) {
     const geom = mgr.geomForPlaceable(region);
-    const valid = geom.shapes.every(shape => shape.validate());
-    const color = valid ? "green" : "red";
-    drawGeometry(geom, color);
-    if ( !valid ) incorrectRegions.add(region);
+
+    let allValid = true;
+    for ( const shape of geom.shapes ) {
+      const valid = shape.validate();
+      allValid &&= valid;
+      const color = valid ? "green" : "red";
+      shape.draw2d({ color })
+      // drawGeometry(geom, color);
+    }
+    if ( !allValid ) incorrectRegions.add(region);
   }
   console.log(`${incorrectRegions.size} incorrect regions out of ${canvas.regions.placeables.length}.`);
   return incorrectRegions;
