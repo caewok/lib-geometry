@@ -31,9 +31,12 @@ function area() {
  */
 function centroid() {
   switch ( this.points.length ) {
-    case 0: return undefined;
-    case 1: return PIXI.Point.tmp.set(this.points[0], this.points[1]); // Should not happen if close is true
-    case 2: {
+    case 0:
+    case 1: return undefined;
+    case 2:
+    case 3: return PIXI.Point.tmp.set(this.points[0], this.points[1]);
+    case 4:
+    case 5:  {
       const [a, b] = [...this.iteratePoints()];
       return PIXI.Point.midPoint(a, b);
     }
