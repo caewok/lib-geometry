@@ -90,6 +90,19 @@ export class RegionGeometry extends PlaceableGeometry {
   }
 
   /**
+   * Get the region shape polygons.
+   * If the region is a polygon, first simplify using Clipper to ensure no complex (self-intersecting) polygons.
+   * @param {RegionShape} regionShape
+   * @returns {PIXI.Polygon[]}
+   */
+  regionShapePolygons(regionShape) {
+    if ( regionShape.type !== "polygon" ) return regionShape.polygons;
+    const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
+    const cPaths = ClipperPaths.fromPolygons(regionShape.polygons);
+    return cPaths.simplifyPolygons().toPolygons();
+  }
+
+  /**
    * Is this shape currently restricted by walls?
    * Presumes without test that isWallRestricted returns true; test this separately.
    * @param {RegionShape} regionShape
@@ -245,7 +258,7 @@ export class RegionGeometry extends PlaceableGeometry {
       // Must intersect the polygon against the constraints. Only the region.document.polygons are already constrained.
       // Batch all constraints into a single clipper object.
       const constraintPolys = this.placeableDocument._shapeConstraints.map(arr => new PIXI.Polygon(arr));
-      const ixPolys = this.#intersectConstraints(regionShape.polygons, constraintPolys)
+      const ixPolys = this.#intersectConstraints(this.regionShapePolygons(regionShape), constraintPolys)
       if ( !ixPolys.length ) return new EmptyGeometricPrimitive(id);
 
       // Intersect hole polygons with constraints and clean, if applicable.
@@ -263,18 +276,26 @@ export class RegionGeometry extends PlaceableGeometry {
       return ExtrudedPolygonPrimitive.fromPolygons(id, ixPolys, opts);
     }
 
-    // 2. Contains holes.
-    if ( holeShapes.length ) {
-      return ExtrudedPolygonPrimitiveWithHoles.fromPolygons(id, regionShape.polygons, holeShapes.flatMap(shape => shape.polygons), opts);
-    }
-
-    // 3. Grid constrained.
+    // 2. Grid constrainedÑuse polygons only.
     if ( this.constructor.shapeIsGridConstrained(regionShape) ) {
+      const solids = [];
+      const holes = holeShapes.flatMap(shape => shape.polygons);
       if ( regionShape.type === "ring" && (regionShape.radius - regionShape.innerWidth > 0) ) {
         // By convention, the first polygon is the solid ring, the second is the hole.
-        ExtrudedPolygonPrimitiveWithHoles.fromPolygons(id, [regionShape.polygons[0]], [regionShape.polygons[1]], opts);
-      }
-      return ExtrudedPolygonPrimitive.fromPolygons(id, regionShape.polygons, opts);
+        solids.push(regionShape.polygons[0]);
+        holes.push(regionShape.polygons[1]);
+      } else solids.push(...this.regionShapePolygons(regionShape));
+
+      if ( holes.length ) return ExtrudedPolygonPrimitiveWithHoles.fromPolygons(id, solids, holes, opts);
+      return ExtrudedPolygonPrimitive.fromPolygons(id, solids, opts);
+    }
+
+    // 3. Otherwise contains holes. Use base geometric shapes where possible.
+    if ( holeShapes.length ) {
+      const solids = this._shapeToPIXI(regionShape);
+      if ( solids.length === 2 ) holes.push(solids.pop()); // Ring shape: solid + hole.
+      const holes = holeShapes.flatMap(shape => this._shapeToPIXI(shape));
+      return ExtrudedPolygonPrimitiveWithHoles.fromPolygons(id, solids, holes, opts);
     }
 
     // 4. Base primitive types. See shape.constructor.TYPES
@@ -308,7 +329,7 @@ export class RegionGeometry extends PlaceableGeometry {
       case "grid":
       case "token":
 
-      default: return ExtrudedPolygonPrimitive.fromPolygons(id, regionShape.polygons, opts); /* eslint-disable-line no-fallthrough */
+      default: return ExtrudedPolygonPrimitive.fromPolygons(id, this.regionShapePolygons(regionShape), opts); /* eslint-disable-line no-fallthrough */
     }
   }
 
@@ -480,6 +501,37 @@ export class RegionGeometry extends PlaceableGeometry {
     }
 
     return { center, angles, dims, anchors, topZ, bottomZ };
+  }
+
+  /**
+   * Polygon, circle, or ellipse that represents the shape.
+   * Rectangles ignored as a 4-point polygon will be transformed to a Quad3d in ModelGeometricPrimitive
+   * Used instead of just regionShape.polygons where feasible, because shapes other than polygon may be more efficient.
+   * @param {RegionShape} regionShape
+   * @returns {PIXI.Polygon[]|PIXI.Ellipse[]|PIXI.Circle[]|PIXI.Circle[2]} Pixi shape, or two circles for rings.
+   */
+  _shapeToPIXI(regionShape) {
+    // TODO: In theory, rotation can be handled by the shape dimension update. But would need to rotate
+    // everything (holes) if the shape itself is rotated, plus additional handling if holes are rotated.
+    // Probably not worth it...
+    if ( regionShape.rotation ) return this.regionShapePolygons(regionShape);
+
+    switch ( regionShape.type ) {
+      case "circle":  return [new PIXI.Circle(regionShape.x, regionShape.y, regionShape.radius)];
+      case "ellipse": return [new PIXI.Ellipse(regionShape.x, regionShape.y, regionShape.radiusX, regionShape.radiusY)];
+      case "ring": {
+        const innerRadius = regionShape.radius - regionShape.innerWidth;
+        const outerRadius = regionShape.radius + regionShape.outerWidth;
+        const outer = new PIXI.Circle(regionShape.x, regionShape.y, outerRadius)
+        if ( innerRadius > 0 ) {
+          const inner = new PIXI.Circle(regionShape.x, regionShape.y, innerRadius);
+          return [outer, inner];
+        }
+        return outer;
+      }
+      default: return this.regionShapePolygons(regionShape);
+    }
+
   }
 
   // ----- NOTE: Shape change tracking ----- //

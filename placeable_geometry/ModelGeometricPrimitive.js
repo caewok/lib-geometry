@@ -149,7 +149,7 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
   /**
    * Build an extruded (along the z-axis) shape from a 2d polygon.
    * @param {string} id           Identifier for this shape.
-   * @param {PIXI.Polygon} poly   Polygon to use.
+   * @param {PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse} poly   Polygon to use.
    * @param {object} [opts]
    * @param {number} [opts.topZ]        Top elevation
    * @param {number} [opts.bottomZ]     Bottom elevation
@@ -158,7 +158,8 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    */
   static fromPolygon(id, poly, opts = {}) {
     this._makeElevationFinite(opts);
-    const faces = this._facesFromPolygon(poly, opts);
+    const top = this._faceFromPolygon(poly, opts.topZ);
+    const faces = this._facesFromPolygon3d(top, opts.bottomZ, opts);
     const prototypeFaces = this.canvasToPrototypeFaces(faces, opts);
     return new this(id, prototypeFaces);
   }
@@ -166,7 +167,7 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
   /**
    * Extrudes multiple polygons for a single shape, handles holes.
    * @param {string} id                 Identifier for this shape.
-   * @param {PIXI.Polygon[]} polys       2d polygons to use.
+   * @param {(PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse)[]} polys       2d polygons to use.
    * @param {object} [opts]
    * @param {number} [opts.topZ]        Top elevation
    * @param {number} [opts.bottomZ]     Bottom elevation
@@ -180,7 +181,8 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
 
     // Construct extruded 3d shape for each polygon in turn.
     for ( const poly of polys )  {
-      const faces = this._facesFromPolygon(poly, opts);
+      const top = this._faceFromPolygon(poly, opts.topZ);
+      const faces = this._facesFromPolygon3d(top, opts.bottomZ, opts);
       const prototypeFaces = this.canvasToPrototypeFaces(faces, opts);
       allProtoFaces.push(...prototypeFaces);
     }
@@ -205,24 +207,20 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
     return opts;
   }
   /**
-   * Helper to create a 3d extruded shape from a polygon, with a top and bottom polygon
-   * shapes and vertical sides.
-   * @param {PIXI.Polygon} poly       Polygon shape to use for top and bottom faces.
+   * Helper to create a 3d polygon for different polygon shapes.
+   * @param {PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse} poly       Polygon shape to use for top and bottom faces.
    * @param {number} topZ             The top elevation
    * @param {number} bottomZ          The bottom elevation
    * @param {number} [opts.density]     Density when dealing with circles, ellipses
-   * @returns {Polygon3d[]} Array of top, bottom, and 3+ sides.
+   * @returns {Polygon3d} A Polygon3d representing this shape.
    */
-  static _facesFromPolygon(poly, { topZ, bottomZ, ...opts } = {}) {
-    let top;
-    if ( poly instanceof PIXI.Circle ) top = Circle3d.fromCircle(poly, topZ);
-    else if ( poly instanceof PIXI.Ellipse ) top = Ellipse3d.fromEllipse(poly, topZ);
-    else if ( poly instanceof PIXI.Rectangle ) top = Quad3d.fromRectangle(poly, topZ);
-    else if ( poly.points.length === 6 ) top =  Triangle3d.fromPolygon(poly, opts.topZ);
-    else if ( poly.points.lenght === 8 ) top =  Quad3d.fromPolygon(poly, opts, topZ);
-    else top = Polygon3d.fromPolygon(poly, topZ);
-
-    return this._facesFromPolygon3d(top, bottomZ, opts);
+  static _faceFromPolygon(poly, z) {
+    if ( poly instanceof PIXI.Circle ) return Circle3d.fromCircle(poly, z);
+    else if ( poly instanceof PIXI.Ellipse ) return Ellipse3d.fromPIXIEllipse(poly, z);
+    else if ( poly instanceof PIXI.Rectangle ) return Quad3d.fromRectangle(poly, z);
+    else if ( poly.points.length === 6 ) return Triangle3d.fromPolygon(poly, z);
+    else if ( poly.points.lenght === 8 ) return Quad3d.fromPolygon(poly, z);
+    else return Polygon3d.fromPolygon(poly, z);
   }
 
   /**
@@ -320,18 +318,21 @@ export class ExtrudedPolygonPrimitiveWithHoles extends ExtrudedPolygonPrimitive 
   /**
    * Build an extruded (along the z-axis) shape from a 2d polygon.
    * @param {string} id           Identifier for this shape.
-   * @param {PIXI.Polygon} poly   Polygon to use.
+   * @param {PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse} poly   Polygon to use.
    * @param {object} [opts]
    * @param {number} [opts.topZ]        Top elevation
    * @param {number} [opts.bottomZ]     Bottom elevation
    * @returns {ExtrudedPolygonPrimitive}
    */
-  static fromPolygon(id, poly, opts) { return ExtrudedPolygonPrimitive.fromPolygon(id, poly, opts); }
+  static fromPolygon(id, poly, holes = [], opts) {
+    if ( !holes.length ) return super.fromPolygon(id, poly, opts);
+    return this.fromPolygons(id, [poly], holes, opts);
+  }
 
   /**
    * Extrudes multiple polygons for a single shape, handles holes.
    * @param {string} id                 Identifier for this shape.
-   * @param {PIXI.Polygon[]} polys      2d polygons to use.
+   * @param {(PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse)[]} polys      2d polygons to use.
    * @param {object} [opts]
    * @param {number} [opts.topZ]        Top elevation
    * @param {number} [opts.bottomZ]     Bottom elevation
@@ -339,19 +340,24 @@ export class ExtrudedPolygonPrimitiveWithHoles extends ExtrudedPolygonPrimitive 
    * @returns {ExtrudedPolygonPrimitive}
    */
   static fromPolygons(id, polys, holes = [], opts = {}) {
-    if ( polys.length === 1 && !holes.length ) return super.fromPolygon(id, polys[0], opts);
     if ( !holes.length ) return super.fromPolygons(id, polys, opts);
     this._makeElevationFinite(opts);
 
-    holes.forEach(hole => {
-      if ( hole.isPositive ) hole.reverseOrientation();
-    });
+    orientPolygons(polys, true);
+    orientPolygons(holes, false);
 
-    const islands = this._buildIslands([...polys, ...holes]);
+    const islands = this._buildIslands(polys, holes);
 
     const allProtoFaces = [];
     for ( const { solid, holes } of islands ) {
-      const top = Polygons3d.fromPolygons([solid, ...holes], opts.topZ);
+      const top = new Polygons3d();
+      top.polygons.push(this._faceFromPolygon(solid, opts.topZ));
+      top.polygons.push(...holes.map(hole => {
+        const hole3d = this._faceFromPolygon(hole, opts.topZ);
+        hole3d.isHole = true;
+        return hole3d;
+      }));
+
       const faces = this._facesFromPolygon3d(top, opts.bottomZ, opts);
       allProtoFaces.push(...this.canvasToPrototypeFaces(faces, opts));
     }
@@ -361,34 +367,39 @@ export class ExtrudedPolygonPrimitiveWithHoles extends ExtrudedPolygonPrimitive 
   /**
    * From 3d polygons, construct a recursive tree of solid + holes
    * A root solid pairs with its direct hole children only.
-   * Each o those holes' direct solid children become new island roots one level down.
-   * @param {PIXI.Polygon[]} rings
+   * Each of those holes' direct solid children become new island roots one level down.
+   * @param {(PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse)[]} solids
+   * @param {(PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse)[]} holes
    * @returns {object[]}
-   * - @prop {PIXI.Polygon} solid
-   * - @prop {PIXI.Polygon[]} holes
+   * - @prop {PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse} solid
+   * - @prop {PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse[]} holes
    */
-  static _buildIslands(rings) {
-    const parent = this._buildRingParents(rings);
-    const children = rings.map(() => []);
+  static _buildIslands(solids, holes) {
+    const parent = this._buildRingParents([...solids, ...holes]);
+    const children = new Array(solids.length + holes.length).fill([]);
     parent.forEach((p, i) => {
       if ( p !== null ) children[p].push(i);
     });
 
-    const islands = []; // { solid: Polygon3d, holes: Polygon3d[] }
+    const islands = []; // { solid: PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse, holes: PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse[] }
+
+    // The parent indices refer to the combined [...solids, ...holes]. Use the offset to find the original shape.
+    // Children similarly reference the combined [...solids, ...holes] array.
+    const holeOffsetIdx = solids.length;
+    const indexIsSolid = idx => idx < holeOffsetIdx;
 
     function processSolid(solidIdx) {
-      const holeIdxs = children[solidIdx].filter(c => !rings[c].isPositive);
-      islands.push({ solid: rings[solidIdx], holes: holeIdxs.map(h => rings[h]) });
+      const holeIdxs = children[solidIdx].filter(c => !indexIsSolid(c));
+      islands.push({ solid: solids[solidIdx], holes: holeIdxs.map(h => holes[h - holeOffsetIdx]) });
 
       // Recurse: Any solid ring nested inside one of these holes starts a new island.
       for ( const holeIdx of holeIdxs ) children[holeIdx]
-        .filter(c => rings[c].isPositive)
+        .filter(c => indexIsSolid(c))
         .forEach(processSolid);
     }
 
-    rings.forEach((ring, i) => {
-      // !isPositive === hole for 2d polygon.
-      if ( ring.isPositive && parent[i] === null ) processSolid(i);
+    solids.forEach((_solid, i) => {
+      if (parent[i] === null ) processSolid(i);
     });
 
     return islands;
@@ -398,12 +409,13 @@ export class ExtrudedPolygonPrimitiveWithHoles extends ExtrudedPolygonPrimitive 
    * Find each ring's immediate parent: the smallest other ring (solid or hole)
    * that contains it. Assumes clean, non-self-intersecting rings that are either
    * disjoint or fully nested (true for Clipper-cleaned region shapes).
-   * @param {PIXI.Polygon[]} planarRings
+   * @param {(PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse)[]} solids
+   * @param {(PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse)[]} holes
    * @returns {number[]} Index of parent polygon for each ring
    */
   static _buildRingParents(planarRings) {
-    const areas = planarRings.map(r => Math.abs(r.signedArea()));
-    const testPoints = planarRings.map(r => r.interiorPoint());
+    const areas = planarRings.map(r => r.area); // Note: Must be positive area, not signed.
+    const testPoints = planarRings.map(r => r.interiorPoint ? r.interiorPoint() : r.center);
     return planarRings.map((ring, i) => {
       let parent = null;
       let parentArea = Number.POSITIVE_INFINITY;
@@ -420,4 +432,12 @@ export class ExtrudedPolygonPrimitiveWithHoles extends ExtrudedPolygonPrimitive 
     });
   }
 
+}
+
+function orientPolygons(polys, isSolid = true) {
+  polys.forEach(poly => {
+    if ( !(poly instanceof PIXI.Polygon) ) return;
+    if ( poly.isPositive ^ isSolid ) poly.reverseOrientation();
+  });
+  return polys;
 }
