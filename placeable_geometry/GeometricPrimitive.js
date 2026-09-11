@@ -349,6 +349,30 @@ export class GeometricPrimitive {
   }
 
   /**
+   * Draw face after rotating 90º on the x-axis.
+   */
+  draw2dRotatedX(opts) {
+    const rot = MatrixFloat32.rotationX(Math.PI_1_2);
+    this.drawTransformed(rot, opts)
+  }
+
+  /**
+   * Draw face after rotating 90º on the y-axis.
+   */
+  draw2dRotatedY(opts) {
+    const rot = MatrixFloat32.rotationY(Math.PI_1_2);
+    this.drawTransformed(rot, opts)
+  }
+
+  drawTransformed(M, opts) {
+    const invTransposeM = M.invert().transpose();
+    for ( const face of this.faces ) {
+      face.transform(M, invTransposeM).draw2d(opts);
+    }
+  }
+
+
+  /**
    * Validate aspects of this shape, to be defined by child class.
    * At a minimum, calls validateFacesOutward
    * @returns {boolean} True if valid (tests pass).
