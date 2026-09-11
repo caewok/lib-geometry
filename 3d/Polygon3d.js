@@ -489,7 +489,8 @@ export class Polygon3d {
       from2dM.multiplyPoint3d(a, a);
       from2dM.multiplyPoint3d(b, b);
       from2dM.multiplyPoint3d(c, c);
-      return Triangle3d.from3Points(a, b, c);
+      const tri = Triangle3d.from3Points(a, b, c);
+      tri.isHole = this.isHole;
     });
     return out;
   }
@@ -524,14 +525,10 @@ export class Polygon3d {
   /**
    * Build a set of vertical Quad3ds representing sides of a polygon shape.
    * Built facing outwards from the polygon, with polygon on top.
-   * @param {number} elevZ            Fixed elevation to use for the sides
-   * @param {number} [heightZ=0]      Relative elevation to the top; subtracted from topZ
-   * @param {number} [density]        If provided, used instead of result of approximateVertexDensity for circles and ellipses
+   * @param {number} bottomZ            Fixed elevation to use for the sides
    * @returns {Quad3d[]}
    */
-  buildTopSides(bottomZ, _opts) {
-    using ctr = this.centroid.clone();
-    ctr.z = bottomZ + ((this.points[0].z - bottomZ) * 0.5);
+  buildTopSides(bottomZ) {
     const numSides = this.points.length;
     const sides = new Array(numSides);
     let i = 0;
@@ -545,12 +542,8 @@ export class Polygon3d {
         continue;
       }
       const side = Quad3d.from4Points(edge.b, edge.a, a.set(edge.a.x, edge.a.y, bottomZ), b.set(edge.b.x, edge.b.y, bottomZ));
-      if ( side.isFacing(ctr) ^ this.isHole ) side.reverseOrientation(); // Face outwards.
       side.isHole = this.isHole;
       sides[i++] = side;
-
-      // Usually we don't want sides to be holes, just reversed orientation.
-      // Example: hole inside a rectangle. We want the interior sides to block when at the center.
     }
     if ( filterSides ) return sides.filter(elem => Boolean(elem));
     return sides;
@@ -1184,7 +1177,11 @@ export class Ellipse3d extends Polygon3d {
   static _geoLibType = "Ellipse3d";
 
   // Assumed density for transforms. If zero, will use PIXI.Circle.approximateVertexDensity based on the major radius.
-  _density = 0;
+  #density = 0;
+
+  get density() { return this.#density || PIXI.Circle.approximateVertexDensity(Math.max(this.radiusX, this.radiusY)); }
+
+  set density(value) { this.#density = value; }
 
   /** @type {Point3d} */
   get center() { return this.points[0]; }
@@ -1486,11 +1483,10 @@ export class Ellipse3d extends Polygon3d {
    * Convert to 2d polygon, dropping z.
    * @returns {PIXI.Polygon}
    */
-  toPolygon2d(opts) {  return this.toPolygon3d(opts).toPolygon2d(opts); }
+  toPolygon2d() {  return this.toPolygon3d().toPolygon2d(); }
 
-  // opts: { density, includeEndpoints = true }
-  toPolygon3d(opts) {
-    const poly2d = this.toPlanarPolygon(opts);
+  toPolygon3d() {
+    const poly2d = this.toPlanarPolygon();
     return Polygon3d.fromPlanarPolygon(poly2d, this.plane);
   }
 
@@ -1506,58 +1502,45 @@ export class Ellipse3d extends Polygon3d {
    * Convert to 2d polygon by perspective transform, dividing each point by z.
    * @returns {PIXI.Polygon}
    */
-  toPerspectivePolygon(opts) { return this.toPolygon3d(opts).toPerspectivePolygon(); }
+  toPerspectivePolygon() { return this.toPolygon3d().toPerspectivePolygon(); }
 
   /**
    * @returns {Polygon3d}
    */
-  toPlanarPolygon(opts = {}) {
-    if ( this._density ) opts.density = this._density;
+  toPlanarPolygon() {
     const ellipse = this.toPlanarEllipse();
-    return ellipse.toPolygon(opts);
+    const poly = ellipse.toPolygon({ density: this.density });
+    if ( this.isHole ^ !poly.isPositive ) poly.reverseOrientation();
+    return poly;
   }
 
-  toVertices(opts) { return this.toPolygon3d(opts).toVertices(opts); }
+  toVertices(opts) { return this.toPolygon3d().toVertices(opts); }
 
   triangulate(opts = {}) {
     opts.useFan ??= true;
-    return this.toPolygon3d(opts).triangulate(opts);
-  }
-
-  /**
-   * Build a set of vertical Quad3ds representing sides of a polygon shape.
-   * Built facing outwards from the polygon, with polygon on top.
-   * @param {number} elevZ            Fixed elevation to use for the sides
-   * @param {number} [heightZ=0]      Relative elevation to the top; subtracted from topZ
-   * @param {number} [density]        If provided, used instead of result of approximateVertexDensity for circles and ellipses
-   * @returns {Quad3d[]}
-   */
-  buildTopSides(bottomZ, { density, ...opts } = {}) {
-    density ||= PIXI.Circle.approximateVertexDensity(Math.max(this.radiusX, this.radiusY));
-    const poly3d = this.toPolygon3d({ density });
-    return poly3d.buildTopSides(bottomZ, opts);
+    return this.toPolygon3d().triangulate(opts);
   }
 
   // ----- NOTE: Iterators ----- //
 
-  *iterateEdges(opts) {
+  *iterateEdges() {
     const poly3d = this.toPolygon3d();
-    for ( const edge of poly3d.iterateEdges(opts) ) yield edge;
+    for ( const edge of poly3d.iterateEdges() ) yield edge;
   }
 
-  *iteratePoints(opts) {
+  *iteratePoints() {
     const poly3d = this.toPolygon3d();
-    for ( const pt of poly3d.iteratePoints(opts) ) yield pt;
+    for ( const pt of poly3d.iteratePoints() ) yield pt;
   }
 
-  *reverseIterateEdges(opts) {
+  *reverseIterateEdges() {
     const poly3d = this.toPolygon3d();
-    for ( const edge of poly3d.reverseIterateEdges(opts) ) yield edge;
+    for ( const edge of poly3d.reverseIterateEdges() ) yield edge;
   }
 
-  *reverseIteratePoints(opts) {
+  *reverseIteratePoints() {
     const poly3d = this.toPolygon3d();
-    for ( const pt of poly3d.reverseIteratePoints(opts) ) yield pt;
+    for ( const pt of poly3d.reverseIteratePoints() ) yield pt;
   }
 
   // ----- NOTE: Intersection ----- //
@@ -1728,7 +1711,7 @@ export class Ellipse3d extends Polygon3d {
    * @param {boolean} [keepLessThan=true]
    * @returns {Polygon3d}
    */
-  clipZ({ z = -0.1, keepLessThan = true, density } = {}) {
+  clipZ({ z = -0.1, keepLessThan = true } = {}) {
     // If the plane is along the z axis, every point has the same z. Reject or keep.
     if ( this.plane.normal.x.almostEqual(0) && this.plane.normal.y.almostEqual(0) ) {
       const out = this._cloneEmpty();
@@ -1742,7 +1725,7 @@ export class Ellipse3d extends Polygon3d {
     }
 
     // Otherwise, convert to polygon and keep or reject
-    const poly = this.toPolygon3d({ density });
+    const poly = this.toPolygon3d();
     return poly.clipZ({ z, keepLessThan });
   }
 
@@ -1821,10 +1804,11 @@ export class Circle3d extends Ellipse3d {
     return new PIXI.Circle(center.x, center.y, this.radius);
   }
 
-  toPlanarPolygon(opts = {}) {
-    if ( this._density ) opts.density = this._density;
+  toPlanarPolygon() {
     const cir = this.toPlanarCircle();
-    return cir.toPolygon(opts);
+    const poly = cir.toPolygon({ density: this.density });
+    if ( this.isHole ^ !poly.isPositive ) poly.reverseOrientation();
+    return poly;
   }
 
   /**
@@ -1845,20 +1829,6 @@ export class Circle3d extends Ellipse3d {
     const out = this._convert2dPointsTo3d(latticePoints);
     PIXI.Point.release(...latticePoints);
     return out;
-  }
-
-  /**
-   * Build a set of vertical Quad3ds representing sides of a polygon shape.
-   * Built facing outwards from the polygon, with polygon on top.
-   * @param {number} elevZ            Fixed elevation to use for the sides
-   * @param {number} [heightZ=0]      Relative elevation to the top; subtracted from topZ
-   * @param {number} [density]        If provided, used instead of result of approximateVertexDensity for circles and ellipses
-   * @returns {Quad3d[]}
-   */
-  buildTopSides(bottomZ, { density, ...opts } = {}) {
-    density ||= PIXI.Circle.approximateVertexDensity(this.radius);
-    const poly3d = this.toPolygon3d({ density });
-    return poly3d.buildTopSides(bottomZ, opts);
   }
 
   // ----- NOTE: Intersection ----- //
@@ -2179,10 +2149,11 @@ export class Quad3d extends Polygon3d {
   }
 
   triangulate() {
-    return [
-      Triangle3d.from3Points(this.a, this.b, this.c),
-      Triangle3d.from3Points(this.a, this.c, this.d),
-    ];
+    const t1 = Triangle3d.from3Points(this.a, this.b, this.c);
+    const t2 = Triangle3d.from3Points(this.a, this.c, this.d);
+    t1.isHole = this.isHole;
+    t2.isHole = this.isHole;
+    return [t1, t2];
   }
 
   // ----- NOTE: Intersection ----- //
@@ -2544,10 +2515,10 @@ export class Polygons3d extends Polygon3d {
    * @param {number} [opts.scalingFactor]   How to scale the clipper points
    * @returns {ClipperPaths}
    */
-  toClipperPaths({ omitAxis = "z", scalingFactor = 100, density } = {}) {
+  toClipperPaths({ omitAxis = "z", scalingFactor = 100 } = {}) {
     // Convert all to Polygons3d
     const polys3d = this.polygons.map(poly => {
-      if ( poly instanceof Ellipse3d ) return poly.toPolygon3d({ scalingFactor, density });
+      if ( poly instanceof Ellipse3d ) return poly.toPolygon3d({ scalingFactor });
       return poly;
     });
 
@@ -2559,12 +2530,11 @@ export class Polygons3d extends Polygon3d {
       case "z": axes = { x: "x", y: "y" }; break;
       default: throw new Error(`${this.constructor.name}|toClipperPaths omitAxis not recognized.`);
     }
-    const polys2d = polys3d.map(poly3d => new PIXI.Polygon(poly3d.points.map(pt => pt.to2d(axes))));
-
-    // Ensure holes are correctly oriented.
-    polys2d.forEach(poly => {
-      if ( !this.isHole ^ poly.isPositive ) poly.reverseOrientation();
+    const polys2d = polys3d.map(poly3d => {
+      const poly = new PIXI.Polygon(poly3d.points.map(pt => pt.to2d(axes)));
+      if ( !poly3d.isHole ^ poly.isPositive ) poly.reverseOrientation();
       poly.clean();
+      return poly;
     });
 
     return CONFIG.GeometryLib.CONFIG.ClipperPaths.fromPolygons(polys2d, { scalingFactor });
