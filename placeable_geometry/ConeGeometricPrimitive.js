@@ -7,7 +7,7 @@ PIXI,
 
 // Geometry
 import { CombinedGeometricPrimitive } from "./CombinedGeometricPrimitive.js";
-import { ExtrudedPolygonPrimitive, ExtrudedTrianglePrimitive } from "./ModelGeometricPrimitive.js";
+import { ExtrudedPolygonPrimitive } from "./ModelGeometricPrimitive.js";
 
 // LibGeometry
 import { Segment } from "../Segment.js";
@@ -70,7 +70,7 @@ export class ConePrimitive extends CombinedGeometricPrimitive {
       }
     }
 
-    const triShape = ExtrudedTrianglePrimitive.fromTriangle(`baseTri_${id}`, apex, baseSegment.a, baseSegment.b, opts);
+    const triShape = ExtrudedPolygonPrimitive.fromPolygon(`baseTri_${id}`, new PIXI.Polygon(apex, baseSegment.a, baseSegment.b), opts);
     out.addShape(triShape);
     if ( regionShape.curvature === "flat" ) return out;
 
