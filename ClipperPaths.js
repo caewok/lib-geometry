@@ -295,6 +295,11 @@ export class ClipperPaths {
     });
   }
 
+  simplifyPolygons(type = ClipperLib.PolyFillType.pftNonZero) {
+    this.paths = ClipperLib.Clipper.SimplifyPolygons(this.paths, ClipperLib.PolyFillType.pftNonZero);
+    return this;
+  }
+
   /**
    * Run CleanPolygons on the paths
    * @param {number} cleanDelta   Value, multiplied by scalingFactor, passed to CleanPolygons.
