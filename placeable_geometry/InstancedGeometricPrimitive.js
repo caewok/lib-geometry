@@ -389,10 +389,9 @@ export class CylinderPrimitive extends InstancedGeometricPrimitive {
     bottom.reverseOrientation();
 
     // Build the sides.
-    const density = this.DENSITY;
-    top._density = density;
-    bottom._density = density;
-    return [top, bottom, ...top.buildTopSides(-0.5, { density })];
+    top.density = this.DENSITY;
+    bottom.density = this.DENSITY;
+    return [top, bottom, ...top.buildTopSides(-0.5)];
   }
 
   static #prototypeFaces;
