@@ -57,14 +57,12 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
    */
   addShape(shape) {
     this.shapes.push(shape);
-    this._initializeFaces();
     this.dirty = this.constructor.DIRTY.ALL;
   }
 
   replaceShapeAtIndex(newShape, idx) {
     if ( this.shapes[idx] ) this.shapes[idx].destroy();
     this.shapes[idx] = newShape;
-    this._initializeFaces();
     this.dirty = this.constructor.DIRTY.ALL;
   }
 
@@ -86,7 +84,6 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
   removeShapeByIndex(idx) {
     const shape = this.shapes.splice(idx, 1)[0] || null;
     if ( shape ) this.dirty = this.constructor.DIRTY.ALL;
-    this._initializeFaces();
     return shape;
   }
 
@@ -140,12 +137,6 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
 
   get prototypeFaces() { return this.#prototypeFaces; }
 
-  _initializeFaces() {
-    this.shapes.forEach(shape => shape._initializeFaces());
-    this.#prototypeFaces = this.shapes.flatMap(shape => shape.prototypeFaces);
-    super._initializeFaces();
-  }
-
   updateFaces() {
     this.shapes.forEach(shape => shape.updateFaces());
     super.updateFaces(); // This will trigger _generateFaces and clear the dirty tag.
@@ -156,12 +147,19 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
    * Default is to use the world matrix on the prototypes.
    */
   _generateFaces(faces) {
+    // Release old face points before destroying them.
+    faces.forEach(face => face.release());
+    const protoFaces = this.prototypeFaces;
+    const numSides = faces.length = protoFaces.length;
+
     let i = 0;
     for ( const shape of this.shapes ) {
       // Calculate each face from the world model.
       const worldM = this.worldModelForShape(shape);
       const invTransposeM = worldM.invert().transpose();
-      for ( const protoFace of shape.prototypeFaces ) protoFace.transform(worldM, faces[i++], invTransposeM);
+      for ( const protoFace of shape.prototypeFaces ) {
+        faces[i++] = protoFace.transform(worldM, invTransposeM)
+      }
     }
   }
 

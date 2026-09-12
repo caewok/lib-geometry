@@ -118,7 +118,7 @@ export class GeometricPrimitive {
   }
 
   initialize() {
-    this._initializeFaces();
+    this.dirty = this.constructor.DIRTY.ALL;
     this.#calculatePrototypeAABB();
   }
 
@@ -283,16 +283,6 @@ export class GeometricPrimitive {
   }
 
   /**
-   * Convert prototype faces to faces.
-   * After this is called, the faces are marked dirty because they have yet to be transformed.
-   */
-  _initializeFaces() {
-    this.#faces.length = 0;
-    this.prototypeFaces.forEach(f => this.#faces.push(f.clone()));
-    this.dirty = this.constructor.DIRTY.FACES;
-  }
-
-  /**
    * Trigger update of the faces.
    */
   updateFaces() {
@@ -301,7 +291,6 @@ export class GeometricPrimitive {
 
     // Must come after clearing faces to avoid calling updateFaces again when this.faces is accessed.
     if ( !this.validate() ) console.warn(`${this.constructor.name}|Shape fails validation!`, this);
-
   }
 
   /**
@@ -309,10 +298,16 @@ export class GeometricPrimitive {
    * Default is to use the model matrix.
    */
   _generateFaces(faces) {
+    // Release old face points before destroying them.
+    faces.forEach(face => face.release());
+    const protoFaces = this.prototypeFaces;
+    const numSides = faces.length = protoFaces.length;
+
+    // Transform the prototype faces by the model matrix.
+    // Pre-calculate the inverse transpose to use with transforming the normal.
     const M = this.modelMatrix.model;
-    const numSides = this.prototypeFaces.length;
     const invTransposeM = M.invert().transpose();
-    for ( let i = 0; i < numSides; i += 1 ) this.prototypeFaces[i].transform(M, faces[i], invTransposeM);
+    for ( let i = 0; i < numSides; i += 1 ) faces[i] = protoFaces[i].transform(M, invTransposeM);
     this._clearDirty(this.constructor.DIRTY.FACES);
   }
 
@@ -348,29 +343,12 @@ export class GeometricPrimitive {
     for ( const face of this.faces ) face.draw2d(opts);
   }
 
-  /**
-   * Draw face after rotating 90º on the x-axis.
-   */
-  draw2dRotatedX(opts) {
-    const rot = MatrixFloat32.rotationX(Math.PI_1_2);
-    this.drawTransformed(rot, opts)
-  }
-
-  /**
-   * Draw face after rotating 90º on the y-axis.
-   */
-  draw2dRotatedY(opts) {
-    const rot = MatrixFloat32.rotationY(Math.PI_1_2);
-    this.drawTransformed(rot, opts)
-  }
-
-  drawTransformed(M, opts) {
-    const invTransposeM = M.invert().transpose();
+  drawTransformed(M, opts, invTransposeM) {
+    invTransposeM ??= M.invert().transpose();
     for ( const face of this.faces ) {
-      face.transform(M, invTransposeM).draw2d(opts);
+      face.transform(M, undefined, invTransposeM).draw2d(opts);
     }
   }
-
 
   /**
    * Validate aspects of this shape, to be defined by child class.

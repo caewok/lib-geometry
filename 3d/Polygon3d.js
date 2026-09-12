@@ -712,13 +712,14 @@ export class Polygon3d {
 
   /**
    * Transform the points using a transformation matrix.
+   * Passing an out variable is not allowed here; use clone instead.
+   * Some transforms, like circles, can result in new shapes (e.g., ellipse).
    * @param {Matrix} M
-   * @param {Polygon3d} [out]
    * @param {Matrix} [invTransposeM]          The inverse transpose of M, when doing repeated calculations.
-   * @returns {Polygon3d} The modified tri.
+   * @returns {Polygon3d} A new object with the modified polygon.
    */
-  transform(M, out, invTransposeM) {
-    out = this.clone(out);
+  transform(M, invTransposeM) {
+    const out = this.clone();
     out.points.forEach(pt => M.multiplyPoint3d(pt, pt));
 
     // Use the inverse transpose to calculate the normal
@@ -1614,14 +1615,11 @@ export class Ellipse3d extends Polygon3d {
   /**
    * Transform this ellipse using a transformation matrix.
    * @param {Matrix} M
-   * @param {Ellipse3d} [out]
    * @param {Matrix} [invTransposeM]          The inverse transpose of M, when doing repeated calculations.
-   * @returns {Ellipse3d} The modified ellipse.
+   * @returns {Ellipse3d|Circle3d} The modified ellipse or circle if the radii are equal.
    */
-  transform(M, out, invTransposeM) {
-    if ( !out ) out = new Ellipse3d();
-    else if ( out instanceof Circle3d ) out = out.clone(new Ellipse3d());
-    out = super.transform(M, out, invTransposeM);
+  transform(M, invTransposeM) {
+    const out = super.transform(M, invTransposeM);
 
     // Calculate the ellipse-specific parameters.
     const { angle, radiusX, radiusY } = this;
@@ -1672,17 +1670,18 @@ export class Ellipse3d extends Polygon3d {
     let minorAxis = B;
     if ( B.magnitudeSquared() > A.magnitudeSquared() ) [majorAxis, minorAxis] = [minorAxis, majorAxis];
 
-    // Set the new radii.
+    // Calculate the new radii.
     out.radiusX = majorAxis.magnitude();
     out.radiusY = minorAxis.magnitude();
+
+    // If the radii are equal, return a circle. (Angle doesn't matter here.)
+    if ( radiusX.almostEqual(radiusY) ) return Circle3d.fromEllipse3d(out);
 
     // Calculate the new angle in the new plane's 2d coordinate system.
     const newTo2dM = out.plane.conversion2dMatrix;
     using newOrigin2d = newTo2dM.multiplyPoint3d(Point3d.tmp.set(0, 0, 0));
     using majorAxis2d = newTo2dM.multiplyPoint3d(majorAxis, tmp).subtract(newOrigin2d);
     out.angle = Math.atan2(majorAxis2d.y, majorAxis2d.x);
-
-    if ( out.radiusX.almostEqual(out.radiusY) ) return out.clone(new Circle3d());
     return out;
   }
 
@@ -1698,9 +1697,9 @@ export class Ellipse3d extends Polygon3d {
     return out;
   }
 
-  scale({ x = 1, y = 1, z = 1 } = {}, ellipse3d) {
+  scale({ x = 1, y = 1, z = 1 } = {}) {
     using scaleM = Matrix.scale({ x, y, z }, { d3: true });
-    return this.transform(scaleM, ellipse3d);
+    return this.transform(scaleM);
   }
 
   // divideByZ: same for ellipse.
@@ -1791,6 +1790,17 @@ export class Circle3d extends Ellipse3d {
     return out;
   }
 
+  /**
+   * Create a circle from the ellipse, using either the maximum or minimum radii
+   */
+  static fromEllipse3d(ellipse3d, useMaximumRadius = true) {
+    const fn = useMaximumRadius ? Math.max : Math.min;
+    const radius = fn(ellipse3d.radiusX, ellipse3d.radiusY);
+    const out = ellipse3d.clone(new this());
+    out.radius = radius;
+    return out;
+  }
+
   // ----- NOTE: Conversions to ----- //
 
   toPlanarCircle() {
@@ -1856,18 +1866,6 @@ export class Circle3d extends Ellipse3d {
   isValid() {
     this.clean();
     return this.points.length === 1;
-  }
-
-  /**
-   * Transform the points using a transformation matrix.
-   * If the x and y scales are different, this will result in an ellipse, not a circle.
-   * @param {Matrix} M
-   * @param {Ellipse3d} [poly]    The circle to modify
-   * @returns {Polygon3d} The modified tri.
-   */
-  transform(M, circle3d, invTransposeM) {
-    circle3d ??= this._cloneEmpty();
-    return super.transform(M, circle3d, invTransposeM);
   }
 
   multiplyScalar(multiplier, circle3d) {
@@ -2661,9 +2659,9 @@ export class Polygons3d extends Polygon3d {
 
   // ----- NOTE: Transformations ----- //
 
-  transform(M, poly3d) {
-    const out = this.#applyMethodToAllWithClone("transform", poly3d, M);
-    out.clearCache(false);
+  transform(M, invTransposeM) {
+    const out = new this.constructor();
+    this.polygons.forEach(poly => out.polygons.push(poly.transform(M, invTransposeM)));
     return out;
   }
 
@@ -2673,9 +2671,9 @@ export class Polygons3d extends Polygon3d {
     return out;
   }
 
-  scale(opts, poly3d) {
-    const out = this.#applyMethodToAllWithClone("scale", poly3d, opts);
-    out.clearCache(false);
+  scale(opts) {
+    const out = new this.constructor();
+    this.polygons.forEach(poly => out.polygons.push(poly.scale(...opts)));
     return out;
   }
 

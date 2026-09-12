@@ -394,9 +394,9 @@ export class CylinderPrimitive extends InstancedGeometricPrimitive {
     return [top, bottom, ...top.buildTopSides(-0.5)];
   }
 
-  static #prototypeFaces;
+  static _prototypeFaces;
 
-  static get prototypeFaces() { return this.#prototypeFaces ||= this.createUnitCylinder(canvas.scene.dimensions.maxR / 10); }
+  static get prototypeFaces() { return this._prototypeFaces ||= this.createUnitCylinder(canvas.scene.dimensions.maxR / 10); }
 
   static _instanceVO;
 
