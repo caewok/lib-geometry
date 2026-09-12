@@ -259,7 +259,7 @@ export class Frustum {
       P.subtract(viewpoint, vToP);
 
       const dotPN = vToP.dot(N);
-      if ( almostLessThan(dotPN, 0) ) continue; // Ignore vertices behind near-plane truncation.
+      if ( dotPN.almostLessThan(0) ) continue; // Ignore vertices behind near-plane truncation.
 
       const t = distPlane / dotPN;
       viewpoint.add(vToP.multiplyScalar(t, pProj), pProj);

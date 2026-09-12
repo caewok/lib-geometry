@@ -206,7 +206,7 @@ export class Sphere {
    * @returns {Point3d[]}
    */
   lineSegmentIntersections(a, b, { inside = false } = {}) {
-    const out = [...this.rayIntersectionTo(a, b.subtract(a)).filter(t => almostBetween(t, 0, 1))];
+    const out = [...this.rayIntersectionTo(a, b.subtract(a)).filter(t => t.almostBetween(0, 1))];
     if ( inside ) {
       if ( this.contains(a) ) out.push(a);
       if ( this.contains(b) ) out.push(b);

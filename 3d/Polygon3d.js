@@ -835,7 +835,7 @@ export class Polygon3d {
   intersection(rayOrigin, rayDirection, { minT = 0, maxT = 1, holesBlock = false } = {}) {
     if ( !holesBlock && this.isHole ) return null;
     const t = this.intersectionT(rayOrigin, rayDirection);
-    if ( t === null || !almostBetween(t, minT, maxT) ) return null;
+    if ( t === null || !t.almostBetween(minT, maxT) ) return null;
     if ( t.almostEqual(0) ) return rayOrigin;
     const ix = Point3d.tmp;
     rayOrigin.add(rayDirection.multiplyScalar(t, ix), ix)
@@ -932,7 +932,7 @@ export class Polygon3d {
 
       // Check if the line crosses the edge.
       if ( distA * distB <= 0 ) {
-        if ( almostLessThan(distA, 0, EPSILON) && almostLessThan(distB, 0, EPSILON) ) {
+        if ( distA.almostLessThan(0, EPSILON) && distB.almostLessThan(0, EPSILON) ) {
           // Edge is perfectly collinear with intersection line.
           tValues.push(vA.dot(direction));
           tValues.push(vB.dot(direction));
@@ -1053,7 +1053,7 @@ export class Polygon3d {
 
       // Check if the line crosses the edge.
       if ( distA * distB <= 0 ) {
-        if ( almostLessThan(distA, 0, EPSILON) && almostLessThan(distB, 0, EPSILON) ) return true;
+        if ( distA.almostLessThan(0, EPSILON) && distB.almostLessThan(0, EPSILON) ) return true;
         else if ( Math.abs(distA - distB) > EPSILON) return true;
       }
 

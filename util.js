@@ -1400,13 +1400,18 @@ export function segmentOverlap(a, b, c, d) {
   return res;
 }
 
-export function almostLessThan(a, b, epsilon = 1e-06) { return a < b || a.almostEqual(b, epsilon); }
+function _almostLessThan(b, epsilon = 1e-06) { return this < (b + epsilon); }
 
-export function almostGreaterThan(a, b, epsilon = 1e-06) { return a > b || a.almostEqual(b, epsilon); }
+function _almostGreaterThan(b, epsilon = 1e-06) { return this > (b - epsilon); }
 
-export function almostBetween(value, min, max, epsilon = 1e-06) {
-  return almostLessThan(value, max, epsilon) && almostGreaterThan(value, min, epsilon);
+function _almostBetween(min, max, epsilon = 1e-06) {
+  return this.almostLessThan(max, epsilon) && this.almostGreaterThan(min, epsilon);
 }
+
+function _strictlyLessThan(b, epsilon = 1e-06) { return this < (b - epsilon); }
+
+function _strictlyGreaterThan(b, epsilon = 1e-06) { return this > (b + epsilon); }
+
 
 export const cutaway = {
   to2d: to2dCutaway,
@@ -1455,3 +1460,20 @@ export function histogram(arr) {
   for ( const n of arr ) m.set(n, m.get(n) + 1);
   return m;
 }
+
+// Define properties on the Number environment
+Object.defineProperties(Number.prototype, {
+  almostLessThan: { value: _almostLessThan },
+  almostGreaterThan: { value: _almostGreaterThan },
+  almostBetween: { value: _almostBetween },
+  strictlyLessThan: { value: _strictlyLessThan },
+  strictlyGreaterThan: { value: _strictlyGreaterThan },
+});
+
+// For temporary backward compatibility
+
+export function almostLessThan(a, b, epsilon) { return a.almostLessThan(b, epsilon); }
+
+export function almostGreaterThan(a, b, epsilon) { return a.almostGreaterThan(b, epsilon); }
+
+export function almostBetween(a, b, epsilon) { return a.almostBetween(b, epsilon); }

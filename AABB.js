@@ -388,7 +388,7 @@ export class AABB2d {
   almostContainsPoint(p, epsilon = 1e-06) {
     const { min, max } = this;
     for ( const axis of this.constructor.axes ) {
-      if ( !almostBetween(p[axis], min[axis], max[axis], epsilon) ) return false
+      if ( !p[axis].almostBetween(min[axis], max[axis], epsilon) ) return false
     }
     return true;
   }
