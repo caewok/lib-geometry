@@ -158,10 +158,8 @@ export class RegionGeometry extends PlaceableGeometry {
     super.initialize();
   }
 
-  updateAllShapes() {
-    console.debug(`RegionGeometry|updateAllShapes ${this.placeableDocument.name} (${this.placeableId})`);
-    for ( let i = 0, iMax = this.shapes.length; i < iMax; i += 1 ) this._updateShapeDimensions(i);
-  }
+
+  // ----- NOTE: Shape Creation ----- //
 
   createShapes() {
     console.debug(`RegionGeometry|createShapes ${this.placeableDocument.name} (${this.placeableId})`);
@@ -282,7 +280,7 @@ export class RegionGeometry extends PlaceableGeometry {
    * @param {RegionShape} regionShape
    * @param {RegionShape[]} holeShapes
    * @param {string} id
-   * @param {GeometricPrimitive} Null if the shape cannot be instantiated (e.g., is empty)
+   * @param {GeometricPrimitive}
    */
   _instantiateShape(regionShape, holeShapes, id) {
     if ( regionShape.hole || regionShape.isEmpty ) return new EmptyGeometricPrimitive(id);
@@ -290,65 +288,14 @@ export class RegionGeometry extends PlaceableGeometry {
     const opts = this._shapeDimensions(regionShape);
 
     // 1. Wall Restricted.
-    // If grid-restricted or wall-restricted, use ExtrudedPolygonPrimitive.
-    if ( this.isWallRestricted && this.constructor.shapeIsWallRestricted(regionShape, this.placeableDocument) ) {
-      // Must intersect the polygon against the constraints. Only the region.document.polygons are already constrained.
-      // Batch all constraints into a single clipper object.
-      const constraintPolys = this.placeableDocument._shapeConstraints.map(arr => new PIXI.Polygon(arr));
-      const ixPolys = this.#intersectConstraints(this.regionShapePolygons(regionShape), constraintPolys)
-      if ( !ixPolys.length ) return new EmptyGeometricPrimitive(id);
+    if ( this.isWallRestricted
+      && this.constructor.shapeIsWallRestricted(regionShape, this.placeableDocument) ) return this._instantiateRestrictedShape(regionShape, holeShapes, id);
 
-      // Intersect hole polygons with constraints and clean, if applicable.
-      let ixHolePolys = [];
-      if ( holeShapes.length ) {
-        const allHolePolygons = holeShapes.flatMap(h => h.polygons);
-        ixHolePolys = this.#intersectConstraints(allHolePolygons, constraintPolys);
-      }
-
-      // Instantiate the appropriate primitive.
-      // 1a. With holes.
-      if ( ixHolePolys.length ) {
-        // Handle intersecting polygons.
-        const { solids, holes } = this.#subtractHoles(ixPolys, ixHolePolys);
-
-        // Could end up with only solids, only holes, or both solids and holes.
-        if ( !solids.length ) return new EmptyGeometricPrimitive(id);
-        if ( !holes.length ) return ExtrudedPolygonPrimitive.fromPolygons(id, solids, opts);
-        return ExtrudedPolygonPrimitiveWithHoles.fromPolygons(id, solids, holes, opts);
-      }
-
-      // 1b. Without holes.
-      return ExtrudedPolygonPrimitive.fromPolygons(id, ixPolys, opts);
-    }
-
-    // 2. Grid constrainedÑuse polygons only.
-    if ( this.constructor.shapeIsGridConstrained(regionShape) ) {
-      const solids = [];
-      const holes = holeShapes.flatMap(shape => shape.polygons);
-      if ( regionShape.type === "ring" && (regionShape.radius - regionShape.innerWidth > 0) ) {
-        // By convention, the first polygon is the solid ring, the second is the hole.
-        solids.push(regionShape.polygons[0]);
-        holes.push(regionShape.polygons[1]);
-      } else solids.push(...this.regionShapePolygons(regionShape));
-
-      if ( holes.length ) return ExtrudedPolygonPrimitiveWithHoles.fromPolygons(id, solids, holes, opts);
-      return ExtrudedPolygonPrimitive.fromPolygons(id, solids, opts);
-    }
+    // 2. Grid constrained
+    if ( this.constructor.shapeIsGridConstrained(regionShape) ) return this._instantiateGridConstrainedShape(regionShape, holeShapes, id);
 
     // 3. Otherwise contains holes. Use base PIXI geometric shapes where possible.
-    if ( holeShapes.length ) {
-      const baseSolids = this._shapeToPIXI(regionShape);
-      const baseHoles = holeShapes.flatMap(shape => this._shapeToPIXI(shape));
-      if ( baseSolids.length === 2 ) baseHoles.push(baseSolids.pop()); // Ring shape: solid + hole.
-
-      // Handle intersecting holes.
-      const { solids, holes } = this.#subtractHoles(baseSolids, baseHoles);
-
-      // Could end up with only solids, only holes, or both solids and holes.
-      if ( !solids.length ) return new EmptyGeometricPrimitive(id);
-      if ( !holes.length ) return ExtrudedPolygonPrimitive.fromPolygons(id, solids, opts);
-      return ExtrudedPolygonPrimitiveWithHoles.fromPolygons(id, solids, holes, opts);
-    }
+    if ( holeShapes.length ) return this._instantiateHoleShape(regionShape, holeShapes, id);
 
     // 4. Base primitive types. See shape.constructor.TYPES
     switch ( regionShape.type ) {
@@ -384,6 +331,93 @@ export class RegionGeometry extends PlaceableGeometry {
       default: return ExtrudedPolygonPrimitive.fromPolygons(id, this.regionShapePolygons(regionShape), opts); /* eslint-disable-line no-fallthrough */
     }
   }
+
+  /**
+   * Build a shape assuming it is wall restricted.
+   * @param {RegionShape} regionShape
+   * @param {RegionShape[]} holeShapes
+   * @param {string} id
+   * @returns {ExtrudedPolygonPrimitive|ExtrudedPolygonPrimitiveWithHoles|EmptyGeometricPrimitive}
+   */
+  _instantiateWallRestrictedShape(regionShape, holeShapes, id) {
+    // Must intersect the polygon against the constraints. Only the region.document.polygons are already constrained.
+    // Batch all constraints into a single clipper object.
+    const constraintPolys = this.placeableDocument._shapeConstraints.map(arr => new PIXI.Polygon(arr));
+    const ixPolys = this.#intersectConstraints(this.regionShapePolygons(regionShape), constraintPolys)
+    if ( !ixPolys.length ) return new EmptyGeometricPrimitive(id);
+
+    // Intersect hole polygons with constraints and clean, if applicable.
+    let ixHolePolys = [];
+    if ( holeShapes.length ) {
+      const allHolePolygons = holeShapes.flatMap(h => h.polygons);
+      ixHolePolys = this.#intersectConstraints(allHolePolygons, constraintPolys);
+    }
+
+    // Instantiate the appropriate primitive.
+    // A. With holes.
+    const opts = this._shapeDimensions(regionShape);
+    if ( ixHolePolys.length ) return this.#instantiateShapeFromSolidsAndHoles(id, ixPolys, ixHolePolys, opts);
+
+    // B. Without holes.
+    return ExtrudedPolygonPrimitive.fromPolygons(id, ixPolys, opts);
+  }
+
+  /**
+   * Build a shape assuming it is wall restricted.
+   * @param {RegionShape} regionShape
+   * @param {RegionShape[]} holeShapes
+   * @param {string} id
+   * @returns {ExtrudedPolygonPrimitive|ExtrudedPolygonPrimitiveWithHoles|EmptyGeometricPrimitive}
+   */
+  _instantiateGridConstrainedShape(regionShape, holeShapes, id) {
+    const baseSolids = [];
+    const baseHoles = holeShapes.flatMap(shape => shape.polygons);
+    if ( regionShape.type === "ring" && (regionShape.radius - regionShape.innerWidth > 0) ) {
+      // By convention, the first polygon is the solid ring, the second is the hole.
+      baseSolids.push(regionShape.polygons[0]);
+      baseHoles.push(regionShape.polygons[1]);
+    } else baseSolids.push(...this.regionShapePolygons(regionShape));
+
+    const opts = this._shapeDimensions(regionShape);
+    return this.#instantiateShapeFromSolidsAndHoles(id, baseSolids, baseHoles, opts);
+  }
+
+  /**
+   * Build a shape that contains holes.
+   * Uses base PIXI geometric shapes where possible.
+   * @param {RegionShape} regionShape
+   * @param {RegionShape[]} holeShapes
+   * @param {string} id
+   * @returns {ExtrudedPolygonPrimitive|ExtrudedPolygonPrimitiveWithHoles|EmptyGeometricPrimitive}
+   */
+  _instantiateHoleShape(regionShape, holeShapes, id) {
+    const baseSolids = this._shapeToPIXI(regionShape);
+    const baseHoles = holeShapes.flatMap(shape => this._shapeToPIXI(shape));
+    if ( baseSolids.length === 2 ) baseHoles.push(baseSolids.pop()); // Ring shape: solid + hole.
+
+    const opts = this._shapeDimensions(regionShape);
+    return this.#instantiateShapeFromSolidsAndHoles(id, baseSolids, baseHoles, opts);
+  }
+
+  /**
+   * Check for intersecting holes and return a 3d extruded polygon from a set of base solids and holes.
+   * @param {string} id
+   * @param {(PIXI.Polygon|PIXI.Ellipse|PIXI.Circle)[]} baseSolids        Solids for this shape
+   * @param {(PIXI.Polygon|PIXI.Ellipse|PIXI.Circle)[]} baseHoles         Potential holes affecting this shape
+   * @param {object} opts                                                 From _shapeDimensions method
+   * @returns {ExtrudedPolygonPrimitive|ExtrudedPolygonPrimitiveWithHoles|EmptyGeometricPrimitive}
+   */
+  #instantiateShapeFromSolidsAndHoles(id, regionShape, baseSolids, baseHoles, opts) {
+     // Handle intersecting holes.
+    const { solids, holes } = this.#subtractHoles(baseSolids, baseHoles);
+
+    // Could end up with only solids, only holes, or both solids and holes.
+    if ( !solids.length ) return new EmptyGeometricPrimitive(id);
+    if ( holes.length ) return ExtrudedPolygonPrimitiveWithHoles.fromPolygons(id, solids, holes, opts);
+    return ExtrudedPolygonPrimitive.fromPolygons(id, solids, opts);
+  }
+
+  // ----- NOTE: Shape Updating -----
 
   _update() {
     console.debug(`RegionGeometry|_update ${this.placeableDocument.name} (${this.placeableId})`);
