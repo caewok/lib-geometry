@@ -9,6 +9,7 @@ import { GeometricPrimitive } from "./GeometricPrimitive.js";
 
 // LibGeometry
 import { AABB3d } from "../3d/AABB3d.js";
+import { MatrixFloat32 } from "../Matrix.js";
 
 
 /* Store key geometry information for each placeable, in 3d.
@@ -229,8 +230,14 @@ export class PlaceableGeometry {
     return null;
   }
 
+  // Use omitAxis = "x" or omitAxis = "y" to investigate the z shape.
   draw2d(opts) {
     this.shapes.forEach(shape => shape.draw2d(opts));
+  }
+
+  drawTransformed(M, opts) {
+    const invTransposeM = M.invert().transpose();
+    this.shapes.forEach(shape => shape.drawTransformed(M, opts, invTransposeM));
   }
 
   // ----- NOTE: Face points ----- //
