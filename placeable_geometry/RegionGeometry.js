@@ -8,7 +8,7 @@ PIXI,
 
 // Geometry
 import { PlaceableGeometry } from "./PlaceableGeometry.js";
-import { CubePrimitive, CylinderPrimitive } from "./InstancedGeometricPrimitive.js";
+import { CubePrimitive, CylinderPrimitive, CircularCylinderPrimitive } from "./InstancedGeometricPrimitive.js";
 import { ConePrimitive } from "./ConeGeometricPrimitive.js";
 import { ExtrudedPolygonPrimitive, ExtrudedPolygonPrimitiveWithHoles } from "./ModelGeometricPrimitive.js";
 import { EmptyGeometricPrimitive } from "./EmptyGeometricPrimitive.js";
@@ -241,6 +241,43 @@ export class RegionGeometry extends PlaceableGeometry {
   }
 
   /**
+   * Subtract hole polygons from solid polygons using Clipper.
+   * @param {PIXI.Polygon|PIXI.Circle|PIXI.Ellipse[]} solids
+   * @param {PIXI.Polygon|PIXI.Circle|PIXI.Ellipse[]} holes
+   * @returns {object} Object containing separated solid and hole polygons
+   */
+  #subtractHoles(solids, holes) {
+    // Only required if a solid overlaps but does not envelop a hole.
+    const solidsForClipper = new Set();
+    const holesForClipper = new Set();
+    for ( const solid of solids ) {
+      for ( const hole of holes ) {
+        if ( !solid.envelops(hole) && solid.overlaps(hole) ) {
+          solidsForClipper.add(solid);
+          holesForClipper.add(hole);
+        }
+      }
+    }
+    if ( !solidsForClipper.size ) return { solids, holes };
+
+    // Calculate boolean difference (solid - hole).
+    const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
+    const solidPaths = ClipperPaths.fromPolygons([...solidsForClipper]);
+    const holePaths = ClipperPaths.fromPolygons([...holesForClipper]);
+    const resolvedPolys = holePaths
+      .diffPaths(solidPaths)
+      .clean()
+      .toPolygons();
+
+    // Separate clipper paths by their spatial orientation and add in skipped shapes.
+    solids = solids.filter(poly => !solidsForClipper.has(poly));
+    holes = holes.filter(poly => !holesForClipper.has(poly));
+    solids.push(...resolvedPolys.filter(poly => poly.isPositive));
+    holes.push(...resolvedPolys.filter(poly => !poly.isPositive));
+    return { solids, holes };
+  }
+
+  /**
    * Instantiate the correct primitive shape based on constraints and type.
    * @param {RegionShape} regionShape
    * @param {RegionShape[]} holeShapes
@@ -270,7 +307,15 @@ export class RegionGeometry extends PlaceableGeometry {
 
       // Instantiate the appropriate primitive.
       // 1a. With holes.
-      if ( ixHolePolys.length ) return ExtrudedPolygonPrimitiveWithHoles.fromPolygons(id, ixPolys, ixHolePolys, opts);
+      if ( ixHolePolys.length ) {
+        // Handle intersecting polygons.
+        const { solids, holes } = this.#subtractHoles(ixPolys, ixHolePolys);
+
+        // Could end up with only solids, only holes, or both solids and holes.
+        if ( !solids.length ) return new EmptyGeometricPrimitive(id);
+        if ( !holes.length ) return ExtrudedPolygonPrimitive.fromPolygons(id, solids, opts);
+        return ExtrudedPolygonPrimitiveWithHoles.fromPolygons(id, solids, holes, opts);
+      }
 
       // 1b. Without holes.
       return ExtrudedPolygonPrimitive.fromPolygons(id, ixPolys, opts);
@@ -290,17 +335,24 @@ export class RegionGeometry extends PlaceableGeometry {
       return ExtrudedPolygonPrimitive.fromPolygons(id, solids, opts);
     }
 
-    // 3. Otherwise contains holes. Use base geometric shapes where possible.
+    // 3. Otherwise contains holes. Use base PIXI geometric shapes where possible.
     if ( holeShapes.length ) {
-      const solids = this._shapeToPIXI(regionShape);
-      if ( solids.length === 2 ) holes.push(solids.pop()); // Ring shape: solid + hole.
-      const holes = holeShapes.flatMap(shape => this._shapeToPIXI(shape));
+      const baseSolids = this._shapeToPIXI(regionShape);
+      const baseHoles = holeShapes.flatMap(shape => this._shapeToPIXI(shape));
+      if ( baseSolids.length === 2 ) baseHoles.push(baseSolids.pop()); // Ring shape: solid + hole.
+
+      // Handle intersecting holes.
+      const { solids, holes } = this.#subtractHoles(baseSolids, baseHoles);
+
+      // Could end up with only solids, only holes, or both solids and holes.
+      if ( !solids.length ) return new EmptyGeometricPrimitive(id);
+      if ( !holes.length ) return ExtrudedPolygonPrimitive.fromPolygons(id, solids, opts);
       return ExtrudedPolygonPrimitiveWithHoles.fromPolygons(id, solids, holes, opts);
     }
 
     // 4. Base primitive types. See shape.constructor.TYPES
     switch ( regionShape.type ) {
-      case "circle":
+      case "circle": return new CircularCylinderPrimitive(id);
       case "ellipse": return new CylinderPrimitive(id);
 
       case "line":
@@ -320,7 +372,7 @@ export class RegionGeometry extends PlaceableGeometry {
           const inner = new PIXI.Circle(regionShape.x, regionShape.y, innerRadius);
           return ExtrudedPolygonPrimitiveWithHoles.fromPolygons(id, [outer], [inner], opts);
         }
-        return new CylinderPrimitive(id);
+        return new CircularCylinderPrimitive(id);
       }
 
       // Other shapes use the basic extruded polygon shape.

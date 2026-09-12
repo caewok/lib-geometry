@@ -415,7 +415,19 @@ export class ExtrudedPolygonPrimitiveWithHoles extends ExtrudedPolygonPrimitive 
    */
   static _buildRingParents(planarRings) {
     const areas = planarRings.map(r => r.area); // Note: Must be positive area, not signed.
-    const testPoints = planarRings.map(r => r.interiorPoint ? r.interiorPoint() : r.center);
+
+    // Ensure the test point is strictly inside the polygon, not on an edge.
+    // which could cause the `contains` method to fail for tightly nested shapes.
+    const testPoints = planarRings.map(r => {
+      if ( typeof r.interiorPoint === "function" ) {
+        const pt = r.interiorPoint();
+        if ( pt ) return pt;
+      }
+      // Fallbac on centroid or manual bounding box center if interiorPoint fails.
+      return r.center || PIXI.Point.tmp.set(r.x, r.y);
+    });
+
+    // Construct the parent-child relationship based on area comparison. Parent area > child area.
     return planarRings.map((ring, i) => {
       let parent = null;
       let parentArea = Number.POSITIVE_INFINITY;
@@ -431,7 +443,6 @@ export class ExtrudedPolygonPrimitiveWithHoles extends ExtrudedPolygonPrimitive 
       return parent;
     });
   }
-
 }
 
 function orientPolygons(polys, isSolid = true) {
