@@ -10,7 +10,7 @@ PIXI,
 import { GEOMETRY_CONFIG } from "../const.js";
 import { Point3d } from "./Point3d.js";
 import { Plane } from "./Plane.js";
-import { almostBetween, cleanPolygonPoints, almostLessThan } from "../util.js";
+import { cleanPolygonPoints } from "../util.js";
 import { AABB3d } from "./AABB3d.js";
 import { Draw } from "../Draw.js";
 import { Matrix, MatrixFloat32 } from "../Matrix.js";
@@ -2230,10 +2230,14 @@ export class Quad3d extends Polygon3d {
     const v = rayDirection.dot(q) * invDet;
 
     // Check Triangle 1 Intersection:
-    // Condition: alpha >= 0, beta >= 0, alpha + beta <= 1
-    if ( u >= 0.0 && v >= 0.0  && (u + v) <= 1.0 ) {
+    // Condition: alpha (u) >= 0, beta (v) >= 0, alpha + beta <= 1
+    const EPSILON = this.constructor.EPSILON;
+    if ( u.almostGreaterThan(0.0, EPSILON)
+      && v.almostGreaterThan(0.0, EPSILON)
+      && (u + v).almostLessThan(1.0, EPSILON) ) {
+
       const t = edge2.dot(q) * invDet;
-      if ( !t.almostEqual(0.0) && t > 0.0 ) return t; // Could return { u, v, triangle: 1 }
+      if ( t.strictlyGreaterThan(0.0, EPSILON) ) return t; // Could return { u, v, triangle: 1 }
     }
 
     // --- Triangle 2: V1, V2, V3 ---
@@ -2248,17 +2252,18 @@ export class Quad3d extends Polygon3d {
     const tVecPrime = rayOrigin.subtract(v2, tmpPoints[8]); // Vector to ray origin.
 
     const uPrime = tVecPrime.dot(pPrime) * invDetPrime; // Aka alphaPrime.
-    if ( uPrime < 0.0 || uPrime > 1.0 ) return null;
+    if ( uPrime.strictlyLessThan(0.0, EPSILON) | uPrime.strictlyGreaterThan(1.0, EPSILON) ) return null;
 
     const qPrime = tVecPrime.cross(edge1Prime, tmpPoints[9]);
     const vPrime = rayDirection.dot(qPrime) * invDetPrime;
-    if ( vPrime < 0.0 || (uPrime + vPrime) > 1.0 ) return null;
+    if ( vPrime.strictlyLessThan(0.0, EPSILON)
+      || (uPrime + vPrime).strictlyGreaterThan(1.0, EPSILON) ) return null;
 
     // Hit Triangle 2
     // Note: Mapping barycentric to bilinear for T2 is complex.
     // Simple approximation: u = 1-beta', v = 1-alpha' (valid for parallelograms)
     const tPrime = edge2Prime.dot(qPrime) * invDetPrime;
-    if ( !tPrime.almostEqual(0) && tPrime > 0.0 ) return tPrime;
+    if ( tPrime.strictlyGreaterThan(0.0, EPSILON) ) return tPrime;
     return null;
   }
 
