@@ -11,7 +11,7 @@ import { MatrixFloat32 } from "../Matrix.js";
 import { cutaway } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
 import { getHexagonalShape } from "../placeable_vertices/BasicVertices.js";
-import { Polygon3d, Quad3d, Ellipse3d, Triangle3d } from "../3d/Polygon3d.js";
+import { Polygon3d, Quad3d, Ellipse3d, Circle3d, Triangle3d } from "../3d/Polygon3d.js";
 import { Sphere } from "../3d/Sphere.js";
 import { HorizontalQuadVertices } from "../placeable_vertices/BasicVertices.js";
 import { CutawayPolygon } from "../CutawayPolygon.js";
@@ -434,6 +434,53 @@ export class CylinderPrimitive extends InstancedGeometricPrimitive {
     };
     return ellipse.cutaway(start, end, opts);
   }
+}
+
+/**
+ * Extruded (along z-axis) but always a circular top and bottom.
+ */
+export class CircularCylinderPrimitive extends CylinderPrimitive {
+
+  /**
+   * Create the faces for a unit cylinder.
+   * @returns {Ellipse3d|Polygon3d[]}
+   */
+  static createUnitCylinder() {
+    const top = Circle3d.fromCenterPoint({ x: 0, y: 0, z: 0.5 }, 0.5);
+    const bottom = Circle3d.fromCenterPoint({ x: 0, y: 0, z: -0.5 }, 0.5);
+    bottom.reverseOrientation();
+
+    // Build the sides.
+    top.density = this.DENSITY;
+    bottom.density = this.DENSITY;
+    return [top, bottom, ...top.buildTopSides(-0.5)];
+  }
+
+  /**
+   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
+   * @param {PIXI.Point} start     Starting point of the slice on the XY plane
+   * @param {PIXI.Point} end        Ending point of the slice on the XY plane
+   * @returns {CutawayPolygon[]}
+   */
+  verticalSlice(start, end) {
+    // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
+    const rot = this.modelMatrix.rotation;
+    if ( rot.x || rot.y ) return super.verticalSlice(start, end);
+
+    const top = this.faces[0];
+    const bottom = this.faces[1];
+    const circle = top.toPlanarCircle();
+    const topZ = top.points[0].z;
+    const bottomZ = bottom.points[0].z;
+
+    const opts = {
+      topElevationFn: () => topZ,
+      bottomElevationFn: () => bottomZ,
+    };
+    return circle.cutaway(start, end, opts);
+  }
+
+
 }
 
 /**
