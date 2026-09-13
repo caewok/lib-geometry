@@ -443,7 +443,7 @@ export class AABB3d extends AABB2d {
 
     // Check if the projected point is inside the circle.
     const dist2 = PIXI.Point.distanceSquaredBetween(planePoint, centerPoint);
-    return almostLessThan(dist2, radiusSquared);
+    return dist2.almostLessThan(radiusSquared);
   }
 
   // ----- NOTE: Iteration ----- //
