@@ -69,6 +69,8 @@ export class RegionGeometry extends PlaceableGeometry {
     ["shapes", "shapes"],
   ]);
 
+  // ----- NOTE: Basic getters ----- //
+
   get region() { return this.placeable; }
 
   get regionShapes() { return this.placeableDocument.shapes; }
@@ -407,7 +409,7 @@ export class RegionGeometry extends PlaceableGeometry {
    * @param {object} opts                                                 From _shapeDimensions method
    * @returns {ExtrudedPolygonPrimitive|ExtrudedPolygonPrimitiveWithHoles|EmptyGeometricPrimitive}
    */
-  #instantiateShapeFromSolidsAndHoles(id, regionShape, baseSolids, baseHoles, opts) {
+  #instantiateShapeFromSolidsAndHoles(id, baseSolids, baseHoles, opts) {
      // Handle intersecting holes.
     const { solids, holes } = this.#subtractHoles(baseSolids, baseHoles);
 
@@ -522,6 +524,50 @@ export class RegionGeometry extends PlaceableGeometry {
     shape.setAnchor(opts.anchors);
   }
 
+  /**
+   * Generates a deterministic signature of properties that dictate shape geometry construction.
+   * If this string changes, the geometry must be fully rebuilt.
+   * Dimensional properties (x, y, rotation, scale, anchors) are intentionally excluded and
+   * instead handled by the model matrix and the _shapeDimensions method.
+   *
+   * @param {RegionShape} regionShape
+   * @param {RegionShape[]} holes
+   * @returns {string}
+   */
+  _getStructuralSignature(regionShape, holes = []) {
+    // Holes can all get the same signature.
+    if ( regionShape.hole || regionShape.isEmpty ) return "empty";
+
+    // Note: Translation (x, y) might change overlap status, correctly forcing a rebuild.
+    const isRestricted = this.isWallRestricted && this.constructor.shapeIsWallRestricted(regionShape, this.placeableDocument);
+    const parts = [
+      regionShape.type,
+      regionShape.isAffectedByGrid ? "grid" : "gridless",
+      isRestricted ? "restricted" : "unrestricted",
+    ];
+
+    // Append type-specific properties that fundamentally alter the underlying geometry.
+    const keys = [];
+    switch ( regionShape.type ) {
+      case "emanation": keys.push("radius"); break;
+      case "cone": keys.push("angle", "curvature", "radius"); break;
+      case "polygon": keys.push("points"); break;
+      case "ring": {
+        if ( (regionShape.radius - regionShape.innerWidth) > 0 ) keys.push("innerWidth", "outerWidth", "radius");
+        else keys.push("innerWidth", "outerWidth"); // Treat as cylinder, so radius handled via dimensions.
+        break;
+      }
+    }
+    parts.push(...keys.map(key => `${key}:${regionShape[key]}`));
+
+    // Recursively append hole signatures.
+    if ( holes.length ) {
+      const holeStrings = holes.map(hole => this._getStructuralSignature(hole)); // eslint-disable-line no-unused-vars
+      parts.push("holes:(${holeStrings.join('|')})");
+    }
+    return parts.join("|");
+  }
+
 
   // ----- NOTE: Shape dimensions ----- //
 
@@ -619,53 +665,6 @@ export class RegionGeometry extends PlaceableGeometry {
     }
 
   }
-
-  // ----- NOTE: Shape change tracking ----- //
-
-  /**
-   * Generates a deterministic signature of properties that dictate shape geometry construction.
-   * If this string changes, the geometry must be fully rebuilt.
-   * Dimensional properties (x, y, rotation, scale, anchors) are intentionally excluded and
-   * instead handled by the model matrix and the _shapeDimensions method.
-   *
-   * @param {RegionShape} regionShape
-   * @param {RegionShape[]} holes
-   * @returns {string}
-   */
-  _getStructuralSignature(regionShape, holes = []) {
-    // Holes can all get the same signature.
-    if ( regionShape.hole || regionShape.isEmpty ) return "empty";
-
-    // Note: Translation (x, y) might change overlap status, correctly forcing a rebuild.
-    const isRestricted = this.isWallRestricted && this.constructor.shapeIsWallRestricted(regionShape, this.placeableDocument);
-    const parts = [
-      regionShape.type,
-      regionShape.isAffectedByGrid ? "grid" : "gridless",
-      isRestricted ? "restricted" : "unrestricted",
-    ];
-
-    // Append type-specific properties that fundamentally alter the underlying geometry.
-    const keys = [];
-    switch ( regionShape.type ) {
-      case "emanation": keys.push("radius"); break;
-      case "cone": keys.push("angle", "curvature", "radius"); break;
-      case "polygon": keys.push("points"); break;
-      case "ring": {
-        if ( (regionShape.radius - regionShape.innerWidth) > 0 ) keys.push("innerWidth", "outerWidth", "radius");
-        else keys.push("innerWidth", "outerWidth"); // Treat as cylinder, so radius handled via dimensions.
-        break;
-      }
-    }
-    parts.push(...keys.map(key => `${key}:${regionShape[key]}`));
-
-    // Recursively append hole signatures.
-    if ( holes.length ) {
-      const holeStrings = holes.map(hole => this._getStructuralSignature(hole)); // eslint-disable-line no-unused-vars
-      parts.push("holes:(${holeStrings.join('|')})");
-    }
-    return parts.join("|");
-  }
-
 
   // ----- NOTE: Levels ----- //
 
