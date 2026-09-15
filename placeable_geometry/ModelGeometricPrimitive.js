@@ -9,7 +9,7 @@ import { VertexObject } from "../placeable_vertices/VertexObject.js";
 import { Polygon3d, Triangle3d, Circle3d, Ellipse3d, Quad3d, Polygons3d } from "../3d/Polygon3d.js";
 import { ModelMatrixAnchor } from "../ModelMatrix.js";
 import { Point3d } from "../3d/Point3d.js";
-import { roundDecimals, isEven } from "../util.js";
+import { roundDecimals, isOdd } from "../util.js";
 
 /**
  * ModelGeometricPrimitives are one-offs.
@@ -291,25 +291,34 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
     if ( bottom.isFacing(centroid) ^ bottom.isHole ) return false;
 
     // Check each side face
-    using dir = Point3d.tmp;
-    const tIntersections = new Set();
     for ( const face of iter ) {
-      const origin = face.centroid;
-      face.plane.normal.multiplyScalar(-1, dir);
-
-      for ( const otherFace of faces ) {
-        if ( otherFace === face ) continue;
-
-        // Round so we can ignore multiple intersections at a single point, like with edge endpoints.
-        // Note that for prototype faces, t might be quite small.
-        const t = roundDecimals(otherFace.intersectionT(origin, dir, { holesBlock: true }) || 0, 8);
-        if ( t <= 0 ) continue;
-        tIntersections.add(t);
-      }
-      if ( isEven(tIntersections.size) ) return false;
-      tIntersections.clear();
+      if ( !this.constructor.testFaceOrientation(face, faces) ) return false;
     }
     return true;
+  }
+
+  /**
+   * Test if a point is inside an array of faces, by counting the number of intersections
+   * of a directional ray from that point.
+   * @param {Point3d} rayOrigin               The point to test
+   * @param {Point3d} rayDirection            The direction of the ray
+   * @param {Polygon3d[]} faces
+   * @returns {boolean} True if odd number of intersections
+   */
+  static testFaceOrientation(face, faces) {
+    const tIntersections = new Set();
+    const rayOrigin = face.centroid;
+    using rayDirection = face.plane.normal.multiplyScalar(-1);
+    for ( const otherFace of faces ) {
+      if ( otherFace === face ) continue;
+
+      // Round so we can ignore multiple intersections at a single point, like with edge endpoints.
+      // Note that for prototype faces, t might be quite small.
+      const t = roundDecimals(otherFace.intersectionT(rayOrigin, rayDirection, { holesBlock: true }) || 0, 8);
+      if ( t <= 0 ) continue;
+      tIntersections.add(t);
+    }
+    return isOdd(tIntersections.size);
   }
 }
 
