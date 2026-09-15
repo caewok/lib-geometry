@@ -100,8 +100,31 @@ export class PlaceableGeometry {
     this.placeableDocument = placeableDocument;
   }
 
+  /**
+   * Initialize geometry shapes and sync initial spatial transforms and bounds.
+   */
   initialize() {
+    console.debug(`${this.constructor.name}|initialize ${this.placeableDocument.name} (${this.placeableId})`);
+    this.createShapes();
+    this.syncTransforms();
+    this.calculateAABB();
   }
+
+  /**
+   * Synchronize spatial transforms (position, rotation, scale, anchor) on existing shapes.
+   * Does not trigger nor depend on structural rebuild flags.
+   */
+  syncTransforms() {
+    this.activeUpdates.clear();
+    this._updateTransforms();
+    this.updateCount += 1;
+  }
+
+  /**
+   * Subclasses override this method to apply spatial transforms to existing shapes.
+   * Does not trigger structural rebuild logic.
+   */
+  _updateTransforms() { }
 
   destroy() {
     this.shapes.forEach(shape => shape.destroy());

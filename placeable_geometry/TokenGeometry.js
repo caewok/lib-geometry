@@ -89,7 +89,6 @@ export const GeometrySubclassMixin = superclass => class extends superclass {
   static _createSubclass(type, doc) {
     const out = new this.SUBCLASSES[type](doc);
     out.initialize();
-    out.forceUpdate();
     return out;
   }
 
@@ -122,6 +121,10 @@ export const GeometrySubclassMixin = superclass => class extends superclass {
   _update() {
     this.calculateAABB(); // Don't need to reiterate geometries again.
     this.updateCount += 1;
+  }
+
+  syncTransforms() {
+    this._iterateSubclasses("syncTransforms");
   }
 
   forceUpdate() {
@@ -379,11 +382,6 @@ export class TokenSubGeometry extends mix(PlaceableGeometry).with(TokenDocumentC
 
   get shape() { return this.shapes[0]; } // Tokens currently always only using a single shape.
 
-  initialize() {
-    this.createShapes();
-    super.initialize();
-  }
-
   // Creates the full shape, unconstrained.
   createShapes() {
     // TODO: Don't destroy unless the shape type has changed. Must account for changes in hex shapes.
@@ -419,17 +417,25 @@ export class TokenSubGeometry extends mix(PlaceableGeometry).with(TokenDocumentC
     // No changes required if level is updated.
     // No changes required if token rotates.
 
-    if ( this.activeUpdates.has("position") ) {
-      const ctr = this.constructor.tokenCenter(this.placeableDocument);
-      // console.debug(`${this.constructor.name}|Updating position for ${this.placeableDocument.name} to ${ctr}`);
-      this.shape.setPosition(ctr);
-    }
+    if ( this.activeUpdates.has("position") ) this._updateShapePosition();
 
-    if ( this.activeUpdates.has("scale") ) {
-      const dims = this.constructor.tokenDimensions(this.placeableDocument);
-      this.shape.setScale(dims);
-    }
+    if ( this.activeUpdates.has("scale") ) this._updateShapeScale();
     super._update();
+  }
+
+  _updateShapePosition() {
+    const ctr = this.constructor.tokenCenter(this.placeableDocument);
+    this.shape.setPosition(ctr);
+  }
+
+  _updateShapeScale() {
+    const dims = this.constructor.tokenDimensions(this.placeableDocument);
+    this.shape.setScale(dims);
+  }
+
+  _updateTransforms() {
+    this._updateShapePosition();
+    this._updateShapeScale();
   }
 
   shapeUpdated() {

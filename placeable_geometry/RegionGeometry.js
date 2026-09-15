@@ -154,12 +154,6 @@ export class RegionGeometry extends PlaceableGeometry {
    */
   _shapeIndex(shape) { return Number(shape.id.split("_").at(-1)); }
 
-  initialize() {
-    console.debug(`RegionGeometry|initialize ${this.placeableDocument.name} (${this.placeableId})`);
-    this.createShapes();
-    super.initialize();
-  }
-
 
   // ----- NOTE: Shape Creation ----- //
 
@@ -433,6 +427,10 @@ export class RegionGeometry extends PlaceableGeometry {
     super._update();
   }
 
+  _updateTransforms() {
+    this.shapes.forEach((_shape, i) => this._updateShapeDimensions(i));
+  }
+
   /** @type {Map<GeometricPrimitive, string>} */
   structuralSignatureMap = new WeakMap();
 
@@ -563,7 +561,7 @@ export class RegionGeometry extends PlaceableGeometry {
     // Recursively append hole signatures.
     if ( holes.length ) {
       const holeStrings = holes.map(hole => this._getStructuralSignature(hole)); // eslint-disable-line no-unused-vars
-      parts.push("holes:(${holeStrings.join('|')})");
+      parts.push(`holes:(${holeStrings.join('|')})`);
     }
     return parts.join("|");
   }

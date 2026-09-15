@@ -97,11 +97,6 @@ export class WallGeometry extends PlaceableGeometry {
     return this.wall.edge;
   }
 
-  initialize() {
-    this.createShapes();
-    super.initialize();
-  }
-
   createShapes() {
     // Reset the wall shapes.
     // Walls are made up of multiple vertical quads, spanning the defined wall segments.
@@ -112,6 +107,14 @@ export class WallGeometry extends PlaceableGeometry {
     shape.initialize();
     this.shapes[0] = shape;
     this._updateShapeDirection();
+  }
+
+  // ----- NOTE: Updating ----- //
+
+  _update() {
+    if ( this.activeUpdates.has("position") ) this._updateShapePosition();
+    if ( this.activeUpdates.has("direction") ) this._updateShapeDirection();
+    super._update();
   }
 
   _updateShapePosition() {
@@ -135,12 +138,9 @@ export class WallGeometry extends PlaceableGeometry {
     this.shapes[0].direction = this.constructor.cullFaceForWallDirection(this.placeableDocument.dir);
   }
 
-  // ----- NOTE: Updating ----- //
-
-  _update() {
-    if ( this.activeUpdates.has("position") ) this._updateShapePosition();
-    if ( this.activeUpdates.has("direction") ) this._updateShapeDirection();
-    super._update();
+  _updateTransforms() {
+    this._updateShapePosition();
+    this._updateShapeDirection();
   }
 
   // ----- NOTE: Levels ----- //

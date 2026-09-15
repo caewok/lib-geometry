@@ -79,8 +79,8 @@ Hooks.on("canvasReady", async () => {
   const bgMgr = CONFIG[GEOMETRY_LIB_ID].geometryManager.levels.background;
   const fgMgr = CONFIG[GEOMETRY_LIB_ID].geometryManager.levels.foreground;
   canvas.scene.levels.forEach(levelD => {
-    bgMgr.geomForDocument(levelD).forceUpdate();
-    fgMgr.geomForDocument(levelD).forceUpdate();
+    bgMgr.geomForDocument(levelD).syncTransforms();
+    fgMgr.geomForDocument(levelD).syncTransforms();
   });
 });
 

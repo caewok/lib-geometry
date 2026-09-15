@@ -193,7 +193,6 @@ export class TileSubGeometry extends mix(PlaceableGeometry).with(TileDocumentCal
 
   initialize() {
     this.constructor.cacheManager.cacheDocument(this.placeableDocument); // Async.
-    this.createShapes();
     super.initialize();
   }
 
@@ -213,21 +212,33 @@ export class TileSubGeometry extends mix(PlaceableGeometry).with(TileDocumentCal
 
     // No changes required if level is updated.
 
-    if ( this.activeUpdates.has("position") ) {
-      const ctr = this.constructor.tileCenter(this.placeableDocument);
-      this.shape.setPosition(ctr);
-    }
+    if ( this.activeUpdates.has("position") ) this._updateShapePosition();
 
-    if ( this.activeUpdates.has("rotation") ) {
-      const angles = this.constructor.tileRotation(this.placeableDocument);
-      this.shape.setRotation(angles);
-    }
+    if ( this.activeUpdates.has("rotation") ) this._updateShapeRotation();
 
-    if ( this.activeUpdates.has("scale") ) {
-      const dims = this.constructor.tileDimensions(this.placeableDocument);
-      this.shape.setScale(dims);
-    }
+    if ( this.activeUpdates.has("scale") ) this._updateShapeScale();
     super._update(opts);
+  }
+
+  _updateShapePosition() {
+    const ctr = this.constructor.tileCenter(this.placeableDocument);
+    this.shape.setPosition(ctr);
+  }
+
+  _updateShapeRotation() {
+    const angles = this.constructor.tileRotation(this.placeableDocument);
+    this.shape.setRotation(angles);
+  }
+
+  _updateShapeScale() {
+    const dims = this.constructor.tileDimensions(this.placeableDocument);
+    this.shape.setScale(dims);
+  }
+
+  _updateTransforms() {
+    this._updateShapePosition();
+    this._updateShapeRotation();
+    this._updateShapeScale();
   }
 
   // ----- NOTE: Faces ---- //
@@ -553,8 +564,6 @@ export class TileGeometry extends mix(Object).with(GeometrySubclassMixin, TileDo
     this._calculatedSubtype = this.constructor.estimateTileShape(this.placeableDocument);
     return super._update();
   }
-
-
 
   /**
    * Estimate which tile shape is required to best represent this tile.
