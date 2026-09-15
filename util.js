@@ -1462,13 +1462,17 @@ export function histogram(arr) {
 }
 
 // Define properties on the Number environment
-Object.defineProperties(Number.prototype, {
-  almostLessThan: { value: _almostLessThan },
-  almostGreaterThan: { value: _almostGreaterThan },
-  almostBetween: { value: _almostBetween },
-  strictlyLessThan: { value: _strictlyLessThan },
-  strictlyGreaterThan: { value: _strictlyGreaterThan },
-});
+if ( !Object.hasOwn(Number.prototype, "almostLessThan") ) {
+  Object.defineProperties(Number.prototype, {
+    almostLessThan: { value: _almostLessThan },
+    almostGreaterThan: { value: _almostGreaterThan },
+    almostBetween: { value: _almostBetween },
+    strictlyLessThan: { value: _strictlyLessThan },
+    strictlyGreaterThan: { value: _strictlyGreaterThan },
+  });
+}
+
+
 
 // For temporary backward compatibility
 
