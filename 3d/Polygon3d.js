@@ -2027,7 +2027,7 @@ export class Triangle3d extends Polygon3d {
    * @param {Number[]} points       Point3ds
    * @param {Number[]} [indices]    Indices to determine order in which triangles are created from vertices
    */
-  static fromPoint3d(points, indices) {
+  static fromPoints3dArray(points, indices) {
     const vertices = new Array(points.length * 3);
     for ( let i = 0, j = 0, iMax = points.length; i < iMax; i += 1 ) {
       const pt = points[i];
@@ -2064,7 +2064,9 @@ export class Triangle3d extends Polygon3d {
   /**
    * Triangulate and convert to vertices.
    * @param {object} [opts]
-   * @param {boolean} [opts.addNormal]        If true, add the normal to this polygon, facing CCW.
+   * @param {boolean} [opts.addNormals=false]         If true, add the normal to this polygon, facing CCW.
+   * @param {Float32Array} [opts.outArr]              Where to store the vertices
+   * @param {number} [opts.outIdx=0]                  What index to start setting each vertex
    * @returns {Float32Array[]}
    */
   toVertices({ addNormals = false, outArr, outIdx = 0 } = {}) {
@@ -2340,7 +2342,8 @@ export class Quad3d extends Polygon3d {
     const tVecPrime = rayOrigin.subtract(v2, tmpPoints[8]); // Vector to ray origin.
 
     const uPrime = tVecPrime.dot(pPrime) * invDetPrime; // Aka alphaPrime.
-    if ( uPrime.strictlyLessThan(0.0, EPSILON) | uPrime.strictlyGreaterThan(1.0, EPSILON) ) { Point3d.release(...tmpPoints);  return null; }
+    if ( uPrime.strictlyLessThan(0.0, EPSILON)
+      || uPrime.strictlyGreaterThan(1.0, EPSILON) ) { Point3d.release(...tmpPoints);  return null; }
 
     const qPrime = tVecPrime.cross(edge1Prime, tmpPoints[9]);
     const vPrime = rayDirection.dot(qPrime) * invDetPrime;
