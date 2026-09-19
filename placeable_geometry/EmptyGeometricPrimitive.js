@@ -57,4 +57,5 @@ export class EmptyGeometricPrimitive extends GeometricPrimitive {
     if ( this.faces.length ) return false;
     return true;
   }
+
 }

@@ -1196,7 +1196,7 @@ function pointsLattice({ spacing = 1, startAtEdge = false } = {}) {
 }
 
 /**
- * Compute a point guaranteed to lie inside a simple polygon (convex or convcave)
+ * Compute a point guaranteed to lie inside a simple polygon (convex or concave)
  * Unlike a vertex-average or area-weighted centroid, this cannot fall outside the ring.
  * @returns {PIXI.Point}
  */

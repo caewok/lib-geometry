@@ -135,10 +135,10 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
   // Prototype faces and faces are stored as a combined set of faces, modified by the world matrix.
   #prototypeFaces = [];
 
-  get prototypeFaces() { return this.#prototypeFaces; }
+  get prototypeFaces() { return this.shapes.flatMap(s => s.prototypeFaces); }
 
   updateFaces() {
-    this.shapes.forEach(shape => shape.updateFaces());
+    this.shapes.forEach(shape => shape.updateFaces(false)); // Do not trigger validation for subshapes.
     super.updateFaces(); // This will trigger _generateFaces and clear the dirty tag.
   }
 
@@ -150,7 +150,7 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
     // Release old face points before destroying them.
     faces.forEach(face => face.release());
     const protoFaces = this.prototypeFaces;
-    const numSides = faces.length = protoFaces.length;
+    faces.length = protoFaces.length;
 
     let i = 0;
     for ( const shape of this.shapes ) {
@@ -192,6 +192,21 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
 //     this.shapes.forEach(shape => shape.updateInternalPoints());
 //   }
 
-  validate() { return this.shapes.every(shape => shape.validate()); }
+
+
+  _testFacesOutward(faces) {
+    if ( !faces || faces.length < 3 ) return false;
+
+    // Calling this.shapes.every(shape => shape.validate() only works if each subshape is
+    // a self-contained 3d shape. But if two adjacent shapes drop their shared face, then
+    // the overall shape might be valid but neither subshape would be. Instead, treat as one large object.
+
+    for ( let i = 0, n = faces.length; i < n; i += 1 ) {
+      const face = faces[i];
+      if ( !this.constructor.testFaceOrientation(face, faces) ) return false;
+    }
+    return true;
+  }
+
 
 }

@@ -111,16 +111,19 @@ export class Plane {
 
   static normalFromPoints(a, b, c, outPoint) {
     outPoint ??= Point3d.tmp;
+    const tmpPoints = Point3d.createN(3);
 
     // In JavaScript (and math, really), ∞ - ∞ is NaN.
     // For our purposes, we can assume these would go to 0.
     // To catch this possibility, make a, b, c finite before subtracting.
-    const aTmp = a.makeFinite(tmpPt1);
-    const bTmp = b.makeFinite(tmpPt2);
-    const cTmp = c.makeFinite(tmpPt3);
+    const aTmp = a.makeFinite(tmpPoints[0]);
+    const bTmp = b.makeFinite(tmpPoints[1]);
+    const cTmp = c.makeFinite(tmpPoints[2]);
     const vAB = bTmp.subtract(aTmp, bTmp);
     const vAC = cTmp.subtract(aTmp, cTmp);
-    return vAC.cross(vAB, outPoint); // Ordered so the orientation matches.
+    const out = vAC.cross(vAB, outPoint); // Ordered so the orientation matches.
+    Point3d.release(...tmpPoints);
+    return out;
   }
 
   /**

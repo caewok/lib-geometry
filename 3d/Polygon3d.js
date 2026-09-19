@@ -588,10 +588,10 @@ export class Polygon3d {
   }
 
   /**
-   * Build a set of vertical Quad3ds representing sides of a polygon shape.
+   * Build a set of vertical Quad3ds (or occasional Triangle3ds) representing sides of a polygon shape.
    * Built facing outwards from the polygon, with polygon on top.
    * @param {number} bottomZ            Fixed elevation to use for the sides
-   * @returns {Quad3d[]}
+   * @returns {Quad3d|Triangle3d[]}
    */
   buildTopSides(bottomZ) {
     const numSides = this.points.length;
@@ -602,16 +602,31 @@ export class Polygon3d {
     let filterSides = false;
     for ( const edge of this.iterateEdges({ close: true }) ) {
       // Cannot form a quad without 4 distinct points (this is rare).
-      if ( edge.a.z.almostEqual(bottomZ) || edge.b.z.almostEqual(bottomZ) ) {
+      const aAtBottom = edge.a.z.almostEqual(bottomZ);
+      const bAtBottom = edge.b.z.almostEqual(bottomZ)
+      let side;
+      if ( aAtBottom && bAtBottom ) {
         filterSides = true;
         continue;
+      } else if ( aAtBottom ) { // edge.a and bottomA are equal.
+        const bottomB = b.set(edge.b.x, edge.b.y, bottomZ);
+        side = this.isHole
+          ? Triangle3d.from3Points(edge.a, edge.b, bottomB)
+            : Triangle3d.from3Points(edge.b, edge.a, bottomB);
+
+      } else if ( bAtBottom ) { // edge.b and bottomB are equal.
+        const bottomA = a.set(edge.a.x, edge.a.y, bottomZ);
+        side = this.isHole
+          ? Triangle3d.from3Points(edge.a, edge.b, bottomA)
+            : Triangle3d.from3Points(edge.b, edge.a, bottomA);
+      } else {
+        const bottomA = a.set(edge.a.x, edge.a.y, bottomZ);
+        const bottomB = b.set(edge.b.x, edge.b.y, bottomZ);
+        side = this.isHole
+          ? Quad3d.from4Points(edge.a, edge.b, bottomB, bottomA)
+            : Quad3d.from4Points(edge.b, edge.a, bottomA, bottomB);
       }
 
-      const bottomA = a.set(edge.a.x, edge.a.y, bottomZ);
-      const bottomB = b.set(edge.b.x, edge.b.y, bottomZ);
-      const side = this.isHole
-        ? Quad3d.from4Points(edge.a, edge.b, bottomB, bottomA)
-          : Quad3d.from4Points(edge.b, edge.a, bottomA, bottomB);
       side.isHole = this.isHole;
       sides[i++] = side;
     }
@@ -1250,7 +1265,7 @@ export class Ellipse3d extends Polygon3d {
   // Assumed density for transforms. If zero, will use PIXI.Circle.approximateVertexDensity based on the major radius.
   #density = 0;
 
-  get density() { return this.#density || PIXI.Circle.approximateVertexDensity(Math.max(this.radiusX, this.radiusY)); }
+  get density() { return this.#density || PIXI.Circle.approximateVertexDensity(Math.max(this.radiusX, this.radiusY, canvas.grid.size)); }
 
   set density(value) { this.#density = value; }
 
@@ -1632,9 +1647,15 @@ export class Ellipse3d extends Polygon3d {
   _isIntersectionWithinPolygon(ix) {
     // If the plane is not vertical, can do a simple projection onto the x/y plane as a 2d polygon.
     let ix2d;
-    if ( this.plane.normal.z ) ix2d = ix.to2d();
-    else ix2d = this._convert3dPointsTo2d([ix])[0];
-    const contained = this.toPlanarEllipse().contains(ix2d.x, ix2d.y);
+    let shape2d;
+    if ( this.plane.normal.z ) {
+      ix2d = ix.to2d();
+      shape2d = this.ellipse;
+    } else {
+      ix2d = this._convert3dPointsTo2d([ix])[0];
+      shape2d = this.toPlanarEllipse();
+    }
+    const contained = shape2d.contains(ix2d.x, ix2d.y);
     ix2d.release();
     return contained;
   }
@@ -1926,9 +1947,15 @@ export class Circle3d extends Ellipse3d {
   _isIntersectionWithinPolygon(ix) {
     // If the plane is not vertical, can do a simple projection onto the x/y plane as a 2d polygon.
     let ix2d;
-    if ( this.plane.normal.z ) ix2d = ix.to2d();
-    else ix2d = this._convert3dPointsTo2d([ix])[0];
-    const contained = this.toPlanarCircle().contains(ix2d.x, ix2d.y);
+    let shape2d;
+    if ( this.plane.normal.z ) {
+      ix2d = ix.to2d();
+      shape2d = this.circle;
+    } else {
+      ix2d = this._convert3dPointsTo2d([ix])[0];
+      shape2d = this.toPlanarCircle();
+    }
+    const contained = shape2d.contains(ix2d.x, ix2d.y);
     ix2d.release();
     return contained;
   }
@@ -2095,7 +2122,6 @@ export class Triangle3d extends Polygon3d {
 
   /**
    * Möller-Trumbore intersection algorithm for a triangle.
-   * ChatGPT assist
    * This function first calculates the edge vectors of the triangle and the determinant
    * of the triangle using the cross product and dot product. It then uses the Möller–Trumbore
    * intersection algorithm to calculate the intersection point using barycentric coordinates,
@@ -2110,6 +2136,7 @@ export class Triangle3d extends Polygon3d {
    */
   rayIntersectionMT(rayOrigin, rayDirection) {
     const [v0, v1, v2] = this.points;
+    const EPSILON = this.constructor.EPSILON;
 
     // Calculate the edge vectors of the triangle
     using edge1 = v1.subtract(v0);
@@ -2120,21 +2147,22 @@ export class Triangle3d extends Polygon3d {
 
     // If the determinant is near zero, ray lies in plane of triangle
     const det = edge1.dot(pvec);
-    if (det > -Number.EPSILON && det < Number.EPSILON) return null;  // Ray is parallel to triangle
+    if ( det.almostEqual(0, EPSILON) ) return null; // Ray is parallel to triangle
     const invDet = 1 / det;
 
     // Calculate the intersection point using barycentric coordinates
     using tvec = rayOrigin.subtract(v0);
     const u = invDet * tvec.dot(pvec);
-    if (u < 0 || u > 1) return null;  // Intersection point is outside of triangle
+    if ( u.strictlyLessThan(0, EPSILON) || u.strictlyGreaterThan(1, EPSILON) ) return null; // Intersection point is outside of triangle
+
 
     using qvec = tvec.cross(edge1, edge1);
     const v = invDet * rayDirection.dot(qvec);
-    if (v < 0 || u + v > 1) return null;  // Intersection point is outside of triangle
+    if ( v.strictlyLessThan(0, EPSILON) || (u + v).strictlyGreaterThan(1, EPSILON) ) return null; // Intersection point is outside of triangle
 
     // Calculate the distance to the intersection point
     const t = invDet * edge2.dot(qvec);
-    return t > Number.EPSILON ? t : null;
+    return t.strictlyGreaterThan(0, EPSILON) ? t : null;
   }
 
   /**
@@ -2253,13 +2281,13 @@ export class Quad3d extends Polygon3d {
    * @returns {t|null} Returns null if not within the quad
    */
   intersectionT(rayOrigin, rayDirection) {
-    return this.rayIntersectionLD(rayOrigin, rayDirection);
+    return this.rayIntersectionMT(rayOrigin, rayDirection);
   }
 
 
   /**
-   * Möller-Trumbore intersection algorithm for a quad.
-   * Test the two triangles of the quad.
+   * Test the two triangles of the quad. Inefficient compared to rayIntersection below but simple.
+   * Kept for debugging comparisons.
    * @param {Point3d} rayOrigin
    * @param {Point3d} rayDirection
    * @param {Point3d} v0
@@ -2267,21 +2295,26 @@ export class Quad3d extends Polygon3d {
    * @param {Point3d} v2
    * @param {Point3d} v3
    */
-//   static rayIntersectionQuad3d(rayOrigin, rayDirection, v0, v1, v2, v3) {
-//     // Triangles are 0 - 1 - 2 and 1-2-3
-//
-//     return Plane.rayIntersectionTriangle3d(rayOrigin, rayDirection, v0, v1, v2)
-//       ?? Plane.rayIntersectionTriangle3d(rayOrigin, rayDirection, v1, v2, v3);
-//   }
+  _rayIntersectionDual(rayOrigin, rayDirection) {
+    const [v0, v1, v2, v3] = this.points;
+
+    // First triangle.
+    using tri0 = Triangle3d.from3Points(v0, v1, v2);
+    const t0 = tri0.rayIntersectionMT(rayOrigin, rayDirection);
+    if ( t0 ) return t0;
+
+    // Second triangle.
+    using tri1 = Triangle3d.from3Points(v1, v2, v3);
+    return tri1.rayIntersectionMT(rayOrigin, rayDirection);
+  }
 
   /**
-   * Lagae-Dutré intersection algorithm for a quad
-   * https://graphics.cs.kuleuven.be/publications/LD04ERQIT/LD04ERQIT_paper.pdf
+   * Intersection test, splitting the quad into two Müller-Trumbore triangles.
    * @param {Point3d} rayOrigin
    * @param {Point3d} rayDirection
    * @returns {number|null}  Null if no intersection. If negative, the intersection is behind the ray origin.
    */
-  rayIntersectionLD(rayOrigin, rayDirection) {
+  rayIntersectionMT(rayOrigin, rayDirection) {
     const [v0, v1, v2, v3] = this.points;
     const tmpPoints = Point3d.createN(10);
     // rayDirection = rayDirection.normalize();
@@ -2357,6 +2390,129 @@ export class Quad3d extends Polygon3d {
     if ( tPrime.strictlyGreaterThan(0.0, EPSILON) ) { Point3d.release(...tmpPoints); return tPrime; }
     Point3d.release(...tmpPoints);
     return null;
+  }
+
+  /**
+   * True Lagae–Dutré ray / bilinear-quad intersection.
+   * A. Lagae & P. Dutré, "An Efficient Ray-Quadrilateral Intersection Test", JGT 2005.
+   * https://graphics.cs.kuleuven.be/publications/LD04ERQIT/LD04ERQIT_paper.pdf
+   *
+   * Unlike splitting the quad into two Möller–Trumbore triangles, this treats the
+   * quad's four corners as a single bilinear patch
+   *   Q(u,v) = (1-u)(1-v)Q00 + u(1-v)Q10 + uv Q11 + (1-u)v Q01
+   * and solves directly for (u, v, t). That makes it correct even when the four
+   * points are *not* coplanar, where a two-triangle split would introduce a crease
+   * along whichever diagonal you happened to pick.
+   *
+   * Vertex correspondence with this class's existing v0..v3 layout
+   *   v0 --- v1        Q00 --- Q10
+   *    |     |    ==>   |       |
+   *   v3 --- v2        Q01 --- Q11
+   * i.e. Q00 = v0, Q10 = v1, Q11 = v2, Q01 = v3 (perimeter order).
+   *
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @returns {number|null} Distance from ray origin to the intersection point, or null if none.
+   */
+  _rayIntersectionLD(rayOrigin, rayDirection) {
+    // If using for a quad whose points do not change, alpha11 and beta11 could be cached.
+
+    const [Q00, Q10, Q11, Q01] = this.points;
+    const EPSILON = this.constructor.EPSILON;
+
+    using E01 = Q10.subtract(Q00);
+    using E03 = Q01.subtract(Q00);
+
+    // ----- First test: reject rays that miss the wedge at corner Q00 ----- //
+    using P = rayDirection.cross(E03);
+    const det = E01.dot(P);
+    if ( det.almostEqual(0, EPSILON) ) return null; // Ray parallel to the patch here.
+    const invDet = 1 / det;
+
+    using T = rayOrigin.subtract(Q00);
+    const alpha = T.dot(P) * invDet;
+    if ( alpha.strictlyLessThan(0, EPSILON) ) return null;
+
+    using Q = T.cross(E01);
+    const beta = rayDirection.dot(Q) * invDet;
+    if ( beta.strictlyLessThan(0, EPSILON) ) return null;
+
+    // ----- Second test: only needed when the first test alone is ambiguous. -----
+    // (alpha + beta > 1 can still be a valid hit on a non-parallelogram patch; this
+    // mirrors the same wedge test from the opposite corner, Q11, to confirm it.)
+    if ( (alpha + beta).strictlyGreaterThan(1, EPSILON) ) {
+      using E23 = Q01.subtract(Q11);
+      using E21 = Q10.subtract(Q11);
+      using Pp = rayDirection.cross(E21);
+      const detP = E23.dot(Pp);
+      if ( detP.almostEqual(0, EPSILON) ) return null;
+      const invDetP = 1 / detP;
+
+      using Tp = rayOrigin.subtract(Q11);
+      const alphaP = Tp.dot(Pp) * invDetP;
+      if ( alphaP.strictlyLessThan(0, EPSILON) ) return null;
+
+      using Qp = Tp.cross(E23);
+      const betaP = rayDirection.dot(Qp) * invDetP;
+      if ( betaP.strictlyLessThan(0, EPSILON) ) return null;
+    }
+
+    // ----- Distance along the ray. ----- //
+    const t = E03.dot(Q) * invDet;
+    if ( t.strictlyLessThan(0, EPSILON) ) return null;
+
+    // ----- Bilinear (u, v) of the hit point. ----- //
+    // alpha11/beta11 describe how far Q11 deviates from lying at bilinear (1,1) —
+    // i.e. how non-parallelogram the patch is. These depend only on the quad's
+    // shape, not on the ray, so a caller doing many ray tests against the same
+    // quad could hoist/cache this block (much like `plane` is cached elsewhere
+    // in this file) instead of recomputing it on every call.
+    using E02 = Q11.subtract(Q00);
+    using n = E01.cross(E03);
+    const { x: nx, y: ny, z: nz } = n;
+    const absNx = Math.abs(nx);
+    const absNy = Math.abs(ny);
+    const absNz = Math.abs(nz);
+
+    let alpha11;
+    let beta11;
+    if ( absNx >= absNy && absNx >= absNz ) {
+      alpha11 = ((E02.y * E03.z) - (E02.z * E03.y)) / nx;
+      beta11  = ((E01.y * E02.z) - (E01.z * E02.y)) / nx;
+    } else if ( absNy >= absNx && absNy >= absNz ) {
+      alpha11 = ((E02.z * E03.x) - (E02.x * E03.z)) / ny;
+      beta11  = ((E01.z * E02.x) - (E01.x * E02.z)) / ny;
+    } else {
+      alpha11 = ((E02.x * E03.y) - (E02.y * E03.x)) / nz;
+      beta11  = ((E01.x * E02.y) - (E01.y * E02.x)) / nz;
+    }
+
+    let u;
+    let v;
+    if ( (alpha11 - 1).almostEqual(0, EPSILON) ) {
+      // Patch is a trapezoid along the E01 direction.
+      u = alpha;
+      v = (beta11 - 1).almostEqual(0, EPSILON) ? beta : beta / ((u * (beta11 - 1)) + 1);
+    } else if ( (beta11 - 1).almostEqual(0, EPSILON) ) {
+      // Patch is a trapezoid along the E03 direction.
+      v = beta;
+      u = alpha / ((v * (alpha11 - 1)) + 1);
+    } else {
+      // General (non-planar-friendly) case: solve a quadratic for u.
+      const A = -(beta11 - 1);
+      const B = (alpha * (beta11 - 1)) - (beta * (alpha11 - 1)) - 1;
+      const C = alpha;
+      const discriminant = Math.max((B * B) - (4 * A * C), 0); // Clamp against fp noise.
+      const sqrtDisc = Math.sqrt(discriminant);
+      const root = -0.5 * (B + ((B < 0 ? -1 : 1) * sqrtDisc));
+      u = root / A;
+      if ( u < 0 || u > 1 ) u = C / root;
+      v = beta / ((u * (beta11 - 1)) + 1);
+    }
+
+    // u, v are available here for texture/barycentric lookups if ever needed —
+    // return { t, u, v } instead of `t` alone if a caller wants them.
+    return t;
   }
 
   /**
@@ -2476,6 +2632,66 @@ export class Polygons3d extends Polygon3d {
     out ??= new this(1);
     out.polygons.length = 1;
     out.polygons[0] = Polygon3d[method](...args);
+    return out;
+  }
+
+  /**
+   * Compute a point guaranteed to lie inside a simple polygon (convex or concave).
+   * Unlike vertex-average or area-weighted centroid, this cannot fall outside the ring.
+   * @returns {Point3d}
+   */
+  interiorPoint() {
+    if ( this.polygons.every(poly => poly.isHole) ) throw Error("Polygons3d#interiorPoint|All polygons are holes!");
+
+    // Use the same conversion matrix for all the polygons, based on the shared plane.
+    const from2dM = this.plane.conversion2dMatrixInverse;
+    const poly2ds = this.toPlanarPolygon();
+
+    const n = this.polygons.length;
+    const isInside = pt => {
+      if ( poly2ds.length === 1 ) return poly2ds[0].contains(pt.x, pt.y) ^ !poly2ds[0].isPositive;
+
+      let count = 0;
+      for ( let i = 0; i < n; i += 1 ) {
+        const poly2d = poly2ds[i]
+        count += poly2d.contains(pt.x, pt.y) * (poly2d.isPositive ? 1 : -1);
+      }
+      return count > 0;
+    }
+
+    // Start with interior points of each solid polygon.
+    using tmp3d = Point3d.tmp;
+    for ( const poly2d of poly2ds ) {
+      if ( !poly2d.isPositive ) continue;
+      const testPt = poly2d.interiorPoint();
+      if ( isInside(testPt) ) return from2dM.multiplyPoint3d(tmp3d.set(testPt.x, testPt.y, 0));
+    }
+
+    // Triangulate the multi-polygon shape into non-overlapping interior
+    const triSet = this.triangulate();
+    if ( !triSet.polygons.length ) throw Error("Polygons3d#interiorPoint|Triangulation produced no valid geometry.");
+
+    // Find the triangle with the largest area to ensure a stable interior point away from narrow edges.
+    let maxAreaSq = -1;
+    let bestTri = triSet.polygons[0];
+    using edge1 = Point3d.tmp;
+    using edge2 = Point3d.tmp;
+    using cross = Point3d.tmp;
+    for ( const tri of triSet.polygons ) {
+      tri.b.subtract(tri.a, edge1);
+      tri.c.subtract(tri.a, edge2);
+      edge1.cross(edge2, cross);
+
+      const areaSq = cross.magnitudeSquared();
+      if ( areaSq > maxAreaSq ) {
+        maxAreaSq = areaSq;
+        bestTri = tri;
+      }
+    }
+
+    // Return the centroid of the largest triangle (guaranteed to be inside the polygon and away from holes).
+    const out = bestTri.centroid;
+    triSet.forEach(tri => tri.release());
     return out;
   }
 
@@ -2715,15 +2931,15 @@ export class Polygons3d extends Polygon3d {
     const triIndices = PIXI.utils.earcut(vertsFlat, holeIndices, 2);
 
     // Build the triangles.
-    const n = triIndices.length;
+    const n = Math.floor(triIndices.length / 3);
     const out = new this.constructor(n);
-    for ( let i = 0; i < n; i += 1 ) {
+    for ( let i = 0, j = 0; j < n; ) {
       const tri = Triangle3d.from3Points(
-        allPts3d[triIndices[i]],
-        allPts3d[triIndices[i+1]],
-        allPts3d[triIndices[i+2]],
+        allPts3d[triIndices[i++]],
+        allPts3d[triIndices[i++]],
+        allPts3d[triIndices[i++]],
       );
-      out.polygons[i] = tri;
+      out.polygons[j++] = tri;
     }
     return out;
   }
@@ -2848,9 +3064,9 @@ export class Polygons3d extends Polygon3d {
       if ( !polyIx ) continue;
       ix ??= polyIx;
       if ( opts.holesBlock ) return ix;
-      holeCount += poly.isHole ? 1 : -1;
+      holeCount += poly.isHole ? -1 : 1;
     }
-    return holeCount < 0 ? ix : null;
+    return holeCount > 0 ? ix : null;
   }
 
 
@@ -2861,7 +3077,7 @@ export class Polygons3d extends Polygon3d {
    * @param {boolean} [holesBlock = false]        If false, polygon holes return null
    * @returns {boolean}
    */
-  _isIntersectionWithinPolygon(ix, holesBlock = true) {
+  _isIntersectionWithinPolygon(ix, holesBlock = false) {
     // Polygons with holes may have intersections on the solid polygon + the hole.
     // Need more solid than hole to count.
     let holeCount = 0;
@@ -2870,9 +3086,9 @@ export class Polygons3d extends Polygon3d {
       const hasIx = poly._isIntersectionWithinPolygon(ix);
       if ( !hasIx ) continue;
       if ( holesBlock ) return true;
-      holeCount += poly.isHole ? 1 : -1;
+      holeCount += poly.isHole ? -1 : 1;
     }
-    return holeCount < 0;
+    return holeCount > 0;
   }
 
   /**
