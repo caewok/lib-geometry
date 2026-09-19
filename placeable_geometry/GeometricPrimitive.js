@@ -401,6 +401,30 @@ export class GeometricPrimitive {
     return true;
   }
 
+  /**
+   * Test if a point is inside an array of faces, by counting the number of intersections
+   * of a directional ray from that point.
+   * @param {Point3d} rayOrigin               The point to test
+   * @param {Point3d} rayDirection            The direction of the ray
+   * @param {Polygon3d[]} faces
+   * @returns {boolean} True if odd number of intersections
+   */
+  static testFaceOrientation(face, faces) {
+    const tIntersections = new Set();
+    const rayOrigin = face.interiorPoint();
+    using rayDirection = face.plane.normal.multiplyScalar(-1);
+    for ( const otherFace of faces ) {
+      if ( otherFace === face ) continue;
+
+      // Round so we can ignore multiple intersections at a single point, like with edge endpoints.
+      // Note that for prototype faces, t might be quite small.
+      const t = roundDecimals(otherFace.intersectionT(rayOrigin, rayDirection, { holesBlock: false }) || 0, 8);
+      if ( t <= 0 ) continue;
+      tIntersections.add(t);
+    }
+    return isOdd(tIntersections.size);
+  }
+
   // ----- NOTE: Vertices ----- //
   /** @type {boolean} */
   static HAS_UVs = false;
