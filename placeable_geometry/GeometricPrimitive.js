@@ -15,6 +15,8 @@ import { ModelMatrixAnchor } from "../ModelMatrix.js";
 import { MatrixFloat32 } from "../Matrix.js";
 import { Segment } from "../Segment.js";
 import { CutawayPolygon } from "../CutawayPolygon.js";
+import { Draw } from "../Draw.js";
+
 
 /** @type {Matrix<4,4>} */
 const IDENTITY_MATRIX = MatrixFloat32.identity(4, 4);
@@ -347,6 +349,21 @@ export class GeometricPrimitive {
     invTransposeM ??= M.invert().transpose();
     for ( const face of this.faces ) {
       face.transform(M, undefined, invTransposeM).draw2d(opts);
+    }
+  }
+
+  /**
+   * Draw normals for the faces, extending out from the centroid of each.
+   */
+  drawNormals({ multiplier = 10, draw, ...opts } = {}) {
+    draw ??= new Draw();
+    using b = Point3d.tmp;
+    for ( const face of this.faces ) {
+      const a = face.centroid;
+      a.add(face.plane.normal.multiplyScalar(multiplier, b), b);
+
+      // Just dropping z axis.
+      draw.segment({ a, b }, opts);
     }
   }
 
