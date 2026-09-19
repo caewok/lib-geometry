@@ -263,6 +263,8 @@ export class PlaceableGeometry {
     this.shapes.forEach(shape => shape.drawTransformed(M, opts, invTransposeM));
   }
 
+  drawNormals(opts) { this.shapes.forEach(shape => shape.drawNormals(opts)); }
+
   // ----- NOTE: Face points ----- //
 
   /**

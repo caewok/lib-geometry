@@ -404,7 +404,7 @@ export class RegionGeometry extends PlaceableGeometry {
    * @returns {ExtrudedPolygonPrimitive|ExtrudedPolygonPrimitiveWithHoles|EmptyGeometricPrimitive}
    */
   #instantiateShapeFromSolidsAndHoles(id, baseSolids, baseHoles, opts) {
-     // Handle intersecting holes.
+    // Handle intersecting holes.
     const { solids, holes } = this.#subtractHoles(baseSolids, baseHoles);
 
     // Could end up with only solids, only holes, or both solids and holes.
