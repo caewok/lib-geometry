@@ -8,7 +8,7 @@ PIXI,
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { VertexObject } from "../placeable_vertices/VertexObject.js";
 import { AABB3d } from "../3d/AABB3d.js";
-import { cutaway } from "../util.js";
+import { cutaway, roundDecimals, isOdd } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
 import { combineTypedArrays } from "../util.js";
 import { ModelMatrixAnchor } from "../ModelMatrix.js";
@@ -287,12 +287,14 @@ export class GeometricPrimitive {
   /**
    * Trigger update of the faces.
    */
-  updateFaces() {
+  updateFaces(validate) {
+    validate ??= CONFIG[GEOMETRY_LIB_ID].CONFIG.debug;
+
     this._generateFaces(this.#faces);
     this._clearDirty(this.constructor.DIRTY.FACES);
 
     // Must come after clearing faces to avoid calling updateFaces again when this.faces is accessed.
-    if ( !this.validate() ) console.warn(`${this.constructor.name}|Shape fails validation!`, this);
+    if ( validate && !this.validate() ) console.warn(`${this.constructor.name}|Shape fails validation!`, this);
   }
 
   /**
