@@ -158,7 +158,7 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    */
   static fromPolygon(id, poly, opts = {}) {
     this._makeElevationFinite(opts);
-    const top = this._faceFromPolygon(poly, opts.topZ);
+    const top = Polygon3d.fromPIXIShape(poly, { z: opts.topZ });
     const faces = this._facesFromPolygon3d(top, opts.bottomZ, opts);
     const prototypeFaces = this.canvasToPrototypeFaces(faces, opts);
     return new this(id, prototypeFaces);
@@ -181,7 +181,7 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
 
     // Construct extruded 3d shape for each polygon in turn.
     for ( const poly of polys )  {
-      const top = this._faceFromPolygon(poly, opts.topZ);
+      const top = Polygon3d.fromPIXIShape(poly, { z: opts.topZ });
       const faces = this._facesFromPolygon3d(top, opts.bottomZ, opts);
       const prototypeFaces = this.canvasToPrototypeFaces(faces, opts);
       allProtoFaces.push(...prototypeFaces);
@@ -205,22 +205,6 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
     if ( !isFinite(opts.topZ) ) opts.topZ = 1e06;
     if ( !isFinite(opts.bottomZ) ) opts.bottomZ = -1e06;
     return opts;
-  }
-  /**
-   * Helper to create a 3d polygon for different polygon shapes.
-   * @param {PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse} poly       Polygon shape to use for top and bottom faces.
-   * @param {number} topZ             The top elevation
-   * @param {number} bottomZ          The bottom elevation
-   * @param {number} [opts.density]     Density when dealing with circles, ellipses
-   * @returns {Polygon3d} A Polygon3d representing this shape.
-   */
-  static _faceFromPolygon(poly, z) {
-    if ( poly instanceof PIXI.Circle ) return Circle3d.fromCircle(poly, z);
-    else if ( poly instanceof PIXI.Ellipse ) return Ellipse3d.fromPIXIEllipse(poly, z);
-    else if ( poly instanceof PIXI.Rectangle ) return Quad3d.fromRectangle(poly, z);
-    else if ( poly.points.length === 6 ) return Triangle3d.fromPolygon(poly, z);
-    else if ( poly.points.lenght === 8 ) return Quad3d.fromPolygon(poly, z);
-    else return Polygon3d.fromPolygon(poly, z);
   }
 
   /**
@@ -280,45 +264,13 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
     // While ExtrudedPolygonPrimitive should not have holes, its child class may.
     // Handle holes here to avoid duplicating the code. Performance hit can be avoided by turning off validation except for debugging.
 
-    // By default, the first face is the top, second is the bottom. See _facesFromPolygon3d.
-    // Top and bottom can still use the centroid.
-    const centroid = this.constructor.calculateCentroid(faces);
-    const iter = faces.values();
-    const top = iter.next().value;
-    if ( top.isFacing(centroid) ^ top.isHole ) return false;
-
-    const bottom = iter.next().value;
-    if ( bottom.isFacing(centroid) ^ bottom.isHole ) return false;
-
-    // Check each side face
-    for ( const face of iter ) {
+    // Could test top and bottom using the centroid, but not guaranteed to have top at 0 and bottom at 1.
+    // Simpler to test all faces using shoelace.
+    for ( let i = 0, n = faces.length; i < n; i += 1 ) {
+      const face = faces[i];
       if ( !this.constructor.testFaceOrientation(face, faces) ) return false;
     }
     return true;
-  }
-
-  /**
-   * Test if a point is inside an array of faces, by counting the number of intersections
-   * of a directional ray from that point.
-   * @param {Point3d} rayOrigin               The point to test
-   * @param {Point3d} rayDirection            The direction of the ray
-   * @param {Polygon3d[]} faces
-   * @returns {boolean} True if odd number of intersections
-   */
-  static testFaceOrientation(face, faces) {
-    const tIntersections = new Set();
-    const rayOrigin = face.centroid;
-    using rayDirection = face.plane.normal.multiplyScalar(-1);
-    for ( const otherFace of faces ) {
-      if ( otherFace === face ) continue;
-
-      // Round so we can ignore multiple intersections at a single point, like with edge endpoints.
-      // Note that for prototype faces, t might be quite small.
-      const t = roundDecimals(otherFace.intersectionT(rayOrigin, rayDirection, { holesBlock: true }) || 0, 8);
-      if ( t <= 0 ) continue;
-      tIntersections.add(t);
-    }
-    return isOdd(tIntersections.size);
   }
 }
 
@@ -351,22 +303,13 @@ export class ExtrudedPolygonPrimitiveWithHoles extends ExtrudedPolygonPrimitive 
   static fromPolygons(id, polys, holes = [], opts = {}) {
     if ( !holes.length ) return super.fromPolygons(id, polys, opts);
     this._makeElevationFinite(opts);
-
-    orientPolygons(polys, true);
-    orientPolygons(holes, false);
-
     const islands = this._buildIslands(polys, holes);
 
     const allProtoFaces = [];
     for ( const { solid, holes } of islands ) {
       const top = new Polygons3d();
-      top.polygons.push(this._faceFromPolygon(solid, opts.topZ));
-      top.polygons.push(...holes.map(hole => {
-        const hole3d = this._faceFromPolygon(hole, opts.topZ);
-        hole3d.isHole = true;
-        return hole3d;
-      }));
-
+      top.polygons.push(Polygon3d.fromPIXIShape(solid, { z: opts.topZ }));
+      top.polygons.push(...holes.map(hole => Polygon3d.fromPIXIShape(hole, { z: opts.topZ, isHole: true })));
       const faces = this._facesFromPolygon3d(top, opts.bottomZ, opts);
       allProtoFaces.push(...this.canvasToPrototypeFaces(faces, opts));
     }
@@ -432,7 +375,7 @@ export class ExtrudedPolygonPrimitiveWithHoles extends ExtrudedPolygonPrimitive 
         const pt = r.interiorPoint();
         if ( pt ) return pt;
       }
-      // Fallbac on centroid or manual bounding box center if interiorPoint fails.
+      // Fallback on centroid or manual bounding box center if interiorPoint fails.
       return r.center || PIXI.Point.tmp.set(r.x, r.y);
     });
 
@@ -452,12 +395,4 @@ export class ExtrudedPolygonPrimitiveWithHoles extends ExtrudedPolygonPrimitive 
       return parent;
     });
   }
-}
-
-function orientPolygons(polys, isSolid = true) {
-  polys.forEach(poly => {
-    if ( !(poly instanceof PIXI.Polygon) ) return;
-    if ( poly.isPositive ^ isSolid ) poly.reverseOrientation();
-  });
-  return polys;
 }
