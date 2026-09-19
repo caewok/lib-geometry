@@ -81,7 +81,6 @@ export class CanvasGeometryManager {
     // Create the correct geometry type for this document.
     const geom = new this.constructor.geometryClass(doc);
     geom.initialize();
-    geom.forceUpdate();
     this.geometryMap.set(doc.uuid, geom);
 
     // Add to the respective quadtree.
