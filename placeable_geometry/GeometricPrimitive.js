@@ -357,7 +357,7 @@ export class GeometricPrimitive {
   /**
    * Draw normals for the faces, extending out from the centroid of each.
    */
-  drawNormals({ multiplier = 10, draw, ...opts } = {}) {
+  drawNormals({ multiplier = 10, draw, omitAxis = "z", ...opts } = {}) {
     draw ??= new Draw();
     using b = Point3d.tmp;
     for ( const face of this.faces ) {
@@ -365,7 +365,11 @@ export class GeometricPrimitive {
       a.add(face.plane.normal.multiplyScalar(multiplier, b), b);
 
       // Just dropping z axis.
-      draw.segment({ a, b }, opts);
+      switch ( omitAxis ) {
+        case "z": draw.segment({ a, b }, opts); break;
+        case "x": draw.segment({ a: a.to2d({ x: "y", y: "z"}), b: b.to2d({ x: "y", y: "z"}) }, opts); break;
+        case "y": draw.segment({ a: a.to2d({ x: "x", y: "z"}), b: b.to2d({ x: "x", y: "z"}) }, opts); break;
+      }
     }
   }
 
@@ -412,12 +416,41 @@ export class GeometricPrimitive {
    * @returns {boolean} True if odd number of intersections
    */
   static testFaceOrientation(face, faces) {
-    const tIntersections = new Set();
     const rayOrigin = face.interiorPoint();
-    using rayDirection = face.plane.normal.multiplyScalar(-1);
-    for ( const otherFace of faces ) {
-      if ( otherFace === face ) continue;
+    const otherFaces = faces.filter(f => f !== face);
 
+    /*
+    Start with the face's own -normal (guarantees the ray starts by heading into
+    the solid). But -normal is, by construction, parallel to every OTHER face
+    whose plane shares that same normal direction -- e.g. testing any vertical
+    riser/side face on a Steps shape produces a horizontal ray that is parallel to
+    *every* tread's plane, and since a riser sits directly at a tread's own
+    elevation, that ray will frequently be exactly coplanar with a tread, not just
+    parallel-and-offset. A ray embedded in another face's plane doesn't cleanly
+    cross it, so intersectionT's "no single-point solution" case (returned as
+    null, then coerced to `t = 0` and skipped below) silently drops what should be
+    a real, countable interaction -- corrupting the parity count.
+    Detect that degeneracy and nudge the ray direction until no other face's
+    plane is (nearly) parallel to it.
+    */
+    using baseDirection = face.plane.normal.multiplyScalar(-1);
+    using rayDirection = baseDirection.clone();
+
+    let attempts = 0;
+    const MAX_ATTEMPTS = 10;
+    for (; attempts < MAX_ATTEMPTS; attempts += 1 ) {
+      if ( !rayIsDegenerate(rayDirection, otherFaces) ) break;
+      using newDirection = perturbDirection(baseDirection);
+      rayDirection.copyFrom(newDirection);
+    }
+
+    if ( attempts >= MAX_ATTEMPTS ) {
+      console.warn(`GeometricPrimitive.testFaceOrientation|No non-degenerate ray direction found after ${MAX_ATTEMPTS} attempts; `
+        + "proceeding with a possibly-degenerate ray.", { face, faces });
+    }
+
+    const tIntersections = new Set();
+    for ( const otherFace of otherFaces ) {
       // Round so we can ignore multiple intersections at a single point, like with edge endpoints.
       // Note that for prototype faces, t might be quite small.
       const t = roundDecimals(otherFace.intersectionT(rayOrigin, rayDirection, { holesBlock: false }) || 0, 8);
@@ -875,4 +908,36 @@ function getUniquePoints(points) {
     if ( !isDuplicate ) unique.push(p);
   }
   return unique;
+}
+
+
+/**
+ * True if `direction` is (nearly) parallel to any of the given faces' planes --
+ * i.e. the ray would run coplanar with, rather than cross, that face.
+ * @param {Point3d} direction
+ * @param {Polygon3d[]} otherFaces
+ * @param {number} [epsilon=1e-6]
+ * @returns {boolean}
+ */
+function rayIsDegenerate(direction, otherFaces, epsilon = 1e-08) {
+  return otherFaces.some(f => direction.dot(f.plane.normal).almostEqual(0, epsilon));
+}
+
+/**
+ * Return a new direction close to `direction` but nudged by a small random amount,
+ * to break an exact parallel/coplanar alignment with some other face's plane.
+ * Kept intentionally small so the ray still reliably starts by heading into the
+ * solid, the way the un-nudged -normal does.
+ * @param {Point3d} direction
+ * @param {number} [scale=1e-3]
+ * @returns {Point3d} A new, normalized Point3d.
+ */
+function perturbDirection(direction, scale = 1e-03) {
+  using jitter = Point3d.tmp.set(
+    (Math.random() - 0.5) * scale,
+    (Math.random() - 0.5) * scale,
+    (Math.random() - 0.5) * scale,
+  );
+  const perturbed = direction.add(jitter);
+  return perturbed.normalize(perturbed);
 }
