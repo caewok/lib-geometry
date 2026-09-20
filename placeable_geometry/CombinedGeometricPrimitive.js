@@ -89,14 +89,6 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
 
   // ----- NOTE: AABB ----- //
 
-  /**
-   * Trigger update of shape AABB
-   */
-  updateAABB() {
-    this.shapes.forEach(shape => shape.updateAABB());
-    super.updateAABB();
-  }
-
   _calculateAABB(aabb) {
     const M = this.modelMatrix.model;
     const aabbs = this.shapes.map(shape => {
