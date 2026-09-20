@@ -310,7 +310,7 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
   static key(pt) {
     const key2d = PIXI.Point.key(pt);
     const z = Math.round(pt.z || 0);
-    return ((BigInt(key2d) << 32n) ^ BigInt(Math.abs(z))) * (z < 0 ? -1 : 1);
+    return ((BigInt(key2d) << 32n) ^ BigInt(Math.abs(z))) * (z < 0 ? BigInt(-1) : BigInt(1))
   }
 
   /**
