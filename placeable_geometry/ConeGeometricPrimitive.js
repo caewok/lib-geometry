@@ -79,6 +79,16 @@ export class ConePrimitive extends CombinedGeometricPrimitive {
     const poly = new PIXI.Polygon(baseSegment.a, ...arcPoints, baseSegment.b);
     const arcShape = ExtrudedPolygonPrimitive.fromPolygon(`${regionShape.curvature}_${id}`, poly, opts);
     out.addShape(arcShape);
+
+    // Drop the shared wall between the triangle and the arc.
+    // First quad of the triangle shape is the base side.
+    triShape.prototypeFaces.splice(2, 1); // Top and bottom polygon are indices 0 and 1, respectively.
+    arcShape.dirty = this.DIRTY.ALL;
+
+    // Last side of the arc shape is the base side.
+    arcShape.prototypeFaces.pop();
+    triShape.dirty = this.DIRTY.ALL;
+
     return out;
   }
 
