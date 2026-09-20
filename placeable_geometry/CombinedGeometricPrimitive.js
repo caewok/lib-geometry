@@ -126,7 +126,8 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
   get prototypeFaces() { return this.shapes.flatMap(s => s.prototypeFaces); }
 
   updateFaces() {
-    this.shapes.forEach(shape => shape.updateFaces(false)); // Do not trigger validation for subshapes.
+    // Don't need the subshape faces, so can skip.
+    // this.shapes.forEach(shape => shape.updateFaces(false)); // Do not trigger validation for subshapes.
     super.updateFaces(); // This will trigger _generateFaces and clear the dirty tag.
   }
 
