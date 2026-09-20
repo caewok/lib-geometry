@@ -1177,14 +1177,15 @@ export function doSegmentsOverlap(a, b, c, d) {
 }
 
 export function pointsAreCollinear(a, b, c, epsilon = 1e-06) {
-  if ( Object.hasOwn(a, "z") ) return foundry.utils.orient2dFast(a, b, c).almostEqual(epsilon);
+  if ( !Object.hasOwn(a, "z") ) return foundry.utils.orient2dFast(a, b, c).almostEqual(0, epsilon);
 
   // Collinear 3d points form a degenerate triangle with zero area.
   // Test the cross products.
   using ab = b.subtract(a);
-  using bc = c.subtract(b);
-  using cross = ab.cross(bc);
-  return cross.almostEqual(0, epsilon);
+  using ac = c.subtract(a);
+  using cross = ab.cross(ac);
+  using zero = Point3d.tmp.set(0, 0, 0);
+  return cross.almostEqual(zero, epsilon);
 }
 
 /**
@@ -1225,6 +1226,49 @@ export function findOverlappingPoints(a, b, c, d) {
   || (p0.x < p1.x && p0.y < p1.y)) return [p0, p1];
 
   return [];
+}
+
+/**
+ * Remove repeated and collinear points from an array of 2d or 3d points.
+ * @param {PIXI.Point[]|Point3d[]} points
+ * @returns {PIXI.Point[]|Point3d[]}
+ */
+export function cleanPolygonPoints(points, epsilon = 1e-06) {
+  if ( points.length < 2 ) return points;
+
+  points = points.values();
+  const result = [points.next().value];
+  for ( const curr of points ) {
+    if ( result.at(-1).almostEqual(curr, epsilon) ) continue;
+    while ( result.length >= 2
+      && pointsAreCollinear(result.at(-2), result.at(-1), curr, epsilon) ) result.pop();
+    result.push(curr);
+  }
+
+  // Clean up where end meets beginning.
+  // Loop b/c removing a point at a seam may expose a new collinearity.
+  while ( result.length >= 3 ) {
+    // Is the last point a duplicate of the first?
+    if ( result[0].almostEqual(result.at(-1), epsilon) ) {
+      result.pop();
+      continue;
+    }
+
+    // Is the last point redundant? (2nd-to-last -> last -> first)
+    if ( pointsAreCollinear(result.at(-2), result.at(-1), result[0], epsilon) ) {
+      result.pop();
+      continue;
+    }
+
+    // Is the first point redundant? (Last -> first -> second)
+    if ( pointsAreCollinear(result.at(-1), result.at(0), result[1], epsilon) ) {
+      result.shift(); // Remove the first point.
+      continue;
+    }
+    break;
+  }
+
+  return result;
 }
 
 /** @type {enum} */
@@ -1356,13 +1400,18 @@ export function segmentOverlap(a, b, c, d) {
   return res;
 }
 
-export function almostLessThan(a, b, epsilon = 1e-06) { return a < b || a.almostEqual(b, epsilon); }
+function _almostLessThan(b, epsilon = 1e-06) { return this < (b + epsilon); }
 
-export function almostGreaterThan(a, b, epsilon = 1e-06) { return a > b || a.almostEqual(b, epsilon); }
+function _almostGreaterThan(b, epsilon = 1e-06) { return this > (b - epsilon); }
 
-export function almostBetween(value, min, max, epsilon = 1e-06) {
-  return almostLessThan(value, max, epsilon) && almostGreaterThan(value, min, epsilon);
+function _almostBetween(min, max, epsilon = 1e-06) {
+  return this.almostLessThan(max, epsilon) && this.almostGreaterThan(min, epsilon);
 }
+
+function _strictlyLessThan(b, epsilon = 1e-06) { return this < (b - epsilon); }
+
+function _strictlyGreaterThan(b, epsilon = 1e-06) { return this > (b + epsilon); }
+
 
 export const cutaway = {
   to2d: to2dCutaway,
@@ -1411,3 +1460,24 @@ export function histogram(arr) {
   for ( const n of arr ) m.set(n, m.get(n) + 1);
   return m;
 }
+
+// Define properties on the Number environment
+if ( !Object.hasOwn(Number.prototype, "almostLessThan") ) {
+  Object.defineProperties(Number.prototype, {
+    almostLessThan: { value: _almostLessThan },
+    almostGreaterThan: { value: _almostGreaterThan },
+    almostBetween: { value: _almostBetween },
+    strictlyLessThan: { value: _strictlyLessThan },
+    strictlyGreaterThan: { value: _strictlyGreaterThan },
+  });
+}
+
+
+
+// For temporary backward compatibility
+
+export function almostLessThan(a, b, epsilon) { return a.almostLessThan(b, epsilon); }
+
+export function almostGreaterThan(a, b, epsilon) { return a.almostGreaterThan(b, epsilon); }
+
+export function almostBetween(a, b, epsilon) { return a.almostBetween(b, epsilon); }

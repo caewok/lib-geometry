@@ -17,6 +17,11 @@ const Poolable = mix(PIXI.Point).with(PoolableMixin);
 function onRelease(obj) {
   obj.x = 0;
   obj.y = 0;
+
+  if( !obj.constructor._geoLibType && Object.hasOwn(obj, "z") ) {
+    console.warn("PIXI.Point pool object has z property.");
+    delete obj.z;
+  }
 }
 
 /**
@@ -574,6 +579,7 @@ PATCHES.PIXI.GETTERS = {
 PATCHES.PIXI.STATIC_GETTERS = {
   pool: function() { return Pool.getPool(this); },
   tmp: function() { return this.pool.acquire(); },
+  createN: function(n) { return this.pool.acquireMultiple(n); }
 }
 
 PATCHES.PIXI.STATIC_METHODS = {

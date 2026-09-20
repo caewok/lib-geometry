@@ -10,6 +10,10 @@ import { pointsAreCollinear } from "../util.js";
 const originPt3d = new Point3d();
 Object.freeze(originPt3d);
 
+const tmpPt1 = new Point3d();
+const tmpPt2 = new Point3d();
+const tmpPt3 = new Point3d();
+
 // Class to represent a plane
 export class Plane {
 
@@ -17,7 +21,7 @@ export class Plane {
     return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
   }
 
-  static get _geoLibType() { return this.name; }
+  static _geoLibType = "Plane";
 
   /** @type {Point3d} */
   #normal = new Point3d(0, 0, 1);
@@ -30,7 +34,7 @@ export class Plane {
   }
 
   /**
-   * Plane constant (d or w): -(N • pt).
+   * Plane constant (d or w): -(N • pt).
    * ax + by + cz + d = 0, where Normal = {a, b, c} and {x, y, z} is a point on the plane.
    * @type {number}
    */
@@ -107,16 +111,19 @@ export class Plane {
 
   static normalFromPoints(a, b, c, outPoint) {
     outPoint ??= Point3d.tmp;
+    const tmpPoints = Point3d.createN(3);
 
     // In JavaScript (and math, really), ∞ - ∞ is NaN.
     // For our purposes, we can assume these would go to 0.
     // To catch this possibility, make a, b, c finite before subtracting.
-    using aTmp = a.makeFinite();
-    using bTmp = b.makeFinite();
-    using cTmp = c.makeFinite();
-    using vAB = bTmp.subtract(aTmp);
-    using vAC = cTmp.subtract(aTmp);
-    return vAC.cross(vAB, outPoint); // Ordered so the orientation matches.
+    const aTmp = a.makeFinite(tmpPoints[0]);
+    const bTmp = b.makeFinite(tmpPoints[1]);
+    const cTmp = c.makeFinite(tmpPoints[2]);
+    const vAB = bTmp.subtract(aTmp, bTmp);
+    const vAC = cTmp.subtract(aTmp, cTmp);
+    const out = vAC.cross(vAB, outPoint); // Ordered so the orientation matches.
+    Point3d.release(...tmpPoints);
+    return out;
   }
 
   /**
@@ -203,8 +210,8 @@ export class Plane {
   }
 
   static angleBetweenSegments(a, b, c, d) {
-    using V1 = b.subtract(a);
-    using V2 = d.subtract(c);
+    const V1 = b.subtract(a, tmpPt1);
+    const V2 = d.subtract(c, tmpPt2);
     const magV1 = V1.magnitude();
     const magV2 = V2.magnitude();
     const mag = magV1 * magV2;
@@ -302,7 +309,7 @@ export class Plane {
    */
   distanceToPoint(a) {
     const { normal, point } = this;
-    using delta = a.subtract(point);
+    const delta = a.subtract(point, tmpPt1);
     return normal.dot(delta);
   }
 
@@ -347,16 +354,16 @@ export class Plane {
    * Point nearly on the plane will return very small values.
    */
   whichSide(p) {
-    using V = p.subtract(this.point);
+    const V = p.subtract(this.point, tmpPt1);
     return this.normal.dot(V);
   }
 
   isPointOnPlane(p) {
     // https://math.stackexchange.com/questions/684141/check-if-a-point-is-on-a-plane-minimize-the-use-of-multiplications-and-divisio
     const vs = this.axisVectors;
-    using a = this.point;
-    using b = this.point.add(vs.v);
-    using c = this.point.add(vs.u);
+    const a = this.point;
+    const b = this.point.add(vs.v, tmpPt1);
+    const c = this.point.add(vs.u, tmpPt2);
     using m = Matrix.fromRowMajorArray([
       a.x, b.x, c.x, p.x,
       a.y, b.y, c.y, p.y,
@@ -375,7 +382,7 @@ export class Plane {
     // https://math.stackexchange.com/questions/64430/find-extra-arbitrary-two-points-for-a-plane-given-the-normal-and-a-point-that-l
     // Find the minimum index
     const n = this.normal;
-    using w = Point3d.tmp;
+    const w = tmpPt1;
     n.x === 0 ? w.set(1, 0, 0)
       : n.y === 0 ? w.set(0, 1, 0)
         : n.z === 0 ? w.set(0, 0, 1)
@@ -383,8 +390,8 @@ export class Plane {
             : n.y < n.z ? w.set(0, 1, 0)
               : w.set(0, 0, 1);
 
-    const u = Point3d.tmp;
-    const v = Point3d.tmp;
+    const u = tmpPt2;
+    const v = tmpPt3;
     w.cross(n, u).normalize(u);
     n.cross(u, v).normalize(v);
     return { v: u, u: v }; // Swap so the x-axis is first.
@@ -429,9 +436,9 @@ export class Plane {
     const { normal: N, point: P } = this;
     const vs = this.axisVectors;
 
-    using u = P.add(vs.u);
-    using v = P.subtract(vs.v);
-    using n = P.add(N);
+    const u = P.add(vs.u, tmpPt1);
+    const v = P.subtract(vs.v, tmpPt2);
+    const n = P.add(N, tmpPt3);
 
     // Adjust for row-major matrix and left-hand coordinate system
     using S = Matrix.fromRowMajorArray([
@@ -499,9 +506,9 @@ export class Plane {
     // Test if line and plane are parallel and do not intersect.
     if ( dot.almostEqual(0) ) return null;
 
-    using w = l0.subtract(P);
+    const w = l0.subtract(P, tmpPt1);
     const fac = -N.dot(w) / dot;
-    using u = l.multiplyScalar(fac);
+    const u = l.multiplyScalar(fac, tmpPt2);
     const out = l0.add(u);
     out.t0 = fac;
     return out;
@@ -516,7 +523,7 @@ export class Plane {
   lineSegmentIntersection(p0, p1) {
     if ( !this.lineSegmentIntersects(p0, p1) ) return null;
 
-    using delta = p1.subtract(p0);
+    const delta = p1.subtract(p0, tmpPt1);
     return this.lineIntersection(p0, delta);
 
     /* Or
@@ -543,17 +550,27 @@ export class Plane {
   /**
    * Is this plane parallel to another?
    * @param {Plane} other   Other plane to intersect
+   * @param {number} [epsilon = 1e-06]
    * @returns {boolean} True if parallel
    */
-  isParallelToPlane(other) {
-    const N1 = this.normal;
-    const N2 = other.normal;
-
-    // Cross product of the two normals is the direction of the line.
-    const direction = N1.cross(N2);
-
+  isParallelToPlane(other, epsilon = 1e-06) {
     // Parallel planes have a cross product with zero magnitude
-    return Boolean(!direction.magnitudeSquared())
+    using direction = this.normal.cross(other.normal);
+    return direction.magnitudeSquared().almostEqual(0, epsilon ** 2);
+  }
+
+  /**
+   * Is this plane coincident with another?
+   * Works regardless of whether normals face the same or opposite direction.
+   * @param {Plane} other
+   * @param {number} [epsilon = 1e-06]
+   * @returns {boolean}
+   */
+  isCoincidentWithPlane(other, { testParallel = true, epsilon = 1e-06 } = {}) {
+    if ( testParallel && !isParallelToPlane(other, epsilon) ) return false;
+
+    // Coincident if one point lies on another.
+    return this.whichSide(other.point).almostEqual(0, epsilon);
   }
 
   /**
@@ -579,7 +596,7 @@ export class Plane {
     using projectedN2 = this.projectPointOnPlane(other.normal);
 
     // The direction vector of the line in plane1.
-    using lineDirection = projectedN2.subtract(projectedOrigin);
+    const lineDirection = projectedN2.subtract(projectedOrigin, tmpPt1);
 
     // Now we find the intersection of this line with the second plane (plane2).
     // A line is defined by L(t) = startPoint + t * direction
@@ -600,7 +617,7 @@ export class Plane {
       return null; // Planes are parallel and distinct.
     }
     */
-    using delta = projectedOrigin.subtract(other.point);
+    const delta = projectedOrigin.subtract(other.point, tmpPt2);
     const numerator = other.normal.dot(delta);
     const t = -numerator / denominator;
     const ix = Point3d.tmp;
@@ -610,6 +627,8 @@ export class Plane {
 
   /**
    * Projects a point onto the plane.
+   * Orthogonal projection, casting a perpendicular line from the point to the plane.
+   * Casts orthogonal to the plane normal.
    * @param {Point3d} pt           Point to project
    * @returns {Point3d} The projected point
    */
@@ -617,14 +636,34 @@ export class Plane {
     outPoint ??= Point3d.tmp;
 
     // Calculate vector from point on plane to the 3d point.
-    using v = pt.subtract(this.point);
+    const v = pt.subtract(this.point, tmpPt1);
 
     // Calculate scalar projection (distance) of w onto normal using dot product.
     const dist = v.dot(this.normal);
 
     // Subtract the distance times the normal vector from the original point.
-    using vScaled = this.normal.multiplyScalar(dist);
+    const vScaled = this.normal.multiplyScalar(dist, tmpPt2);
     return pt.subtract(vScaled, outPoint);
+  }
+
+  /**
+   * Find the z point on a plane from x and y coordinates.
+   * Projects points vertically straight down along the z-axis
+   * @param {number} x
+   * @param {number} y
+   * @param {number} [epsilon=1e-08] Tolerance for determining if the plane is vertical
+   * @returns {number|undefined} Z coordinate, or undefined if the plane is vertical.
+   */
+  getZ(x, y, epsilon = 1e-08) {
+    // A plane is vertical if its normal has no z component.
+    const N = this.normal;
+    if ( N.z.almostEqual(0, epsilon) ) {
+      console.warn("Cannot calculate Z for a vertical plane; Z is undefined.");
+      return undefined;
+    }
+
+    // Solves the plane equation (Ax + By + Cz + D = 0) for z.
+    return -((N.x * x)+ (N.y * y) + this.constant) / N.z;
   }
 }
 

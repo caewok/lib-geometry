@@ -18,8 +18,12 @@ Object.freeze(axes.x);
 Object.freeze(axes.y);
 Object.freeze(axes.z);
 
+// Temporary points. Need 8 to accommodate the transform method.
+const tmpPoints = Point3d.createN(8);
 
 export class AABB3d extends AABB2d {
+
+  static _geoLibType = "AABB3d";
 
   static POINT_CLASS = Point3d;
 
@@ -46,6 +50,8 @@ export class AABB3d extends AABB2d {
     if ( Number.isNumeric(values) ) values = [values];
     return Math.minMax(...values);
   }
+
+  // ----- NOTE: Static factory methods ----- //
 
   /**
    * Convert a 2d AABB to a 3d AABB, by adding min and max z.
@@ -150,21 +156,30 @@ export class AABB3d extends AABB2d {
    * @returns {AABB3d}
    */
   static fromTile(tile, out) {
-    out = super.fromTile(tile, out);
+    out ??= new this();
+    super.fromTile(tile, out);
     const elevZ = tile.elevationZ;
     out.max.z = elevZ;
     out.min.z = elevZ;
     return out;
   }
 
-  static fromTileDocument(tileD, alphaThreshold, out) {
-    out = super.fromTileDocument(tileD, alphaThreshold, out);
+  static fromTileDocument(tileD, out) {
+    out ??= new this();
+    super.fromTileDocument(tileD, out);
     const elevZ = gridUnitsToPixels(tileD.elevation);
     out.max.z = elevZ;
     out.min.z = elevZ;
     return out;
   }
 
+  static fromLevel(level, opts) {
+    opts.out ??= new this();
+    const out = super.fromLevel(level, opts);
+    out.min.z = gridUnitsToPixels(level.elevation.bottom);
+    out.max.z = gridUnitsToPixels(level.elevation.top);
+    return out;
+  }
 
   /**
    * @param {Edge} edge
@@ -190,7 +205,8 @@ export class AABB3d extends AABB2d {
    * @returns {AABB3d}
    */
   static fromEdge(edge, out) {
-    out = super.fromEdge(edge, out);
+    out ??= new this();
+    super.fromEdge(edge, out);
     const { a, b } = edge.elevationLibGeometry;
     out.min.z = Math.min(a.bottom ?? Number.NEGATIVE_INFINITY, b.bottom ?? Number.NEGATIVE_INFINITY);
     out.max.z = Math.max(a.top ?? Number.POSITIVE_INFINITY, b.top ?? Number.POSITIVE_INFINITY);
@@ -202,7 +218,8 @@ export class AABB3d extends AABB2d {
    * @returns {AABB3d}
    */
   static fromToken(token, out) {
-    out = super.fromToken(token, out);
+    out ??= new this();
+    super.fromToken(token, out);
     const { topZ, bottomZ } = token.document;
     out.min.z = bottomZ;
     out.max.z = topZ;
@@ -214,7 +231,8 @@ export class AABB3d extends AABB2d {
    * @returns {AABB3d}
    */
   static fromTokenDocument(tokenD, out) {
-    out = super.fromTokenDocument(tokenD, out);
+    out ??= new this();
+    super.fromTokenDocument(tokenD, out);
     out.min.z = tokenD.bottomZ;
     out.max.z = tokenD.topZ;
     return out;
@@ -282,12 +300,14 @@ export class AABB3d extends AABB2d {
     const ax = angle(N, axes.x);
     const ay = angle(N, axes.y);
     const az = angle(N, axes.z);
-    using R = Point3d.tmp.set(Math.sin(ax), Math.sin(ay), Math.sin(az)) * circle3d.radius;
+    const R = tmpPoints[0].set(Math.sin(ax), Math.sin(ay), Math.sin(az)) * circle3d.radius;
     const { x, y, z } = this.center;
     out.min.set(x - R.x, y - R.y, z - R.z);
     out.max.set(x + R.x, y + R.y, z + R.z);
     return out;
   }
+
+  // ----- NOTE: Overlap tests ----- //
 
   /**
    * Generic overlaps test.
@@ -357,8 +377,7 @@ export class AABB3d extends AABB2d {
     // Test 3: Edge cross products.
     // Test axis = Cross(PolygonEdge, BoxAxis) for all combinations.
     // BoxAxes are X(1,0,0), Y(0,1,0), Z(0,0,1).
-    using axis = Point3d.tmp;
-    using edgeDir = Point3d.tmp;
+    const [axis, edgeDir] = tmpPoints;
     for ( const edge of poly3d.iterateEdges() ) {
       edge.b.subtract(edge.a, edgeDir);
 
@@ -412,20 +431,22 @@ export class AABB3d extends AABB2d {
     if ( this.containsPoint(center) ) return true;
 
     // Find the point on the AABB closest to the circle's center.
-    using closestPoint = Point3d.tmp.set(
+    const closestPoint = tmpPoints[0].set(
       Math.max(min.x, Math.min(center.x, max.x)),
       Math.max(min.y, Math.min(center.y, max.y)),
       Math.max(min.z, Math.min(center.z, max.z)),
     );
 
     // Project this closest point onto the circle's plane.
-    using planePoint = plane.projectPointOnPlane(closestPoint);
-    using centerPoint = plane.projectPointOnPlane(center);
+    const planePoint = plane.projectPointOnPlane(closestPoint, tmpPoints[1]);
+    const centerPoint = plane.projectPointOnPlane(center, tmpPoints[2]);
 
     // Check if the projected point is inside the circle.
     const dist2 = PIXI.Point.distanceSquaredBetween(planePoint, centerPoint);
-    return almostLessThan(dist2, radiusSquared);
+    return dist2.almostLessThan(radiusSquared);
   }
+
+  // ----- NOTE: Iteration ----- //
 
   /**
    * @param {Point3d} [outPoint]
@@ -443,7 +464,35 @@ export class AABB3d extends AABB2d {
     }
   }
 
-  // ----- NOTE: Projection and Separating Axis Theorem ----- //
+  // ----- NOTE: Projection and transform ----- //
+
+  /**
+   * Transform using a 4x4 matrix.
+   * @param {Matrix<4x4>} M
+   * @param {AABB3d} out
+   * @returns {AABB3d}
+   */
+  transform(M, out) {
+    const { min, max } = this;
+
+    // Generate all 8 points of the current AABB.
+    const corners = [
+      tmpPoints[0].set(min.x, min.y, min.z),
+      tmpPoints[1].set(min.x, min.y, max.z),
+      tmpPoints[2].set(min.x, max.y, min.z),
+      tmpPoints[3].set(min.x, max.y, max.z),
+      tmpPoints[4].set(max.x, min.y, min.z),
+      tmpPoints[5].set(max.x, min.y, max.z),
+      tmpPoints[6].set(max.x, max.y, min.z),
+      tmpPoints[7].set(max.x, max.y, max.z),
+    ];
+
+    // Transform each corner using the matrix.
+    corners.forEach(pt => M.multiplyPoint3d(pt, pt));
+
+    // Build the new axis-aligned bounds.
+    return this.constructor.fromPoints(corners, out);
+  }
 
 }
 

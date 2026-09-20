@@ -131,7 +131,7 @@ export class LocalCoordinateCache extends AABB2d {
   // ----- NOTE: Model Matrix ----- //
 
   /** @type {ModelMatrix2d} */
-  modelMatrix = new ModelMatrix2dAnchorInverse();
+  modelMatrix = ModelMatrix2dAnchorInverse.create();
 
   /**
    * Center the local rectangle before applying rotation and scale.
@@ -215,8 +215,10 @@ export class LocalCoordinateCache extends AABB2d {
       this.modelMatrix.model.multiplyPoint2d(pt, pt);
       pts[i++] = pt;
     }
-    const poly = new PIXI.Polygon(...pts);
-    return poly.getBounds();
+
+    // Can the box be represented with a rectangle? Points must be horizontal and vertical.
+    // Could also be rotated 90º
+    return pointsToPolygonOrRectangle(pts);
   }
 
   // ----- NOTE: Indexing ----- //
@@ -1261,15 +1263,7 @@ export class PixelCache extends LocalCoordinateCache {
 
     // Can the box be represented with a rectangle? Points must be horizontal and vertical.
     // Could also be rotated 90º
-    if ( (TL.x.almostEqual(BL.x) && TL.y.almostEqual(TR.y))
-      || (TL.x.almostEqual(TR.x) && TL.y.almostEqual(BL.y)) ) {
-      const xMinMax = Math.minMax(TL.x, TR.x, BL.x, BR.x);
-      const yMinMax = Math.minMax(TL.y, TR.y, BL.y, BR.y);
-      return new PIXI.Rectangle(xMinMax.min, yMinMax.min, xMinMax.max - xMinMax.min, yMinMax.max - yMinMax.min);
-    }
-
-    // Alternatively, represent as polygon, which allows for a tighter contains test.
-    return new PIXI.Polygon(TL, TR, BR, BL);
+    return pointsToPolygonOrRectangle([TL, TR, BR, BL]);
   }
 
 
@@ -1508,8 +1502,8 @@ console.table(pts)
     const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
 
     // Convert pixels to isobands.
-    const width = this.bufferWidth;
-    const height = this.bufferHeight;
+    const width = this.bufferWidth || this.width; // Need the actual pixel width and height, which depends on the class.
+    const height = this.bufferHeight || this.height;
     const rowViews = new Array(height);
     for ( let r = 0, start = 0, rMax = height; r < rMax; r += 1, start += width ) {
       // TODO: Use single Typed view instead of slicing?
@@ -1554,7 +1548,7 @@ console.table(pts)
     // Translate by the minimum alpha bounds.
     const aabb = this.getThresholdLocalAABB(alphaThreshold);
     if ( aabb.min.x || aabb.min.y ) {
-      const M = MatrixFloat32.translation(aabb.min.x, aabb.min.y);
+      using M = MatrixFloat32.translation(aabb.min, { d3: false });
       return paths.transform(M);
     } else return paths;
   }
@@ -3289,4 +3283,32 @@ function addPoint(poly, pt) {
   }
   poly.points.push(pt.x, pt.y);
   return poly;
+}
+
+/**
+ * Convert array of points to either a rectangle or a polygon.
+ * @param {PIXI.Point[]} pts
+ * @returns {PIXI.Polygon|PIXI.Rectangle} Returns rectangle if the points are axis-aligned.
+ */
+function pointsToPolygonOrRectangle(pts) {
+  if ( pts.length !== 4 ) return new PIXI.Polygon(pts);
+
+  // Round to ensure equality tests work as expected.
+  pts.map(pt => pt.roundDecimals(8));
+
+  // All points must be distinct. Don't use key because it rounds to nearest pixel.
+  const uniquePoints = new Set(pts.map(pt => `${pt}`));
+  if ( uniquePoints.size !== 4 ) return PIXI.Polygon(pts);
+
+  // Requires exactly two unique x and two unique y points.
+  const xCoords = new Set(pts.map(p => p.x));
+  const yCoords = new Set(pts.map(p => p.y));
+
+  // An axis-aligned rectangle has exactly 2 unique x and 2 unique y.
+  if ( !(xCoords.size === 2 && yCoords.size === 2) ) return PIXI.Polygon(pts);
+
+  // Build the rectangle.
+  const xMinMax = Math.minMax(...pts.map(pt => pt.x));
+  const yMinMax = Math.minMax(...pts.map(pt => pt.y));
+  return new PIXI.Rectangle(xMinMax.min, yMinMax.min, xMinMax.max - xMinMax.min, yMinMax.max - yMinMax.min);
 }

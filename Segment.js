@@ -12,7 +12,7 @@ export class Segment {
     return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
   }
 
-  static get _geoLibType() { return this.name; }
+  static _geoLibType = "Segment";
 
   /** @type {PIXI.Point|Point3d} */
   a = null;
@@ -20,7 +20,7 @@ export class Segment {
   /** @type {PIXI.Point|Point3d} */
   b = null;
 
-  constructor(a, b) {
+  constructor(a = null, b = null) {
     this.a = a;
     this.b = b;
   }

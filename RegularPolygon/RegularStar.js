@@ -19,6 +19,8 @@ import { NULL_SET } from "../util.js";
  */
 export class RegularStar extends RegularPolygon {
 
+  static _geoLibType = "RegularStar";
+
   /** @type {PIXI.Point[]} */
   _outerPoints;
 

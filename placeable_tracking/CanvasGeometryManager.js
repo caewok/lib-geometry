@@ -81,7 +81,6 @@ export class CanvasGeometryManager {
     // Create the correct geometry type for this document.
     const geom = new this.constructor.geometryClass(doc);
     geom.initialize();
-    geom.forceUpdate();
     this.geometryMap.set(doc.uuid, geom);
 
     // Add to the respective quadtree.
@@ -97,8 +96,8 @@ export class CanvasGeometryManager {
   update(doc, updateKeys, opts) {
     const geom = this.geometryMap.get(doc.uuid);
     if ( !geom ) return;
-    geom.update(updateKeys, opts);
-    this.quadtree.update({ t: geom, r: geom.aabb });
+    const updated = geom.update(updateKeys, opts);
+    if ( updated ) this.quadtree.update({ t: geom, r: geom.aabb });
   }
 
  /**
@@ -222,19 +221,10 @@ export class TokenGeometryManager extends CanvasGeometryManager {
       refreshShape
       */
       if ( token.isPreview ) return;
-      const needsUpdate = flags.refreshPosition || flags.refreshSize || flags.refreshElevation || flags.refreshShape;
-      if ( !needsUpdate ) return;
-      const geom = this.geometryMap.get(token.document.uuid);
-      if ( !geom ) return;
 
-      // Set the geometry update flags manually based on the refresh flags.
-      const updateFlags = geom._updateFlags;
-      Object.keys(updateFlags).forEach(key => updateFlags[key] = false);
-      updateFlags.properties = flags.refreshShape;
-      updateFlags.positionXY = flags.refreshPosition;
-      updateFlags.scale = flags.refreshSize;
-      updateFlags.elevation = flags.refreshElevation;
-      geom._update();
+      // Flags have boolean values, but always seem to be set to true.
+      if ( Object.values(flags).some(flag => !Boolean(flag)) ) console.warn("Some flags set to false.", { ...flags });
+      this.update(token.document, new Set(Object.keys(flags)));
     });
   }
 }

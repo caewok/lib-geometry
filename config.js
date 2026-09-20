@@ -142,10 +142,16 @@ const OBSTACLE_TEST_CONFIG = {
    * @returns {boolean} True if test token is ally of subject token, from perspective of subject token.
    */
   tokenIsAlly,
-}
+};
+
+const GENERAL_CONFIG = {
+
+  /** @type {boolean} */
+  debug: true,
+};
 
 export function mergeConfigs(maxVersion = VERSION) {
-  const thisConfig = { ...ELEVATION_CONFIG, ...TILECACHE_CONFIG, ...PLACEABLE_TRACKING_CONFIG, ...OBSTACLE_TEST_CONFIG };
+  const thisConfig = { ...GENERAL_CONFIG, ...ELEVATION_CONFIG, ...TILECACHE_CONFIG, ...PLACEABLE_TRACKING_CONFIG, ...OBSTACLE_TEST_CONFIG };
   if ( foundry.utils.isNewerVersion(VERSION, maxVersion) ) {
     // This config is newer.
     CONFIG[GEOMETRY_LIB_ID].CONFIG = { ...CONFIG[GEOMETRY_LIB_ID].CONFIG, ...thisConfig };
@@ -239,7 +245,7 @@ function tokenIsEnemy(subjectTokenD, testTokenD) {
 
   // All secret tokens presumed enemies.
   if ( sD === CONST.TOKEN_DISPOSITIONS.SECRET ) return true;
-  const tD = tokenD.disposition;
+  const tD = testTokenD.disposition;
   if ( tD === CONST.TOKEN_DISPOSITIONS.SECRET ) return true;
 
   // Hostiles are enemies to non-hostiles and vice-versa.

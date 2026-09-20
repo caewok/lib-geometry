@@ -48,6 +48,9 @@ PATCHES.Wall = { ELEVATION: {} };
 PATCHES.Region = { ELEVATION: {} };
 PATCHES.TokenDocument = { ELEVATION: {} };
 PATCHES.WallDocument = { ELEVATION: {} };
+PATCHES.TileDocument = { ELEVATION: {} };
+PATCHES.RegionDocument = { ELEVATION: {} };
+PATCHES.LevelDocument = { ELEVATION: {} };
 
 GEOMETRY_CONFIG.proneStatusId = "prone";
 GEOMETRY_CONFIG.proneMultiplier = 0.33;
@@ -199,6 +202,20 @@ PATCHES.TokenDocument.ELEVATION.GETTERS = {
 PATCHES.WallDocument.ELEVATION.GETTERS = {
   topZ: wallTopZ,
   bottomZ: wallBottomZ,
+};
+
+PATCHES.RegionDocument.ELEVATION.GETTERS = {
+  topZ: function() { return gridUnitsToPixels(this.elevation.top); },
+  bottomZ: function() { return gridUnitsToPixels(this.elevation.bottom); },
+};
+
+PATCHES.LevelDocument.ELEVATION.GETTERS = {
+  topZ: function() { return gridUnitsToPixels(this.elevation.top); },
+  bottomZ: function() { return gridUnitsToPixels(this.elevation.bottom); },
+};
+
+PATCHES.TileDocument.ELEVATION.GETTERS = {
+  elevationZ: function() { return gridUnitsToPixels(this.elevation); },
 };
 
 // ---- NOTE: PointSource ----- //

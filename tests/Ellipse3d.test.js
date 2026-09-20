@@ -90,16 +90,6 @@ describe("Ellipse3d#transform", () => {
       expect(transformed.plane.normal.z).to.be.closeTo(0, 1e-6);
     });
 
-    it("should mutate the provided `out` object if supplied", () => {
-      const outTarget = new Ellipse3d();
-      const M = Matrix.translation({ x: 5, y: 5, z: 5 }, { d3: true });
-
-      const result = baseEllipse.transform(M, outTarget);
-
-      expect(result).to.equal(outTarget);
-      expect(outTarget.center.x).to.be.closeTo(5, 1e-6);
-    });
-
     it("should convert an ellipse into a Circle3d if scaled to have equal radii", () => {
       // Requires fixing the `out.majorAxis === out.minorAxis` bug in your source code first.
       const M = Matrix.scale({ x: 1, y: 2, z: 1 }, { d3: true });

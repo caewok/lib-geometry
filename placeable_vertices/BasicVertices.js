@@ -12,7 +12,6 @@ import { GEOMETRY_LIB_ID } from "../const.js";
 import { combineTypedArrays } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
 import { Sphere } from "../3d/Sphere.js";
-import { MatrixFloat32 } from "../Matrix.js";
 import { ModelMatrix } from "../ModelMatrix.js";
 import { Triangle3d } from "../3d/Polygon3d.js";
 import { ClipperPaths } from "../ClipperPaths.js";
@@ -641,7 +640,7 @@ export class HorizontalQuadVertices extends BasicVertices {
   }
 
   static modelMatrixFromShape(rect, { elevationZ = 0, rotateZ = 0, modelMatrix } = {}) {
-    modelMatrix ??= new ModelMatrix();
+    modelMatrix ??= ModelMatrix.create();
 
     // Scale by absolute z-length (vertical height).
     // If the topZ and bottomZ are unbalanced, translate in the z direction to reset topZ to correct elevation.
@@ -720,7 +719,7 @@ export class VerticalQuadVertices extends BasicVertices {
 
   static modelMatrixFromShape(segment, { topZ = T, bottomZ = B, rotateZ = 0, modelMatrix } = {}) {
     const { a, b } = segment;
-    modelMatrix ??= new ModelMatrix();
+    modelMatrix ??= ModelMatrix.create();
 
     // Scale by absolute z-length (vertical height).
     // If the topZ and bottomZ are unbalanced, translate in the z direction to reset topZ to correct elevation.
@@ -861,7 +860,7 @@ export class Rectangle3dVertices extends BasicVertices {
   }
 
   static modelMatrixFromShape(rect, { topZ = T, bottomZ = B, rotateZ = 0, modelMatrix } = {}) {
-    modelMatrix ??= new ModelMatrix();
+    modelMatrix ??= ModelMatrix.create();
 
     const zHeight = topZ - bottomZ;
     const z = bottomZ + (zHeight * 0.5);
@@ -1339,7 +1338,7 @@ export class Ellipse3dVertices extends Polygon3dVertices {
   static _getUnitVertices(density = this.defaultDensity) { return this.calculateVertices(undefined, { density }); }
 
   static modelMatrixFromShape(ellipse, { topZ = T, bottomZ = B, rotateZ = 0, modelMatrix } = {}) {
-    modelMatrix ??= new ModelMatrix();
+    modelMatrix ??= ModelMatrix.create();
 
     const zHeight = topZ - bottomZ;
     const z = bottomZ + (zHeight * 0.5);
@@ -1379,7 +1378,7 @@ export class Circle3dVertices extends Ellipse3dVertices {
   static _getUnitVertices(density = this.defaultDensity) { return this.calculateVertices(undefined, { density }); }
 
   static modelMatrixFromShape(circle, { topZ = T, bottomZ = B, modelMatrix } = {}) {
-    modelMatrix ??= new ModelMatrix();
+    modelMatrix ??= ModelMatrix.create();
 
     const zHeight = topZ - bottomZ;
     const z = bottomZ + (zHeight * 0.5);
@@ -1474,7 +1473,7 @@ export class SphereVertices extends BasicVertices {
 
   static modelMatrixFromShape(circle, { elevationZ = 0, modelMatrix } = {}) {
     if ( circle instanceof Sphere ) return this._modelMatrixFromSphere(circle, { modelMatrix });
-    modelMatrix ??= new ModelMatrix();
+    modelMatrix ??= ModelMatrix.create();
 
     // Build transform matrix.
     modelMatrix.scale = { x: circle.radiuas, y: circle.radius, z: circle.radius };
@@ -1483,7 +1482,7 @@ export class SphereVertices extends BasicVertices {
   }
 
   static _modelMatrixFromSphere(sphere, { modelMatrix } = {}) {
-    modelMatrix ??= new ModelMatrix();
+    modelMatrix ??= ModelMatrix.create();
 
     // Build transform matrix.
     modelMatrix.scale = { x: sphere.radius, y: sphere.radius, z: sphere.radius };

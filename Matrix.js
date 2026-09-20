@@ -4,7 +4,7 @@ PIXI,
 "use strict";
 
 import { Point3d } from "./3d/Point3d.js";
-import { PoolableMixin } from "./Pool.js";
+import { PoolableMixin, BufferManager } from "./Pool.js";
 import { mix } from "./mixwith.js";
 
 // Basic matrix operations
@@ -28,7 +28,7 @@ class AbstractMatrix {
     return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
   }
 
-  static get _geoLibType() { return this.name; }
+  static _geoLibType = "AbstractMatrix";
 
   /** @type {Array} */
   arr = [];
@@ -42,14 +42,17 @@ class AbstractMatrix {
   constructor(nrow = 0, ncol = 0) {
     this.nrow = nrow;
     this.ncol = ncol;
-    this.arr.length = nrow * ncol;
   }
 
   /**
    * Create a new point. Meant to be overridden using pooling, but kept here for testing.
    * @returns {PointArrayAbstract}
    */
-  static create(nrow = 0, ncol = 0) { return new this(nrow, ncol); }
+  static create(nrow = 0, ncol = 0) {
+    const out = new this(nrow, ncol);
+    out.arr.length = out.size;
+    return out;
+  }
 
   // ----- NOTE: Getters and indexers ---- //
 
@@ -794,6 +797,8 @@ class AbstractMatrix {
     return { M, Minv };
   }
 
+  // ----- NOTE: Transformations ----- //
+
   /**
    * Rotation matrix for a given angle, rotating around X axis.
    * @param {number} angle          Radians
@@ -1242,9 +1247,17 @@ class AbstractMatrix {
     return outMatrix;
   }
 
-  multiplyPoint(point, outPoint) {
-    if ( Object.hasOwn(point, "z") ) return this.multiplyPoint2d(point, outPoint);
-    else return this.multiplyPoint3d(point, outPoint);
+  multiplyPoint(point, outPoint, pointW = 1) {
+    if ( this.nrow === 4 && this.ncol === 4 ) {
+      if ( !Object.hasOwn(point, "z") ) console.warn("Matrix#multiplyPoint|Attempting to multiply a 4x4 matrix with a 2d point.");
+      return this.multiplyPoint3d(point, outPoint, pointW);
+    }
+    if ( this.nrow === 3 && this.ncol === 3 ) {
+      if ( Object.hasOwn(point, "z") ) console.warn("Matrix#multiplyPoint|Attempting to multiply a 3x3 matrix with a 3d point.");
+      return this.multiplyPoint2d(point, outPoint, pointW);
+    }
+    console.warn("Matrix#multiplyPoint|Attempting to multiply a point with a non-3x3, non-4x4 matrix.");
+    return this.multiplyPoint3d(point, outPoint, pointW);
   }
 
   /**
@@ -1252,12 +1265,11 @@ class AbstractMatrix {
    * For speed, the input is not checked against the matrix for correct dimensionality.
    * Foundry bench puts this at ~ 68% of multiply.
    * @param {Point3d} point    The point to multiply
-   * @param {Point3d} outPoint Optional point in which to store the result.
+   * @param {boolean|number} [pointW=1]    Default is to treat as normal point (1); set to 0 to treat as vector
    * @returns {Point3d}
    */
-  multiplyPoint2d(point, outPoint = new PIXI.Point()) {
-    // For speed, assume _idx is (col * this.nrow) + row
-    // Array organized col0, row0, row1, row2, ... col1, row0, row1, ...
+  multiplyPoint2d(point, outPoint = new PIXI.Point(), pointW = 1) {
+    // Assumes row-major order.
     const a00 = this.arr[0]; // aRC
     const a01 = this.arr[1];
     const a02 = this.arr[2];
@@ -1272,14 +1284,16 @@ class AbstractMatrix {
 
     const b00 = point.x;
     const b01 = point.y;
-    const b02 = 1;
+    const b02 = pointW; // 1 if point, 0 if vector (w value).
 
     outPoint.x = a00 * b00 + a10 * b01 + a20 * b02;
     outPoint.y = a01 * b00 + a11 * b01 + a21 * b02;
     const w = a02 * b00 + a12 * b01 + a22 * b02;
 
-    outPoint.x /= w;
-    outPoint.y /= w;
+    if ( w && pointW ) { // Only perspective divide finite points, not vectors.
+      outPoint.x /= w;
+      outPoint.y /= w;
+    }
 
     return outPoint;
   }
@@ -1288,14 +1302,13 @@ class AbstractMatrix {
    * Multiply a Point3d by this matrix and output a different Point3d.
    * For speed, the input is not checked against the matrix for correct dimensionality.
    * Foundry bench puts this at ~ 68% of multiply.
-   * @param {Point3d} point    The point to multiply
-   * @param {Point3d} outPoint Optional point in which to store the result.
+   * @param {Point3d} point       The point to multiply
+   * @param {Point3d} [outPoint]  Optional point in which to store the result.
+   * @param {boolean|number} [pointW=1]    Default is to treat as normal point (1); set to 0 to treat as vector
    * @returns {Point3d}
    */
-  multiplyPoint3d(point, outPoint = Point3d.tmp) {
-
-    // For speed, assume _idx is (col * this.nrow) + row
-    // Array organized col0, row0, row1, row2, ... col1, row0, row1, ...
+  multiplyPoint3d(point, outPoint = Point3d.tmp, pointW = 1) {
+    // Assume row-major array order.
     const a00 = this.arr[0]; // aRC
     const a01 = this.arr[1];
     const a02 = this.arr[2];
@@ -1319,16 +1332,18 @@ class AbstractMatrix {
     const b00 = point.x;
     const b01 = point.y;
     const b02 = point.z;
-    const b03 = 1;
+    const b03 = pointW; // 1 if point, 0 if vector (w value).
 
     outPoint.x = a00 * b00 + a10 * b01 + a20 * b02 + a30 * b03;
     outPoint.y = a01 * b00 + a11 * b01 + a21 * b02 + a31 * b03;
     outPoint.z = a02 * b00 + a12 * b01 + a22 * b02 + a32 * b03;
     const w = a03 * b00 + a13 * b01 + a23 * b02 + a33 * b03;
 
-    outPoint.x /= w;
-    outPoint.y /= w;
-    outPoint.z /= w;
+    if ( w && pointW ) { // Only perspective divide finite points, not vectors.
+      outPoint.x /= w;
+      outPoint.y /= w;
+      outPoint.z /= w;
+    }
 
     return outPoint;
   }
@@ -1682,20 +1697,25 @@ AbstractMatrix.prototype.copyTo = AbstractMatrix.prototype.clone;
 // Pooling
 export class Matrix extends mix(AbstractMatrix).with(PoolableMixin) {
 
+  static _geoLibType = "Matrix";
+
   // Pooling
+
   /**
-   * Return a temporary matrix of a given size.
+   * Get an object from the pool.
    * @param {number} nrow
    * @param {number} ncol
    * @returns {Matrix}
    */
-  static tmpMatrix(nrow, ncol) {
-    const obj = this.tmp;
+  static create(nrow = 0, ncol = 0) {
+    const obj = super.create();
     obj.nrow = nrow;
     obj.ncol = ncol;
-    obj.arr.length = obj.size;
+    obj.arr.length = obj.nrow * obj.ncol;
     return obj;
   }
+
+  static tmpMatrix = this.create; // Backward-compatibility
 
   /**
    * Callback to release a Matrix object, zeroing out its values.
@@ -1706,119 +1726,14 @@ export class Matrix extends mix(AbstractMatrix).with(PoolableMixin) {
     obj.nrow = 0;
     obj.ncol = 0;
   }
-}
 
-
-/**
- * Manage a typed array buffer size.
- * Allocate space on a first-fit strategy. (Free List alogrithm.)
- * Tracks contiguous blocks of empty space and allocates accordingly.
- */
-class BufferManager {
-  /** @type {ArrayBuffer} */
-  buffer;
-
-  /** @type {object[]} */
-  freeSegments = [];
-
-  /** @type {TypedArray} */
-  typedClass;
-
-  /** @type {number} */
-  get bytesPerElement() { return this.typedClass.BYTES_PER_ELEMENT; }
-
-  constructor(totalSize = 0, { typedClass = Float32Array, maxSize = totalSize } = {}) {
-    this.typedClass = typedClass;
-    const byteSize = totalSize * this.bytesPerElement;
-    this.buffer = new ArrayBuffer(byteSize, { maxByteLength: maxSize * this.bytesPerElement });
-    this.freeSegments.push({ byteOffset: 0, byteSize });
-  }
-
-  /**
-   * Return a new array of the requested size.
-   * @param {number} size     Number of elements
-   * @returns {TypedArray<size>}
-   */
-  newArray(size) {
-    const byteOffset = this.allocate(size);
-    return new this.typedClass(this.buffer, byteOffset, size);
-  }
-
-  /**
-   * Reserve a block of space.
-   * If out of space, constructs a new buffer.
-   * @param {number} size       Number of elements to reserve
-   * @returns {number} The byte offset.
-   */
-  allocate(size) {
-    const byteSize = size * this.bytesPerElement;
-    for ( let i = 0, iMax = this.freeSegments.length; i < iMax; i += 1 ) {
-      const segment = this.freeSegments[i];
-      if ( segment.byteSize >= byteSize ) {
-        const byteOffset = segment.byteOffset;
-        if ( segment.byteSize === byteSize ) this.freeSegments.splice(i, 1); // Perfect fit: remove the segment entirely.
-        else {
-          // Partial fit: shrink the existing fre segment.
-          segment.byteOffset += byteSize;
-          segment.byteSize -= byteSize;
-        }
-        return byteOffset;
-      }
-    }
-
-    // Insufficient memory left in the buffer.
-    // Expand buffer if possible.
-    const totalBytesNeeded = this.buffer.byteLength + byteSize;
-    if ( this.buffer.maxByteLength > totalBytesNeeded ) {
-      // Grow the buffer and use the resized portion for this allocation.
-      const byteOffset = this.buffer.byteLength;
-      this.buffer.resize(totalBytesNeeded);
-      return byteOffset;
-    } else {
-      // Trash the buffer and start anew.
-      this.freeSegments.length = 1;
-      this.freeSegments[0] = { byteOffset: 0, byteSize: this.buffer.byteLength };
-      this.buffer = new ArrayBuffer(Math.max(this.buffer.byteLength, byteSize), { maxByteLength: Math.max(this.buffer.maxByteLength, byteSize) });
-      return this.allocate(size);
-    }
-  }
-
-  /**
-   * Release a block of space and merges it with adjacent free blocks.
-   * @param {TypedArray} arr        The array being freed.
-   */
-  release(arr) {
-    arr.fill(0); // Good practice to limit caching errors.
-    if ( arr.buffer !== this.buffer ) return;
-    const byteSize = arr.byteLength;
-    const byteOffset = arr.byteOffset;
-    const newSegment = { byteSize, byteOffset };
-
-    // Insert and maintain sorted order by offset to allow merging.
-    const idx = this.freeSegments.findIndex(s => s.byteOffset > byteOffset);
-    if ( ~idx ) this.freeSegments.splice(idx, 0, newSegment);
-    else this.freeSegments.push(newSegment);
-    this._mergeNeighbors();
-  }
-
-  /**
-   * Combines adjacent free blocks to limit fragmentation.
-   */
-  _mergeNeighbors() {
-    for ( let i = 0, iMax = this.freeSegments.length - 1; i < iMax; i += 1 ) {
-      const current = this.freeSegments[i];
-      const next = this.freeSegments[i+1];
-
-      // If current block ends exactly where the next starts, merge.
-      if ( current.byteOffset + current.byteSize === next.byteOffset ) {
-        current.byteSize += next.byteSize;
-        this.freeSegments.splice(i + 1, 1);
-        iMax--;
-        i--; // Check again with the newly merged block.
-      }
-    }
+  constructor(nrow, ncol) {
+     super(nrow, ncol);
+     this.arr.length = this.nrow * this.ncol;
   }
 }
+
+
 
 /** Testing
 mgr = new BufferManager(16, { maxSize: 32 })
@@ -1840,56 +1755,77 @@ arr6 = mgr.newArray(35)
 
 // Example typed class
 
-export class MatrixFloat32 extends Matrix {
-
-  /** @type {Float32Array} */
-  arr = null;
-
-  constructor(nrow, ncol, buffer, offset = 0) {
-    super(nrow, ncol);
-
-    buffer ??= new ArrayBuffer(this.size * Float32Array.BYTES_PER_ELEMENT);
-    const byteOffset = offset * Float32Array.BYTES_PER_ELEMENT;
-    this.arr = new Float32Array(buffer, byteOffset, this.size);
-  }
+export class MatrixFloat32 extends mix(AbstractMatrix).with(PoolableMixin) {
+  static _geoLibType = "MatrixFloat32";
 
   // ----- NOTE: Buffer manager ----- //
-  /** @type {number} */
-  static BUFFER_DEFAULT_MATRIX_SIZE = 16; // Common size for a single matrix.
 
-  /** @type {number} */
-  static BUFFER_NUM_MATRICES = 10; // How many matrices to allocate before switching buffers.
+  static BUFFER_NUM_MATRICES = 2 ** 4;
+
+  static BUFFER_MAX_NUM_MATRICES = 2 ** 7;
+
+  static BUFFER_DEFAULT_MATRIX_SIZE = 2 ** 4; // 4 x 4 default matrix.
 
   /**
    * Current buffer with usable space to define matrices.
    * @type {BufferManager}
    */
-  static bufferManager = new BufferManager(this.BUFFER_DEFAULT_MATRIX_SIZE, {
+  static bufferManager = new BufferManager(this.BUFFER_NUM_MATRICES * this.BUFFER_DEFAULT_MATRIX_SIZE, {
     typedClass: Float32Array,
-    maxSize: this.BUFFER_NUM_MATRICES * this.BUFFER_DEFAULT_MATRIX_SIZE
+    maxBufferSize: this.BUFFER_MAX_NUM_MATRICES,
   });
 
   /**
-   * Return a temporary matrix of a given size.
+   * Get an object from the pool.
    * Uses an array buffer to allocate the array, which may be reused.
    * @param {number} nrow
    * @param {number} ncol
    * @returns {Matrix}
    */
-  static tmpMatrix(nrow, ncol) {
-    const obj = this.tmp;
+  static create(nrow = 0, ncol = 0) {
+    const obj = super.create();
     obj.nrow = nrow;
     obj.ncol = ncol;
     obj.arr = this.bufferManager.newArray(obj.size);
     return obj;
   }
 
+  static tmpMatrix = this.create; // Backward-compatibility
+
   static onRelease(obj) {
     this.bufferManager.release(obj.arr);
     obj.nrow = 0;
     obj.ncol = 0;
-    obj.arr = null;
+    obj.arr = [];
   }
+
+  /**
+   * Like buildNObjects, but uses a distinct buffer shared only by those n object.
+   * Useful if the intent is to transfer the buffer to a worker or webGPU, for example.
+   * @param {number} n
+   * @returns {HPointAbstract[n]}
+   */
+  static allocateNObjects(n, { nrow = 0, ncol = 0 } = {}) {
+    const bm = this.bufferManager;
+    const nElems = nrow * ncol;
+    const ptBytes = bm.bytesPerElement * nElems;
+    const byteSize = ptBytes * n;
+    const buffer = new ArrayBuffer(byteSize);
+    const objs = Array(n);
+    let byteOffset = 0;
+    for ( let i = 0; i < n; i += 1 ) {
+      const obj = new this(nrow, ncol);
+      obj.arr = new bm.typedClass(buffer, byteOffset, nElems);
+      objs[i] = obj;
+      byteOffset += ptBytes;
+    }
+    return objs;
+  }
+
+  static allocate3x3(n) { return this.allocateNObjects(n, { nrow: 3, ncol: 3 }); }
+
+  static allocate4x4(n) { return this.allocateNObjects(n, { nrow: 4, ncol: 4 }); }
+
 }
 
 

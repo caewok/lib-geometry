@@ -10,7 +10,7 @@ import { Polygon3d, Circle3d, Ellipse3d, Triangle3d } from "./Polygon3d.js";
 import { Point3d } from "./Point3d.js";
 import { Matrix, MatrixFloat32 } from "../Matrix.js";
 import { almostBetween } from "../util.js";
-import * as Delaunay from "../d3-delaunay.js";
+import { Delaunay } from "../d3-delaunay.js";
 
 /* Sphere
 Represent a 3d sphere, with some functions to manipulate it.
@@ -206,7 +206,7 @@ export class Sphere {
    * @returns {Point3d[]}
    */
   lineSegmentIntersections(a, b, { inside = false } = {}) {
-    const out = [...this.rayIntersectionTo(a, b.subtract(a)).filter(t => almostBetween(t, 0, 1))];
+    const out = [...this.rayIntersectionTo(a, b.subtract(a)).filter(t => t.almostBetween(0, 1))];
     if ( inside ) {
       if ( this.contains(a) ) out.push(a);
       if ( this.contains(b) ) out.push(b);
@@ -638,7 +638,7 @@ export class Sphere {
    * @param {Point3d[]} pts
    * @returns {Triangle3d[]}
    */
-  static triangulateSphereSurface(pts3d) {
+  static triangulate(pts3d) {
     // Map the 3d surface points to 2d spherical coordinates (longitude, latitude)
     const pts2d = pts3d.map(pt => {
       const lon = Math.atan(pt.y, pt.x); // Range: -π to π
@@ -647,17 +647,19 @@ export class Sphere {
     });
 
     // Perform 2d Delaunay Triangulation on the spherical grid.
-    const delaunay = Delaunay.from(pts2d);
+    const delaunay = Delaunay.from(pts2d); // Note that pts2d is the required array/tuple: [x, y]
     const triangles = delaunay.triangles; // Array of indices pointing to our original array.
 
     // Construct the final triangles
-    const numTriangles = triangles.length / 3;
+    const n = triangles.length;
+    const numTriangles = n / 3;
     const tris = Array(numTriangles);
-    for ( let i = 0; i < numTriangles; ) {
+    let j = 0;
+    for ( let i = 0; i < n; ) {
       const a = pts3d[triangles[i++]];
       const b = pts3d[triangles[i++]];
       const c = pts3d[triangles[i++]];
-      tris.push(Triangle3d.from3Points(a, b, c));
+      tris[j++] = Triangle3d.from3Points(a, b, c);
     }
 
     return tris;

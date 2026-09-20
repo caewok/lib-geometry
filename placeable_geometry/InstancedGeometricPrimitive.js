@@ -6,15 +6,16 @@ PIXI,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { GeometricPrimitive, GeometricModelMatrix } from "./GeometricPrimitive.js";
+import { GeometricPrimitive } from "./GeometricPrimitive.js";
 import { MatrixFloat32 } from "../Matrix.js";
-import { FixedLengthTrackingBuffer } from "../placeable_tracking/TrackingBuffer.js";
-import { almostBetween } from "../util.js";
+import { cutaway } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
 import { getHexagonalShape } from "../placeable_vertices/BasicVertices.js";
-import { Polygon3d, Quad3d, Ellipse3d, Triangle3d } from "../3d/Polygon3d.js";
+import { Polygon3d, Quad3d, Ellipse3d, Circle3d, Triangle3d } from "../3d/Polygon3d.js";
 import { Sphere } from "../3d/Sphere.js";
 import { HorizontalQuadVertices } from "../placeable_vertices/BasicVertices.js";
+import { CutawayPolygon } from "../CutawayPolygon.js";
+import { VertexObject } from "../placeable_vertices/VertexObject.js";
 
 /** @type {Matrix<4,4>} */
 const IDENTITY_MATRIX = MatrixFloat32.identity(4, 4);
@@ -63,43 +64,30 @@ const QUADS = {
 
 export class InstancedGeometricPrimitive extends GeometricPrimitive {
 
-  constructor(id) {
-    super(id);
-  }
-
-  /**
-   * Destroy this geometric primitive, releasing associated memory in buffers.
-   */
-  _destroy() {
-    this.constructor.modelMatrixTracker.deleteFacet(this.id);
-    this.modelMatrix = null;
-  }
-
-  // ----- NOTE: Model Matrix ----- //
-
-  get modelTrackerIndex() { return this.constructor.modelMatrixTracker.facetIdMap.get(this.id); }
-
-  _initializeModel() {
-    this.modelMatrix = new GeometricModelMatrix(this.id, this.constructor.modelMatrixTracker);
-  }
-
-
-  /**
-   * Each defined primitive will have its own buffer of matrices.
-   * Store the entire model matrix as a single typed array.
-   * Each 16-element matrix (per placeable) is accessed using an id.
-   * Defaults to identity.
-   * @type {FixedLengthTrackingBuffer}
-   */
-  // Must be defined by the child class so that each class has a separate model buffer.
-  // static modelMatrixTracker = new FixedLengthTrackingBuffer( { facetLengths: 16, numFacets: 0, type: Float32Array });
-
   // ----- NOTE: FACES ----- //
 
   /** @type {Polygon3d} */
   static prototypeFaces = [] // Defined by child class.
 
   get prototypeFaces() { return this.constructor.prototypeFaces; }
+
+  // ----- NOTE: Vertices ----- //
+
+  /**
+   * Instanced primitives share a static instanceVO, just like they share static prototype faces.
+   * @type {VertexObject}
+   */
+  static _instanceVO;
+
+  static get instanceVO() { return (this._instanceVO ??= this.generateInstanceVertices()); }
+
+  get instanceVO() { return this.constructor.instanceVO; }
+
+  static generateInstanceVertices() {
+    const vo = new VertexObject();
+    this.generateVerticesForFaces(this.prototypeFaces, vo);
+    return vo;
+  }
 }
 
 /**
@@ -108,65 +96,45 @@ export class InstancedGeometricPrimitive extends GeometricPrimitive {
  */
 export class QuadPrimitive extends InstancedGeometricPrimitive {
 
-  static modelMatrixTracker = new FixedLengthTrackingBuffer({ facetLengths: 16, numFacets: 0, type: Float32Array });
-
   /** @type {Polygon3d} */
   static prototypeFaces = [QUADS.up.clone()];
 
-  static CULL_FACES = {
-    NONE: 0,
-    FRONT: 1, // For the prototype, culls if viewed from above.
-    BACK: 2,  // For the prototype, culls if viewed from below.
-
-    // Synonyms
-    DOUBLE: 0,
-    LEFT: 1,
-    RIGHT: 2
-  };
-
-  static DIRECTIONAL = true;
-
-  /** @type {enum} */
-  direction = 0;
-
-  constructor(id, direction = 0) {
-    // TODO: direction could be opts.occlusionFlag if multiple options.
-    // In gl.disable(gl.CULL_FACE), corresponds to CULL_NONE = 0, CULL_FRONT = 1, CULL_BACK = 2.
-    super(id);
-    this.direction = direction;
-  }
-
-  // ----- NOTE: Intersection testing ----- //
+  static _instanceVO;
 
   /**
-   * Determine where a ray hits this object in 3d.
-   * Stops at the first hit for a triangle facing the correct direction.
-   * Ignores intersections behind the ray.
-   * @param {Point3d} rayOrigin
-   * @param {Point3d} rayDirection
-   * @param {object} [opts]
-   * @param {number} [opts.minT=0]            Ignore hits earlier in the segment than this (multiple of rayDirection)
-   * @param {number} [opts.maxT=1]            Ignore hits later in the segment than this (multiple of rayDirection)
-   * @param {CULL_FACES} [opts.direction=CULL_FACES.DOUBLE]
-   * @returns {number|null} The distance along the ray, as a multiple of rayDirection
+   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
+   * @param {PIXI.Point} start     Starting point of the slice on the XY plane
+   * @param {PIXI.Point} end        Ending point of the slice on the XY plane
+   * @returns {CutawayPolygon[]}
    */
-  rayIntersection(rayOrigin, rayDirection, opts) {
-    // Only one face; pass the direction.
-    opts.direction ??= this.direction;
-    return this.constructor.rayIntersectionForFace(this.faces[0], rayOrigin, rayDirection, opts);
+  verticalSlice(start, end) {
+    // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
+    const rot = this.modelMatrix.rotation;
+    if ( rot.x || rot.y ) return super.verticalSlice(start, end);
+
+    const top = this.faces[0];
+    const poly = top.toPlanarPolygon();
+    const topZ = top.points[0].z;
+    const bottomZ = topZ - 1;
+
+    const opts = {
+      topElevationFn: () => topZ,
+      bottomElevationFn: () => bottomZ,
+    };
+    return poly.cutaway(start, end, opts);
   }
 
-  static rayIntersectionForFace(face, rayOrigin, rayDirection, { minT = 0, maxT = 1, direction = this.constructor.CULL_FACES.DOUBLE } = {}) {
-    const CF = this.constructor.CULL_FACES
-    switch ( direction ) {
-      case CF.FRONT: if ( face.plane.whichSide(rayOrigin ) > 0 ) return null; break;
-      case CF.BACK: if ( face.plane.whichSide(rayOrigin ) < 0 ) return null; break;
-      // DOUBLE: facing doesn't matter.
-      // Default: treat as DOUBLE.
-    }
-    const t = face.intersectionT(rayOrigin, rayDirection);
-    if ( t !== null && almostBetween(t, minT, maxT) ) return t;
-    return null;
+  prototypeFacesOutward() {
+    // Should face up before any rotations.
+    using ctr = Point3d.tmp.set(0, 0, 1);
+    return this.prototypeFaces[0].isFacing(ctr);
+  }
+
+  facesOutward() {
+    // Should face up before any rotations.
+    using ctr = Point3d.tmp.set(0, 0, 1);
+    this.modelMatrix.model.multiplyPoint3d(ctr, ctr);
+    return this.faces[0].isFacing(ctr);
   }
 }
 
@@ -179,13 +147,68 @@ export class VerticalQuadPrimitive extends QuadPrimitive {
 
   static prototypeFaces = [QUADS.north.clone()];
 
+  static _instanceVO;
+
   setDims({ lengthXY, zHeight } = {}) {
     // For the horizontal quad (before rotation), length is the x-axis, height is z-axis.
     // Set y scale to 1 to avoid collapsing the matrix.
     using dims = Point3d.tmp.set(lengthXY, 1, zHeight);
     this.setScale(dims);
   }
+
+  /**
+   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
+   * @param {PIXI.Point} start     Starting point of the slice on the XY plane
+   * @param {PIXI.Point} end        Ending point of the slice on the XY plane
+   * @returns {CutawayPolygon[]}
+   */
+  verticalSlice(start, end) {
+    // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
+    const rot = this.modelMatrix.rotation;
+    if ( rot.x || rot.y ) return super.verticalSlice(start, end);
+
+    // Draw the 2d top as a thin quad.
+    // The 3d quad has 4 edges: 2 vertical and 2 horizontal.
+    // Rely on fact that we know the points from QUAD.north.
+    const face = this.faces[0];
+    const a = face.points[0];
+    const b = face.points[3];
+
+    // Add/subtract half a pixel each way.
+    using dir = b.subtract(a);
+    using normal = PIXI.Point.tmp.set(-dir.y, dir.x);
+    normal.normalize(normal).multiplyScalar(0.5, normal);
+    using pt0 = a.subtract(normal);
+    using pt1 = a.add(normal);
+    using pt2 = b.add(normal);
+    using pt3 = b.subtract(normal);
+
+    const poly = new PIXI.Polygon(pt0, pt1, pt2, pt3);
+    const topZ = face.points[0].z;
+    const bottomZ = face.points[1].z;
+
+    const opts = {
+      topElevationFn: () => topZ,
+      bottomElevationFn: () => bottomZ,
+    };
+    return poly.cutaway(start, end, opts);
+  }
+
+  prototypeFacesOutward() {
+    // Should face north before any rotations.
+    using ctr = Point3d.tmp.set(0, -1, 0);
+    return this.prototypeFaces[0].isFacing(ctr);
+  }
+
+  facesOutward() {
+    // Should face north before any rotations.
+    using ctr = Point3d.tmp.set(0, -1, 0);
+    this.modelMatrix.model.multiplyPoint3d(ctr, ctr);
+    return this.faces[0].isFacing(ctr);
+  }
 }
+
+
 
 /**
  * Quad that includes a texture. (E.g., for tiles)
@@ -193,34 +216,25 @@ export class VerticalQuadPrimitive extends QuadPrimitive {
  */
 export class TexturedQuadPrimitive extends QuadPrimitive {
 
-  static modelMatrixTracker = new FixedLengthTrackingBuffer( { facetLengths: 16, numFacets: 0, type: Float32Array });
-
   static TEXTURED = true;
 
   textureURL = "";
 
-  static alphaThresholdTracker = new FixedLengthTrackingBuffer({ facetLengths: 1, numFacets: 0, type: Float32Array });
+  alphaThreshold = 0.75;
 
-  get alphaThreshold() {
-    return this.constructor.alphaThresholdTracker.viewFacetAtIndex(this.modelTrackerIndex)[0];
-  }
-
-  set alphaThreshold(value) {
-    const arr = this.constructor.alphaThresholdTracker.viewFacetAtIndex(this.modelTrackerIndex);
-    arr.set(value);
-  }
+  static _instanceVO;
 
   /**
    * Update instance vertices.
    * Default approach uses the prototype faces.
    */
-  static updateInstanceVertices() {
+  static generateInstanceVertices() {
     // Add vertices from faces.
-    const vo = this.instanceVO ;
-    const vertices = HorizontalQuadVertices.top;
+    const vo = new VertexObject;
+    vo.vertices = HorizontalQuadVertices.top;
     vo.hasNormals = true;
     vo.hasUVs = true;
-    this.updateVertexObject(vo, vertices);
+    vo.condense(vo);
     return vo;
   }
 }
@@ -229,8 +243,6 @@ export class TexturedQuadPrimitive extends QuadPrimitive {
  * Cube, e.g. for a square token.
  */
 export class CubePrimitive extends InstancedGeometricPrimitive {
-
-  static modelMatrixTracker = new FixedLengthTrackingBuffer( { facetLengths: 16, numFacets: 0, type: Float32Array });
 
   /**
    * Create the instance face shapes for a unit cube.
@@ -263,15 +275,38 @@ export class CubePrimitive extends InstancedGeometricPrimitive {
   /** @type {Faces} */
   static prototypeFaces = this.createUnitCube();
 
+  static _instanceVO;
+
   // Internal points follow the AABB.
+
+  /**
+   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
+   * @param {PIXI.Point} start     Starting point of the slice on the XY plane
+   * @param {PIXI.Point} end        Ending point of the slice on the XY plane
+   * @returns {CutawayPolygon[]}
+   */
+  verticalSlice(start, end) {
+    // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
+    const rot = this.modelMatrix.rotation;
+    if ( rot.x || rot.y ) return super.verticalSlice(start, end);
+    const top = this.faces[0];
+    const bottom = this.faces[1];
+    const poly = top.toPlanarPolygon();
+    const topZ = top.points[0].z;
+    const bottomZ = bottom.points[0].z;
+
+    const opts = {
+      topElevationFn: () => topZ,
+      bottomElevationFn: () => bottomZ,
+    };
+    return poly.cutaway(poly, start, end, opts);
+  }
 }
 
 /**
  * Simple extruded (along z-axis) hexagon.
  */
 export class HexagonCylinderPrimitive extends InstancedGeometricPrimitive {
-
-  static modelMatrixTracker = new FixedLengthTrackingBuffer( { facetLengths: 16, numFacets: 0, type: Float32Array });
 
   /**
    * Create the face shapes for a unit hexagon.
@@ -292,9 +327,11 @@ export class HexagonCylinderPrimitive extends InstancedGeometricPrimitive {
     return [top, bottom, ...top.buildTopSides(-0.5)];
   }
 
-  static #prototypeFaces;
+  static #prototypeFaces; /* eslint-disable-line no-unused-private-class-members */
 
   static get prototypeFaces() { return (this.#prototypeFaces = this.createUnitHexagonCylinder()); }
+
+  static _instanceVO;
 
   /**
    * Determine all top, bottom, and mid corners along with midpoints between for the
@@ -306,6 +343,29 @@ export class HexagonCylinderPrimitive extends InstancedGeometricPrimitive {
     const bottom = this.faces[1];
     return this.constructor.calculatePolygonCylinderInternalPoints(top, bottom);
   }
+
+  /**
+   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
+   * @param {PIXI.Point} start     Starting point of the slice on the XY plane
+   * @param {PIXI.Point} end        Ending point of the slice on the XY plane
+   * @returns {CutawayPolygon[]}
+   */
+  verticalSlice(start, end) {
+    // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
+    const rot = this.modelMatrix.rotation;
+    if ( rot.x || rot.y ) return super.verticalSlice(start, end);
+    const top = this.faces[0];
+    const bottom = this.faces[1];
+    const poly = top.toPlanarPolygon();
+    const topZ = top.points[0].z;
+    const bottomZ = bottom.points[0].z;
+
+    const opts = {
+      topElevationFn: () => topZ,
+      bottomElevationFn: () => bottomZ,
+    };
+    return poly.cutaway(start, end, opts);
+  }
 }
 
 /**
@@ -313,23 +373,32 @@ export class HexagonCylinderPrimitive extends InstancedGeometricPrimitive {
  */
 export class CylinderPrimitive extends InstancedGeometricPrimitive {
 
-  static modelMatrixTracker = new FixedLengthTrackingBuffer( { facetLengths: 16, numFacets: 0, type: Float32Array });
+  /**
+   * Assumed number of sides for the polygon approximation of the cylinder.
+   * Used to construct the sides.
+   */
+  static DENSITY = PIXI.Circle.approximateVertexDensity(100);
 
   /**
    * Create the faces for a unit cylinder.
    * @returns {Ellipse3d|Polygon3d[]}
    */
-  static createUnitCylinder(radiusDensity = 100) {
+  static createUnitCylinder() {
     const top = Ellipse3d.fromCenterPoint({ x: 0, y: 0, z: 0.5 }, { radiusX: 0.5, radiusY: 0.5 });
     const bottom = Ellipse3d.fromCenterPoint({ x: 0, y: 0, z: -0.5 }, { radiusX: 0.5, radiusY: 0.5 });
     bottom.reverseOrientation();
-    const density = PIXI.Circle.approximateVertexDensity(radiusDensity);
-    return [top, bottom, ...top.buildTopSides(-0.5, { density })];
+
+    // Build the sides.
+    top.density = this.DENSITY;
+    bottom.density = this.DENSITY;
+    return [top, bottom, ...top.buildTopSides(-0.5)];
   }
 
-  static #prototypeFaces;
+  static _prototypeFaces;
 
-  static get prototypeFaces() { return this.#prototypeFaces ||= this.createUnitCylinder(canvas.scene.dimensions.maxR / 10); }
+  static get prototypeFaces() { return this._prototypeFaces ||= this.createUnitCylinder(canvas.scene.dimensions.maxR / 10); }
+
+  static _instanceVO;
 
   /**
    * Determine all top, bottom, and mid corners along with midpoints between for the cylinder.
@@ -341,6 +410,77 @@ export class CylinderPrimitive extends InstancedGeometricPrimitive {
     const bottom = this.faces[1].toPolygon3d({ density: 8 })
     return this.constructor.calculatePolygonCylinderInternalPoints(top, bottom);
   }
+
+  /**
+   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
+   * @param {PIXI.Point} start     Starting point of the slice on the XY plane
+   * @param {PIXI.Point} end        Ending point of the slice on the XY plane
+   * @returns {CutawayPolygon[]}
+   */
+  verticalSlice(start, end) {
+    // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
+    const rot = this.modelMatrix.rotation;
+    if ( rot.x || rot.y ) return super.verticalSlice(start, end);
+
+    const top = this.faces[0];
+    const bottom = this.faces[1];
+    const ellipse = top.toPlanarEllipse();
+    const topZ = top.points[0].z;
+    const bottomZ = bottom.points[0].z;
+
+    const opts = {
+      topElevationFn: () => topZ,
+      bottomElevationFn: () => bottomZ,
+    };
+    return ellipse.cutaway(start, end, opts);
+  }
+}
+
+/**
+ * Extruded (along z-axis) but always a circular top and bottom.
+ */
+export class CircularCylinderPrimitive extends CylinderPrimitive {
+
+  /**
+   * Create the faces for a unit cylinder.
+   * @returns {Ellipse3d|Polygon3d[]}
+   */
+  static createUnitCylinder() {
+    const top = Circle3d.fromCenterPoint({ x: 0, y: 0, z: 0.5 }, 0.5);
+    const bottom = Circle3d.fromCenterPoint({ x: 0, y: 0, z: -0.5 }, 0.5);
+    bottom.reverseOrientation();
+
+    // Build the sides.
+    top.density = this.DENSITY;
+    bottom.density = this.DENSITY;
+    return [top, bottom, ...top.buildTopSides(-0.5)];
+  }
+
+  /**
+   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
+   * @param {PIXI.Point} start     Starting point of the slice on the XY plane
+   * @param {PIXI.Point} end        Ending point of the slice on the XY plane
+   * @returns {CutawayPolygon[]}
+   */
+  verticalSlice(start, end) {
+    // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
+    const rot = this.modelMatrix.rotation;
+    if ( rot.x || rot.y ) return super.verticalSlice(start, end);
+
+    const top = this.faces[0];
+    const bottom = this.faces[1];
+    const circle = top.toPlanarCircle();
+    const topZ = top.points[0].z;
+    const bottomZ = bottom.points[0].z;
+
+    const opts = {
+      topElevationFn: () => topZ,
+      bottomElevationFn: () => bottomZ,
+    };
+    return circle.cutaway(start, end, opts);
+  }
+
+
 }
 
 /**
@@ -348,18 +488,18 @@ export class CylinderPrimitive extends InstancedGeometricPrimitive {
  */
 export class SpherePrimitive extends InstancedGeometricPrimitive {
 
-  static modelMatrixTracker = new FixedLengthTrackingBuffer( { facetLengths: 16, numFacets: 0, type: Float32Array });
-
   static prototypeFaces = [new Sphere({ x: 0, y: 0 }, 0.5)];
 
-  static updateInstanceVertices() {
-    const vo = this.instanceVO;
+  static _instanceVO;
+
+  static generateInstanceVertices() {
+    const vo = new VertexObject();
     const pts = this.prototypeFaces[0].pointsLattice(10 / canvas.grid.size);
-    const tris = Sphere.triangulateSphereSurface(pts)
-    const vertices = tris.toVertices({ addNormals: true });
+    const tris = Sphere.triangulate(pts)
+    vo.vertices = tris.toVertices({ addNormals: true });
     vo.hasNormals = true;
     vo.hasUVs = false;
-    this.updateVertexObject(vo, vertices);
+    vo.condense(vo);
     return vo;
   }
 
@@ -389,6 +529,76 @@ export class SpherePrimitive extends InstancedGeometricPrimitive {
       },
     };
   }
+
+  /**
+   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
+   * @param {PIXI.Point} start     Starting point of the slice on the XY plane
+   * @param {PIXI.Point} end        Ending point of the slice on the XY plane
+   * @returns {CutawayPolygon[]}
+   */
+  verticalSlice(start, end) {
+    // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
+    const rot = this.modelMatrix.rotation;
+    if ( rot.x || rot.y ) return super.verticalSlice(start, end);
+
+    const { center, radius } = this.faces[0];
+    using dirXY = PIXI.Point.tmp;
+    end.subtract(start, dirXY).normalize(dirXY);
+
+    // Define the normal of the vertical slicing plane.
+    const normalXY = PIXI.Point.tmp.set(-dirXY.y, dirXY.x);
+
+    // Calculate the perpendicular distance from the sphere's center to the plane.
+    using delta = PIXI.Point.tmp;
+    center.to2d(delta).subtract(start, delta);
+    const distToPlane = Math.abs(delta.dot(normalXY));
+
+    // Check for intersection
+    if ( distToPlane > radius ) return []; // Plane misses sphere entirely.
+
+    // Calculate the radius of the resulting 2d circle.
+    // Use Math.max to prevent NaN due to minor floating point inaccuracies if distToPlane === radius.
+    const circleRadius = Math.sqrt(Math.max(0, (radius ** 2)- (distToPlane ** 2)));
+    if ( circleRadius.almostEqual(0) ) return [];
+
+    // Calculate the center of the 2d circle mapped to the plane's coordinate system.
+    const distAlongPlane = delta.dot(dirXY);
+    using circleCenter = PIXI.Point.tmp.set(distAlongPlane, center.z);
+
+    // Convert to cutaway.
+    const circle = new PIXI.Circle(circleCenter.x, circleCenter.y, circleRadius);
+    const poly = CutawayPolygon.fromCutawayPoints(circle.toPolygon().points, start, end);
+
+    // Convert to squared distance.
+    let i = 0;
+    for ( using pt of poly.iteratePoints() ) {
+      cutaway.convertFromDistance(pt);
+      poly.points[i++] = pt.x;
+      poly.points[i++] = pt.y;
+    }
+    return [poly]; // TODO: Add CutawayCircle class.
+  }
+
+  // ----- NOTE: Debug ----- //
+
+  /**
+   * Test whether all faces of this shape face outward as expected.
+   * Outward means from an outside viewer, the face is counter-clockwise.
+   * @returns {boolean} True if all faces point outward.
+   */
+  prototypeFacesOutward() {
+    using origin = Point3d.tmp.set(0, 0, 0);
+    return !this.prototypeFaces[0].isFacing(origin);
+  }
+
+  /**
+   * Test whether all faces of this shape face outward as expected.
+   * Outward means from an outside viewer, the face is counter-clockwise.
+   * @returns {boolean} True if all faces point outward.
+   */
+  facesOutward() {
+    return !this.faces[0].isFacing(this.center)
+  }
 }
 
 /**
@@ -396,11 +606,11 @@ export class SpherePrimitive extends InstancedGeometricPrimitive {
  */
 export class WedgeRectangularBasePrimitive extends InstancedGeometricPrimitive {
 
-  static modelMatrixTracker = new FixedLengthTrackingBuffer( { facetLengths: 16, numFacets: 0, type: Float32Array });
-
-  static #prototypeFaces;
+  static #prototypeFaces; /* eslint-disable-line no-unused-private-class-members */
 
   static get prototypeFaces() { return (this.#prototypeFaces = this.createUnitWedge()); }
+
+  static _instanceVO;
 
   static createUnitWedge() {
     // Right-angled isoceles triangle.
@@ -448,11 +658,6 @@ export class WedgeRectangularBasePrimitive extends InstancedGeometricPrimitive {
     return faces;
   }
 
-  initialize() {
-    super.initialize();
-    this.modelMatrix = new GeometricModelMatrix(this.id, this.constructor.modelMatrixTracker);
-  }
-
   // Height as a percentage of the base.
   #rampPercentageHeight = 1;
 
@@ -468,6 +673,8 @@ export class WedgeRectangularBasePrimitive extends InstancedGeometricPrimitive {
     translateM
       .multiply4x4(scaleM, transformM)
       .multiply4x4(invTranslateM, transformM);
+
+    // TODO: Need to finish this. Multiply the prototype faces?
   }
 }
 

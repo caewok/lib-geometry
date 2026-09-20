@@ -1,6 +1,5 @@
 /* globals
 canvas,
-Hooks,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
@@ -10,8 +9,7 @@ import { GeometricPrimitive } from "./GeometricPrimitive.js";
 
 // LibGeometry
 import { AABB3d } from "../3d/AABB3d.js";
-import { NULL_SET } from "../util.js";
-import { gridUnitsToPixels } from "../util.js";
+import { MatrixFloat32 } from "../Matrix.js";
 
 
 /* Store key geometry information for each placeable, in 3d.
@@ -28,25 +26,51 @@ Stored on each placeable.
 
 Once registered, will create tracking objects for each placeable created.
 
-Update methods:
-
-position2dUpdated
-scaleUpdated
-rotationUpdated
-shapeUpdated
-propertiesUpdated
-
-
 */
 
-Hooks.on("updateLevel", function(_level, _changes, _opts, _id) {
-  PlaceableGeometry.calculateLevelSegments();
-});
+/* Levels visibility
 
-Hooks.on("canvasReady", function(_canvas) {
-  PlaceableGeometry.calculateLevelSegments();
-});
+Tokens are at a specific level but can be at any elevation, including ones outside the level parameters.
+Same is true of everything else—their elevation does not dictate their level.
 
+Tokens have a defined elevation and a user vieweable elevation.
+When you move a token to a different level, its defined elevation stays the same but its
+viewable elevation changes. (This may change if a Level or Stairs behavior is used.)
+
+E.g.
+- Basement: -20–0
+- Ground: 0–20
+- First Floor: 20–40
+
+Token at 0 on Ground is -20 at First Floor (0 - 20) but 0 in its document.
+Token at 50 on Ground is 30 at First Floor (50 - 20) but 50 in its document.
+
+Tiles have a defined elevation, and are either present or not in a level regardless of elevation.
+
+For base Foundry then, a given level has, in effect, infinite ± elevation. Objects are either
+there or not based on their levels set.
+
+Regions, then, do not get split between levels but instead are either present/not present in the scene
+from any given token viewpoint.
+
+Infinite walls are either present or not. Same with non-infinite walls. No splitting.
+
+E.g., from First Floor, a token looks down at Ground. It sees a Ground region from 10–30 and
+a wall from 0–10. The region is defined as in both Ground and First. The wall is defined as
+in only Ground. A second wall from 0–10 is defined in both Ground and First. Then the token will
+see the region and the second wall only. This is annoying for infinite walls in base Foundry but
+fine for finite walls using Wall Height.
+
+This avoids splitting objects. While walls can conceivably overlap, usually it will be either
+a shorter wall viewed from a balcony or a wall to block view of a room, not both at once.
+
+Note: The visibleLevels selection for a given level really controls:
+1. Can the other level's background/foreground be seen?
+2. Can the other level's tokens be seen?
+
+- Tiles, walls, regions all display only if they are marked as being on the level.
+
+*/
 
 export class PlaceableGeometry {
 
@@ -54,67 +78,6 @@ export class PlaceableGeometry {
 
   static get PLACEABLE_LABEL_PLURAL() { return this.PLACEABLE_NAME.toLowerCase().concat("s"); }
 
-  // ----- NOTE: Levels ----- //
-
-  /**
-   * Reorganize and split level intervals to cover the low to high range with no overlaps.
-   * Add gap intervals as necessary.
-   * @param {object[]} segments      The intervals
-   *    - @prop {number} bottom       Bottom elevation value
-   *    - @prop {number} top          Top elevation value
-   *    - @prop {string[]} id[]       Id of the levels encountered in this interval
-   */
-  static levelSegments = [];
-
-  /**
-   * Reorganize and split level intervals to cover the low to high range with no overlaps.
-   * Add gap intervals as necessary.
-   * @returns {object[]} segments       The intervals
-   *    - @prop {number} bottom         Bottom elevation value
-   *    - @prop {number} top            Top elevation value
-   *    - @prop {Set<string>} ids       Ids of the levels encountered in this interval
-   */
-  static calculateLevelSegments() {
-    // Create a distinct "event" for every bottom and top point.
-    const events = new Array(canvas.scene.levels.size * 2);
-    let i = 0;
-    for ( const level of canvas.scene.levels ) {
-      const { bottom, top } = level.elevation;
-      events[i++] = { value: bottom, type: "start", id: level.id };
-      events[i++] = { value: top, type: "end", id: level.id };
-    }
-
-    // Sort by value, with end events after start events if equal.
-    events.sort((a, b) => (a.value - b.value) || a.type === "start");
-
-    // Sweep through sorted events, identifying boundary changes.
-    const segments = [];
-    const activeIds = new Set();
-    let currentPosition = events[0].value;
-    for ( const event of events) {
-      // If we have moved forward in space, commit the previous segment.
-      if ( event.value > currentPosition ) {
-        segments.push({
-          bottom: currentPosition,
-          top: event.value,
-          ids: new Set(activeIds), // May be empty if it is a gap.
-        });
-      }
-
-      // Update active ids based on event type.
-      switch ( event.type ) {
-        case "start": activeIds.add(event.id); break;
-        case "end": activeIds.delete(event.id); break;
-        // Nothing to do for elevation additions.
-      }
-
-      // Move forward to the new value on the line.
-      currentPosition = event.value;
-    }
-
-    this.levelSegments = segments;
-    return segments;
-  }
 
   // ----- NOTE: Constructor ----- //
 
@@ -137,35 +100,54 @@ export class PlaceableGeometry {
     this.placeableDocument = placeableDocument;
   }
 
+  /**
+   * Initialize geometry shapes and sync initial spatial transforms and bounds.
+   */
   initialize() {
-    this.iterateShapes().forEach(shape => shape.initialize());
+    console.debug(`${this.constructor.name}|initialize ${this.placeableDocument.name} (${this.placeableId})`);
+    this.createShapes();
+    this.syncTransforms();
+    this.calculateAABB();
   }
 
+  /**
+   * Synchronize spatial transforms (position, rotation, scale, anchor) on existing shapes.
+   * Does not trigger nor depend on structural rebuild flags.
+   */
+  syncTransforms() {
+    this.activeUpdates.clear();
+    this._updateTransforms();
+    this.updateCount += 1;
+  }
+
+  /**
+   * Subclasses override this method to apply spatial transforms to existing shapes.
+   * Does not trigger structural rebuild logic.
+   */
+  _updateTransforms() { }
+
   destroy() {
-    this.iterateShapes().forEach(shape => shape.destroy());
+    this.shapes.forEach(shape => shape.destroy());
     this.shapes.length = 0;
   }
 
   // ----- NOTE: Updating ----- //
 
-  static UPDATE_KEYS = {
-    properties: NULL_SET,
-    level: NULL_SET,
-    positionXY: new Set(["x", "y"]),
-    elevation: new Set(["elevation"]),
-    scale: NULL_SET,
-    rotation: NULL_SET,
-  };
+  /**
+   * Map defined by child class(es) linking a changed property with the update category:
+   * E.g.:
+   * UPDATE_KEY_MAP = new Map(["x", "positionXY"]);
+   * Child class: UPDATE_KEY_MAP = new Map([...super.UPDATE_KEY_MAP, ["y", "positionXY"]]);
+   * @type {Map<string, string}
 
-  // Temporary tracking of the updates made for a given update.
-  _updateFlags = {
-    properties: false,
-    level: false,
-    positionXY: false,
-    elevation: false,
-    scale: false,
-    rotation: false,
-  };
+   */
+  static UPDATE_KEY_MAP = new Map();
+
+  /**
+   * Set of active flags that signify properties being updated.
+   * @param {Set<string>}
+   */
+  activeUpdates = new Set();
 
   /**
    * Increment a count of updates, used by things like webGL to know when to update.
@@ -174,27 +156,29 @@ export class PlaceableGeometry {
 
   /**
    * @param {Set<string>} updateKeys      Flattened keys that were updated
+   * @returns {boolean} True if an update occurred.
    */
-  update(updateKeys, opts) {
-    const updateFlags = this._updateFlags;
-    Object.keys(updateFlags).forEach(key => updateFlags[key] = false);
+  update(updateKeys) {
+    this.activeUpdates.clear();
 
-    let shapeUpdated = false;
-    for ( const [type, s] of Object.entries(this.constructor.UPDATE_KEYS) ) {
-      updateFlags[type] = s.intersects(updateKeys);
-      shapeUpdated ||= true;
+    for ( const key of updateKeys ) {
+      const flag = this.constructor.UPDATE_KEY_MAP.get(key);
+      if ( flag ) this.activeUpdates.add(flag);
     }
-    if ( !shapeUpdated ) return;
-    this._update(opts);
+    if ( !this.activeUpdates.size ) return false;
+    this._update();
+    return true;
   }
 
   forceUpdate() {
-    Object.keys(this._updateFlags).forEach(key => this._updateFlags[key] = true);
+    // Mark everything as updated.
+    this.constructor.UPDATE_KEY_MAP.values().forEach(flag => this.activeUpdates.add(flag));
     this._update();
+    return true;
   }
 
   // Triggered second.
-  _update(_opts) {
+  _update() {
     this.calculateAABB();
     this.updateCount += 1;
   }
@@ -207,15 +191,29 @@ export class PlaceableGeometry {
    * @param {CONST.WALL_RESTRICTION_TYPES} [senseType="sight"]
    * @returns {boolean}
    */
-  blocksSense(_senseType = "sight") { return true; }
+  static blocksSense(placeableDocument, _senseType = "sight") { return true; }
 
   /**
-   * Does this geometry currently block, from the view of a given level?
-   * Must all check if it blocks the given sense type.
+   * Does this placeable exist on this level?
    * @param {string} levelId
+   * @returns {boolean} True if seen from this level or the levelId is null or "".
+   */
+  static isPresentAtLevel(placeableDocument, levelId) {
+    if ( !canvas.scene.levels.has(levelId) ) return !levelId;
+    return placeableDocument.levels.has(levelId);
+  }
+
+  /**
+   * Combines sense test with level test with any other tests specific to the placeable document.
+   * @param {object} [opts]
+   * @prop {CONST.WALL_RESTRICTION_TYPES} [opts.senseType = "sight"]
+   * @prop {string} [opts.levelId]
+   * @prop {...}                      Other options used by subclasses
    * @returns {boolean}
    */
-  blocksFromLevel(_levelId) { return true; }
+  static couldBlock(placeableDocument, { levelId, senseType } = {}) {
+    return this.blocksSense(placeableDocument, senseType) && this.isPresentAtLevel(placeableDocument, levelId);
+  }
 
   // ----- NOTE: AABB ----- //
 
@@ -223,7 +221,7 @@ export class PlaceableGeometry {
   aabb = new AABB3d();
 
   calculateAABB() {
-    AABB3d.union([...this.iterateShapes()].map(shape => shape.aabb), this.aabb);
+    AABB3d.union(this.shapes.map(shape => shape.aabb), this.aabb);
   }
 
   // ----- NOTE: Geometric shapes and faces ----- //
@@ -231,27 +229,10 @@ export class PlaceableGeometry {
   shapes = [];
 
   /**
-   * Iterate over the shapes.
-   * @param {object} [opts]
-   * @param {CONST.WALL_RESTRICTION_TYPES} [opts.senseType]   If provided, will return early if geometry does not block this sense type.
-   * @param {string} [opts.levelId]                           If provided, will return early if geometry does not affect this level.
-   * @yields {GeometricPrimitive}
-   */
-  *iterateShapes({ senseType, levelId } = {}) {
-    if ( senseType && !this.blocksSense(senseType) ) return;
-    if ( levelId && !this.blocksFromLevel(levelId) ) return;
-    for ( const shape of this.shapes ) {
-      if ( shape ) yield shape;
-    }
-  }
-
-  /**
    * Iterate over the shapes' faces.
    * @yields {Polygon3d}
    */
-  *iterateFaces(opts = {}) {
-    for ( const shape of this.iterateShapes(opts) ) yield* shape.faces;
-  }
+  *iterateFaces() { for ( const shape of this.shapes ) yield* shape.faces; }
 
   /**
    * Determine where a ray hits this object in 3d.
@@ -260,35 +241,46 @@ export class PlaceableGeometry {
    * @param {Point3d} rayOrigin
    * @param {Point3d} rayDirection
    * @param {object} [opts]
-   * @param {string} [opts.levelId]       Level to
    * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
    * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
    * @returns {number|null} The distance along the ray, as a multiple of rayDirection
    */
   rayIntersection(rayOrigin, rayDirection, opts) {
-    for ( const shape of this.iterateShapes(opts) ) {
+    for ( const shape of this.shapes ) {
       const t = shape.rayIntersection(rayOrigin, rayDirection, opts);
       if ( t !== null ) return t;
     }
     return null;
   }
 
+  // Use omitAxis = "x" or omitAxis = "y" to investigate the z shape.
   draw2d(opts) {
-    this.iterateShapes().forEach(shape => shape.draw2d(opts));
+    this.shapes.forEach(shape => shape.draw2d(opts));
   }
+
+  drawTransformed(M, opts) {
+    const invTransposeM = M.invert().transpose();
+    this.shapes.forEach(shape => shape.drawTransformed(M, opts, invTransposeM));
+  }
+
+  drawNormals(opts) { this.shapes.forEach(shape => shape.drawNormals(opts)); }
 
   // ----- NOTE: Face points ----- //
 
-  getFacePoints(opts) {
-    return this.iterateShapes(opts).flatMap(shape => shape.facePoints());
+  /**
+   * @param {object} [opts]   See iterateShape
+   * @yields {Point3d}
+   */
+  *iterateFacePoints() {
+    for ( const shape of this.shapes ) yield* shape.iterateFacePoints();
   }
 
   // ----- NOTE: Internal points ----- //
 
   static POINT_INDICES = GeometricPrimitive.POINT_INDICES;
 
-  getInternalPoints(opts) {
-    return this.iterateShapes(opts).map(shape => shape.getInternalPoints());
+  *iterateInternalPoints() {
+    for ( const shape of this.shapes ) yield shape.internalPoints;
   }
 
   // ----- NOTE: Static helpers ----- //
@@ -308,118 +300,30 @@ export class PlaceableGeometry {
   }
 
   /**
-   * Top and bottom z values for a given segment index.
-   * @param {number} segmentIdx
-   * @param {number} topZ
-   * @param {number} bottomZ
-   * @returns {object}
-   * - @prop {number} topZ
-   * - @prop {number} bottomZ
+   * Finite elevation.
+   * If positive infinity, will be set to a maximum value.
+   * If negative infinity, will be set to a minimum value.
+   * If undefined, will be set to 0.
+   * @param {number|null|undefined} elev
+   * @returns {number}
    */
-  static elevationZForSegment(segmentIdx, topZ, bottomZ) {
-    const segmentData = this.levelSegments[segmentIdx];
-    topZ = Math.min(gridUnitsToPixels(segmentData.top), topZ);
-    bottomZ = Math.max(gridUnitsToPixels(segmentData.bottom), bottomZ);
-    return { topZ, bottomZ };
+  static finiteElevation(elev) {
+    if ( !Number.isNumeric(elev) ) return 0;
+    if ( isFinite(elev) ) return elev;
+    const MAX_ELEV = 1e06;
+    return elev === Number.POSITIVE_INFINITY ? MAX_ELEV : -MAX_ELEV;
   }
 
   /**
-   * Finite elevation of a placeable.
-   * @param {PlaceableDocument} placeableD
-   * @returns {object}
+   * Finite elevation of the placeable document
+   * @type {number|object} Either a single elevation or an object.
    * - @prop {number} topZ
    * - @prop {number} bottomZ
    */
-  static placeableElevationZ(placeableD) {
-    const MAX_ELEV = 1e06;
-    let { topZ, bottomZ } = placeableD;
-    if ( !isFinite(topZ) ) topZ = MAX_ELEV;
-    if ( !isFinite(bottomZ) ) bottomZ = -MAX_ELEV;
-    return { topZ, bottomZ };
+  get elevationZ() {
+    return {
+      topZ: this.constructor.finiteElevation(this.placeableDocument.topZ),
+      bottomZ: this.constructor.finiteElevation(this.placeableDocument.bottomZ),
+    };
   }
 }
-
-/**
- * Additional methods required for placeables—walls and regions—that span different levels.
- * (Tiles show up in differrent levels but trivially so.)
- */
-export const LevelSpanningMixin = superclass => {
-  return class extends superclass {
-
-    // ----- NOTE: Geometric shapes and faces ----- //
-
-    /**
-     * Iterate over the shapes.
-     * @param {object} [opts]
-     * @param {CONST.WALL_RESTRICTION_TYPES} [opts.senseType]   If provided, will return early if geometry does not block this sense type.
-     * @param {string} [opts.levelId]                           If provided, will return early if geometry does not affect this level.
-     * @yields {GeometricPrimitive}
-     */
-    *iterateShapes({ senseType, levelId } = {}) {
-      if ( senseType && !this.blocksSense(senseType) ) return;
-      if ( levelId && !this.blocksFromLevel(levelId) ) return;
-      for ( let i = 0, iMax = this.shapes.length; i < iMax; i += 1 ) {
-        const shape = this.shapes[i];
-        if ( !shape ) continue;
-        if ( levelId && !this.constructor.levelSegments[i].ids.has(levelId) ) continue;
-        yield shape;
-      }
-    }
-
-    // ----- NOTE: Levels ----- //
-
-    /**
-     * Id, taking into account the level segment.
-     * Combines the level segment ids so each segment is unique.
-     * @param {number} levelSegmentIdx
-     * @returns {string}
-     */
-    _levelShapeId(levelSegmentIdx) {
-      const segment = this.constructor.levelSegments[levelSegmentIdx];
-      const levelIds = [...segment.ids].join("_");
-      return `${this.placeableId}_${levelIds}`;
-    }
-
-    /**
-     * Does this geometry currently block a given sense type?
-     * @param {CONST.WALL_RESTRICTION_TYPES} [senseType="sight"]
-     * @returns {boolean}
-     */
-    blocksSense(_senseType = "sight") { return true; }
-
-    /**
-     * Does this geometry currently block, from the view of a given level?
-     * Must all check if it blocks at the given level.
-     * For walls, it is usually necessary to check each of the segments.
-     * @param {string} levelId
-     * @returns {boolean}
-     */
-    blocksFromLevel(levelId) {
-      return !this.constructor.levelSegments.some(segment => segment.ids.has(levelId));
-    }
-
-    /**
-     * Does this wall exist on this level?
-     * Must be at this level and within the level elevation range.
-     * @param {string} levelId
-     * @returns {boolean}
-     */
-    isPresentAtLevel(levelId) {
-      // Confirm this wall has the level id.
-      if ( !canvas.scene.levels.has(levelId) ) return false;
-      if ( !this.placeableDocument.levels.has(levelId) ) return false;
-
-      // Confirm this wall's top and bottom elevation place it within the level.
-      const { topZ, bottomZ } = this.constructor.placeableElevationZ(this.placeableDocument);
-      const level = canvas.scene.levels.get(levelId);
-      if ( !level ) return false;
-      const levelBottomZ = gridUnitsToPixels(level.elevation.bottom);
-      const levelTopZ = gridUnitsToPixels(level.elevation.top);
-      return (bottomZ < levelBottomZ && topZ > levelTopZ )
-        || bottomZ.between(levelBottomZ, levelTopZ)
-        || topZ.between(levelBottomZ, levelTopZ);
-    }
-  };
-}
-
-

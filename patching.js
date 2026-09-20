@@ -42,6 +42,9 @@ const PATCHES = {
   // Elevation document patches
   "foundry.documents.TokenDocument": PATCHES_ELEVATION.TokenDocument,
   "foundry.documents.WallDocument": PATCHES_ELEVATION.WallDocument,
+  "foundry.documents.TileDocument": PATCHES_ELEVATION.TileDocument,
+  "foundry.documents.RegionDocument": PATCHES_ELEVATION.RegionDocument,
+  "foundry.documents.Level": PATCHES_ELEVATION.LevelDocument,
 
   // Source document patches
   "foundry.canvas.sources.BaseEffectSource": PATCHES_ELEVATION.BaseEffectSource,

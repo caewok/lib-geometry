@@ -7,12 +7,22 @@ PIXI,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { TileGeometry } from "./TileGeometry.js";
+import {
+  TileGeometry,
+  TileFullGeometry,
+  TileBoundingRectGeometry,
+  TileBoundingPolygonGeometry,
+  TilePolygonsGeometry,
+  TileTrianglesGeometry,
+} from "./TileGeometry.js";
+
 import { GEOMETRY_LIB_ID } from "../const.js";
-import { gridUnitsToPixels, NULL_SET } from "../util.js";
+import { gridUnitsToPixels } from "../util.js";
 import { AABB3d } from "../3d/AABB3d.js";
 import { Point3d } from "../3d/Point3d.js";
+import { mix } from "../mixwith.js";
 
+/*
 const TRACKER_TYPES = {
   background: [
     "background.alphaThreshold",
@@ -33,8 +43,7 @@ const TRACKER_TYPES = {
   ],
 
   rotation: [
-    "textures.anchorX",
-    "textures.anchorY",
+    "textures.rotation",
   ],
 
   scale: [
@@ -46,7 +55,6 @@ const TRACKER_TYPES = {
     "textures.fit",
     "textures.anchorX",
     "textures.anchorY",
-    "textures.fit",
     "textures.offsetX",
     "textures.offsetY",
     "textures.rotation",
@@ -54,6 +62,7 @@ const TRACKER_TYPES = {
     "textures.scaleY",
   ],
 };
+*/
 
 /**
  * On canvas ready, make sure the level textures are loaded so the dimensions can be determined.
@@ -70,13 +79,13 @@ Hooks.on("canvasReady", async () => {
   const bgMgr = CONFIG[GEOMETRY_LIB_ID].geometryManager.levels.background;
   const fgMgr = CONFIG[GEOMETRY_LIB_ID].geometryManager.levels.foreground;
   canvas.scene.levels.forEach(levelD => {
-    bgMgr.geomForDocument(levelD).forceUpdate();
-    fgMgr.geomForDocument(levelD).forceUpdate();
+    bgMgr.geomForDocument(levelD).syncTransforms();
+    fgMgr.geomForDocument(levelD).syncTransforms();
   });
 });
 
 
-export class LevelBackgroundGeometry extends TileGeometry {
+const LevelCalculationsMixin = superclass => class extends superclass {
 
   /** @type {string} */
   static PLACEABLE_NAME = "Level";
@@ -87,11 +96,11 @@ export class LevelBackgroundGeometry extends TileGeometry {
   /** @type {string} */
   static LEVEL_TYPE = "background";
 
+  /** @type {number} */
+  static alphaThreshold(level) { return level[this.LEVEL_TYPE].alphaThreshold || 0; }
+
+
   get level() { return this.placeableDocument; }
-
-  get tile() { throw Error("LevelGeometry does not have a tile"); }
-
-  get alphaThreshold() { return this.level.background.alphaThreshold; }
 
   /**
    * Create an id used for the model matrix tracking.
@@ -99,37 +108,38 @@ export class LevelBackgroundGeometry extends TileGeometry {
    */
   get placeableId() { return `${this.placeableDocument.uuid}_${this.constructor.LEVEL_TYPE}`; }
 
-  static get cacheManager() { return CONFIG[GEOMETRY_LIB_ID].levelBackgroundPixelCache; }
+  // AABB required for Quadtree.
+  aabb = new AABB3d();
 
-  static TRACKER_TYPES = TRACKER_TYPES;
+  /**
+   * Does this geometry currently block a given sense type?
+   * @param {CONST.WALL_RESTRICTION_TYPES} [senseType="sight"]
+   * @returns {boolean}
+   */
+  static blocksSense(_placeableDocument, _senseType = "sight") { return true; }
 
-  static UPDATE_KEYS = {
-    ...super.UPDATE_KEYS,
-    properties: new Set([...TRACKER_TYPES.texture, ...TRACKER_TYPES[this.LEVEL_TYPE]]),
-    level: NULL_SET,
-    position2d: new Set([...TRACKER_TYPES.elevation, ...TRACKER_TYPES.texture]),
-  };
+  /**
+   * Does this placeable exist on this level?
+   * @param {string} levelId
+   * @returns {boolean} True if seen from this level or the levelId is null or "".
+   */
+  static isPresentAtLevel(placeableDocument, levelId) {
+    if ( !canvas.scene.levels.has(levelId) ) return !levelId;
+    if ( placeableDocument.id === levelId ) return true;
+    return !placeableDocument.visibility.levels.has(levelId);
+  }
 
-  // ----- NOTE: AABB ----- //
-  calculateAABB() {
-    const cache = this.pixelCache;
-    const elevationZ = this.constructor.placeableElevationZ(this.placeableDocument)
-    if ( !cache ) {
-      // Cannot ascertain width and height without the texture. (At least, it would require a partial load.)
-      // But there is a decent chance that the scene rect would cover the dimensions.
-      AABB3d.fromRectangle(canvas.scene.dimensions.sceneRect, elevationZ, this.aabb);
-
-    } else {
-      // Use the cache to find the boundary points.
-      const { width, height } = cache;
-      using TL = cache._toCanvasCoordinates(0, 0);
-      using BL = cache._toCanvasCoordinates(0, height);
-      using TR = cache._toCanvasCoordinates(width, 0);
-      using BR = cache._toCanvasCoordinates(width, height);
-      AABB3d.fromPoints([TL, BL, TR, BR], this.aabb);
-      this.aabb.min.z = elevationZ;
-      this.aabb.max.z = elevationZ;
-    }
+  /**
+   * Combines sense test with level test with any other tests specific to the placeable document.
+   * @param {object} [opts]
+   * @prop {CONST.WALL_RESTRICTION_TYPES} [opts.senseType = "sight"]
+   * @prop {string} [opts.levelId]
+   * @prop {...}                      Other options used by subclasses
+   * @returns {boolean}
+   */
+  static couldBlock(placeableDocument, opts = {}) {
+    return this.blocksSense(placeableDocument, opts.senseType)
+        && this.isPresentAtLevel(placeableDocument, opts.levelId);
   }
 
   // ----- NOTE: Scene texture characteristics ----- //
@@ -178,22 +188,70 @@ export class LevelBackgroundGeometry extends TileGeometry {
   }
 
   /**
-   * Finite elevation of the level background (bottom).
-   * @param {PlaceableDocument} placeableD
-   * @returns {number}
+   * Get the source for a level document.
+   * @param {Level} levelD
+   * @returns {string} The url.
    */
-  static placeableElevationZ(placeableD) {
-    const MAX_ELEV = 1e06;
-    const z = gridUnitsToPixels(placeableD.elevation.bottom);
-    if ( z === Number.POSITIVE_INFINITY ) return MAX_ELEV;
-    if ( z === Number.NEGATIVE_INFINITY ) return -MAX_ELEV;
-    return z;
+  static textureSource(levelD) { return levelD[this.LEVEL_TYPE].src; }
+
+};
+
+const LevelGeometrySubclassMixin = superclass => class extends superclass {
+  // Set these from scratch b/c the properties vary from that of the tile
+  static UPDATE_KEY_MAP = new Map([
+    ["textures.offsetX", "position"],
+    ["textures.offsetY", "position"],
+    ["textures.anchorX", "position"],
+    ["textures.anchorY", "position"],
+    ["elevation.bottom", "position"],
+    ["elevation.top", "position"],
+
+    ["textures.rotation", "rotation"],
+
+    ["textures.scaleX", "scale"],
+    ["textures.scaleY", "scale"],
+    ["textures.fit", "scale"],
+  ]);
+
+  // ----- NOTE: AABB ----- //
+  calculateAABB() {
+    const cache = this.pixelCache;
+    const elevationZ = this.elevationZ;
+    if ( !cache ) {
+      // Cannot ascertain width and height without the texture. (At least, it would require a partial load.)
+      // But there is a decent chance that the scene rect would cover the dimensions.
+      AABB3d.fromLevel(this.placeableDocument, { type: this.constructor.LEVEL_TYPE, out: this.aabb });
+
+    } else {
+      // Use the cache to find the boundary points.
+      const { width, height } = cache;
+      using TL = cache._toCanvasCoordinates(0, 0);
+      using BL = cache._toCanvasCoordinates(0, height);
+      using TR = cache._toCanvasCoordinates(width, 0);
+      using BR = cache._toCanvasCoordinates(width, height);
+      AABB3d.fromPoints([TL, BL, TR, BR], this.aabb);
+      this.aabb.min.z = elevationZ;
+      this.aabb.max.z = elevationZ;
+    }
   }
+};
 
-}
+const LevelBackgroundMixin = superclass => class extends superclass {
+  /** @type {string} */
+  static LEVEL_TYPE = "background";
 
-export class LevelForegroundGeometry extends LevelBackgroundGeometry {
+  static get cacheManager() { return CONFIG[GEOMETRY_LIB_ID].levelBackgroundPixelCache; }
 
+  /**
+   * Finite elevation of the level background (bottom).
+   * @type {number}
+   */
+  get elevationZ() {
+    return this.constructor.finiteElevation(this.placeableDocument.bottomZ);
+  }
+};
+
+const LevelForegroundMixin = superclass => class extends superclass {
   /** @type {string} */
   static LEVEL_TYPE = "foreground";
 
@@ -201,14 +259,104 @@ export class LevelForegroundGeometry extends LevelBackgroundGeometry {
 
   /**
    * Finite elevation of the level background (bottom).
-   * @param {PlaceableDocument} placeableD
-   * @returns {number}
+   * @type {number}
    */
-  static placeableElevationZ(placeableD) {
-    const MAX_ELEV = 1e06;
-    const z = gridUnitsToPixels(placeableD.elevation.top);
-    if ( z === Number.POSITIVE_INFINITY ) return MAX_ELEV;
-    if ( z === Number.NEGATIVE_INFINITY ) return -MAX_ELEV;
-    return z;
+  get elevationZ() {
+    return this.constructor.finiteElevation(this.placeableDocument.topZ);
+  }
+};
+
+const LevelBackgroundAlphaMixin = superclass => class extends superclass {
+  static UPDATE_KEY_MAP = new Map([
+    ...super.UPDATE_KEY_MAP,
+    ["background.alphaThreshold", "texture"],
+    ["background.src", "texture"],
+  ]);
+}
+
+const LevelForegroundAlphaMixin = superclass => class extends superclass {
+  static UPDATE_KEY_MAP = new Map([
+    ...super.UPDATE_KEY_MAP,
+    ["foreground.alphaThreshold", "texture"],
+    ["foreground.src", "texture"],
+  ]);
+}
+
+
+export class LevelBackgroundFullGeometry extends mix(TileFullGeometry).with(LevelCalculationsMixin, LevelGeometrySubclassMixin, LevelBackgroundMixin) { }
+export class LevelBackgroundBoundingRectGeometry extends mix(TileBoundingRectGeometry).with(LevelCalculationsMixin, LevelGeometrySubclassMixin, LevelBackgroundMixin, LevelBackgroundAlphaMixin) { }
+export class LevelBackgroundBoundingPolygonGeometry  extends mix(TileBoundingPolygonGeometry).with(LevelCalculationsMixin, LevelGeometrySubclassMixin, LevelBackgroundMixin, LevelBackgroundAlphaMixin) { }
+export class LevelBackgroundPolygonsGeometry  extends mix(TilePolygonsGeometry).with(LevelCalculationsMixin, LevelGeometrySubclassMixin, LevelBackgroundMixin, LevelBackgroundAlphaMixin) { }
+export class LevelBackgroundTrianglesGeometry  extends mix(TileTrianglesGeometry).with(LevelCalculationsMixin, LevelGeometrySubclassMixin, LevelBackgroundMixin, LevelBackgroundAlphaMixin) { }
+
+export class LevelForegroundFullGeometry extends mix(TileFullGeometry).with(LevelCalculationsMixin, LevelGeometrySubclassMixin, LevelForegroundMixin) { }
+export class LevelForegroundBoundingRectGeometry extends mix(TileBoundingRectGeometry).with(LevelCalculationsMixin, LevelGeometrySubclassMixin, LevelForegroundMixin, LevelForegroundAlphaMixin) { }
+export class LevelForegroundBoundingPolygonGeometry extends mix(TileBoundingPolygonGeometry).with(LevelCalculationsMixin, LevelGeometrySubclassMixin, LevelForegroundMixin, LevelForegroundAlphaMixin) { }
+export class LevelForegroundPolygonsGeometry extends mix(TilePolygonsGeometry).with(LevelCalculationsMixin, LevelGeometrySubclassMixin, LevelForegroundMixin, LevelForegroundAlphaMixin) { }
+export class LevelForegroundTrianglesGeometry extends mix(TileTrianglesGeometry).with(LevelCalculationsMixin, LevelGeometrySubclassMixin, LevelForegroundMixin, LevelForegroundAlphaMixin) { }
+
+
+export class LevelBackgroundGeometry extends mix(TileGeometry).with(LevelCalculationsMixin, LevelBackgroundMixin) {
+
+  static UPDATE_KEY_MAP = new Map(); // Only so LevelBackgroundMixin works.
+
+  static SUBCLASSES = {
+    full: LevelBackgroundFullGeometry,
+    boundingRect: LevelBackgroundBoundingRectGeometry,
+    boundingPolygon: LevelBackgroundBoundingPolygonGeometry,
+    polygons: LevelBackgroundPolygonsGeometry,
+    triangles: LevelBackgroundTrianglesGeometry,
+  };
+
+  calculateAABB() {
+    // Check if the asset is loaded. If not, load it and update the aabb again later.
+    const type = this.constructor.LEVEL_TYPE;
+    const src = this.placeableDocument[type].src;
+    let tex;
+    if ( src ) tex = PIXI.Assets.get(src); // May return null.
+    if ( src && !tex ) PIXI.Assets.load(src).then((tex) => {
+      if ( tex ) this.calculateAABB();
+    });
+    AABB3d.fromLevel(this.placeableDocument, { type, out: this.aabb });
+  }
+
+  /**
+   * Finite elevation of the level background (bottom).
+   * @type {number}
+   */
+  get elevationZ() {
+    return this.constructor.finiteElevation(this.placeableDocument.bottomZ);
+  }
+}
+
+export class LevelForegroundGeometry extends mix(TileGeometry).with(LevelCalculationsMixin, LevelForegroundMixin) {
+
+  static SUBCLASSES = {
+    full: LevelForegroundFullGeometry,
+    boundingRect: LevelForegroundBoundingRectGeometry,
+    boundingPolygon: LevelForegroundBoundingPolygonGeometry,
+    polygons: LevelForegroundPolygonsGeometry,
+    triangles: LevelForegroundTrianglesGeometry,
+  };
+
+
+  calculateAABB() {
+    // Check if the asset is loaded. If not, load it and update the aabb again later.
+    const type = this.constructor.LEVEL_TYPE;
+    const src = this.placeableDocument[type].src;
+    let tex;
+    if ( src ) tex = PIXI.Assets.get(src); // May return null.
+    if ( src && !tex ) PIXI.Assets.load(src).then((tex) => {
+      if ( tex ) this.calculateAABB();
+    });
+    AABB3d.fromLevel(this.placeableDocument, { type, out: this.aabb });
+  }
+
+  /**
+   * Finite elevation of the level background (bottom).
+   * @type {number}
+   */
+  get elevationZ() {
+    return this.constructor.finiteElevation(this.placeableDocument.topZ);
   }
 }

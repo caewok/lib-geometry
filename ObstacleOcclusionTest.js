@@ -2,16 +2,17 @@
 canvas,
 CONST,
 CONFIG,
-foundry,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
 import { NULL_SET } from "./util.js";
-import { OTHER_MODULES, GEOMETRY_LIB_ID } from "./const.js";
+import { OTHER_MODULES } from "./const.js";
 import { AABB3d } from "./3d/AABB3d.js";
 import { Draw } from "./Draw.js";
-import { TokenGeometry } from "./placeable_geometry/TokenGeometry.js";
+import { Point3d } from "./3d/Point3d.js";
+
+const tmpPt1 = new Point3d();
 
 /**
  * An instance that, for a given configuration, tracks potential obstacles.
@@ -50,8 +51,11 @@ export class ObstacleOcclusionTest {
    * @param {string} [opts.levelId]                           If provided, will return early if geometry does not affect this level.
    * @yields {GeometricPrimitive}
    */
-  *iterateObstacleShapes(opts) {
-    for ( const geom of this.iterateObstacleGeoms(opt) ) yield* geom.iterateShapes();
+  *iterateObstacleShapes({ geomSubtype = "full", ...opts } = {}) {
+    for ( const geom of this.iterateObstacleGeoms(opts) ) {
+      if ( geom.constructor.HAS_SUBTYPES ) yield* geom[geomSubtype].shapes;
+      else yield* geom.shapes;
+    }
   }
 
   /**
@@ -60,8 +64,11 @@ export class ObstacleOcclusionTest {
    * @param {string} [opts.levelId]                           If provided, will return early if geometry does not affect this level.
    * @yields {Polygon3d}
    */
-  *iterateObstacleFaces(opts) {
-    for ( const geom of this.iterateObstacleGeoms(opt) ) yield* geom.iterateFaces();
+  *iterateObstacleFaces({ geomSubtype = "full", ...opts } = {}) {
+    for ( const geom of this.iterateObstacleGeoms(opts) ) {
+      if ( geom.constructor.HAS_SUBTYPES ) yield* geom[geomSubtype].iterateFaces();
+      else yield* geom.iterateFaces();
+    }
   }
 
   /**
@@ -70,16 +77,10 @@ export class ObstacleOcclusionTest {
    * @param {string} [opts.levelId]                           If provided, will return early if geometry does not affect this level.
    * @yields {PlaceableGeometry}
    */
-  *iterateObstacleGeoms({ includeObstacles = this.constructor.OBSTACLE_KEYS, senseType, levelId } = {}) {
-    senseType ??= this.senseType;
-    levelId ??= this.levelId;
+  *iterateObstacleGeoms({ includeObstacles = this.constructor.OBSTACLE_KEYS } = {}) {
     for ( const key of includeObstacles ) {
       const geoms = this.obstacleGeometries[key] || [];
-      for ( const geom of geoms ) {
-        if ( !geom.blocksSense(senseType) ) continue;
-        if ( !geom.blocksFromLevel(levelId) ) continue;
-        yield geom;
-      }
+      yield* geoms;
     }
   }
 
@@ -123,7 +124,7 @@ export class ObstacleOcclusionTest {
 
   /**
    * @typedef BlockingConfig
-   * @prop {string} senseType
+   * @prop {CONST.WALL_RESTRICTION_TYPES} senseType
    * @prop {boolean} walls        True if walls block
    * @prop {boolean} tiles        True if tiles block
    * @prop {boolean} regions      True if regions block
@@ -131,10 +132,15 @@ export class ObstacleOcclusionTest {
    * - @prop {boolean} background   True if level background texture blocks
    * - @prop {boolean} foreground   True if level foreground texture blocks
    * @prop {TokenBlockingConfig} tokens     Token-specific blocking settings
+   * @prop {object} filters         Optional filters to further restrict what obstacles block.
+   * - @prop {function[]} regions
+   * - @prop {function[]} tiles
+   * - @prop {function[]} tokens
+   * - @prop {function[]} walls
    */
 
   /** @type {BlockingConfig} */
-  _config = {
+  config = {
     senseType: "sight",
     walls: true,
     tiles: true,
@@ -153,15 +159,16 @@ export class ObstacleOcclusionTest {
       allies: false,      // False: allies do not block.
       excludedStatuses: NULL_SET,  // If token has status, it does not block
     },
+
+    // Optional filters.
+    filters: {
+      regions: [],
+      tiles: [],
+      tokens: [],
+      walls: [],
+      levels: [],
+    },
   };
-
-  get config() { return structuredClone(this._config); }
-
-  set config(cfg = {}) {
-    if ( cfg.blocking ) console.error("ObstacleOcclusionTest no longer has 'blocking' in its config.");
-    foundry.utils.mergeObject(this._config, cfg, { inplace: true, insertKeys: false, recursive: true });
-    this.update();
-  }
 
   /**
    * Subject token for which obstacles are being tested.
@@ -176,7 +183,6 @@ export class ObstacleOcclusionTest {
   set subjectToken(value) {
     if ( value.document ) value = value.document;
     this.#subjectToken = value;
-    this.obstacleGeometries.tokens = this.findBlockingTokens();
   }
 
   /**
@@ -193,7 +199,6 @@ export class ObstacleOcclusionTest {
       if ( !tokens[Symbol.iterator] ) tokens = [tokens];
       this.#tokensToExclude = new WeakSet(tokens.map(t => t.document ? t.document : t));
     }
-    this.obstacleGeometries.tokens = this.findBlockingTokens();
   }
 
   /**
@@ -210,8 +215,8 @@ export class ObstacleOcclusionTest {
   get validLevels() {
     const thisLevel = canvas.scene.levels.get(this.levelId);
     if ( !thisLevel ) return new Set(canvas.scene.levels.keys()); // Default to all levels.
-    const s = Set(thisLevel.visibility.levels); // Clone the set so we can modify it.
-    s.add(thisLevel);
+    const s = new Set(thisLevel.visibility.levels); // Clone the set so we can modify it.
+    s.add(thisLevel.id);
     return s;
   }
 
@@ -233,12 +238,11 @@ export class ObstacleOcclusionTest {
    * @param {Point3d} [viewpoint]             Used for _rayIsOccluded as the starting viewpoint
    * @param {Token[]} [tokensToExclude=[]]    Exclude these tokens from collision testing
    */
-  initialize({ subjectToken, tokensToExclude, levelId, ...cfg } = {}) {
+  initialize({ subjectToken, tokensToExclude, levelId } = {}) {
     // Set privately and then trigger full update.
     if ( levelId ) this.levelId = levelId;
     if ( subjectToken ) this.#subjectToken = subjectToken.document ? subjectToken.document : subjectToken;
     if ( tokensToExclude ) this.#tokensToExclude = new WeakSet(tokensToExclude.map(t => t.document ? t.document : t));
-    this.config = cfg; // Even if empty, trigger this.constructObstacleTester() via config setter;
   }
 
   /**
@@ -272,7 +276,7 @@ export class ObstacleOcclusionTest {
   }
 
   _updateObstacles() {
-    const senseType = this._config.senseType;
+    const senseType = this.config.senseType;
     this.obstacleGeometries.tiles = this.findBlockingTiles();
     this.obstacleGeometries.tokens = this.findBlockingTokens();
     this.obstacleGeometries.regions = this.findBlockingRegions();
@@ -295,9 +299,34 @@ export class ObstacleOcclusionTest {
   /**
    * Helper to get placeable docs within bounds, filter by the 3d aabb, and filter by frustum.
    */
-  #filterDocGeometries(mgr, opts) {
-    const geoms = mgr.quadtree.getObjects(this.aabb, opts);
-    if ( this.frustum ) return geoms.filter(geom => this.#frustum.overlapsGeometry(geom));
+  #filterDocGeometries(mgr, obstacleKey, collisionOpts = {}) {
+    collisionOpts.senseType ??= this.config.senseType;
+    collisionOpts.levelId ??= this.levelId;
+
+    // Add in custom filters as appropriate, to the collision test.
+    const customFilters = this.config.filters?.[obstacleKey] || [];
+    const collisionTest = customFilters.length
+      ? o => {
+        if ( !o.t.constructor.couldBlock(o.t.placeableDocument, collisionOpts) ) return false;
+        return customFilters.every(fn => fn(o.t.placeableDocument));
+      }
+      : o => o.t.constructor.couldBlock(o.t.placeableDocument, collisionOpts);
+
+    // Get the geometries from the quadtree.
+    const geoms = mgr.quadtree.getObjects(this.aabb, { collisionTest });
+    if ( this.frustum ) {
+      switch ( obstacleKey ) {
+        case "levels":
+        case "tiles": return geoms.filter(geom => {
+          if ( geom.alphaBlockingType === "ignore" ) return false;
+          return this.#frustum.overlapsGeometry(geom.boundarySubtype);
+        });
+
+        case "tokens": return geoms.filter(geom => this.#frustum.overlapsGeometry(geom.boundarySubtype));
+
+        default: return geoms.filter(geom => this.#frustum.overlapsGeometry(geom));
+      }
+    }
     return geoms;
   }
 
@@ -305,59 +334,66 @@ export class ObstacleOcclusionTest {
    * @returns {Set<WallDocument>}
    */
   findBlockingWalls() {
-    if ( !this._config.walls ) return NULL_SET;
-
-    // Drop non-blocking walls for this sense type.
-    const collisionTest = o => o.t.placeableDocument[this._config.senseType];
-    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.walls, { collisionTest });
+    if ( !this.config.walls ) return NULL_SET;
+    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.walls, "walls");
   }
 
   /**
    * @returns {Set<TokenDocument>}
    */
   findBlockingTokens() {
-    const tokensCfg = this._config.tokens;
+    const tokensCfg = this.config.tokens;
     if ( !(tokensCfg.dead || tokensCfg.live) ) return NULL_SET;
 
-    const validLevels = this.validLevels;
-    const collisionTest = o => validLevels.has(o.t.placeableDocument.level) && this.includeToken(o.t.placeableDocument);
-    let tokenGeoms = this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.tokens, { collisionTest });
-
-    // Filter out the subject token and other tokens to exclude (such as the target).
-    tokenGeoms = tokenGeoms.filter(geom => !(this.subjectToken === geom.placeableDocument || this.tokensToExclude.has(geom.placeableDocument)));
-
-    // Module-specific
+    // Temporarily add filters.
+    const tokenFilters = this.config.filters.tokens;
     const RIDEABLE = OTHER_MODULES.RIDEABLE;
-    if ( RIDEABLE ) {
-      // Cannot iterate the weak set.
-      // This is slower but preserves the weak set.
-      // Drop any token with a riding connection to an excluded token.
-      for ( const tDoc of canvas.scene.tokens ) {
-        if ( !tDoc.object ) continue;
-        if ( this.subjectToken === tDoc || this.tokensToExclude.has(tDoc) ) {
-          tokenGeoms = tokenGeoms.filter(tokenGeom => !(tokenGeom.token && RIDEABLE.API.RidingConnection(tokenGeom.token, tDoc.object)));
-        }
-      }
-    }
+    tokenFilters.push(this.#filterExcludedToken.bind(this));
+    if ( RIDEABLE ) tokenFilters.push(this.#filterRidingToken.bind(this));
+
+    const blockingCfg = this.config.tokens;
+    const subjectToken = this.subjectToken;
+    const tokenGeoms = this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.tokens, "tokens", { subjectToken, ...blockingCfg });
+
+    // Remove the temporary filters.
+    if ( RIDEABLE ) tokenFilters.pop();
+    tokenFilters.pop();
+
     return tokenGeoms;
+  }
+
+  #filterExcludedToken(tokenD) {
+    return !(this.subjectToken === tokenD || this.tokensToExclude.has(tokenD));
+  }
+
+  #filterRidingToken(tokenD) {
+    // Assumes Rideable module is active, for performance.
+    // Drop any token with a riding connection to an excluded token.
+    const RIDEABLE = OTHER_MODULES.RIDEABLE;
+    const ridingToken = tokenD.object;
+    if ( !ridingToken ) return true;
+    for ( const token of canvas.tokens.placeables ) {
+      const tDoc = token.document;
+      if ( this.subjectToken === tDoc
+        || this.tokensToExclude.has(tDoc) ) return !(ridingToken && RIDEABLE.API.RidingConnection(ridingToken, token))
+    }
+    return true;
   }
 
   /**
    * @returns {Set<TileDocument>}
    */
   findBlockingTiles() {
-    if ( !this._config.tiles ) return NULL_SET;
-    const validLevels = this.validLevels;
-    const collisionTest = o => o.t.placeableDocument.levels.intersects(validLevels);
-    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.tiles, { collisionTest });
+    if ( !this.config.tiles ) return NULL_SET;
+    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.tiles, "tiles");
   }
 
   /**
    * @returns {Set<RegionDocument>}
    */
   findBlockingRegions() {
-    if ( !this._config.regions || !canvas.regions.placeables.length ) return NULL_SET;
-    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.regions);
+    if ( !this.config.regions || !canvas.regions.placeables.length ) return NULL_SET;
+    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.regions, "regions");
   }
 
   /**
@@ -365,33 +401,10 @@ export class ObstacleOcclusionTest {
    * @returns {Set<Level>}
    */
   findBlockingLevels(levelType = "background") {
-    const validLevels = this.validLevels;
-    const collisionTest = o => validLevels.has(o.t.placeableDocument.id);
-    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.levels[levelType], { collisionTest })
+    return this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.levels[levelType], "levels")
       .filter(geom => geom.level[levelType].src); // Must have a defined texture.
   }
 
-  /**
-   * Does the token block with respect to a movement token?
-   * @param {TokenDocument} tokenD           Token to test for whether it could block
-   * @param {TokenDocument} [subjectTokenD]       Token doing the movement or viewing
-   * @param {TokenBlockingConfig} blockingCfg
-   * @returns {boolean}
-   */
-
-
-  static tokenBlocks = TokenGeometry.tokenBlocks;
-
-  static includeToken = TokenGeometry.includeToken;
-
-
-  includeToken(tokenD) {
-    return this.constructor.includeToken(tokenD, {
-      blockingCfg: this._config.tokens,
-      subjectToken: this.subjectToken,
-      tokensToExclude: this.tokensToExclude
-    });
-  }
 
   // ---- NOTE: Test ray intersection with obstacles ----- //
   obstacleTester;
@@ -443,10 +456,15 @@ export class ObstacleOcclusionTest {
    * @returns {boolean}
    */
   #geometriesOcclude(geoms, rayOrigin, rayDirection) {
-    using rayEnd = rayOrigin.add(rayDirection);
-    const opts = { levelId: this.levelId };
+    const rayEnd = rayOrigin.add(rayDirection, tmpPt1);
     return geoms.some(geom => this.#geomWithinRayBounds(geom, rayOrigin, rayEnd)
-      && geom.rayIntersection(rayOrigin, rayDirection, opts));
+      && geom.rayIntersection(rayOrigin, rayDirection));
+  }
+
+  #subGeometriesOcclude(geoms, rayOrigin, rayDirection, geomSubtype = "full") {
+    const rayEnd = rayOrigin.add(rayDirection, tmpPt1);
+    return geoms.some(geom => this.#geomWithinRayBounds(geom, rayOrigin, rayEnd)
+      && geom[geomSubtype].rayIntersection(rayOrigin, rayDirection));
   }
 
   /**
@@ -461,42 +479,54 @@ export class ObstacleOcclusionTest {
 
   terrainWallsOcclude(rayOrigin, rayDirection) {
     let limitedOcclusion = 0;
-    using rayEnd = rayOrigin.add(rayDirection);
+    const rayEnd = rayOrigin.add(rayDirection, tmpPt1);
     const geoms = geoms.filter(geom => this.#geomWithinRayBounds(geom, rayOrigin, rayEnd));
-    const opts = { ignoreLevelIds: this.invalidLevels };
     for ( const geom of geoms ) {
-      if ( !geom.rayIntersection(rayOrigin, rayDirection, opts) ) continue;
+      if ( !geom.rayIntersection(rayOrigin, rayDirection) ) continue;
       if ( limitedOcclusion++ ) return true;
     }
     return false;
   }
 
   proximateWallsOcclude(rayOrigin, rayDirection) {
-    using rayEnd = rayOrigin.add(rayDirection);
+    const rayEnd = rayOrigin.add(rayDirection, tmpPt1);
     const geoms = [
       ...this.obstacleGeometries.proximateWalls,
       ...this.obstacleGeometries.reverseProximateWalls
     ];
-    const opts = { ignoreLevelIds: this.invalidLevels };
     for ( const geom of geoms ) {
       if ( !this.#geomWithinRayBounds(geom, rayOrigin, rayEnd) ) continue;
 
       // If the proximity threshold is met, this edge excluded from perception calculations.
-      if ( geom.edge.applyThreshold(this._config.senseType, rayOrigin) ) continue;
+      if ( geom.edge.applyThreshold(this.config.senseType, rayOrigin) ) continue;
 
       // If an intersection is found, we can stop.
-      if ( geom.rayIntersection(rayOrigin, rayDirection, opts) ) return true;
+      if ( geom.rayIntersection(rayOrigin, rayDirection) ) return true;
 
     }
     return false;
   }
 
-  tilesOcclude(rayOrigin, rayDirection) {
-    return this.#geometriesOcclude(this.obstacleGeometries.tiles, rayOrigin, rayDirection);
+  /**
+   * Does a tile occlude this ray?
+   * @param {Pointd} rayOrigin
+   * @param {Point3d}  rayDirection
+   * @param {"full"|"boundingRect"|"boundingPolygon"|"polygons"|"triangles"} [ixType="full"]
+   * @returns {boolean}
+   */
+  tilesOcclude(rayOrigin, rayDirection, geomSubtype = "full") {
+    return this.#subGeometriesOcclude(this.obstacleGeometries.tiles, rayOrigin, rayDirection, geomSubtype);
   }
 
-  tokensOcclude(rayOrigin, rayDirection) {
-    return this.#geometriesOcclude(this.obstacleGeometries.tokens, rayOrigin, rayDirection);
+  /**
+   * Does a token occlude this ray?
+   * @param {Pointd} rayOrigin
+   * @param {Point3d}  rayDirection
+   * @param {"full"|"constrained"|"lit"|"bright"} [ixType="constrained"]
+   * @returns {boolean}
+   */
+  tokensOcclude(rayOrigin, rayDirection, geomSubtype = "constrained") {
+    return this.#subGeometriesOcclude(this.obstacleGeometries.tokens, rayOrigin, rayDirection, geomSubtype);
   }
 
   regionsOcclude(rayOrigin, rayDirection) {
@@ -536,7 +566,7 @@ export class ObstacleOcclusionTest {
 
   _drawFrustum(draw) {
     if ( !this.frustum ) return;
-    const drawOpts = { draw, width: 0, fill: Draw.COLORS.gray, fillAlpha: 0.1 }
+    const drawOpts = { draw, width: 0, fill: Draw.COLORS.yellow, fillAlpha: 0.1 }
     if ( this.frustum.draw2d ) this.frustum.draw2d(drawOpts);
     else {
       draw ??= Draw;
@@ -548,7 +578,7 @@ export class ObstacleOcclusionTest {
    * For debugging.
    * Draw outlines for the various objects that can be detected on the canvas.
    */
-  _drawDetectedObjects(draw) {
+  _drawDetectedObjects(draw, { tileSubtype = "boundarySubtype", tokenSubtype = "full", levelSubtype = "boundarySubtype" } = {}) {
     const colors = Draw.COLORS;
     const OBSTACLE_COLORS = {
       walls: colors.lightred,
@@ -563,7 +593,12 @@ export class ObstacleOcclusionTest {
     for ( const [key, obstacleGeoms] of Object.entries(this.obstacleGeometries) ) {
       const color = OBSTACLE_COLORS[key];
       const drawOpts = { draw, color, fillAlpha: 0.1, fill: color };
-      obstacleGeoms.forEach(geom => geom.draw2d(drawOpts));
+      switch ( key ) {
+        case "tiles": obstacleGeoms.forEach(geom => geom[tileSubtype].draw2d(drawOpts)); break;
+        case "levels": obstacleGeoms.forEach(geom => geom[levelSubtype].draw2d(drawOpts)); break;
+        case "tokens": obstacleGeoms.forEach(geom => geom[tokenSubtype].draw2d(drawOpts)); break;
+        default: obstacleGeoms.forEach(geom => geom.draw2d(drawOpts));
+      }
     }
   }
 }
