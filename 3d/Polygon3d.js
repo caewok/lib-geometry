@@ -611,7 +611,7 @@ export class Polygon3d {
    * @param {number} bottomZ            Fixed elevation to use for the sides
    * @returns {Quad3d|Triangle3d[]}
    */
-  buildTopSides(bottomZ) {
+  buildTopSides(bottomZ, epsilon = this.constructor.EPSILON) {
     const numSides = this.points.length;
     const sides = new Array(numSides);
     let i = 0;
@@ -619,32 +619,24 @@ export class Polygon3d {
     using b = Point3d.tmp;
     let filterSides = false;
     for ( const edge of this.iterateEdges({ close: true }) ) {
-      // Cannot form a quad without 4 distinct points (this is rare).
-      const aAtBottom = edge.a.z.almostEqual(bottomZ);
-      const bAtBottom = edge.b.z.almostEqual(bottomZ)
-      let side;
-      if ( aAtBottom && bAtBottom ) {
-        filterSides = true;
+      // Cannot form a quad without 4 distinct points. Quick test here.
+      if ( edge.a.z.almostEqual(bottomZ) && edge.b.z.almostEqual(bottomZ) ) {
+        filterSides = true
         continue;
-      } else if ( aAtBottom ) { // edge.a and bottomA are equal.
-        const bottomB = b.set(edge.b.x, edge.b.y, bottomZ);
-        side = this.isHole
-          ? Triangle3d.from3Points(edge.a, edge.b, bottomB)
-            : Triangle3d.from3Points(edge.b, edge.a, bottomB);
-
-      } else if ( bAtBottom ) { // edge.b and bottomB are equal.
-        const bottomA = a.set(edge.a.x, edge.a.y, bottomZ);
-        side = this.isHole
-          ? Triangle3d.from3Points(edge.a, edge.b, bottomA)
-            : Triangle3d.from3Points(edge.b, edge.a, bottomA);
-      } else {
-        const bottomA = a.set(edge.a.x, edge.a.y, bottomZ);
-        const bottomB = b.set(edge.b.x, edge.b.y, bottomZ);
-        side = this.isHole
-          ? Quad3d.from4Points(edge.a, edge.b, bottomB, bottomA)
-            : Quad3d.from4Points(edge.b, edge.a, bottomA, bottomB);
       }
 
+      // Build a quad or occassionally a triangle.
+      const bottomA = a.set(edge.a.x, edge.a.y, bottomZ);
+      const bottomB = b.set(edge.b.x, edge.b.y, bottomZ);
+
+      const pts = cleanPolygonPoints([edge.b, edge.a, bottomA, bottomB], epsilon)
+      if ( this.isHole ) pts.reverse();
+      let side;
+      switch ( pts.length ) {
+        case 3: side = Triangle3d.from3Points(...pts); break;
+        case 4: side = Quad3d.from4Points(...pts); break;
+        default: filterSides = true; continue;
+      }
       side.isHole = this.isHole;
       sides[i++] = side;
     }
@@ -3030,9 +3022,9 @@ export class Polygons3d extends Polygon3d {
     return out;
   }
 
-  buildTopSides(bottomZ, opts) {
+  buildTopSides(bottomZ, epsilon) {
     const sides = [];
-    for ( const poly3d of this.polygons ) sides.push(...poly3d.buildTopSides(bottomZ, opts));
+    for ( const poly3d of this.polygons ) sides.push(...poly3d.buildTopSides(bottomZ, epsilon));
     return sides;
   }
 

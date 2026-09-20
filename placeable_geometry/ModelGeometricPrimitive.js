@@ -178,11 +178,9 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
     if ( polys.length === 1 ) return this.fromPolygon(id, polys[0], opts);
     this._makeElevationFinite(opts);
     const allProtoFaces = [];
-
-    // Construct extruded 3d shape for each polygon in turn.
     for ( const poly of polys )  {
       const top = Polygon3d.fromPIXIShape(poly, { z: opts.topZ });
-      const faces = this._facesFromPolygon3d(top, opts.bottomZ, opts);
+      const faces = this._facesFromPolygon3d(top, opts.bottomZ, opts)
       const prototypeFaces = this.canvasToPrototypeFaces(faces, opts);
       allProtoFaces.push(...prototypeFaces);
     }
@@ -218,7 +216,9 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
     const bottom = top.clone();
     bottom.setZ(bottomZ);
     bottom.reverseOrientation();
-    return [top, bottom, ...top.buildTopSides(bottomZ, opts)];
+
+    const EPSILON = 1e-04; // Larger epsilon because these side will eventually be transformed to a smaller prototype.
+    return [top, bottom, ...top.buildTopSides(bottomZ, EPSILON)];
   }
 
   /**

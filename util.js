@@ -1233,15 +1233,15 @@ export function findOverlappingPoints(a, b, c, d) {
  * @param {PIXI.Point[]|Point3d[]} points
  * @returns {PIXI.Point[]|Point3d[]}
  */
-export function cleanPolygonPoints(points) {
+export function cleanPolygonPoints(points, epsilon = 1e-06) {
   if ( points.length < 2 ) return points;
 
   points = points.values();
   const result = [points.next().value];
   for ( const curr of points ) {
-    if ( result.at(-1).almostEqual(curr) ) continue;
+    if ( result.at(-1).almostEqual(curr, epsilon) ) continue;
     while ( result.length >= 2
-      && pointsAreCollinear(result.at(-2), result.at(-1), curr) ) result.pop();
+      && pointsAreCollinear(result.at(-2), result.at(-1), curr, epsilon) ) result.pop();
     result.push(curr);
   }
 
@@ -1249,19 +1249,19 @@ export function cleanPolygonPoints(points) {
   // Loop b/c removing a point at a seam may expose a new collinearity.
   while ( result.length >= 3 ) {
     // Is the last point a duplicate of the first?
-    if ( result[0].almostEqual(result.at(-1)) ) {
+    if ( result[0].almostEqual(result.at(-1), epsilon) ) {
       result.pop();
       continue;
     }
 
     // Is the last point redundant? (2nd-to-last -> last -> first)
-    if ( pointsAreCollinear(result.at(-2), result.at(-1), result[0]) ) {
+    if ( pointsAreCollinear(result.at(-2), result.at(-1), result[0], epsilon) ) {
       result.pop();
       continue;
     }
 
     // Is the first point redundant? (Last -> first -> second)
-    if ( pointsAreCollinear(result.at(-1), result.at(0), result[1]) ) {
+    if ( pointsAreCollinear(result.at(-1), result.at(0), result[1], epsilon) ) {
       result.shift(); // Remove the first point.
       continue;
     }
