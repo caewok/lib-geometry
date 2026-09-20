@@ -118,10 +118,6 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
 
   // ----- NOTE: Model Matrix ----- //
 
-
-  /** @type {ModelMatrix} */
-  modelMatrix = ModelMatrixAnchor.create();
-
   /**
    * Mworld = Mlocal x M.container (row-major)
    * @returns {Matrix}
