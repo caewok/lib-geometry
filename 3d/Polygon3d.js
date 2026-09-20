@@ -421,9 +421,27 @@ export class Polygon3d {
     out = this.fromPolygon(poly2d, 0, out);
 
     // Now translate the XY polygon in the z direction.
+    return this._matchPolygon3dToPlane(out, plane);
+  }
+
+  /**
+   * Shift the points of a polygon tha tis parallel to the XY canvas based on a plane.
+   * @param {Polygon3d} poly3d        Poly3d set at elevation 0 with a plane normal z value only.
+   * @param {Plane} plane
+   * @returns {Polygon3d} Same polygon, possibly shifted to match the plane.
+   */
+  static _matchPolygon3dToPlane(poly3d, plane) {
+    if ( poly3d.plane.almostEqual(plane) ) return poly3d;
+    if ( poly3d.points[0].z !== 0 ) console.error("_matchPolygon3dToPlane|Should be at 0 elevation.");
+    if ( poly3d.plane.normal.x || poly3d.plane.normal.y ) console.error("_matchPolygon3dToPlane|Should be pointing straight up or down.");
+
+    // Now translate the XY polygon in the z direction.
     const invM2d = plane.conversion2dMatrixInverse;
-    for ( const pt3d of out.iteratePoints() ) invM2d.multiplyPoint3d(pt3d, pt3d);
-    return out;
+    for ( const pt3d of poly3d.iteratePoints() ) invM2d.multiplyPoint3d(pt3d, pt3d);
+
+    // The plane is not dirty because we checked it for equality at the beginning. So we must reset it.
+    poly3d.plane.copyFrom(plane);
+    return poly3d;
   }
 
 
@@ -655,6 +673,74 @@ export class Polygon3d {
   }
 
 
+/**
+ * Combine polygons (Polygon3d, Quad3d, Triangle3d, Polygons3d, ...) that lie on the
+ * same plane into as few objects as possible, by unioning them in that plane's local
+ * 2d coordinates. Useful for tidying up geometry that was assembled edge-by-edge (e.g.
+ * a run of side-wall quads) into a single, properly-welded shape.
+ *
+ * Any Polygons3d passed in is first flattened into its constituent polygons. Members
+ * are then bucketed by Plane#almostEqual; a polygon whose plane doesn't match any
+ * other member's plane is returned unchanged (no union needed). Each bucket of 2+
+ * coplanar members is unioned in 2d and returned as a single Polygons3d -- or, if
+ * the union collapses to exactly one simple ring, as a plain Polygon3d.
+ * @param {(Polygon3d|Polygons3d)[]} polys
+ * @param {object} [opts]
+ * @param {number} [opts.scalingFactor=100]   Passed through to ClipperPaths.
+ * @returns {(Polygon3d|Polygons3d)[]}
+ */
+static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
+  // Flatten any Polygons3d inputs into their individual member polygons.
+  const flat = polys.flatMap(poly => poly.polygons ?? [poly]);
+  if ( !flat.length ) return [];
+
+  // Bucket by plane. Groups are few in practice, so a linear scan per member is fine.
+  const groups = [];
+  for ( const poly of flat ) {
+    const plane = poly.plane;
+    const group = groups.find(g => g.plane.almostEqual(plane));
+    if ( group ) group.members.push(poly);
+    else groups.push({ plane, members: [poly] });
+  }
+
+  const ClipperPaths = CONFIG.GeometryLib.CONFIG.ClipperPaths;
+  const out = [];
+  for ( const { plane, members } of groups ) {
+    // Nothing to combine -- pass the lone polygon through unchanged.
+    if ( members.length === 1 ) { out.push(members[0]); continue; }
+
+    // Project every member's ring into the plane's own local 2d coordinates.
+    const M2d = plane.conversion2dMatrix;
+    const polys2d = members.map(poly3d => {
+      const pts2d = poly3d.points.map(pt => {
+        using tmp3d = M2d.multiplyPoint3d(pt);
+        return tmp3d.to2d();
+      });
+      const poly2d = new PIXI.Polygon(pts2d);
+      PIXI.Point.release(...pts2d);
+
+      if ( poly3d.isHole ^ !poly2d.isPositive ) poly2d.reverseOrientation();
+      return poly2d;
+    });
+
+    // Weld/union everything that touches or overlaps on this plane.
+    // NOTE: assumes ClipperPaths exposes a `unionPaths` boolean op, mirroring the
+    // `intersectPaths` used elsewhere in this codebase (e.g. Steps.js#verticalPlanks).
+    // Adjust the method name here if this wrapper's actual union method differs.
+    const unioned = ClipperPaths.fromPolygons(polys2d, { scalingFactor }).union().toPolygons();
+
+    // Convert the unioned 2d ring(s) back to 3d on the shared plane.
+    const polys3d = [];
+    for ( const poly of unioned ) {
+      const poly3d = Polygon3d.fromPIXIShape(poly);
+      Polygon3d._matchPolygon3dToPlane(poly3d, plane);
+      polys3d.push(poly3d);
+    }
+
+    out.push(polys3d.length === 1 ? polys3d[0] : Polygons3d.from3dPolygons(polys3d));
+  }
+  return out;
+}
 
   // ----- NOTE: Iterators ----- //
 
@@ -2901,7 +2987,7 @@ export class Polygons3d extends Polygon3d {
     }
     if ( !solids.length ) return new this.constructor();
     if ( solids.length > 1 && !holes.length ) {
-      const out = new this();
+      const out = new this.constructor();
       this.polygons.forEach(poly => out.polygons.push(...poly.triangulate(opts)));
       return out;
     } else if ( solids.length > 1 ) console.warn("Polygons3d#triangulate|Expects one solid per instance if holes are present.");
