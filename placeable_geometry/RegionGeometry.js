@@ -276,7 +276,7 @@ export class RegionGeometry extends PlaceableGeometry {
    * @param {RegionShape} regionShape
    * @param {RegionShape[]} holeShapes
    * @param {string} id
-   * @param {GeometricPrimitive}
+   * @returns {GeometricPrimitive}
    */
   _instantiateShape(regionShape, holeShapes, id) {
     if ( regionShape.hole || regionShape.isEmpty ) return new EmptyGeometricPrimitive(id);
@@ -285,7 +285,7 @@ export class RegionGeometry extends PlaceableGeometry {
 
     // 1. Wall Restricted.
     if ( this.isWallRestricted
-      && this.constructor.shapeIsWallRestricted(regionShape, this.placeableDocument) ) return this._instantiateRestrictedShape(regionShape, holeShapes, id);
+      && this.constructor.shapeIsWallRestricted(regionShape, this.placeableDocument) ) return this._instantiateWallRestrictedShape(regionShape, holeShapes, id);
 
     // 2. Grid constrained
     if ( this.constructor.shapeIsGridConstrained(regionShape) ) return this._instantiateGridConstrainedShape(regionShape, holeShapes, id);
@@ -336,46 +336,48 @@ export class RegionGeometry extends PlaceableGeometry {
    * @returns {ExtrudedPolygonPrimitive|ExtrudedPolygonPrimitiveWithHoles|EmptyGeometricPrimitive}
    */
   _instantiateWallRestrictedShape(regionShape, holeShapes, id) {
-    // Must intersect the polygon against the constraints. Only the region.document.polygons are already constrained.
-    // Batch all constraints into a single clipper object.
+    const { solids, holes } = this._wallRestrictedPolygonsForRegionShape(regionShape, holeShapes);
+    const opts = this._shapeDimensions(regionShape);
+    return this.#instantiateShapeFromSolidsAndHoles(id, solids, holes, opts);
+  }
+
+  _wallRestrictedPolygonsForRegionShape(regionShape, holeShapes) {
     const constraintPolys = this.placeableDocument._shapeConstraints.map(arr => new PIXI.Polygon(arr));
-    const ixPolys = this.#intersectConstraints(this.regionShapePolygons(regionShape), constraintPolys)
-    if ( !ixPolys.length ) return new EmptyGeometricPrimitive(id);
+    const solids = this.#intersectConstraints(this.regionShapePolygons(regionShape), constraintPolys)
+    if ( !solids.length ) return { solids: [], holes: [] };
 
     // Intersect hole polygons with constraints and clean, if applicable.
-    let ixHolePolys = [];
+    let holes = [];
     if ( holeShapes.length ) {
       const allHolePolygons = holeShapes.flatMap(h => h.polygons);
-      ixHolePolys = this.#intersectConstraints(allHolePolygons, constraintPolys);
+      holes = this.#intersectConstraints(allHolePolygons, constraintPolys);
     }
-
-    // Instantiate the appropriate primitive.
-    // A. With holes.
-    const opts = this._shapeDimensions(regionShape);
-    if ( ixHolePolys.length ) return this.#instantiateShapeFromSolidsAndHoles(id, ixPolys, ixHolePolys, opts);
-
-    // B. Without holes.
-    return ExtrudedPolygonPrimitive.fromPolygons(id, ixPolys, opts);
+    return { solids, holes };
   }
 
   /**
-   * Build a shape assuming it is wall restricted.
+   * Build a shape assuming it is constrained by the grid shape.
    * @param {RegionShape} regionShape
    * @param {RegionShape[]} holeShapes
    * @param {string} id
    * @returns {ExtrudedPolygonPrimitive|ExtrudedPolygonPrimitiveWithHoles|EmptyGeometricPrimitive}
    */
   _instantiateGridConstrainedShape(regionShape, holeShapes, id) {
-    const baseSolids = [];
-    const baseHoles = holeShapes.flatMap(shape => shape.polygons);
+    const { solids, holes } = this._gridConstrainedPolygonsForRegionShape(regionShape, holeShapes);
+    const opts = this._shapeDimensions(regionShape);
+    return this.#instantiateShapeFromSolidsAndHoles(id, solids, holes, opts);
+  }
+
+  _gridConstrainedPolygonsForRegionShape(regionShape, holeShapes) {
+    const solids = [];
+    const holes = holeShapes.flatMap(shape => shape.polygons);
     if ( regionShape.type === "ring" && (regionShape.radius - regionShape.innerWidth > 0) ) {
       // By convention, the first polygon is the solid ring, the second is the hole.
-      baseSolids.push(regionShape.polygons[0]);
-      baseHoles.push(regionShape.polygons[1]);
-    } else baseSolids.push(...this.regionShapePolygons(regionShape));
+      solids.push(regionShape.polygons[0]);
+      holes.push(regionShape.polygons[1]);
+    } else solids.push(...this.regionShapePolygons(regionShape));
 
-    const opts = this._shapeDimensions(regionShape);
-    return this.#instantiateShapeFromSolidsAndHoles(id, baseSolids, baseHoles, opts);
+    return { solids, holes };
   }
 
   /**
@@ -387,12 +389,16 @@ export class RegionGeometry extends PlaceableGeometry {
    * @returns {ExtrudedPolygonPrimitive|ExtrudedPolygonPrimitiveWithHoles|EmptyGeometricPrimitive}
    */
   _instantiateHoleShape(regionShape, holeShapes, id) {
-    const baseSolids = this._shapeToPIXI(regionShape);
-    const baseHoles = holeShapes.flatMap(shape => this._shapeToPIXI(shape));
-    if ( baseSolids.length === 2 ) baseHoles.push(baseSolids.pop()); // Ring shape: solid + hole.
-
+    const { solids, holes } = this._polygonsWithHolesForRegionShape(regionShape, holeShapes);
     const opts = this._shapeDimensions(regionShape);
-    return this.#instantiateShapeFromSolidsAndHoles(id, baseSolids, baseHoles, opts);
+    return this.#instantiateShapeFromSolidsAndHoles(id, solids, holes, opts);
+  }
+
+  _polygonsWithHolesForRegionShape(regionShape, holeShapes) {
+    const solids = this._shapeToPIXI(regionShape);
+    const holes = holeShapes.flatMap(shape => this._shapeToPIXI(shape));
+    if ( solids.length === 2 ) holes.push(solids.pop()); // Ring shape: solid + hole.
+    return { solids, holes };
   }
 
   /**
@@ -560,7 +566,7 @@ export class RegionGeometry extends PlaceableGeometry {
 
     // Recursively append hole signatures.
     if ( holes.length ) {
-      const holeStrings = holes.map(hole => this._getStructuralSignature(hole)); // eslint-disable-line no-unused-vars
+      const holeStrings = holes.map(hole => this._getStructuralSignature(hole));
       parts.push(`holes:(${holeStrings.join('|')})`);
     }
     return parts.join("|");
@@ -681,9 +687,20 @@ export class RegionGeometry extends PlaceableGeometry {
    * - @prop {number} bottomZ
    */
   get elevationZ() {
-    const elevs = super.elevationZ
-    if ( !this.constructor.topInclusive(this.placeableDocument) ) elevs.topZ -= 1; // Subtract 1 pixel if not inclusive.
-    return elevs;
+    return this.constructor.elevationZ(this.placeableDocument);
+  }
+
+  static elevationZ(regionD) {
+    let topZ = this.finiteElevation(regionD.topZ);
+    const bottomZ = this.finiteElevation(regionD.bottomZ);
+    if ( !this.topInclusive(regionD) ) topZ -= 1; // Subtract 1 pixel if not inclusive.
+    return { topZ, bottomZ };
+  }
+
+  /** @type {number} */
+  static zHeight(regionD) {
+    const { bottomZ, topZ } = this.elevationZ(regionD);
+    return topZ - bottomZ;
   }
 
   // ------ NOTE: Static property retrieval ----- //
