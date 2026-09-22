@@ -1324,6 +1324,21 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
     draw ??= new Draw();
     draw.shape(this.toPolygon2d({ omitAxis }), opts);
   }
+
+  drawNormal({ multiplier = 10, draw, omitAxis = "z", ...opts } = {}) {
+    draw ??= new Draw();
+    const a3d = this.centroid;
+    using b3d = Point3d.tmp;
+    a3d.add(this.plane.normal.multiplyScalar(multiplier, b3d), b3d);
+    using a;
+    using b;
+    switch ( omitAxis ) {
+      case "x": a3d.to2d({ x: "y", y: "z" }, a); b3d.to2d({ x: "y", y: "z" }, b); break;
+      case "y": a3d.to2d({ x: "x", y: "z" }, a); b3d.to2d({ x: "x", y: "z" }, b); break;
+      default: a.copyFrom(a3d); b.copyFrom(b3d);
+    }
+    draw.segment({ a, b }, opts);
+  }
 }
 
 function pointFromVertices(i, vertices, indices, stride = 3, offset = 0, outPoint) {
