@@ -16,6 +16,7 @@ import { Draw } from "../Draw.js";
 import { Matrix, MatrixFloat32 } from "../Matrix.js";
 import { Ellipse } from "../Ellipse.js";
 import { Segment } from "../Segment.js";
+import { NULL_SET } from "../util.js";
 
 /*
 3d Polygon representing a flat polygon plane.
@@ -2860,6 +2861,17 @@ export class Polygons3d extends Polygon3d {
   static fromPolygons(polys, elevation, out) {
     out ??= new this();
     out.polygons = polys.map(poly => Polygon3d.fromPolygon(poly, elevation));
+    return out;
+  }
+
+  static fromPIXIShapes(polys, { z = 0, holes = NULL_SET, density = 0, out } = {}) {
+    out ??= new this();
+    const opts = { z, density, isHole: false };
+    for ( let i = 0, n = polys.length; i < n; i += 1 ) {
+      const poly = polys[i];
+      opts.isHole = holes.has(i);
+      out.polygons.push(Polygon3d.fromPIXIShape(poly, opts));
+    }
     return out;
   }
 
