@@ -9,6 +9,7 @@ export * as canvasTests from "./canvas_tests.js";
 export * as placeableVertices from "./placeable_vertices/_module.mjs";
 export * as placeableGeometry from "./placeable_geometry/_module.mjs";
 export * as placeableGeometryTracking from "./placeable_tracking/_module.mjs";
+export * as placeableProperties from "./placeable_properties/_module.mjs";
 
 export * as sdf from "./sdf/_module.mjs";
 

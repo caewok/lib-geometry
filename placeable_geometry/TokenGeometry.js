@@ -16,6 +16,7 @@ import {
   HexagonCylinderPrimitive
   } from "./InstancedGeometricPrimitive.js";
 import { ExtrudedPolygonPrimitive } from "./ModelGeometricPrimitive.js";
+import { TokenProperties } from "../placeable_properties/TokenProperties.js";
 
 // LibGeometry
 import { GEOMETRY_LIB_ID } from "../const.js";
