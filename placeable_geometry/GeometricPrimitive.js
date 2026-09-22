@@ -357,20 +357,8 @@ export class GeometricPrimitive {
   /**
    * Draw normals for the faces, extending out from the centroid of each.
    */
-  drawNormals({ multiplier = 10, draw, omitAxis = "z", ...opts } = {}) {
-    draw ??= new Draw();
-    using b = Point3d.tmp;
-    for ( const face of this.faces ) {
-      const a = face.centroid;
-      a.add(face.plane.normal.multiplyScalar(multiplier, b), b);
-
-      // Just dropping z axis.
-      switch ( omitAxis ) {
-        case "z": draw.segment({ a, b }, opts); break;
-        case "x": draw.segment({ a: a.to2d({ x: "y", y: "z"}), b: b.to2d({ x: "y", y: "z"}) }, opts); break;
-        case "y": draw.segment({ a: a.to2d({ x: "x", y: "z"}), b: b.to2d({ x: "x", y: "z"}) }, opts); break;
-      }
-    }
+  drawNormals(opts) {
+    for ( const face of this.faces ) face.drawNormal(opts);
   }
 
   /**
