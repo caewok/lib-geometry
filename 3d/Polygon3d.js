@@ -1330,8 +1330,8 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
     const a3d = this.centroid;
     using b3d = Point3d.tmp;
     a3d.add(this.plane.normal.multiplyScalar(multiplier, b3d), b3d);
-    using a;
-    using b;
+    using a = Point3d.tmp;
+    using b = Point3d.tmp;
     switch ( omitAxis ) {
       case "x": a3d.to2d({ x: "y", y: "z" }, a); b3d.to2d({ x: "y", y: "z" }, b); break;
       case "y": a3d.to2d({ x: "x", y: "z" }, a); b3d.to2d({ x: "x", y: "z" }, b); break;
