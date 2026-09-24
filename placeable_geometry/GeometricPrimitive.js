@@ -441,9 +441,10 @@ export class GeometricPrimitive {
     for ( const otherFace of otherFaces ) {
       // Round so we can ignore multiple intersections at a single point, like with edge endpoints.
       // Note that for prototype faces, t might be quite small.
-      const t = roundDecimals(otherFace.intersectionT(rayOrigin, rayDirection, { holesBlock: false }) || 0, 8);
-      if ( t <= 0 ) continue;
-      tIntersections.add(t);
+      const t = otherFace.intersectionT(rayOrigin, rayDirection, { holesBlock: false });
+      if ( !t || t.almostLessThan(0) ) continue;
+      const roundedT = roundDecimals(t, 6);
+      tIntersections.add(roundedT);
     }
     return isOdd(tIntersections.size);
   }
