@@ -81,13 +81,6 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
     return modelMatrix.model.invert();
   }
 
-  // ----- NOTE: Vertices ----- //
-
-  static instanceVO = null;
-
-  /** @type {VertexObject} */
-  instanceVO = new VertexObject();
-
 }
 
 /**
