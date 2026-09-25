@@ -6,6 +6,7 @@ PIXI,
 import { Point3d } from "./3d/Point3d.js";
 import { cutaway, gridUnitsToPixels, clamp } from "./util.js";
 import { Draw } from "./Draw.js";
+import { Polygon3d, Triangle3d, Quad3d } from "./3d/Polygon3d.js";
 
 /**
  * A cutaway polygon is a 2d representation of a vertical slice of a shape.
@@ -39,6 +40,26 @@ export class CutawayPolygon extends PIXI.Polygon {
     poly.start.copyFrom(start);
     poly.end.copyFrom(end);
     return poly;
+  }
+
+  /**
+   * Convert to 3d canvas points.
+   * @returns {Iterator<Point3d>}
+   */
+  to3dPoints() {
+    return this.iteratePoints().map(pt => this._from2d(pt));
+  }
+
+  /**
+   * Convert the cutaway to 3d planar polygon.
+   */
+  to3dPlanarPolygon() {
+    const pts = [...this.to3dPoints()];
+    switch ( this.points.length ) {
+      case 3: return Triangle3d.from3dPoints(pts);
+      case 4: return Quad3d.from3dPoints(pts);
+      default: return Polygon3d.from3dPoints(pts);
+    }
   }
 
   /**

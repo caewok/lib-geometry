@@ -16,6 +16,7 @@ import { EmptyGeometricPrimitive } from "./EmptyGeometricPrimitive.js";
 // LibGeometry
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { Point3d } from "../3d/Point3d.js";
+import { gridUnitsToPixels } from "../util.js";
 
 /**
   Region will either be a single shape or a group of polygons.
@@ -691,9 +692,10 @@ export class RegionGeometry extends PlaceableGeometry {
   }
 
   static elevationZ(regionD) {
-    let topZ = this.finiteElevation(regionD.topZ);
+    const { top, topInclusive } = regionD.elevation;
+    const topE = this.finiteElevation(topInclusive ? top : top - 1); // Subtract 1 grid distance if not inclusive.
+    const topZ = gridUnitsToPixels(topE);
     const bottomZ = this.finiteElevation(regionD.bottomZ);
-    if ( !this.topInclusive(regionD) ) topZ -= 1; // Subtract 1 pixel if not inclusive.
     return { topZ, bottomZ };
   }
 

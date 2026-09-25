@@ -91,6 +91,27 @@ export class Ellipse extends PIXI.Ellipse {
   }
 
   /**
+   * Check whether the given x and y coordinates are inside this ellipse.
+   * @param {number} x
+   * @param {number} y
+   * @returns {boolean}
+   */
+  contains(x, y) {
+    // Fall back to PIXI.Ellipse's default behavior if there is no rotation
+    if ( !this.rotation ) return super.contains(x, y);
+
+    // Shift coordinates to the ellipse's local coordinate space
+    const localPt = this._fromCartesianCoords({ x, y });
+
+    // Calculate distance against the normalized radii
+    // In PIXI.Ellipse, 'width' and 'height' represent the half-axes
+    const dx = localPt.x / this.width;
+    const dy = localPt.y / this.height;
+
+    return (dx * dx + dy * dy).almostLessThan(1);
+  }
+
+  /**
    * Construct an ellipse that mirrors that of a Drawing ellipse
    * @param {Drawing} drawing
    * @returns {Ellipse}

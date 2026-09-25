@@ -939,6 +939,16 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
   // ----- NOTE: Intersection ----- //
 
   /**
+   * Test if an XY point is contained within the projected polygon.
+   * @param {PIXI.Point} canvasLoc
+   * @returns {boolean} True if contained.
+   */
+  containsProjectedXY(canvasLoc) {
+    const poly = this.toPolygon2d();
+    return poly.contains(canvasLoc.x, canvasLoc.y);
+  }
+
+  /**
    * Test if a ray is within the polygon bounds and intersects the polygon's plane.
    * Does not consider whether this polygon is facing.
    * @param {Point3d} rayOrigin
@@ -1667,6 +1677,15 @@ export class Ellipse3d extends Polygon3d {
   }
 
   /**
+   * Convert to 2d ellipse, dropping z.
+   * @return {Ellipse}
+   */
+  toEllipse2d() {
+    const center = this.centroid;
+    return new Ellipse(center.x, center.y, this.radiusX, this.radiusY, { rotation: Math.toDegrees(this.angle) });
+  }
+
+  /**
    * Convert to 2d polygon, dropping z.
    * @returns {PIXI.Polygon}
    */
@@ -1731,6 +1750,16 @@ export class Ellipse3d extends Polygon3d {
   }
 
   // ----- NOTE: Intersection ----- //
+
+  /**
+   * Test if an XY point is contained within the projected polygon.
+   * @param {PIXI.Point} canvasLoc
+   * @returns {boolean} True if contained.
+   */
+  containsProjectedXY(canvasLoc) {
+    const ellipse = this.toPlanarEllipse();
+    return ellipse.contains(canvasLoc.x, canvasLoc.y);
+  }
 
   /**
    * Is a 3d point that is on the plane within the polygon?
@@ -2003,6 +2032,15 @@ export class Circle3d extends Ellipse3d {
     return new PIXI.Circle(center.x, center.y, this.radius);
   }
 
+  /**
+   * Convert to 2d circle, dropping z.
+   * @return {PIXI.Circle}
+   */
+  toCircle2d() {
+    const center = this.centroid;
+    return new PIXI.Circle(center.x, center.y, this.radius);
+  }
+
   toPlanarPolygon() {
     const cir = this.toPlanarCircle();
     const poly = cir.toPolygon({ density: this.density });
@@ -2031,6 +2069,17 @@ export class Circle3d extends Ellipse3d {
   }
 
   // ----- NOTE: Intersection ----- //
+
+  /**
+   * Test if an XY point is contained within the projected polygon.
+   * @param {PIXI.Point} canvasLoc
+   * @returns {boolean} True if contained.
+   */
+  containsProjectedXY(canvasLoc) {
+    const circle = this.toPlanarCircle();
+    return circle.contains(canvasLoc.x, canvasLoc.y);
+  }
+
 
   /**
    * Is a 3d point that is on the plane within the polygon?
@@ -3124,6 +3173,20 @@ export class Polygons3d extends Polygon3d {
   }
 
   // ----- NOTE: Intersection ----- //
+
+  /**
+   * Test if an XY point is contained within the projected polygon.
+   * @param {PIXI.Point} canvasLoc
+   * @returns {boolean} True if contained.
+   */
+  containsProjectedXY(canvasLoc) {
+    let count = 0;
+    for ( const poly of this.polygons ) {
+      count += poly.containsProjectedXY(canvasLoc) * (poly.isHole ? -1 : 1);
+    }
+    return count > 0;
+  }
+
 
   /**
    * Test if a ray is within the polygon bounds and intersects the polygon's plane.

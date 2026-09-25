@@ -180,6 +180,10 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
     return new this(id, allProtoFaces);
   }
 
+  get topFace() { return this.faces[1]; }
+
+  get bottomFace() { return this.faces[0]; }
+
 
   // ----- NOTE: Factory helpers to construct faces ----- //
 
@@ -211,7 +215,7 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
     bottom.reverseOrientation();
 
     const EPSILON = 1e-04; // Larger epsilon because these side will eventually be transformed to a smaller prototype.
-    return [top, bottom, ...top.buildTopSides(bottomZ, EPSILON)];
+    return [bottom, top, ...top.buildTopSides(bottomZ, EPSILON)];
   }
 
   /**
@@ -220,9 +224,7 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    * @returns {object}
    */
   getInternalPoints() {
-    const top = this.faces[0];
-    const bottom = this.faces[1];
-    return this.constructor.calculatePolygonCylinderInternalPoints(top, bottom);
+    return this.constructor.calculatePolygonCylinderInternalPoints(this.topFace, this.bottomFace);
   }
 
   /**
@@ -232,11 +234,10 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    * @returns {CutawayPolygon[]}
    */
   verticalSlice(start, end) {
-    const top = this.faces[0];
-    const bottom = this.faces[1];
-    const poly = top.toPlanarPolygon();
-    const topZ = top.points[0].z;
-    const bottomZ = bottom.points[0].z;
+    const { topFace, bottomFace } = this;
+    const poly = topFace.toPolygon2d();
+    const topZ = topFace.points[0].z;
+    const bottomZ = bottomFace.points[0].z;
 
     const opts = {
       topElevationFn: () => topZ,

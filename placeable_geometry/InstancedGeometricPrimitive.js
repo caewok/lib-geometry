@@ -113,7 +113,7 @@ export class QuadPrimitive extends InstancedGeometricPrimitive {
     if ( rot.x || rot.y ) return super.verticalSlice(start, end);
 
     const top = this.faces[0];
-    const poly = top.toPlanarPolygon();
+    const poly = top.toPolygon2d();
     const topZ = top.points[0].z;
     const bottomZ = topZ - 1;
 
@@ -251,16 +251,16 @@ export class CubePrimitive extends InstancedGeometricPrimitive {
    */
   static createUnitCube() {
     const faces = [
-      QUADS.up.clone(),
       QUADS.down.clone(),
+      QUADS.up.clone(),
       QUADS.north.clone(),
       QUADS.west.clone(),
       QUADS.south.clone(),
       QUADS.east.clone(),
     ];
 
-    faces[0].setZ(0.5);
-    faces[1].setZ(-0.5);
+    faces[1].setZ(0.5);
+    faces[0].setZ(-0.5);
 
     // Adjust the sides so that they are at the region edge.
     for ( let i = 0; i < 4; i += 1 ) {
@@ -271,6 +271,10 @@ export class CubePrimitive extends InstancedGeometricPrimitive {
     }
     return faces;
   }
+
+  get topFace() { return this.faces[1]; }
+
+  get bottomFace() { return this.faces[0]; }
 
   /** @type {Faces} */
   static prototypeFaces = this.createUnitCube();
@@ -289,17 +293,17 @@ export class CubePrimitive extends InstancedGeometricPrimitive {
     // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
     const rot = this.modelMatrix.rotation;
     if ( rot.x || rot.y ) return super.verticalSlice(start, end);
-    const top = this.faces[0];
-    const bottom = this.faces[1];
-    const poly = top.toPlanarPolygon();
-    const topZ = top.points[0].z;
-    const bottomZ = bottom.points[0].z;
+
+    const { topFace, bottomFace } = this;
+    const poly = topFace.toPolygon2d();
+    const topZ = topFace.points[0].z;
+    const bottomZ = bottomFace.points[0].z;
 
     const opts = {
       topElevationFn: () => topZ,
       bottomElevationFn: () => bottomZ,
     };
-    return poly.cutaway(poly, start, end, opts);
+    return poly.cutaway(start, end, opts);
   }
 }
 
@@ -324,8 +328,12 @@ export class HexagonCylinderPrimitive extends InstancedGeometricPrimitive {
     bottom.reverseOrientation();
     top.setZ(0.5);
     bottom.setZ(-0.5);
-    return [top, bottom, ...top.buildTopSides(-0.5)];
+    return [bottom, top, ...top.buildTopSides(-0.5)];
   }
+
+  get topFace() { return this.faces[1]; }
+
+  get bottomFace() { return this.faces[0]; }
 
   static #prototypeFaces; /* eslint-disable-line no-unused-private-class-members */
 
@@ -339,9 +347,7 @@ export class HexagonCylinderPrimitive extends InstancedGeometricPrimitive {
    * @returns {object}
    */
   getInternalPoints() {
-    const top = this.faces[0];
-    const bottom = this.faces[1];
-    return this.constructor.calculatePolygonCylinderInternalPoints(top, bottom);
+    return this.constructor.calculatePolygonCylinderInternalPoints(this.topFace, this.bottomFace);
   }
 
   /**
@@ -354,11 +360,10 @@ export class HexagonCylinderPrimitive extends InstancedGeometricPrimitive {
     // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
     const rot = this.modelMatrix.rotation;
     if ( rot.x || rot.y ) return super.verticalSlice(start, end);
-    const top = this.faces[0];
-    const bottom = this.faces[1];
-    const poly = top.toPlanarPolygon();
-    const topZ = top.points[0].z;
-    const bottomZ = bottom.points[0].z;
+    const { topFace, bottomFace } = this;
+    const poly = topFace.toPolygon2d();
+    const topZ = topFace.points[0].z;
+    const bottomZ = bottomFace.points[0].z;
 
     const opts = {
       topElevationFn: () => topZ,
@@ -391,8 +396,12 @@ export class CylinderPrimitive extends InstancedGeometricPrimitive {
     // Build the sides.
     top.density = this.DENSITY;
     bottom.density = this.DENSITY;
-    return [top, bottom, ...top.buildTopSides(-0.5)];
+    return [bottom, top, ...top.buildTopSides(-0.5)];
   }
+
+  get topFace() { return this.faces[1]; }
+
+  get bottomFace() { return this.faces[0]; }
 
   static _prototypeFaces;
 
@@ -406,8 +415,8 @@ export class CylinderPrimitive extends InstancedGeometricPrimitive {
    * @returns {object}
    */
   getInternalPoints() {
-    const top = this.faces[0].toPolygon3d({ density: 8 })
-    const bottom = this.faces[1].toPolygon3d({ density: 8 })
+    const top = this.topFace.toPolygon3d({ density: 8 })
+    const bottom = this.bottomFace.toPolygon3d({ density: 8 })
     return this.constructor.calculatePolygonCylinderInternalPoints(top, bottom);
   }
 
@@ -422,11 +431,10 @@ export class CylinderPrimitive extends InstancedGeometricPrimitive {
     const rot = this.modelMatrix.rotation;
     if ( rot.x || rot.y ) return super.verticalSlice(start, end);
 
-    const top = this.faces[0];
-    const bottom = this.faces[1];
-    const ellipse = top.toPlanarEllipse();
-    const topZ = top.points[0].z;
-    const bottomZ = bottom.points[0].z;
+    const { topFace, bottomFace } = this;
+    const ellipse = topFace.toEllipse2d();
+    const topZ = topFace.points[0].z;
+    const bottomZ = bottomFace.points[0].z;
 
     const opts = {
       topElevationFn: () => topZ,
@@ -453,8 +461,12 @@ export class CircularCylinderPrimitive extends CylinderPrimitive {
     // Build the sides.
     top.density = this.DENSITY;
     bottom.density = this.DENSITY;
-    return [top, bottom, ...top.buildTopSides(-0.5)];
+    return [bottom, top, ...top.buildTopSides(-0.5)];
   }
+
+  get topFace() { return this.faces[1]; }
+
+  get bottomFace() { return this.faces[0]; }
 
   /**
    * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
@@ -467,11 +479,10 @@ export class CircularCylinderPrimitive extends CylinderPrimitive {
     const rot = this.modelMatrix.rotation;
     if ( rot.x || rot.y ) return super.verticalSlice(start, end);
 
-    const top = this.faces[0];
-    const bottom = this.faces[1];
-    const circle = top.toPlanarCircle();
-    const topZ = top.points[0].z;
-    const bottomZ = bottom.points[0].z;
+    const { topFace, bottomFace } = this;
+    const circle = topFace.toCircle2d();
+    const topZ = topFace.points[0].z;
+    const bottomZ = bottomFace.points[0].z;
 
     const opts = {
       topElevationFn: () => topZ,
