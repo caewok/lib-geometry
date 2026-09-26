@@ -1782,7 +1782,7 @@ export class Ellipse3d extends Polygon3d {
    * @returns {boolean} True if contained.
    */
   containsProjectedXY(canvasLoc) {
-    const ellipse = this.toPlanarEllipse();
+    const ellipse = this.toEllipse2d();
     return ellipse.contains(canvasLoc.x, canvasLoc.y);
   }
 
@@ -2101,7 +2101,7 @@ export class Circle3d extends Ellipse3d {
    * @returns {boolean} True if contained.
    */
   containsProjectedXY(canvasLoc) {
-    const circle = this.toPlanarCircle();
+    const circle = this.toCircle2d();
     return circle.contains(canvasLoc.x, canvasLoc.y);
   }
 
