@@ -2953,12 +2953,12 @@ export class Polygons3d extends Polygon3d {
     return out;
   }
 
-  static fromPIXIShapes(polys, { z = 0, holes = NULL_SET, density = 0, out } = {}) {
+  static fromPIXIShapes(polys, { z = 0, holes, density = 0, out } = {}) {
     out ??= new this();
-    const opts = { z, density, isHole: false };
+    const opts = { z, density };
     for ( let i = 0, n = polys.length; i < n; i += 1 ) {
       const poly = polys[i];
-      opts.isHole = holes.has(i);
+      if ( holes ) opts.isHole = holes.has(i);
       out.polygons.push(Polygon3d.fromPIXIShape(poly, opts));
     }
     return out;
