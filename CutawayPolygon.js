@@ -42,6 +42,20 @@ export class CutawayPolygon extends PIXI.Polygon {
     return poly;
   }
 
+   /**
+   * Create a new polygon from a series of cutaway points already in a polygon.
+   * @param {PIXI.Polygon} poly
+   * @param {Point3d} start
+   * @param {Point3d} end
+   * @returns {CutawayPolygon} The same polygon, modified in place to be a cutaway.
+   */
+  static fromPolygon(poly, start, end) {
+    poly.start = start.clone();
+    poly.end = end.clone();
+    Object.setPrototypeOf(poly, this.prototype);
+    return poly;
+  }
+
   /**
    * Convert to 3d canvas points.
    * @returns {Iterator<Point3d>}
