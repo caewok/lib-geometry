@@ -1691,9 +1691,34 @@ export class Ellipse3d extends Polygon3d {
    */
   toPolygon2d() {  return this.toPolygon3d().toPolygon2d(); }
 
+  /**
+   * Construct a 3d polygon that approximates the ellipse with a polygon.
+   * @returns {Polygon3d}
+   */
   toPolygon3d() {
-    const poly2d = this.toPlanarPolygon();
-    return Polygon3d.fromPlanarPolygon(poly2d, this.plane);
+    const { vx, vy } = this.radiusVectors();
+    const center = this.center;
+    const density = this.density;
+    const points = Point3d.createN(density);
+    const step = (2 * Math.PI) / density;
+
+    using tmpPt = Point3d.tmp;
+    for ( let i = 0; i < density; i += 1 ) {
+      const t = i * step;
+      const cTheta = Math.cos(t);
+      const sTheta = Math.sin(t);
+
+      const pt = points[i];
+      center
+        .add(vx.multiplyScalar(cTheta, tmpPt), pt)
+        .add(vy.multiplyScalar(sTheta, tmpPt), pt);
+    }
+
+    const out = new Polygon3d();
+    out.points = points;
+    out.isHole = this.isHole;
+    out.plane = this.plane;
+    return out;
   }
 
   /**
