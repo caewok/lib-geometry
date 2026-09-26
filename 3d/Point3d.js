@@ -335,6 +335,26 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
   }
 
   /**
+   * String key, rounding to a given number of decimals.
+   * @param {number} [places=8]   Number of decimals
+   */
+  stringKey(places=8) {
+    return `${this.x.toFixed(places)},${this.y.toFixed(places)}`;
+  }
+
+  /**
+   * Invert a string key.
+   * @param {string}
+   * @returns {Point3d}
+   */
+  static invertStringKey(str, out) {
+    // To avoid calling str.split repeatedly, do not call super; handle here.
+    out ??= this.tmp;
+    const [xStr, yStr, zStr] = str.split(",");
+    return out.set(Number(xStr) || 0, Number(yStr) || 0, Number(zStr) || 0);
+  }
+
+  /**
    * Drop the z dimension; return a new PIXI.Point
    * @param {object} [opts]    Options that affect which axes are used
    * @param {string} [opts.x]  Which 3d axis to use for the x axis

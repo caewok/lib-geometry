@@ -1400,6 +1400,43 @@ export function segmentOverlap(a, b, c, d) {
   return res;
 }
 
+/**
+ * Filters out duplicate intersection points. (Fixes issues with shared vertices.)
+ * Only use when points within 1 pixel can be combined.
+ * @param {Point3d[]|PIXI.Point[]} points
+ * @param {number} [epsilon]
+ * @returns {Point3d[]|PIXI.Point[]} The unique points
+ */
+export function getUniqueIntegerPoints(points) {
+  const unique = new Set([points[0].key]);
+  const out = [points[0]];
+  for ( const pt of points.slice(1) ) {
+    const key = unique.key;
+    if ( unique.has(key) ) continue;
+    unique.add(key);
+    out.push(pt);
+  }
+  return out;
+}
+
+/**
+ * Filters out duplicate intersection points. (Fixes issues with shared vertices.)
+ * @param {Point3d[]|PIXI.Point[]} points
+ * @param {number} [decimals=8]
+ * @returns {Point3d[]|PIXI.Point[]} The unique points
+ */
+export function getUniquePoints(points, decimals) {
+  const unique = new Set([points[0].stringKey(decimals)]);
+  const out = [points[0]];
+  for ( const pt of points.slice(1) ) {
+    const key = unique.stringKey(decimals);
+    if ( unique.has(key) ) continue;
+    unique.add(key);
+    out.push(pt);
+  }
+  return out;
+}
+
 function _almostLessThan(b, epsilon = 1e-06) { return this < (b + epsilon); }
 
 function _almostGreaterThan(b, epsilon = 1e-06) { return this > (b - epsilon); }
