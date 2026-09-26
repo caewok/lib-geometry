@@ -8,14 +8,13 @@ PIXI,
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { VertexObject } from "../placeable_vertices/VertexObject.js";
 import { AABB3d } from "../3d/AABB3d.js";
-import { cutaway, roundDecimals, isOdd } from "../util.js";
+import { cutaway, roundDecimals, isOdd, getUniqueIntegerPoints } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
 import { combineTypedArrays } from "../util.js";
 import { ModelMatrixAnchor } from "../ModelMatrix.js";
 import { MatrixFloat32 } from "../Matrix.js";
 import { Segment } from "../Segment.js";
 import { CutawayPolygon } from "../CutawayPolygon.js";
-import { Draw } from "../Draw.js";
 
 
 /** @type {Matrix<4,4>} */
@@ -824,7 +823,7 @@ export class GeometricPrimitive {
         } else if ( distA.almostEqual(0) ) interPoints3d.push(a);
 
         // A convex/planar polygon sliced by a plane should yield exactly 2 unique points.
-        const uniquePts = getUniquePoints(interPoints3d);
+        const uniquePts = getUniqueIntegerPoints(interPoints3d);
         if ( uniquePts.length === 2 ) {
           // Map the 3d points to the 2d coordinate system.
           const pt0 = cutaway.to2d(uniquePts[0], start, end);
@@ -877,28 +876,13 @@ export class GeometricPrimitive {
     }
     return polygons;
   }
+
+
 }
 
 
 
 // ----- NOTE: Helper functions -----
-
-/**
- * Filters out duplicate intersection points. (Fixes issues with shared vertices.)
- * @param {Point3d[]} points
- * @returns {Point3d[]} The unique points
- */
-function getUniquePoints(points) {
-  const unique = [];
-  using zero = Point3d.tmp.set(0, 0, 0);
-  using tmp = Point3d.tmp;
-  for ( const p of points ) {
-    const isDuplicate = unique.some(u =>  u.subtract(p, tmp).almostEqual(zero))
-    if ( !isDuplicate ) unique.push(p);
-  }
-  return unique;
-}
-
 
 /**
  * True if `direction` is (nearly) parallel to any of the given faces' planes --

@@ -1,15 +1,16 @@
 /* globals
+CONFIG,
 PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
 import { GeometricPrimitive } from "./GeometricPrimitive.js";
-import { VertexObject } from "../placeable_vertices/VertexObject.js";
-import { Polygon3d, Triangle3d, Circle3d, Ellipse3d, Quad3d, Polygons3d } from "../3d/Polygon3d.js";
+import { Polygon3d, Polygons3d } from "../3d/Polygon3d.js";
 import { ModelMatrixAnchor } from "../ModelMatrix.js";
 import { Point3d } from "../3d/Point3d.js";
-import { roundDecimals, isOdd } from "../util.js";
+import { GEOMETRY_LIB_ID } from "../const.js";
+import { CutawayPolygon } from "../CutawayPolygon.js";
 
 /**
  * ModelGeometricPrimitives are one-offs.
@@ -209,7 +210,7 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    * @param {number} bottomZ      The bottom elevation
    * @returns {Polygon3d[]}
    */
-  static _facesFromPolygon3d(top, bottomZ, opts) {
+  static _facesFromPolygon3d(top, bottomZ, _opts) {
     const bottom = top.clone();
     bottom.setZ(bottomZ);
     bottom.reverseOrientation();
@@ -233,11 +234,13 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    * @param {PIXI.Point} end        Ending point of the slice on the XY plane
    * @returns {CutawayPolygon[]}
    */
-  verticalSlice(start, end) {
+  verticalSlice(start, end, { topZ, bottomZ } = {}) {
     const { topFace, bottomFace } = this;
-    const poly = topFace.toPolygon2d();
-    const topZ = topFace.points[0].z;
-    const bottomZ = bottomFace.points[0].z;
+
+    // Because the bottom face is parallel to XY plane, we can just drop the Z axis.
+    const poly = bottomFace.toPolygon2d();
+    topZ ??= topFace.points[0].z;
+    bottomZ ??= bottomFace.points[0].z;
 
     const opts = {
       topElevationFn: () => topZ,
@@ -389,4 +392,88 @@ export class ExtrudedPolygonPrimitiveWithHoles extends ExtrudedPolygonPrimitive 
       return parent;
     });
   }
+
+  /**
+   * Cuts the extruded polygon with a vertical plane and returns 2D rectangular cross-sections.
+   * @param {PIXI.Point|Point3d} start     Starting point of the slice on the XY plane
+   * @param {PIXI.Point|Point3d} end       Ending point of the slice on the XY plane
+   * @returns {CutawayPolygon[]} Array of CutawayPolygon cross-sections (solids and holes)   */
+  verticalSlice(start, end, { topZ, bottomZ } = {}) {
+    // Construct the 2d cutaway polygons, accounting for holes.
+    const { topFace, bottomFace } = this;
+    if ( !bottomFace.polygons ) return super.verticalSlice(start, end, { topZ, bottomZ });
+
+    // Determine top and bottom elevations.
+    topZ ??= topFace.points[0].z;
+    bottomZ ??= bottomFace.points[0].z;
+    const opts = {
+      topElevationFn: () => topZ,
+      bottomElevationFn: () => bottomZ,
+    };
+
+    // Because the bottom face is parallel to XY plane, we can just drop the Z axis.
+    const cutaways = this.bottomFace.polygons.map(poly => poly.toPolygon2d().cutaway(start, end, opts));
+
+    // Use Clipper to union the cutaways. Holes go straight through, leaving 1+ solid polygons.
+    const paths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths.fromPolygons(cutaways);
+    const out = paths
+      .union()
+      .clean()
+      .toPolygons();
+
+    return out.map(poly => CutawayPolygon.fromPolygon(poly, start, end));
+  }
+
+  /**
+   * Helper: Merges overlapping or touching 1D intervals.
+   * @param {number[][]} intervals - Array of [start, end] tuples.
+   * @returns {number[][]} Merged intervals.
+   */
+  _mergeIntervals(intervals) {
+    if ( !intervals.length ) return [];
+    intervals.sort((a, b) => a[0] - b[0]);
+
+    const merged = [intervals[0]];
+    for ( let i = 1; i < intervals.length; i++ ) {
+      const last = merged[merged.length - 1];
+      const current = intervals[i];
+      if ( current[0] <= last[1] ) {
+        last[1] = Math.max(last[1], current[1]);
+      } else {
+        merged.push(current);
+      }
+    }
+    return merged;
+  }
+
+  /**
+   * Helper: Subtracts hole intervals from solid intervals.
+   * @param {number[][]} solids - Merged solid intervals.
+   * @param {number[][]} holes - Merged hole intervals.
+   * @returns {number[][]} Resulting solid intervals.
+   */
+  _subtractIntervals(solids, holes) {
+    let currentSolids = [...solids];
+
+    for ( const hole of holes ) {
+      const nextSolids = [];
+      for ( const solid of currentSolids ) {
+        if ( hole[1] <= solid[0] || hole[0] >= solid[1] ) {
+          // No overlap
+          nextSolids.push(solid);
+        } else {
+          // Hole splits or trims the solid
+          if ( hole[0] > solid[0] ) {
+            nextSolids.push([solid[0], hole[0]]);
+          }
+          if ( hole[1] < solid[1] ) {
+            nextSolids.push([hole[1], solid[1]]);
+          }
+        }
+      }
+      currentSolids = nextSolids;
+    }
+    return currentSolids;
+  }
+
 }
