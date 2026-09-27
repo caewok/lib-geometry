@@ -2049,12 +2049,16 @@ export class Circle3d extends Ellipse3d {
 
   static _geoLibType = "Circle3d";
 
+  get radius() { return super.radius; }
+
   set radius(value) {
     if ( Number.isNumeric(value) ) {
       using v = PIXI.Point.tmp.set(value, value);
       super.radius = v;
     } else super.radius = value;
   }
+
+  get radiusSquared() { return super.radiusSquared; }
 
   set radiusSquared(value) {
     if ( Number.isNumeric(value) ) {
@@ -2064,8 +2068,9 @@ export class Circle3d extends Ellipse3d {
   }
 
   _setDimensions(opts = {}) {
-    if ( Number.isNumeric(opts.radius) ) opts.radius = PIXI.Point.tmp.set(opts.radius, opts.radius);
-    if ( Number.isNumeric(opts.radiusSquared) ) opts.radiusSquared = PIXI.Point.tmp.set(opts.radiusSquared, opts.radiusSquared);
+    using tmpPt = PIXI.Point.tmp;
+    if ( Number.isNumeric(opts.radius) ) opts.radius = tmpPt.set(opts.radius, opts.radius);
+    if ( Number.isNumeric(opts.radiusSquared) ) opts.radiusSquared = tmpPt.set(opts.radiusSquared, opts.radiusSquared);
     return super._setDimensions(opts);
   }
 
