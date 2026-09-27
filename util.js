@@ -1408,9 +1408,12 @@ export function segmentOverlap(a, b, c, d) {
  * @returns {Point3d[]|PIXI.Point[]} The unique points
  */
 export function getUniqueIntegerPoints(points) {
-  const unique = new Set([points[0].key]);
-  const out = [points[0]];
-  for ( const pt of points.slice(1) ) {
+  if ( !points.length ) return [];
+  const iter = points.values();
+  const first = iter.next().value;
+  const unique = new Set([first.key]);
+  const out = [first];
+  for ( const pt of iter ) {
     const key = unique.key;
     if ( unique.has(key) ) continue;
     unique.add(key);
@@ -1426,9 +1429,12 @@ export function getUniqueIntegerPoints(points) {
  * @returns {Point3d[]|PIXI.Point[]} The unique points
  */
 export function getUniquePoints(points, decimals) {
-  const unique = new Set([points[0].stringKey(decimals)]);
-  const out = [points[0]];
-  for ( const pt of points.slice(1) ) {
+  if ( !points.length ) return [];
+  const iter = points.values();
+  const first = iter.next().value;
+  const unique = new Set([first.stringKey(decimals)]);
+  const out = [first];
+  for ( const pt of iter ) {
     const key = unique.stringKey(decimals);
     if ( unique.has(key) ) continue;
     unique.add(key);
