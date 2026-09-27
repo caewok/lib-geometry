@@ -16,7 +16,6 @@ import { Draw } from "../Draw.js";
 import { Matrix, MatrixFloat32 } from "../Matrix.js";
 import { Ellipse } from "../Ellipse.js";
 import { Segment } from "../Segment.js";
-import { NULL_SET } from "../util.js";
 
 /*
 3d Polygon representing a flat polygon plane.
@@ -741,24 +740,24 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
    * Iterate over the polygon's edges in order.
    * @param {object} [options]
    * @param {boolean} [close]   If true, return last point --> first point as edge.
-   * @returns { Segment } for each edge
+   * @yields {Segment}
    * Edges link, such that edge0.b === edge.1.a.
    */
   *iterateEdges({close = true} = {}) {
     const n = this.points.length;
     if ( n < 2 ) return;
 
-    const firstA = this.points[0];
+    const firstA = this.points[0].clone();
     let a = firstA;
     for ( let i = 1; i < n; i += 1 ) {
-      const b = this.points[i];
-      yield { a, b };
+      const b = this.points[i].clone();
+      yield new Segment(a, b);
       a = b;
     }
 
     if ( close ) {
       const b = firstA;
-      yield { a, b };
+      yield new Segment(a, b);
     }
   }
 
@@ -766,24 +765,24 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
    * Iterate over the polygon's edges in reverse order.
    * @param {object} [options]
    * @param {boolean} [close]   If true, return last point --> first point as edge.
-   * @returns { A: Point3d, B: Point3d } for each edge
+   * @yields {Segment}
    * Edges link, such that edge0.b === edge.1.a.
    */
   *reverseIterateEdges({close = true} = {}) {
     const n = this.points.length;
     if ( n < 2 ) return;
 
-    const firstA = this.points.at(-1);
+    const firstA = this.points.at(-1).clone();
     let a = firstA;
     for ( let i = n - 2; i > -1; i -= 1 ) {
-      const b = this.points[i];
-      yield { a, b };
+      const b = this.points[i].clone();
+      yield new Segment(a, b);
       a = b;
     }
 
     if ( close ) {
       const b = firstA;
-      yield { a, b };
+      yield new Segment(a, b);
     }
   }
 
@@ -1164,7 +1163,7 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
   /**
    * Intersect this Polygon3d against a plane.
    * @param {Plane} plane
-   * @returns {Segment3d[]|null} Empty if no intersections or parallel. If coincident, returns null.
+   * @returns {Segment|null} Empty if no intersections or parallel. If coincident, returns null.
    */
   intersectPlane(plane) {
     if ( this.points.length < 3 ) return [];
@@ -1172,7 +1171,7 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
     if ( this.plane.isParallelToPlane(plane) ) {
       // If polygon lies flat on the cutting plane, handle explicitly.
       // Return the polygon's own edges as segments.
-      if ( this.plane.isCoincidentWithPlane(plane, { testParallel: false }) ) return [...this.iterateEdges()];
+      if ( this.plane.isCoincidentWithPlane(plane, { testParallel: false }) ) return null;
       return []; // No intersection.
     }
 
@@ -1270,7 +1269,7 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
    * Coplanar objects can be transformed to 2d and intersected or tested for overlap.
    */
   intersectPolygon3d(other) {
-    if ( this.points.length < 3 || other.points.length < 3 ) return [];
+    if ( !(this.isValid && other.isValid) ) return [];
     if ( this.plane.isParallelToPlane(other.plane) ) {
       if ( this.plane.isCoincidentWithPlane(other.plane, { testParallel: false }) ) return null;
       return []; // No intersection; parallel but not touching.
@@ -1312,7 +1311,7 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
    * @returns {boolean}
    */
   intersectsPolygon3d(other) {
-    if ( this.points.length < 3 || other.points.length < 3 ) return false;
+    if ( !(this.isValid || other.isValid) ) return false;
     if ( this.plane.isParallelToPlane(other.plane) ) {
       return this.plane.isCoincidentWithPlane(other.plane, { testParallel: false });
     }
@@ -1848,6 +1847,76 @@ export class Ellipse3d extends Polygon3d {
     return [[t1, t2]];
   }
 
+  /**
+   * Does a line (ray) intersect this polygon?
+   * Assumes the line is on this plane.
+   * @param {Point3d} origin
+   * @param {Point3d} direction
+   * @returns {number[]} T-values along the line.
+   */
+  _hasPlanarLineINtersections(origin, direction) {
+    // Reuse the relatively cheap exact quadratic calculation here.
+    return this._planarLineIntersections(origin, direction).length > 0;
+  }
+
+  /**
+   * Intersect this Polygon3d against a plane.
+   * @param {Plane} plane
+   * @returns {Segment[]|null} Empty if no intersections or parallel. If coincident, returns null.
+   */
+  intersectPlane(plane) {
+    if ( !this.isValid ) return [];
+
+    if ( this.plane.isParallelToPlane(plane) ) {
+      // Ellipse lies flat in the cutting plane: no well-defined intersection line.
+      if ( this.plane.isCoincidentWithPlane(plane, { testParallel: false }) ) return null;
+      return []; // Parallel but not touching.
+    }
+
+    // Origin and normalized direction of the intersection line of the two planes.
+    const res = this.plane.intersectPlane(plane);
+    using origin = res.point;
+    using direction = res.direction;
+    direction.normalize(direction);
+
+    // Ellipse-specific: where does that line cross the ellipse boundary?
+    const intervals = this._planarLineIntersections(origin, direction);
+
+    // Convert the interval(s) back to 3d segments (an ellipse yields at most one chord).
+    const EPSILON = this.constructor.EPSILON;
+    const resultSegments = [];
+    for ( const [start, end] of intervals ) {
+      if ( (end - start) > EPSILON ) {
+        const pStart = Point3d.tmp;
+        const pEnd = Point3d.tmp;
+        origin.add(direction.multiplyScalar(start, pStart), pStart);
+        origin.add(direction.multiplyScalar(end, pEnd), pEnd);
+        resultSegments.push(new Segment(pStart, pEnd));
+      }
+    }
+    return resultSegments;
+  }
+
+  /**
+   * Does this 3d polygon intersect a plane?
+   * @param {Plane} plane
+   * @returns {boolean}
+   */
+  intersectsPlane(plane) {
+    if ( !this.isValid ) return false;
+
+    if ( this.plane.isParallelToPlane(plane) ) {
+      return this.plane.isCoincidentWithPlane(plane, { testParallel: false });
+    }
+
+    // Just use `intersectPlane` here because it is a cheap quadratic calculation.
+    const res = this.plane.intersectPlane(plane);
+    using origin = res.point;
+    using direction = res.direction;
+    direction.normalize(direction);
+
+    return this._planarLineIntersections(origin, direction).length > 0;
+  }
 
   // ----- NOTE: Transformations ----- //
   isValid() {
@@ -1980,11 +2049,6 @@ export class Circle3d extends Ellipse3d {
 
   static _geoLibType = "Circle3d";
 
-  // For numerical consistency, store the radius squared to use when possible.
-  get radius() { return this.radiusX; }
-
-  get radiusSquared() { return this.radius * this.radius; }
-
   set radius(value) {
     if ( Number.isNumeric(value) ) {
       using v = PIXI.Point.tmp.set(value, value);
@@ -2007,7 +2071,7 @@ export class Circle3d extends Ellipse3d {
 
   // ----- NOTE: Plane ----- //
 
-  get circle() { return new PIXI.Circle(this.center.x, this.center.y, this.radius); }
+  get circle() { return new PIXI.Circle(this.center.x, this.center.y, this.radius.x); }
 
   // ----- NOTE: Factory methods ----- //
 
@@ -2054,7 +2118,7 @@ export class Circle3d extends Ellipse3d {
       const to2dM = this.plane.conversion2dMatrix;
       to2dM.multiplyPoint3d(centroid, center);
     }
-    return new PIXI.Circle(center.x, center.y, this.radius);
+    return new PIXI.Circle(center.x, center.y, this.radius.x);
   }
 
   /**
@@ -2063,7 +2127,7 @@ export class Circle3d extends Ellipse3d {
    */
   toCircle2d() {
     const center = this.centroid;
-    return new PIXI.Circle(center.x, center.y, this.radius);
+    return new PIXI.Circle(center.x, center.y, this.radius.x);
   }
 
   toPlanarPolygon() {
@@ -2128,6 +2192,26 @@ export class Circle3d extends Ellipse3d {
     return contained;
   }
 
+  /**
+   * Find the intervals of a line (ray) that intersects this polygon.
+   * Assumes the line is on this plane.
+   * @param {Point3d} origin
+   * @param {Point3d} direction
+   * @returns {number[]} T-values along the line.
+   */
+  _planarLineIntersections(origin, direction) {
+    using d = origin.subtract(this.center);
+    const B = 2 * d.dot(direction);
+    const C = d.dot(d) - this.radiusSquared.x;
+    const discriminant = (B ** 2) - (4 * C);
+    if ( discriminant.almostLessThan(0) ) return [];
+
+    const sqrtD = Math.sqrt(discriminant);
+    return [[(-B - sqrtD) / 2, (-B + sqrtD) / 2]];
+  }
+
+
+
   // ----- NOTE: Transformations ----- //
   isValid() {
     this.clean();
@@ -2137,7 +2221,7 @@ export class Circle3d extends Ellipse3d {
   multiplyScalar(multiplier, circle3d) {
     circle3d ??= this._cloneEmpty();
     this.clone(circle3d);
-    circle3d.radius *= multiplier;
+    circle3d.radius = this.radius.x * multiplier;
     return circle3d;
   }
 
