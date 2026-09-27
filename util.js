@@ -1443,6 +1443,34 @@ export function getUniquePoints(points, decimals) {
   return out;
 }
 
+/**
+ * Determine the interior points that fit between min and max.
+ * Each point, including min and max, must be at least spacer away.
+ * Each point is equidistant.
+ * @param {number} min
+ * @param {number} max
+ * @param {number} spacer
+ * @returns {number[]}
+ */
+export function calculateEvenlySpacedValues(min, max, spacer) {
+  if ( min >= max || spacer <= 0 ) return [];
+
+  const range = max - min;
+
+  // We need at least 2 * spacer distance between min and max to fit a single point.
+  // (min + spacer <= point <= max - spacer)
+  // Formula for max possible points: N * spacer <= range - spacer >= (N + 1) * spacer <= range
+  const count = Math.floor(range / spacer) - 1;
+  if ( count <= 0 ) return []; // No points can fit within the required spacing.
+
+  // To distribute evenly, total range is divided into `count+1` equal steps.
+  // This step size is guaranteed to be >= spacer.
+  const step = range / (count + 1);
+  const result = new Array(count);
+  for ( let i = 1; i <= count; i += 1 ) result[i - 1] = min + i * step;
+  return result;
+}
+
 function _almostLessThan(b, epsilon = 1e-06) { return this < (b + epsilon); }
 
 function _almostGreaterThan(b, epsilon = 1e-06) { return this > (b - epsilon); }
