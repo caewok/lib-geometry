@@ -5,7 +5,7 @@ PIXI
 
 import { Point3d } from "./Point3d.js";
 import { Matrix } from "../Matrix.js";
-import { pointsAreCollinear } from "../util.js";
+import { cleanPolygonPoints } from "../util.js";
 
 const originPt3d = new Point3d();
 Object.freeze(originPt3d);
@@ -111,18 +111,9 @@ export class Plane {
 
   static normalFromPoints(a, b, c, outPoint) {
     outPoint ??= Point3d.tmp;
-    const tmpPoints = Point3d.createN(3);
-
-    // In JavaScript (and math, really), ∞ - ∞ is NaN.
-    // For our purposes, we can assume these would go to 0.
-    // To catch this possibility, make a, b, c finite before subtracting.
-    const aTmp = a.makeFinite(tmpPoints[0]);
-    const bTmp = b.makeFinite(tmpPoints[1]);
-    const cTmp = c.makeFinite(tmpPoints[2]);
-    const vAB = bTmp.subtract(aTmp, bTmp);
-    const vAC = cTmp.subtract(aTmp, cTmp);
+    using vAB = b.subtract(a);
+    using vAC = c.subtract(a);
     const out = vAC.cross(vAB, outPoint); // Ordered so the orientation matches.
-    Point3d.release(...tmpPoints);
     return out;
   }
 
@@ -149,30 +140,8 @@ export class Plane {
   }
 
   static fromMultiplePoints(pts, out) {
-    const iter = Iterator.from(pts);
-    const a = iter.next().value;
-
-    // Ensure no duplicates or collinearity
-    let b = null;
-    for (const point of iter) {
-      if (!point.almostEqual(a)) {
-        b = point;
-        break;
-      }
-    }
-
-    let c = null;
-    for (const point of iter) {
-      if (!point.almostEqual(a) && !point.almostEqual(b) && !pointsAreCollinear(a, b, point)) {
-        c = point;
-        break;
-      }
-    }
-    if (!c) {
-      console.error("Insufficient number of points to calculate plane.", pts);
-      return new this();
-    }
-    return this.fromPoints(a, b, c, out);
+    pts = cleanPolygonPoints([...pts]);
+    return this.fromPoints(pts[0], pts[1], pts[2], out);
   }
 
 
@@ -567,7 +536,7 @@ export class Plane {
    * @returns {boolean}
    */
   isCoincidentWithPlane(other, { testParallel = true, epsilon = 1e-06 } = {}) {
-    if ( testParallel && !isParallelToPlane(other, epsilon) ) return false;
+    if ( testParallel && !this.isParallelToPlane(other, epsilon) ) return false;
 
     // Coincident if one point lies on another.
     return this.whichSide(other.point).almostEqual(0, epsilon);
