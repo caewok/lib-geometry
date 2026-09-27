@@ -8,13 +8,14 @@ PIXI,
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { VertexObject } from "../placeable_vertices/VertexObject.js";
 import { AABB3d } from "../3d/AABB3d.js";
-import { cutaway, roundDecimals, isOdd, getUniqueIntegerPoints } from "../util.js";
+import { cutaway, roundDecimals, isOdd } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
 import { combineTypedArrays } from "../util.js";
 import { ModelMatrixAnchor } from "../ModelMatrix.js";
 import { MatrixFloat32 } from "../Matrix.js";
-import { Segment } from "../Segment.js";
 import { CutawayPolygon } from "../CutawayPolygon.js";
+import { Plane } from "../3d/Plane.js";
+import { Segment } from "../Segment.js";
 
 
 /** @type {Matrix<4,4>} */
@@ -786,98 +787,103 @@ export class GeometricPrimitive {
   // ----- NOTE: Vertical Cutaway -----
 
   /**
-   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
-   * @param {PIXI.Point} start     Starting point of the slice on the XY plane
-   * @param {PIXI.Point} end        Ending point of the slice on the XY plane
-   * @returns {CutawayPolygon[]}
+   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s) as CutawayPolygons.
+   * Correctly handles shapes with holes (internal cavities, Polygons3d hole faces, etc.).
+   * @param {PIXI.Point|Point3d} start     Starting point of the slice on the XY plane
+   * @param {PIXI.Point|Point3d} end       Ending point of the slice on the XY plane
+   * @returns {CutawayPolygon[]} Array of CutawayPolygon cross-sections (solids and holes)
    */
   verticalSlice(start, end) {
-    using dirXY = Point3d.tmp;
-    end.subtract(start, dirXY).normalize(dirXY);
+    if ( start.almostEqual(end) ) return [];
 
-    // Define the normal of the vertical slicing plane. Perpendicular to dirXY.
-    using sliceNormal = Point3d.tmp.set(-dirXY.y, dirXY.x, 0);
+    // Build the vertical plane for the start|end line.
+    if ( !Object.hasOwn(start, "z") ) start = Point3d.tmp.set(start.x, start.y, 0);
+    if ( !Object.hasOwn(end, "z") ) end = Point3d.tmp.set(end.x, end.y, 0);
+    using c = start.clone();
+    c.z += 50; // To construct the normal plane.
+    const plane = Plane.fromPoints(start, end, c);
 
-    // Iterate through each polygon to find intersection segments.
-    using dirA = PIXI.Point.tmp;
-    using dirB = PIXI.Point.tmp;
-    const segments2d = [];
+    // 4. Intersect each face with the vertical plane
+    const dirSegments2d = [];
+    using a2d = PIXI.Point.tmp;
+    using b2d = PIXI.Point.tmp;
     for ( const face of this.faces ) {
-      const interPoints3d = [];
-      for ( const edge of face.iterateEdges() ) {
-        const { a, b } = edge;
+      const segments = face.intersectPlane(plane);
+      if ( !segments.length ) continue;
 
-        // Distance from plane = (point - origin) • normal.
-        a.to2d(dirA).subtract(start, dirA);
-        b.to2d(dirB).subtract(start, dirB);
-        const distA = dirA.dot(sliceNormal);
-        const distB = dirB.dot(sliceNormal);
+      // Map 3D endpoints to 2D Cutaway coordinates (u = distance along slice, v = z elevation)
+      segments.forEach(segment => {
+        cutaway.to2d(segment.a, start, end, a2d);
+        cutaway.to2d(segment.b, start, end, b2d);
 
-        // Check if endpoints are on opposite sides of the slicing plane.
-        if ( distA * distB < 0 ) {
-          // Linear interpolation to find the exact intersection point.
-          const t = distA / (distA - distB);
-          const pInter = Point3d.tmp;
-          b.subtract(a, pInter).multiplyScalar(t, pInter).add(a, pInter); // a + (t * (b - a))
-          interPoints3d.push(pInter);
-        } else if ( distA.almostEqual(0) ) interPoints3d.push(a);
+        // Use the pixel distance, not distance squared, to assemble the points.
+        cutaway.convertToDistance(a2d);
+        cutaway.convertToDistance(b2d);
 
-        // A convex/planar polygon sliced by a plane should yield exactly 2 unique points.
-        const uniquePts = getUniqueIntegerPoints(interPoints3d);
-        if ( uniquePts.length === 2 ) {
-          // Map the 3d points to the 2d coordinate system.
-          const pt0 = cutaway.to2d(uniquePts[0], start, end);
-          const pt1 = cutaway.to2d(uniquePts[1], start, end);
-          segments2d.push(new Segment(pt0, pt1));
+        if ( PIXI.Point.distanceSquaredBetween(a2d, b2d) < 1e-06 ) return;
+        dirSegments2d.push(new Segment(a2d.clone(), b2d.clone()));
+      });
+      segments.forEach(s => s.release());
 
-        } else console.warn(`GeometricPrimitive|verticalSlice found ${uniquePts.length} unique points`, uniquePts);
-      }
     }
-    return this.#assembleCutawayPolygons(segments2d, start, end);
+
+    // 5. Assemble directed 2D segments into closed loops
+    const polyPointsArr = this.#assemblePolygons(dirSegments2d);
+    const out = polyPointsArr.map(polyPoints => {
+      const poly = CutawayPolygon.fromCutawayPoints(polyPoints, start, end);
+      poly.points.forEach(pt => cutaway.convertFromDistance(pt)); // Process after the points are copied.
+      return poly;
+    });
+
+    dirSegments2d.forEach(s => s.release());
+    return out;
   }
 
   /**
-   * Stitch a list of disconnected 2d segments into an ordered array of 2d polygons (islands).
-   * @param {Segment[]} segments      Array of 2d line segments
-   * @returns {PIXI.Polygon[]} Array of 2d polygons
+   * Stitch directed 2D segments into ordered, closed polygon loops.
+   * Maintains loop direction so outer boundaries and holes are properly oriented.
+   * @param {Segment<PIXI.Point>[]} segments   Directed 2D line segments
+   * @returns {PIXI.Point[][]} Array of polygon points, grouped by polygon
    */
-  #assembleCutawayPolygons(segments, start, end) {
-    if ( segments.length === 0 ) return [];
+  #assemblePolygons(segments) {
+    if ( !segments.length ) return [];
 
-    // Continue building new islands as long as there are unassigned segments.
     const polygons = [];
     const unvisited = [...segments];
+
     while ( unvisited.length > 0 ) {
-      const polyPoints = [];
+      const startSeg = unvisited.shift();
+      const polyPoints = [startSeg.a];
 
-      // Start a new loop with the first available unvisited segment.
-      const startSegment = unvisited.shift();
-      let targetPoint = startSegment.b;
-      polyPoints.push(startSegment.a);
+      let targetPoint = startSeg.b;
+      const loopStart = startSeg.a;
 
-      // Trace the current loop until it closes or hits a dead end.
-      while ( true ) {
-        // Check if the loop closed back on itself.
-        if ( targetPoint.almostEqual(startSegment.a) ) break;
-
+      while ( unvisited.length > 0 ) {
         polyPoints.push(targetPoint);
 
-        // Find the next segment connecting our current target point.
-        const nextIndex = unvisited.findIndex(seg =>
-          seg.a.almostEqual(targetPoint) || seg.b.almostEqual(targetPoint));
-        if ( nextIndex === -1 ) break; // Open loop discontinuity. Save as-is.
+        // Determine the closest a point to this b point.
+        // Assume no open loops.
+        let minDist = PIXI.Point.distanceSquaredBetween(loopStart, targetPoint)
+        let nextIdx = -1;
+        for ( let i = 0, n = unvisited.length; i < n; i++ ) {
+          const s = unvisited[i];
+          const dist = PIXI.Point.distanceSquaredBetween(s.a, targetPoint);
+          if ( dist < minDist ) {
+            minDist = dist;
+            nextIdx = i;
+          }
+        }
+        if ( !~nextIdx ) break; // Reached the beginning.
 
-        // Set the new target point to the other end of the found segment.
-        const nextSegment = unvisited.splice(nextIndex, 1)[0];
-        targetPoint = nextSegment.a.almostEqual(targetPoint) ? nextSegment.b : nextSegment.a;
+        const nextSeg = unvisited.splice(nextIdx, 1)[0];
+        targetPoint = nextSeg.b;
       }
-      const cutaway = CutawayPolygon.fromCutawayPoints(polyPoints, start, end);
-      polygons.push(cutaway);
+
+      if ( polyPoints.length >= 3 ) polygons.push(polyPoints);
     }
+
     return polygons;
   }
-
-
 }
 
 
