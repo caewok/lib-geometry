@@ -245,6 +245,39 @@ export class GeometricPrimitive {
 
   get aabb() {
     if ( this.isDirty(this.constructor.DIRTY.AABB) ) this.updateAABB();
+
+    if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.debug ) {
+      if ( Number.isNaN(this.#prototypeAABB.min.x)
+        || Number.isNaN(this.#prototypeAABB.min.y)
+        || Number.isNaN(this.#prototypeAABB.min.z)
+        || Number.isNaN(this.#prototypeAABB.max.x)
+        || Number.isNaN(this.#prototypeAABB.max.y)
+        || Number.isNaN(this.#prototypeAABB.max.z) ) console.error(`${this.constructor.name}|Prototype AABB is NaN.`);
+
+      if ( Number.isNaN(this.#aabb.min.x)
+        || Number.isNaN(this.#aabb.min.y)
+        || Number.isNaN(this.#aabb.min.z)
+        || Number.isNaN(this.#aabb.max.x)
+        || Number.isNaN(this.#aabb.max.y)
+        || Number.isNaN(this.#aabb.max.z)
+
+       ) console.error(`${this.constructor.name}|AABB is NaN.`);
+
+      if ( !(Number.isFinite(this.#prototypeAABB.min.x)
+          && Number.isFinite(this.#prototypeAABB.min.y)
+          && Number.isFinite(this.#prototypeAABB.min.z)
+          && Number.isFinite(this.#prototypeAABB.max.x)
+          && Number.isFinite(this.#prototypeAABB.max.y)
+          && Number.isFinite(this.#prototypeAABB.max.z)) ) console.warn(`${this.constructor.name}|Prototype AABB is not finite.`);
+
+      if ( !(Number.isFinite(this.#aabb.min.x)
+          && Number.isFinite(this.#aabb.min.y)
+          && Number.isFinite(this.#aabb.min.z)
+          && Number.isFinite(this.#aabb.max.x)
+          && Number.isFinite(this.#aabb.max.y)
+          && Number.isFinite(this.#aabb.max.z)) ) console.warn(`${this.constructor.name}|AABB is not finite.`);
+    }
+
     return this.#aabb;
   }
 
@@ -795,6 +828,7 @@ export class GeometricPrimitive {
    */
   verticalSlice(start, end) {
     if ( start.almostEqual(end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end) ) return [];
 
     // Build the vertical plane for the start|end line.
     if ( !Object.hasOwn(start, "z") ) start = Point3d.tmp.set(start.x, start.y, 0);
