@@ -83,11 +83,11 @@ export class ConePrimitive extends CombinedGeometricPrimitive {
     // Drop the shared wall between the triangle and the arc.
     // First quad of the triangle shape is the base side.
     triShape.prototypeFaces.splice(2, 1); // Top and bottom polygon are indices 0 and 1, respectively.
-    arcShape.dirty = this.DIRTY.ALL;
 
     // Last side of the arc shape is the base side.
     arcShape.prototypeFaces.pop();
-    triShape.dirty = this.DIRTY.ALL;
+
+    out.initialize();
 
     return out;
   }

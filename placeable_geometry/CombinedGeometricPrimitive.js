@@ -22,7 +22,7 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
   /**
    * Initialize the values for this geometric primitive.
    */
-  initialize() { this.shapes.forEach(shape => shape.initialize()); }
+  initialize() { this.shapes.forEach(shape => shape.initialize()); super.initialize(); }
 
   /**
    * Destroy this geometric primitive, releasing associated memory in buffers.
