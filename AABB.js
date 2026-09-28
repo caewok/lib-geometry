@@ -385,9 +385,9 @@ export class AABB2d {
    * @param {number} [epsilon=1e-06]        How close to min/max for the point to count as contained
    * @returns {AABB2d}
    */
-  almostContainsPoint(p, epsilon = 1e-06) {
+  almostContainsPoint(p, axes = this.constructor.axes, epsilon = 1e-06) {
     const { min, max } = this;
-    for ( const axis of this.constructor.axes ) {
+    for ( const axis of axes ) {
       if ( !p[axis].almostBetween(min[axis], max[axis], epsilon) ) return false
     }
     return true;
