@@ -58,4 +58,6 @@ export class EmptyGeometricPrimitive extends GeometricPrimitive {
     return true;
   }
 
+  containsProjectedXY() { return false; }
+
 }

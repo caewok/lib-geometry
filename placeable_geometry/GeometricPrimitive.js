@@ -302,6 +302,14 @@ export class GeometricPrimitive {
     this.#prototypeAABB.transform(this.modelMatrix.model, aabb);
   }
 
+  /**
+   * Does this shape's XY dimensions potentially contain this canvas location?
+   * Meant to be a relatively quick test. Should only reject if it is certain not to contain it.
+   * @param {PIXI.Point} canvasLoc
+   * @returns {boolean}
+   */
+  containsProjectedXY(canvasLoc) { return this.aabb.almostContainsPoint(canvasLoc, ["x", "y"]); }
+
   // ----- NOTE: Faces ----- //
 
   // Prototype faces should be set at initialization and not otherwise be dirty.

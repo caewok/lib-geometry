@@ -185,6 +185,17 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
 
   get bottomFace() { return this.faces[0]; }
 
+  get baseFace() { return this.faces[0]; }
+
+  /**
+   * Does this shape's XY dimensions potentially contain this canvas location?
+   * Meant to be a relatively quick test. Should only reject if it is certain not to contain it.
+   * @param {PIXI.Point} canvasLoc
+   * @returns {boolean}
+   */
+  containsProjectedXY(canvasLoc) {
+    return this.bottomFace.containsProjectedXY(canvasLoc);
+  }
 
   // ----- NOTE: Factory helpers to construct faces ----- //
 

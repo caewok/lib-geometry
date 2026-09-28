@@ -282,6 +282,16 @@ export class CubePrimitive extends InstancedGeometricPrimitive {
 
   get bottomFace() { return this.faces[0]; }
 
+  /**
+   * Does this shape's XY dimensions potentially contain this canvas location?
+   * Meant to be a relatively quick test. Should only reject if it is certain not to contain it.
+   * @param {PIXI.Point} canvasLoc
+   * @returns {boolean}
+   */
+  containsProjectedXY(canvasLoc) {
+    return this.bottomFace.containsProjectedXY(canvasLoc);
+  }
+
   /** @type {Faces} */
   static prototypeFaces = this.createUnitCube();
 
@@ -343,6 +353,16 @@ export class HexagonCylinderPrimitive extends InstancedGeometricPrimitive {
   get topFace() { return this.faces[1]; }
 
   get bottomFace() { return this.faces[0]; }
+
+  /**
+   * Does this shape's XY dimensions potentially contain this canvas location?
+   * Meant to be a relatively quick test. Should only reject if it is certain not to contain it.
+   * @param {PIXI.Point} canvasLoc
+   * @returns {boolean}
+   */
+  containsProjectedXY(canvasLoc) {
+    return this.bottomFace.containsProjectedXY(canvasLoc);
+  }
 
   static #prototypeFaces; /* eslint-disable-line no-unused-private-class-members */
 
@@ -415,6 +435,16 @@ export class CylinderPrimitive extends InstancedGeometricPrimitive {
 
   get bottomFace() { return this.faces[0]; }
 
+  /**
+   * Does this shape's XY dimensions potentially contain this canvas location?
+   * Meant to be a relatively quick test. Should only reject if it is certain not to contain it.
+   * @param {PIXI.Point} canvasLoc
+   * @returns {boolean}
+   */
+  containsProjectedXY(canvasLoc) {
+    return this.bottomFace.containsProjectedXY(canvasLoc);
+  }
+
   static _prototypeFaces;
 
   static get prototypeFaces() { return this._prototypeFaces ||= this.createUnitCylinder(canvas.scene.dimensions.maxR / 10); }
@@ -482,6 +512,16 @@ export class CircularCylinderPrimitive extends CylinderPrimitive {
   get topFace() { return this.faces[1]; }
 
   get bottomFace() { return this.faces[0]; }
+
+  /**
+   * Does this shape's XY dimensions potentially contain this canvas location?
+   * Meant to be a relatively quick test. Should only reject if it is certain not to contain it.
+   * @param {PIXI.Point} canvasLoc
+   * @returns {boolean}
+   */
+  containsProjectedXY(canvasLoc) {
+    return this.bottomFace.containsProjectedXY(canvasLoc);
+  }
 
   /**
    * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
