@@ -108,6 +108,9 @@ export class QuadPrimitive extends InstancedGeometricPrimitive {
    * @returns {CutawayPolygon[]}
    */
   verticalSlice(start, end) {
+    if ( start.almostEqual(end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end) ) return [];
+
     // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
     const rot = this.modelMatrix.rotation;
     if ( rot.x || rot.y ) return super.verticalSlice(start, end);
@@ -163,6 +166,9 @@ export class VerticalQuadPrimitive extends QuadPrimitive {
    * @returns {CutawayPolygon[]}
    */
   verticalSlice(start, end) {
+    if ( start.almostEqual(end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end) ) return [];
+
     // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
     const rot = this.modelMatrix.rotation;
     if ( rot.x || rot.y ) return super.verticalSlice(start, end);
@@ -290,6 +296,9 @@ export class CubePrimitive extends InstancedGeometricPrimitive {
    * @returns {CutawayPolygon[]}
    */
   verticalSlice(start, end) {
+    if ( start.almostEqual(end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end) ) return [];
+
     // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
     const rot = this.modelMatrix.rotation;
     if ( rot.x || rot.y ) return super.verticalSlice(start, end);
@@ -357,6 +366,9 @@ export class HexagonCylinderPrimitive extends InstancedGeometricPrimitive {
    * @returns {CutawayPolygon[]}
    */
   verticalSlice(start, end) {
+    if ( start.almostEqual(end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end) ) return [];
+
     // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
     const rot = this.modelMatrix.rotation;
     if ( rot.x || rot.y ) return super.verticalSlice(start, end);
@@ -427,6 +439,9 @@ export class CylinderPrimitive extends InstancedGeometricPrimitive {
    * @returns {CutawayPolygon[]}
    */
   verticalSlice(start, end) {
+    if ( start.almostEqual(end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end) ) return [];
+
     // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
     const rot = this.modelMatrix.rotation;
     if ( rot.x || rot.y ) return super.verticalSlice(start, end);
@@ -475,6 +490,9 @@ export class CircularCylinderPrimitive extends CylinderPrimitive {
    * @returns {CutawayPolygon[]}
    */
   verticalSlice(start, end) {
+    if ( start.almostEqual(end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end) ) return [];
+
     // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
     const rot = this.modelMatrix.rotation;
     if ( rot.x || rot.y ) return super.verticalSlice(start, end);
@@ -548,6 +566,9 @@ export class SpherePrimitive extends InstancedGeometricPrimitive {
    * @returns {CutawayPolygon[]}
    */
   verticalSlice(start, end) {
+    if ( start.almostEqual(end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end) ) return [];
+
     // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
     const rot = this.modelMatrix.rotation;
     if ( rot.x || rot.y ) return super.verticalSlice(start, end);
@@ -611,84 +632,4 @@ export class SpherePrimitive extends InstancedGeometricPrimitive {
     return !this.faces[0].isFacing(this.center)
   }
 }
-
-/**
- * Wedge-shape used for ramps with rectangular bases.
- */
-export class WedgeRectangularBasePrimitive extends InstancedGeometricPrimitive {
-
-  static #prototypeFaces; /* eslint-disable-line no-unused-private-class-members */
-
-  static get prototypeFaces() { return (this.#prototypeFaces = this.createUnitWedge()); }
-
-  static _instanceVO;
-
-  static createUnitWedge() {
-    // Right-angled isoceles triangle.
-    // Centered at 0,0,0 so rotation works.
-    // To modify the angle requires translation to/from.
-    const faces = [];
-    using a = Point3d.tmp;
-    using b = Point3d.tmp;
-    using c = Point3d.tmp;
-    using d = Point3d.tmp;
-    const min = -0.5;
-    const max = 0.5;
-
-    // Base is a square centered at 0,0, elevation at -0.5.
-    const down = QUADS.down.clone();
-    down.translate({ z: min });
-    faces.push(down);
-
-    // Back is a quad.
-    // Back is at x = 0.5
-    const back = QUADS.east.clone();
-    back.translate({ x: max });
-    faces.push(back);
-
-    // Sides are triangles. From base to top of back.
-    faces.push(Triangle3d.from3Points(
-      a.set(min, max, min),
-      b.set(max, max, min),
-      c.set(max, max, max),
-    ));
-    faces.push(Triangle3d.from3Points(
-      a.set(max, min, max),
-      b.set(max, min, min),
-      c.set(min, min, min),
-    ));
-
-    // Ramp is a quad. From base to top of back.
-    faces.push(Quad3d.from3Points(
-      a.set(min, min, min),
-      b.set(min, max, min),
-      c.set(max, max, max),
-      d.set(max, min, max),
-    ));
-
-    return faces;
-  }
-
-  // Height as a percentage of the base.
-  #rampPercentageHeight = 1;
-
-  get rampPercentageHeight() { return this.#rampPercentageHeight; }
-
-  set rampPercentageHeight(value) {
-    if ( this.#rampPercentageHeight === value ) return;
-
-    const transformM = this.modelMatrix.transformM;
-    using translateM = MatrixFloat32.translation({ x: -0.5, z: 0.5 });
-    using scaleM = MatrixFloat32.scale({ z: value });
-    using invTranslateM = translateM.invert();
-    translateM
-      .multiply4x4(scaleM, transformM)
-      .multiply4x4(invTranslateM, transformM);
-
-    // TODO: Need to finish this. Multiply the prototype faces?
-  }
-}
-
-
-
 

@@ -235,6 +235,8 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    * @returns {CutawayPolygon[]}
    */
   verticalSlice(start, end, { topZ, bottomZ } = {}) {
+    if ( start.almostEqual(end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end) ) return [];
     const { topFace, bottomFace } = this;
 
     // Because the bottom face is parallel to XY plane, we can just drop the Z axis.
@@ -399,6 +401,9 @@ export class ExtrudedPolygonPrimitiveWithHoles extends ExtrudedPolygonPrimitive 
    * @param {PIXI.Point|Point3d} end       Ending point of the slice on the XY plane
    * @returns {CutawayPolygon[]} Array of CutawayPolygon cross-sections (solids and holes)   */
   verticalSlice(start, end, { topZ, bottomZ } = {}) {
+    if ( start.almostEqual(end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end) ) return [];
+
     // Construct the 2d cutaway polygons, accounting for holes.
     const { topFace, bottomFace } = this;
     if ( !bottomFace.polygons ) return super.verticalSlice(start, end, { topZ, bottomZ });
@@ -412,7 +417,12 @@ export class ExtrudedPolygonPrimitiveWithHoles extends ExtrudedPolygonPrimitive 
     };
 
     // Because the bottom face is parallel to XY plane, we can just drop the Z axis.
-    const cutaways = this.bottomFace.polygons.map(poly => poly.toPolygon2d().cutaway(start, end, opts));
+    const cutaways = [];
+    for ( const poly of this.bottomFace.polygons ) {
+      const poly2d = poly.toPolygon2d().cutaway(start, end, opts);
+      if ( poly2d ) cutaways.push(poly2d);
+    }
+    if ( !cutaways.length ) return [];
 
     // Use Clipper to union the cutaways. Holes go straight through, leaving 1+ solid polygons.
     const paths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths.fromPolygons(cutaways);
