@@ -60,6 +60,7 @@ export class Polygon3d {
     this.#dirtyAABB = true;
     this.#dirtyPlane = true;
     this.#dirtyCentroid = true;
+    this.#planarPoints.length = 0;
     this.#cleaned = false;
   }
 
@@ -380,6 +381,7 @@ export class Polygon3d {
       const outPt = out.points[i] ??= Point3d.tmp; // May require adding points.
       outPt.copyFrom(pts[i]);
     }
+    out.dirtyAABB = true;
     out.clean();
     return out;
   }
@@ -408,6 +410,7 @@ export class Polygon3d {
     using ctr3d = Point3d.tmp.set(ctr.x, ctr.y, elevation + 1);
     if ( out.isFacing(ctr3d) ^ !isHole ) out.reverseOrientation();
     out.isHole = isHole;
+    out.dirtyAABB = true;
     return out;
   }
 
@@ -425,7 +428,7 @@ export class Polygon3d {
   }
 
   /**
-   * Shift the points of a polygon tha tis parallel to the XY canvas based on a plane.
+   * Shift the points of a polygon that is parallel to the XY canvas based on a plane.
    * @param {Polygon3d} poly3d        Poly3d set at elevation 0 with a plane normal z value only.
    * @param {Plane} plane
    * @returns {Polygon3d} Same polygon, possibly shifted to match the plane.
@@ -441,6 +444,7 @@ export class Polygon3d {
 
     // The plane is not dirty because we checked it for equality at the beginning. So we must reset it.
     poly3d.plane.copyFrom(plane);
+    poly3d.dirtyAABB = true;
     return poly3d;
   }
 
@@ -466,10 +470,12 @@ export class Polygon3d {
 
     // Copy over key properties.
     out.isHole = this.isHole;
-    if ( !this.dirtyPlane ) out.plane = this.plane;  // Uses a setter to copy from, unset dirty value.
+    if ( !this.dirtyPlane ) out.plane = this.plane; // Uses a setter to copy from, unset dirty value.
+    else out.dirtyPlane = true;
     if ( !this.dirtyCentroid ) out.centroid = this.centroid; // Uses a setter to copy from, unset dirty value.
+    else out.dirtyCentroid = true;
     if ( !this.dirtyAABB ) out.aabb = this.aabb; // Uses a setter to copy from, unset dirty value.
-
+    else out.dirtyAABB = true;
     return out;
   }
 
@@ -1378,6 +1384,8 @@ export class Ellipse3d extends Polygon3d {
   set center(value) {
     this.points[0].copyFrom(value);
     this.plane.point.copyFrom(value);
+    this.dirtyAABB = true;
+    this.dirtyCentroid = true;
   }
 
   // For numerical consistency, store the radius squared to use when possible.
@@ -1388,6 +1396,7 @@ export class Ellipse3d extends Polygon3d {
     this.#radius.copyFrom(value);
     using value2 = value.multiply(value);
     this.#radiusSquared.copyFrom(value2);
+    this.dirtyAABB = true;
   }
 
   /** @type {PIXI.Point} */
@@ -1397,6 +1406,7 @@ export class Ellipse3d extends Polygon3d {
     this.#radiusSquared.copyFrom(value);
     using valueSqrt = value.sqrt();
     this.#radius.copyFrom(valueSqrt);
+    this.dirtyAABB = true;
   }
 
   /** @type {number} */
@@ -1404,6 +1414,7 @@ export class Ellipse3d extends Polygon3d {
   set radiusX(value) {
     using tmp = PIXI.Point.tmp.set(value, this.radiusY);
     this.radius = tmp;
+    this.dirtyAABB = true;
   }
 
   /** @type {number} */
@@ -1411,6 +1422,7 @@ export class Ellipse3d extends Polygon3d {
   set radiusY(value) {
     using tmp = PIXI.Point.tmp.set(this.radiusX, value);
     this.radius = tmp;
+    this.dirtyAABB = true;
   }
 
   /**
@@ -1436,13 +1448,13 @@ export class Ellipse3d extends Polygon3d {
   /** @type {Point3d} */
   get majorRadiusAxis() {
     const { vx, vy } = this.radiusVectors();
-    return vx.magnitudeSquared() > vy.magnitudeSquared ? vx : vy;
+    return (vx.magnitudeSquared() > vy.magnitudeSquared) ? vx : vy;
   }
 
   /** @type {Point3d} */
   get minorRadiusAxis() {
     const { vx, vy } = this.radiusVectors();
-    return vx.magnitudeSquared() < vy.magnitudeSquared ? vx : vy;
+    return (vx.magnitudeSquared() < vy.magnitudeSquared) ? vx : vy;
   }
 
   get majorAxisEndpoints() {
@@ -2271,6 +2283,7 @@ export class Triangle3d extends Polygon3d {
     out.a.copyFrom(a);
     out.b.copyFrom(b);
     out.c.copyFrom(c);
+    out.dirtyAABB = true;
     return out;
   }
 
@@ -2279,6 +2292,7 @@ export class Triangle3d extends Polygon3d {
     out.a.copyPartial(a);
     out.b.copyPartial(b);
     out.c.copyPartial(c);
+    out.dirtyAABB = true;
     return out;
   }
 
@@ -2499,6 +2513,7 @@ export class Quad3d extends Polygon3d {
     out.b.copyFrom(b);
     out.c.copyFrom(c);
     out.d.copyFrom(d);
+    out.dirtyAABB = true;
     return out;
   }
 
@@ -2508,6 +2523,7 @@ export class Quad3d extends Polygon3d {
     out.b.copyPartial(b);
     out.c.copyPartial(c);
     out.d.copyPartial(d);
+    out.dirtyAABB = true;
     return out;
   }
 
@@ -2517,6 +2533,7 @@ export class Quad3d extends Polygon3d {
     out.points[1].set(rect.right, rect.top, elevZ);
     out.points[2].set(rect.right, rect.bottom, elevZ);
     out.points[3].set(rect.left, rect.bottom, elevZ);
+    out.dirtyAABB = true;
     return out;
   }
 
@@ -2865,7 +2882,6 @@ export class Polygons3d extends Polygon3d {
   /** @type {Polygon3d[]} */
   polygons = [];
 
-  // TODO: Determine the convex hull of the polygons to determine the points of this polygon?
   constructor(n = 0) {
     super(0);
     this.polygons.length = n;
@@ -2889,6 +2905,7 @@ export class Polygons3d extends Polygon3d {
     out ??= new this(1);
     out.polygons.length = 1;
     out.polygons[0] = Polygon3d[method](...args);
+    out.dirtyAABB = true;
     return out;
   }
 
@@ -2978,11 +2995,7 @@ export class Polygons3d extends Polygon3d {
   // ----- NOTE: Bounds ----- //
 
   /** @type {object<minMax>} */
-  _calculateAABB(aabb) {
-    const combinedBounds = AABB3d.union(this.polygons.map(poly3d => poly3d.aabb));
-    aabb.min.copyFrom(combinedBounds.min);
-    aabb.max.copyFrom(combinedBounds.max);
-  }
+  _calculateAABB(aabb) { AABB3d.union(this.polygons.map(poly3d => poly3d.aabb), aabb); }
 
   // ----- NOTE: Plane ----- //
 
@@ -3050,12 +3063,14 @@ export class Polygons3d extends Polygon3d {
       if ( holes ) opts.isHole = holes.has(i);
       out.polygons.push(Polygon3d.fromPIXIShape(poly, opts));
     }
+    out.dirtyAABB = true;
     return out;
   }
 
   static fromClipperPaths(cpObj, elevation, out) {
     out ??= new this();
     out.polygons = Polygon3d.fromClipperPaths(cpObj, elevation);
+    out.dirtyAABB = true;
     return out;
   }
 
@@ -3064,6 +3079,7 @@ export class Polygons3d extends Polygon3d {
   static fromPlanarPolygons(polys, plane, out) {
     out ??= new this();
     out.polygons = polys.map(poly => Polygon3d.fromPlanarPolygon(poly, plane));
+    out.dirtyAABB = true;
     return out;
   }
 
@@ -3084,6 +3100,9 @@ export class Polygons3d extends Polygon3d {
         && thisPoly instanceof outPoly.constructor ) thisPoly.clone(outPoly);
       else outPolys[i] = thisPoly.clone();
     }
+
+    out.dirtyAABB = true;
+
     return out;
   }
 
@@ -3171,6 +3190,7 @@ export class Polygons3d extends Polygon3d {
     if ( solids.length > 1 && !holes.length ) {
       const out = new this.constructor();
       this.polygons.forEach(poly => out.polygons.push(...poly.triangulate(opts)));
+      out.dirtyAABB = true;
       return out;
     } else if ( solids.length > 1 ) console.warn("Polygons3d#triangulate|Expects one solid per instance if holes are present.");
 
@@ -3265,6 +3285,7 @@ export class Polygons3d extends Polygon3d {
   transform(M, invTransposeM) {
     const out = new this.constructor();
     this.polygons.forEach(poly => out.polygons.push(poly.transform(M, invTransposeM)));
+    out.dirtyAABB = true;
     return out;
   }
 
@@ -3277,6 +3298,7 @@ export class Polygons3d extends Polygon3d {
   scale(pt) {
     const out = new this.constructor();
     this.polygons.forEach(poly => out.polygons.push(poly.scale(pt)));
+    out.dirtyAABB = true;
     return out;
   }
 
