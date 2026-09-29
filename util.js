@@ -134,13 +134,20 @@ export function elevationForUnit(k) { return roundNearWhole(k * canvas.scene.dim
  */
 function to2dCutaway(currPt, start, end, outPoint) {
   outPoint ??= PIXI.Point.tmp;
+
+  // 2d (XY) distance.
   const distCS = PIXI.Point.distanceSquaredBetween(currPt, start);
 
   const pt = outPoint.set(distCS, currPt.z);
   if ( end ) {
-    const distCE = PIXI.Point.distanceSquaredBetween(currPt, end);
-    const distSE = PIXI.Point.distanceSquaredBetween(start, end);
-    if ( distCS < distCE && distCE > distSE ) pt.x *= -1;
+    using start2d = start.to2d();
+    using end2d = end.to2d();
+    using currPt2d = currPt.to2d();
+
+    // Dot product of the directional vectors gives the sign.
+    using dirAB = end2d.subtract(start2d);
+    using dirAP = currPt2d.subtract(start2d);
+    if ( dirAB.dot(dirAP) < 0 ) pt.x *= -1;
   }
   return pt;
 }

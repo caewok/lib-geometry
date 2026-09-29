@@ -7,11 +7,12 @@ import { Point3d } from "./3d/Point3d.js";
 import { cutaway, gridUnitsToPixels, clamp } from "./util.js";
 import { Draw } from "./Draw.js";
 import { Polygon3d, Triangle3d, Quad3d } from "./3d/Polygon3d.js";
+import { ElevatedPoint } from "./3d/ElevatedPoint.js";
 
 /**
  * A cutaway polygon is a 2d representation of a vertical slice of a shape.
- * That slice is generally a quadrilateral but can be further modified by replacing
- * an edge with a set of points.
+ * That slice is usually a quadrilateral but may be more complex shapes depending on the
+ * underlying 3d object.
  */
 export class CutawayPolygon extends PIXI.Polygon {
   /** @type {Point3d} */
@@ -19,6 +20,32 @@ export class CutawayPolygon extends PIXI.Polygon {
 
   /** @type {Point3d} */
   end = new Point3d();
+
+  /** @type {boolean} */
+  _isSquaredDistance = true; // Is the x-axis squared?
+
+  get isSquaredDistance() { return this._isSquaredDistance; }
+
+  set isSquaredDistance(value) {
+    value = Boolean(value);
+    if ( this._isSquaredDistance === value ) return;
+
+    const pt = { x: 0 }; // Don't need y for the conversion methods here.
+    if ( this._isSquaredDistance ) {
+      // Convert to linear.
+      for ( let i = 0, n = this.points.length; i < n; i += 2 ) {
+        pt.x = this.points[i];
+        this.points[i] = this.convertToDistanceCutaway(pt).x;
+      }
+    } else {
+      // Convert to squared.
+      for ( let i = 0, n = this.points.length; i < n; i += 2 ) {
+        pt.x = this.points[i];
+        this.points[i] = this.convertFromDistanceCutaway(pt).x;
+      }
+    }
+    this._isSquaredDistance = value;
+  }
 
   /** @type {number} */
   get top() { return this.getBounds().bottom; } // Y values are reversed.
@@ -33,12 +60,14 @@ export class CutawayPolygon extends PIXI.Polygon {
    * @param {Point[]} pts
    * @param {Point3d} start
    * @param {Point3d} end
+   * @param {boolean} [isSquared=true]
    * @returns {CutawayPolygon}
    */
-  static fromCutawayPoints(pts, start, end) {
+  static fromCutawayPoints(pts, start, end, isSquaredDistance = true) {
     const poly = new this(pts);
     poly.start.copyFrom(start);
     poly.end.copyFrom(end);
+    poly._isSquaredDistance = isSquaredDistance;
     return poly;
   }
 
@@ -47,22 +76,32 @@ export class CutawayPolygon extends PIXI.Polygon {
    * @param {PIXI.Polygon} poly
    * @param {Point3d} start
    * @param {Point3d} end
+   * @param {boolean} [isSquared=true]
    * @returns {CutawayPolygon} The same polygon, modified in place to be a cutaway.
    */
-  static fromPolygon(poly, start, end) {
+  static fromPolygon(poly, start, end, isSquaredDistance = true) {
     poly.start = start.clone();
     poly.end = end.clone();
+    poly._isSquaredDistance = isSquaredDistance
     Object.setPrototypeOf(poly, this.prototype);
     return poly;
   }
 
   /**
+   * Convert a cutaway point to its respective position on the line start|end.
+   * Requires the point to be
+   * @param {CutawayPoint} cutawayPt
+   * @param {ElevatedPoint} start             Beginning endpoint of the line segment
+   * @param {ElevatedPoint} end               End of the line segment
+   * @param {ElevatedPoint} [outPoint]
+   * @returns {ElevatedPoint}
+   */
+
+  /**
    * Convert to 3d canvas points.
    * @returns {Iterator<Point3d>}
    */
-  to3dPoints() {
-    return this.iteratePoints().map(pt => this._from2d(pt));
-  }
+  to3dPoints() { return this.iteratePoints().map(pt => this._from2d(pt)); }
 
   /**
    * Convert the cutaway to 3d planar polygon.
@@ -77,18 +116,47 @@ export class CutawayPolygon extends PIXI.Polygon {
   }
 
   /**
+   * Convert the cutaway to a 2d polygon with linear distance. Done in place.
+   * @returns {}
+   */
+
+
+  /**
    * Convert x,y to 3d position
    * @param {Point} {x, y}
    * @returns {ElevatedPoint}
    */
-  _from2d(pt2d, outPoint) { return cutaway.from2d(pt2d, this.start, this.end, outPoint); }
+  _from2d(pt2d, outPoint) {
+    // See cutaway.from2dCutaway.
+    outPoint ??= ElevatedPoint.tmp;
+    using start2d = this.start.to2d();
+    using end2d = this.end.to2d();
+
+    const fn = this.isSquaredDistance ? "towardsPointSquared" : "towardsPoint";
+    start2d[fn](end2d, pt2d.x, outPoint);
+    outPoint.z = cutawayPt.y;
+    return outPoint;
+  }
 
   /**
    * Convert 3d point to 2d position
    * @param {Point3d} {x, y, z}
    * @returns {PIXI.Point}
    */
-  _to2d(pt3d, outPoint) { return cutaway.to2d(pt3d, this.start, this.end, outPoint); }
+  _to2d(pt3d, outPoint) {
+    const { start, end } = this;
+    outPoint ??= PIXI.Point.tmp;
+
+    const fn = this.isSquaredDistance ? "distanceSquaredBetween" : "distanceBetween";
+    const distCS = PIXI.Point[fn](currPt, start);
+    const pt = outPoint.set(distCS, currPt.z);
+    if ( end ) {
+      const distCE = PIXI.Point[fn](currPt, end);
+      const distSE = PIXI.Point[fn](start, end);
+      if ( distCS < distCE && distCE > distSE ) pt.x *= -1;
+    }
+    return pt;
+  }
 
   /**
    * Intersect this cutaway quad based on a 3d segment.
@@ -97,6 +165,7 @@ export class CutawayPolygon extends PIXI.Polygon {
    * @returns {PIXI.Point[]} The intersection points, marked as movingInto true/false.
    */
   intersectSegment3d(a, b) {
+    this.isSquaredDistance = false;
     using a2d = this._to2d(a);
     using b2d = this._to2d(b);
     const ixs = this.segmentIntersections(a2d, b2d).map(ix => {
@@ -121,6 +190,7 @@ export class CutawayPolygon extends PIXI.Polygon {
    * @returns {boolean}
    */
   contains3d(a) {
+    this.isSquaredDistance = false;
     using a2d = this._to2d(a);
     return this.contains(a2d.x, a2d.y);
   }
@@ -259,22 +329,23 @@ export class CutawayPolygon extends PIXI.Polygon {
     opts.color ??= Draw.COLORS.red;
     opts.fill ??= Draw.COLORS.red;
     opts.fillAlpha ??= 0.3;
-    const invertedPolyPoints = [];
-    const pts = [...this.iteratePoints()];
+
+
+    // If squared distance, convert.
+    const convertFn = this.isSquaredDistance ? convertToDistance : pt => pt;
 
     // Locate the minimum point that is above an arbitrarily low value so we don't draw excessively large polys.
     const LOWEST = gridUnitsToPixels(-100);
     const HIGHEST = gridUnitsToPixels(100);
-    for ( let i = 0, n = pts.length; i < n; i += 1 ) {
-      const { x, y } = pts[i];
-      const pt = { x, y: -clamp(y, LOWEST, HIGHEST) } // Arbitrary cutoff for low elevations.
-
-      // Convert to smaller values for displaying.
-      convertToDistance(pt);
-      convertToElevation(pt);
+    const invertedPolyPoints = [];
+    for ( const pt of this.iteratePoints() ) {
+      pt.y = -clamp(y, LOWEST, HIGHEST);  // Arbitrary cutoff for low and high elevations.
+      convertFn(pt);
       invertedPolyPoints.push(pt);
     }
+
     const invertedPoly = new PIXI.Polygon(...invertedPolyPoints);
     Draw.shape(invertedPoly, opts);
+    invertedPolyPoints.forEach(pt => pt.release());
   }
 }
