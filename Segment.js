@@ -40,6 +40,17 @@ export class Segment {
   }
 
   /**
+   * Flip a and b points, in place.
+   * @returns {this}
+   */
+  reverse() {
+    const oldB = this.b;
+    this.b = this.a;
+    this.a = oldB;
+    return this;
+  }
+
+  /**
    * Difference between the two points.
    * @type {PIXI.Point|Point3d}
    */

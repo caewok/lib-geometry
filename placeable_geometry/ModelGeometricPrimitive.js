@@ -118,17 +118,43 @@ export class PlanarPolygonPrimitive extends ModelGeometricPrimitive {
     return new this(id, [prototypeFace]);
   }
 
+  get baseFace() { return this.faces[0]; }
+
   prototypeFacesOutward() { return true; } // Handled with facesOutward.
 
   facesOutward() {
     // Confirm the prototype face is oriented same as the original.
     const prototypeFace = this.prototypeFaces[0];
-    const poly3d = this.faces[0];
+    const poly3d = this.baseFace;
     const ctr = poly3d.centroid.clone();
     ctr.z += 1;
     const protoCenter = Point3d.tmp.set(0, 0, 1); // 1 above the origin.
     return !(prototypeFace.isFacing(protoCenter) ^ poly3d.isFacing(ctr));
   }
+
+  /**
+   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
+   * @param {PIXI.Point} start     Starting point of the slice on the XY plane
+   * @param {PIXI.Point} end        Ending point of the slice on the XY plane
+   * @returns {CutawayPolygon[]}
+   */
+  verticalSlice(start, end, { thickness = 1 } = {}) {
+    if ( start.almostEqual(end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end) ) return [];
+    const polys = this.baseFace.polygons ?? [this.baseFace];
+    const topZ = polys[0].points[0].z;
+    const bottomZ = topZ - thickness;
+    const opts = { topElevationFn: () => topZ, bottomElevationFn: () => bottomZ };
+    const cutaways = polys.map(poly => poly.toPolygon2d().cutaway(start, end, opts));
+    if ( cutaways.length < 2 ) return cutaways;
+    return CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths.fromPolygons(cutaways)
+      .union()
+      .clean()
+      .toPolygons()
+      .map(p => CutawayPolygon.fromPolygon(p, start, end));
+  }
+
+
 }
 
 /**
@@ -152,7 +178,7 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    */
   static fromPolygon(id, poly, opts = {}) {
     this._makeElevationFinite(opts);
-    const top = Polygon3d.fromPIXIShape(poly, { z: opts.topZ });
+    const top = Polygon3d.fromPIXIShape(poly, { elevationZ: opts.topZ });
     const faces = this._facesFromPolygon3d(top, opts.bottomZ, opts);
     const prototypeFaces = this.canvasToPrototypeFaces(faces, opts);
     return new this(id, prototypeFaces);
@@ -173,7 +199,7 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
     this._makeElevationFinite(opts);
     const allProtoFaces = [];
     for ( const poly of polys )  {
-      const top = Polygon3d.fromPIXIShape(poly, { z: opts.topZ });
+      const top = Polygon3d.fromPIXIShape(poly, { elevationZ: opts.topZ });
       const faces = this._facesFromPolygon3d(top, opts.bottomZ, opts)
       const prototypeFaces = this.canvasToPrototypeFaces(faces, opts);
       allProtoFaces.push(...prototypeFaces);
@@ -318,8 +344,8 @@ export class ExtrudedPolygonPrimitiveWithHoles extends ExtrudedPolygonPrimitive 
     const allProtoFaces = [];
     for ( const { solid, holes } of islands ) {
       const top = new Polygons3d();
-      top.polygons.push(Polygon3d.fromPIXIShape(solid, { z: opts.topZ }));
-      top.polygons.push(...holes.map(hole => Polygon3d.fromPIXIShape(hole, { z: opts.topZ, isHole: true })));
+      top.polygons.push(Polygon3d.fromPIXIShape(solid, { elevationZ: opts.topZ, isHole: false }));
+      top.polygons.push(...holes.map(hole => Polygon3d.fromPIXIShape(hole, { elevationZ: opts.topZ, isHole: true })));
       const faces = this._facesFromPolygon3d(top, opts.bottomZ, opts);
       allProtoFaces.push(...this.canvasToPrototypeFaces(faces, opts));
     }
@@ -431,11 +457,14 @@ export class ExtrudedPolygonPrimitiveWithHoles extends ExtrudedPolygonPrimitive 
     const cutaways = [];
     for ( const poly of this.bottomFace.polygons ) {
       const poly2d = poly.toPolygon2d().cutaway(start, end, opts);
-      if ( poly2d ) cutaways.push(poly2d);
+      if ( poly2d ) cutaways.push(...poly2d);
     }
     if ( !cutaways.length ) return [];
 
     // Use Clipper to union the cutaways. Holes go straight through, leaving 1+ solid polygons.
+    // Must convert from distance squared to ensure correct intersections of any diagonals.
+    // For this basic ExtrudedPolygonPrimitiveWithHoles, no diagonals should exist.
+    // (Flat top + flat bottom + vertical sides ==> rectangle cutaways)
     const paths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths.fromPolygons(cutaways);
     const out = paths
       .union()

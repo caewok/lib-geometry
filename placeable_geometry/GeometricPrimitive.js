@@ -246,36 +246,39 @@ export class GeometricPrimitive {
   get aabb() {
     if ( this.isDirty(this.constructor.DIRTY.AABB) ) this.updateAABB();
 
-    if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.debug ) {
-      if ( Number.isNaN(this.#prototypeAABB.min.x)
-        || Number.isNaN(this.#prototypeAABB.min.y)
-        || Number.isNaN(this.#prototypeAABB.min.z)
-        || Number.isNaN(this.#prototypeAABB.max.x)
-        || Number.isNaN(this.#prototypeAABB.max.y)
-        || Number.isNaN(this.#prototypeAABB.max.z) ) console.error(`${this.constructor.name}|Prototype AABB is NaN.`);
 
-      if ( Number.isNaN(this.#aabb.min.x)
-        || Number.isNaN(this.#aabb.min.y)
-        || Number.isNaN(this.#aabb.min.z)
-        || Number.isNaN(this.#aabb.max.x)
-        || Number.isNaN(this.#aabb.max.y)
-        || Number.isNaN(this.#aabb.max.z)
+    if ( this.faces.length) {
+      if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.debug ) {
+        if ( Number.isNaN(this.#prototypeAABB.min.x)
+          || Number.isNaN(this.#prototypeAABB.min.y)
+          || Number.isNaN(this.#prototypeAABB.min.z)
+          || Number.isNaN(this.#prototypeAABB.max.x)
+          || Number.isNaN(this.#prototypeAABB.max.y)
+          || Number.isNaN(this.#prototypeAABB.max.z) ) console.error(`${this.constructor.name}|Prototype AABB is NaN.`);
 
-       ) console.error(`${this.constructor.name}|AABB is NaN.`);
+        if ( Number.isNaN(this.#aabb.min.x)
+          || Number.isNaN(this.#aabb.min.y)
+          || Number.isNaN(this.#aabb.min.z)
+          || Number.isNaN(this.#aabb.max.x)
+          || Number.isNaN(this.#aabb.max.y)
+          || Number.isNaN(this.#aabb.max.z)
 
-      if ( !(Number.isFinite(this.#prototypeAABB.min.x)
-          && Number.isFinite(this.#prototypeAABB.min.y)
-          && Number.isFinite(this.#prototypeAABB.min.z)
-          && Number.isFinite(this.#prototypeAABB.max.x)
-          && Number.isFinite(this.#prototypeAABB.max.y)
-          && Number.isFinite(this.#prototypeAABB.max.z)) ) console.warn(`${this.constructor.name}|Prototype AABB is not finite.`);
+         ) console.error(`${this.constructor.name}|AABB is NaN.`);
 
-      if ( !(Number.isFinite(this.#aabb.min.x)
-          && Number.isFinite(this.#aabb.min.y)
-          && Number.isFinite(this.#aabb.min.z)
-          && Number.isFinite(this.#aabb.max.x)
-          && Number.isFinite(this.#aabb.max.y)
-          && Number.isFinite(this.#aabb.max.z)) ) console.warn(`${this.constructor.name}|AABB is not finite.`);
+        if ( !(Number.isFinite(this.#prototypeAABB.min.x)
+            && Number.isFinite(this.#prototypeAABB.min.y)
+            && Number.isFinite(this.#prototypeAABB.min.z)
+            && Number.isFinite(this.#prototypeAABB.max.x)
+            && Number.isFinite(this.#prototypeAABB.max.y)
+            && Number.isFinite(this.#prototypeAABB.max.z)) ) console.warn(`${this.constructor.name}|Prototype AABB is not finite.`);
+
+        if ( !(Number.isFinite(this.#aabb.min.x)
+            && Number.isFinite(this.#aabb.min.y)
+            && Number.isFinite(this.#aabb.min.z)
+            && Number.isFinite(this.#aabb.max.x)
+            && Number.isFinite(this.#aabb.max.y)
+            && Number.isFinite(this.#aabb.max.z)) ) console.warn(`${this.constructor.name}|AABB is not finite.`);
+      }
     }
 
     return this.#aabb;
@@ -871,12 +874,7 @@ export class GeometricPrimitive {
 
     // 5. Assemble directed 2D segments into closed loops
     const polyPointsArr = this.#assemblePolygons(dirSegments2d);
-    const out = polyPointsArr.map(polyPoints => {
-      const poly = CutawayPolygon.fromCutawayPoints(polyPoints, start, end);
-      poly.points.forEach(pt => cutaway.convertFromDistance(pt)); // Process after the points are copied.
-      return poly;
-    });
-
+    const out = polyPointsArr.map(polyPoints => CutawayPolygon.fromCutawayPoints(polyPoints, start, end));
     dirSegments2d.forEach(s => s.release());
     return out;
   }

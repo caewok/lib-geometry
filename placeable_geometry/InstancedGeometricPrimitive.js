@@ -11,7 +11,7 @@ import { MatrixFloat32 } from "../Matrix.js";
 import { cutaway } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
 import { getHexagonalShape } from "../placeable_vertices/BasicVertices.js";
-import { Polygon3d, Quad3d, Ellipse3d, Circle3d, Triangle3d } from "../3d/Polygon3d.js";
+import { Polygon3d, Quad3d, Ellipse3d, Circle3d } from "../3d/Polygon3d.js";
 import { Sphere } from "../3d/Sphere.js";
 import { HorizontalQuadVertices } from "../placeable_vertices/BasicVertices.js";
 import { CutawayPolygon } from "../CutawayPolygon.js";
@@ -107,7 +107,7 @@ export class QuadPrimitive extends InstancedGeometricPrimitive {
    * @param {PIXI.Point} end        Ending point of the slice on the XY plane
    * @returns {CutawayPolygon[]}
    */
-  verticalSlice(start, end) {
+  verticalSlice(start, end, { thickness = 1 } = {}) {
     if ( start.almostEqual(end) ) return [];
     if ( !this.aabb.overlapsSegment(start, end) ) return [];
 
@@ -118,8 +118,7 @@ export class QuadPrimitive extends InstancedGeometricPrimitive {
     const top = this.faces[0];
     const poly = top.toPolygon2d();
     const topZ = top.points[0].z;
-    const bottomZ = topZ - 1;
-
+    const bottomZ = topZ - thickness;
     const opts = {
       topElevationFn: () => topZ,
       bottomElevationFn: () => bottomZ,
@@ -342,7 +341,7 @@ export class HexagonCylinderPrimitive extends InstancedGeometricPrimitive {
     const bounds = poly.getBounds();
     poly = poly.scale(1/bounds.width, 1/bounds.height);
     if ( poly.isPositive ) poly.reverseOrientation();
-    const top = Polygon3d.fromPolygon(poly, 0.5);
+    const top = Polygon3d.fromPolygon(poly, { elevationZ: 0.5 });
     const bottom = top.clone();
     bottom.reverseOrientation();
     top.setZ(0.5);
@@ -638,17 +637,9 @@ export class SpherePrimitive extends InstancedGeometricPrimitive {
     using circleCenter = PIXI.Point.tmp.set(distAlongPlane, center.z);
 
     // Convert to cutaway.
+    // TODO: Add CutawayCircle and CutawayEllipse classes
     const circle = new PIXI.Circle(circleCenter.x, circleCenter.y, circleRadius);
-    const poly = CutawayPolygon.fromCutawayPoints(circle.toPolygon().points, start, end);
-
-    // Convert to squared distance.
-    let i = 0;
-    for ( using pt of poly.iteratePoints() ) {
-      cutaway.convertFromDistance(pt);
-      poly.points[i++] = pt.x;
-      poly.points[i++] = pt.y;
-    }
-    return [poly]; // TODO: Add CutawayCircle class.
+    return [CutawayPolygon.fromCutawayPoints(circle.toPolygon().points, start, end)];
   }
 
   // ----- NOTE: Debug ----- //

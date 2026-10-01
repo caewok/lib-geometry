@@ -387,7 +387,7 @@ export class TileBoundingPolygonGeometry extends TileSubGeometry {
 
     const poly = this._boundingPolygon;
     const elevationZ = this.elevationZ;
-    const poly3d = Polygon3d.fromPolygon(poly, elevationZ);
+    const poly3d = Polygon3d.fromPolygon(poly, { elevationZ });
     const opts = {
       center: this.constructor.tileCenter(this.placeableDocument),
       dims: this.constructor.tileDimensions(this.placeableDocument),
