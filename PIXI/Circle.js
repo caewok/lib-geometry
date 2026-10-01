@@ -177,8 +177,8 @@ function lineSegmentIntersects(a, b, { inside = false } = {}) {
 /**
  * Cutaway a line segment start|end that moves through this circle.
  * Assumes a cylinder, not a sphere.
- * @param {Point3d} start     Starting endpoint for the segment
- * @param {Point3d} end       Ending endpoint for the segment
+ * @param {PIXI.Point} start     Starting endpoint for the segment
+ * @param {PIXI.Point} end       Ending endpoint for the segment
  * @param {object} [opts]
  * @param {number} [opts.top=1e06]        Top (elevation in pixel units) of the polygon
  * @param {number} [opts.bottom=-1e06]    Bottom (elevation in pixel units) of the polygon

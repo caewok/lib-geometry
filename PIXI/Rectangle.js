@@ -412,11 +412,11 @@ function gridRectangles(rect1, rect2) {
 
 /**
  * Cutaway a line segment start|end that moves through this rectangle.
- * @param {Point3d} a       Starting endpoint for the segment
- * @param {Point3d} b       Ending endpoint for the segment
+ * @param {PIXI.Point} a       Starting endpoint for the segment
+ * @param {PIXI.Point} b       Ending endpoint for the segment
  * @param {object} [opts]
- * @param {Point3d} [opts.start]              Starting endpoint for the segment
- * @param {Point3d} [opts.end]                Ending endpoint for the segment
+ * @param {PIXI.Point} [opts.start]              Starting endpoint for the segment
+ * @param {PIXI.Point} [opts.end]                Ending endpoint for the segment
  * @param {function} [opts.topElevationFn]    Function to calculate the top elevation for a position
  * @param {function} [opts.bottomElevationFn] Function to calculate the bottom elevation for a position
  * @param {number} [opts.isHole=false]        Treat this shape as a hole; reverse the points of the returned polygon
