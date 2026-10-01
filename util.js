@@ -114,123 +114,12 @@ export function unitElevation(elevation) { return Math.round(elevation / canvas.
 export function elevationForUnit(k) { return roundNearWhole(k * canvas.scene.dimensions.distance); }
 
 /**
- * @typedef {PIXI.Point} CutawayPoint
- * A point in cutaway space.
- * @param {number} x      Distance-squared from start point
- * @param {number} y      Elevation in pixel units
- */
-
-/**
- * Convert a point on a line to a coordinate representing the line direction in the x direction
- * and the elevation in the y direction.
- *
- * @param {ElevatedPoint} currPt      A point on the line start|end
- * @param {ElevatedPoint} start       Beginning endpoint of the line segment
- * @param {ElevatedPoint} [end]       End of the line segment; required only if the current point is before start
- * @param {PIXI.Point} [outPoint]
- * @returns {CutawayPoint} X value is 0 at start, negative if further from end than start.
- *  - x: Distance-squared from start, in direction of end.
- *  - y: Elevation in pixel units
- */
-function to2dCutaway(currPt, start, end, outPoint) {
-  outPoint ??= PIXI.Point.tmp;
-
-  // 2d (XY) distance.
-  const distCS = PIXI.Point.distanceSquaredBetween(currPt, start);
-
-  const pt = outPoint.set(distCS, currPt.z);
-  if ( end ) {
-    using start2d = start.to2d();
-    using end2d = end.to2d();
-    using currPt2d = currPt.to2d();
-
-    // Dot product of the directional vectors gives the sign.
-    using dirAB = end2d.subtract(start2d);
-    using dirAP = currPt2d.subtract(start2d);
-    if ( dirAB.dot(dirAP) < 0 ) pt.x *= -1;
-  }
-  return pt;
-}
-
-/* Identifying locations on the 1d line.
-currPt ---> start ---> end
-dist(currPt, start) < dist(currPt, end) && dist(currPt, end) > dist(start, end)
-
-start ---> currPt ---> end
-dist(start, end) > dist(start, currPt) && dist(start, end) > dist(end, currPt)
-
-start ---> end ---> currPt
-dist(end, currPt) < dist(start, currPt) && dist(currPt, start) > dist(start, end)
-*/
-
-/**
- * Convert a cutaway point to its respective position on the line start|end.
- * @param {CutawayPoint} cutawayPt      2d cutaway point created from _to2dCutaway
- * @param {ElevatedPoint} start             Beginning endpoint of the line segment
- * @param {ElevatedPoint} end               End of the line segment
- * @param {ElevatedPoint} [outPoint]
- * @returns {ElevatedPoint}
- */
-function from2dCutaway(cutawayPt, start, end, outPoint) {
-  outPoint ??= CONFIG[GEOMETRY_LIB_ID].lib.threeD.ElevatedPoint.tmp;
-  // b/c outPoint is 3d, makes sure to temporarily store the 2d values.
-  using start2d = start.to2d();
-  using end2d = end.to2d();
-  start2d.towardsPointSquared(end2d, cutawayPt.x, outPoint);
-  outPoint.z = cutawayPt.y;
-  return outPoint;
-}
-
-/**
- * Convert a cutaway point to use distance instead of distance squared.
- * @param {CutawayPoint} cutawayPt
- * @returns {PIXI.Point} The same point, modified in place.
- */
-function convertToDistanceCutaway(cutawayPt) {
-  const sign = Math.sign(cutawayPt.x);
-  cutawayPt.x =  sign * Math.sqrt(Math.abs(cutawayPt.x));
-  return cutawayPt;
-}
-
-/**
- * Convert a cutaway point to use grid elevation instead of pixel units for y.
- * @param {CutawayPoint} cutawayPt
- * @returns {PIXI.Point} The same point, modified in place.
- */
-function convertToElevationCutaway(cutawayPt) {
-  cutawayPt.y = pixelsToGridUnits(cutawayPt.y);
-  return cutawayPt;
-}
-
-/**
- * Convert a cutaway point to use distance-squared instead of distance.
- * @param {CutawayPoint} cutawayPt
- * @returns {PIXI.Point} The same point, modified in place.
- */
-function convertFromDistanceCutaway(cutawayPt) {
-  const sign = Math.sign(cutawayPt.x);
-  cutawayPt.x = sign * Math.pow(cutawayPt.x, 2);
-  return cutawayPt;
-}
-
-/**
- * Convert a cutaway point to use pixel units instead of grid units for y.
- * @param {CutawayPoint} cutawayPt
- * @returns {PIXI.Point} The same point, modified in place.
- */
-function convertFromElevationCutaway(cutawayPt) {
-  cutawayPt.y = gridUnitsToPixels(cutawayPt.y);
-  return cutawayPt;
-}
-
-/**
  * Formerly Math.roundDecimals before Foundry v12.
  * @param {number} number     The number to round
  * @param {number} places     Number of places past the decimal point to round
  * @returns {number}
  */
 export function roundDecimals(number, places) { return Number(number.toFixed(places)); }
-
 
 /**
  * This method is only guaranteed to work for convex polygons
@@ -1491,14 +1380,6 @@ function _strictlyLessThan(b, epsilon = 1e-06) { return this < (b - epsilon); }
 function _strictlyGreaterThan(b, epsilon = 1e-06) { return this > (b + epsilon); }
 
 
-export const cutaway = {
-  to2d: to2dCutaway,
-  from2d: from2dCutaway,
-  convertToDistance: convertToDistanceCutaway,
-  convertToElevation: convertToElevationCutaway,
-  convertFromDistance: convertFromDistanceCutaway,
-  convertFromElevation: convertFromElevationCutaway
-};
 
 /**
  * Retrieve an embedded property from an object using a string.
