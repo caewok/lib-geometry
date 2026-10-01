@@ -313,123 +313,40 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
 export class ExtrudedPolygonPrimitiveWithHoles extends ExtrudedPolygonPrimitive {
 
   /**
-   * Build an extruded (along the z-axis) shape from a 2d polygon.
-   * @param {string} id           Identifier for this shape.
-   * @param {PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse} poly   Polygon to use.
-   * @param {object} [opts]
-   * @param {number} [opts.topZ]        Top elevation
-   * @param {number} [opts.bottomZ]     Bottom elevation
-   * @returns {ExtrudedPolygonPrimitive}
-   */
-  static fromPolygon(id, poly, holes = [], opts) {
-    if ( !holes.length ) return super.fromPolygon(id, poly, opts);
-    return this.fromPolygons(id, [poly], holes, opts);
-  }
-
-  /**
-   * Extrudes multiple polygons for a single shape, handles holes.
+   * Extrudes polygons for a single island (one solid + its holes).
    * @param {string} id                 Identifier for this shape.
-   * @param {(PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse)[]} polys      2d polygons to use.
+   * @param {(PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse)[]} solids        Solid 2d polygon to use
+   * @param {(PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse)[]} holes      2d polygon holes to use
    * @param {object} [opts]
    * @param {number} [opts.topZ]        Top elevation
    * @param {number} [opts.bottomZ]     Bottom elevation
    * @param {number} [opts.density]     Density when dealing with circles, ellipses
    * @returns {ExtrudedPolygonPrimitive}
    */
-  static fromPolygons(id, polys, holes = [], opts = {}) {
-    if ( !holes.length ) return super.fromPolygons(id, polys, opts);
+  static fromPolygons() {
+    console.error("ExtrudedPolygonPrimitiveWithHoles#fromPolygons is not implemented. Use only 1 solid per extruded shape.");
+  }
+
+  /**
+   * Extrudes polygons for a single island (one solid + its holes).
+   * @param {string} id           Identifier for this shape.
+   * @param {PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse} solid   Polygon to use.
+   * @param {(PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse)[]} holes      2d polygon holes to use
+   * @param {object} [opts]
+   * @param {number} [opts.topZ]        Top elevation
+   * @param {number} [opts.bottomZ]     Bottom elevation
+   * @returns {ExtrudedPolygonPrimitive}
+   */
+  static fromPolygon(id, solid, holes = [], opts) {
+    if ( !holes.length ) return super.fromPolygon(id, poly, opts);
     this._makeElevationFinite(opts);
-    const islands = this._buildIslands(polys, holes);
 
-    const allProtoFaces = [];
-    for ( const { solid, holes } of islands ) {
-      const top = new Polygons3d();
-      top.polygons.push(Polygon3d.fromPIXIShape(solid, { elevationZ: opts.topZ, isHole: false }));
-      top.polygons.push(...holes.map(hole => Polygon3d.fromPIXIShape(hole, { elevationZ: opts.topZ, isHole: true })));
-      const faces = this._facesFromPolygon3d(top, opts.bottomZ, opts);
-      allProtoFaces.push(...this.canvasToPrototypeFaces(faces, opts));
-    }
+    const top = new Polygons3d();
+    top.polygons.push(Polygon3d.fromPIXIShape(solid, { elevationZ: opts.topZ, isHole: false }));
+    top.polygons.push(...holes.map(hole => Polygon3d.fromPIXIShape(hole, { elevationZ: opts.topZ, isHole: true })));
+    const faces = this._facesFromPolygon3d(top, opts.bottomZ, opts);
+    const allProtoFaces = this.canvasToPrototypeFaces(faces, opts);
     return new this(id, allProtoFaces);
-  }
-
-  /**
-   * From 3d polygons, construct a recursive tree of solid + holes
-   * A root solid pairs with its direct hole children only.
-   * Each of those holes' direct solid children become new island roots one level down.
-   * @param {(PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse)[]} solids
-   * @param {(PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse)[]} holes
-   * @returns {object[]}
-   * - @prop {PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse} solid
-   * - @prop {PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse[]} holes
-   */
-  static _buildIslands(solids, holes) {
-    const parent = this._buildRingParents([...solids, ...holes]);
-    const children = new Array(solids.length + holes.length).fill([]);
-    parent.forEach((p, i) => {
-      if ( p !== null ) children[p].push(i);
-    });
-
-    const islands = []; // { solid: PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse, holes: PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse[] }
-
-    // The parent indices refer to the combined [...solids, ...holes]. Use the offset to find the original shape.
-    // Children similarly reference the combined [...solids, ...holes] array.
-    const holeOffsetIdx = solids.length;
-    const indexIsSolid = idx => idx < holeOffsetIdx;
-
-    function processSolid(solidIdx) {
-      const holeIdxs = children[solidIdx].filter(c => !indexIsSolid(c));
-      islands.push({ solid: solids[solidIdx], holes: holeIdxs.map(h => holes[h - holeOffsetIdx]) });
-
-      // Recurse: Any solid ring nested inside one of these holes starts a new island.
-      for ( const holeIdx of holeIdxs ) children[holeIdx]
-        .filter(c => indexIsSolid(c))
-        .forEach(processSolid);
-    }
-
-    solids.forEach((_solid, i) => {
-      if (parent[i] === null ) processSolid(i);
-    });
-
-    return islands;
-  }
-
-  /**
-   * Find each ring's immediate parent: the smallest other ring (solid or hole)
-   * that contains it. Assumes clean, non-self-intersecting rings that are either
-   * disjoint or fully nested (true for Clipper-cleaned region shapes).
-   * @param {(PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse)[]} solids
-   * @param {(PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse)[]} holes
-   * @returns {number[]} Index of parent polygon for each ring
-   */
-  static _buildRingParents(planarRings) {
-    const areas = planarRings.map(r => r.area); // Note: Must be positive area, not signed.
-
-    // Ensure the test point is strictly inside the polygon, not on an edge.
-    // which could cause the `contains` method to fail for tightly nested shapes.
-    const testPoints = planarRings.map(r => {
-      if ( typeof r.interiorPoint === "function" ) {
-        const pt = r.interiorPoint();
-        if ( pt ) return pt;
-      }
-      // Fallback on centroid or manual bounding box center if interiorPoint fails.
-      return r.center || PIXI.Point.tmp.set(r.x, r.y);
-    });
-
-    // Construct the parent-child relationship based on area comparison. Parent area > child area.
-    return planarRings.map((ring, i) => {
-      let parent = null;
-      let parentArea = Number.POSITIVE_INFINITY;
-      for ( let j = 0, n = planarRings.length; j < n; j += 1 ) {
-        if ( i === j ) continue; // Skip self-test.
-        if ( areas[j] <= areas[i] ) continue; // A parent must be strictly larger than the ring it contains.
-        if ( areas[j] >= parentArea ) continue; // Already have a tighter-fitting candidate.
-        if ( planarRings[j].contains(testPoints[i].x, testPoints[i].y) ) {
-          parent = j;
-          parentArea = areas[j];
-        }
-      }
-      return parent;
-    });
   }
 
   /**
@@ -474,56 +391,5 @@ export class ExtrudedPolygonPrimitiveWithHoles extends ExtrudedPolygonPrimitive 
     return out.map(poly => CutawayPolygon.fromPolygon(poly, start, end));
   }
 
-  /**
-   * Helper: Merges overlapping or touching 1D intervals.
-   * @param {number[][]} intervals - Array of [start, end] tuples.
-   * @returns {number[][]} Merged intervals.
-   */
-  _mergeIntervals(intervals) {
-    if ( !intervals.length ) return [];
-    intervals.sort((a, b) => a[0] - b[0]);
-
-    const merged = [intervals[0]];
-    for ( let i = 1; i < intervals.length; i++ ) {
-      const last = merged[merged.length - 1];
-      const current = intervals[i];
-      if ( current[0] <= last[1] ) {
-        last[1] = Math.max(last[1], current[1]);
-      } else {
-        merged.push(current);
-      }
-    }
-    return merged;
-  }
-
-  /**
-   * Helper: Subtracts hole intervals from solid intervals.
-   * @param {number[][]} solids - Merged solid intervals.
-   * @param {number[][]} holes - Merged hole intervals.
-   * @returns {number[][]} Resulting solid intervals.
-   */
-  _subtractIntervals(solids, holes) {
-    let currentSolids = [...solids];
-
-    for ( const hole of holes ) {
-      const nextSolids = [];
-      for ( const solid of currentSolids ) {
-        if ( hole[1] <= solid[0] || hole[0] >= solid[1] ) {
-          // No overlap
-          nextSolids.push(solid);
-        } else {
-          // Hole splits or trims the solid
-          if ( hole[0] > solid[0] ) {
-            nextSolids.push([solid[0], hole[0]]);
-          }
-          if ( hole[1] < solid[1] ) {
-            nextSolids.push([hole[1], solid[1]]);
-          }
-        }
-      }
-      currentSolids = nextSolids;
-    }
-    return currentSolids;
-  }
 
 }
