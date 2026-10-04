@@ -1,12 +1,12 @@
 /* globals
-
+canvas,
+CONFIG,
 PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
 // Geometry
-import { CombinedGeometricPrimitive } from "./CombinedGeometricPrimitive.js";
 import { ExtrudedPolygonPrimitive } from "./ModelGeometricPrimitive.js";
 
 // LibGeometry
@@ -15,18 +15,15 @@ import { GEOMETRY_LIB_ID } from "../const.js";
 
 /**
  * A ConePrimitive can represent a 3d extruded cone that is either flat, round, or semicircular.
- * Represents it as 1 or 2 pieces: the triangle base and arc shape, if any.
+ * Made up of a triangle base and arc shape, if any.
  */
-export class ConePrimitive extends CombinedGeometricPrimitive {
+export class ConePrimitive extends ExtrudedPolygonPrimitive {
 
   /** @type {"flat"|"round"|"semicircle"} */
-  type = "flat";
+  curvature = "flat";
 
-  /** @type {number<radians>} */
-  theta = 0; // Angle of the cone at the apex.
-
-  /** @type {number} */
-  radius = 0;
+  /** @type {number<degrees>} */
+  angle = 0; // Angle of the cone at the apex.
 
   /**
    * Get the 2d polygon canvas representation of this shape, usually based on the bottom shape.
@@ -40,37 +37,13 @@ export class ConePrimitive extends CombinedGeometricPrimitive {
     return ClipperPaths.unionPolygons(polys2d);
   }
 
-  // ----- NOTE: Faces ----- //
-
-  /** @type {Polygon3d[]} */
-  get bottomFaces() {
-    const bottoms = [];
-    for ( const child of this.children ) bottoms.push(...child.bottomFaces);
-    return bottoms;
-  }
-
-  /** @type {Polygon3d[]} */
-  get topFaces() {
-    const tops = [];
-    for ( const child of this.children ) tops.push(...child.topFaces);
-    return tops;
-  }
-
-  /** @type {Polygon3d[]} */
-  get sideFaces() {
-    const sides = [];
-    for ( const child of this.children ) sides.push(...child.topFaces);
-    return sides;
-  }
-
-
   // ----- NOTE: Static factory methods ----- //
 
   /**
    * Cone built from a single triangle or a triangle + arc or half-circle.
    * The default position is centered, with the apex at x = -0.5, y = 0 and the base vertical along x = 0.5
    */
-  static create(id, angle, { type = "rounded", density = 0 } = {}) {
+  static create(id, angle, { curvature = "rounded", density } = {}) {
     let baseSegment;
     let arcCircle;
     let arcStartAngle;
@@ -78,78 +51,49 @@ export class ConePrimitive extends CombinedGeometricPrimitive {
     const rotation = 0;
     const theta = Math.toRadians(angle);
     const radius = 1;
-    using apex = PIXI.Point.tmp.set(-0.5, 0);
-    switch ( regionShape.curvature ) {
+    using apex = PIXI.Point.tmp.set(0, 0);
+    switch ( curvature ) {
       case "flat":
         baseSegment = this.flatConeBase(apex, radius, theta, rotation);
         break;
       case "semicircle": {
         baseSegment = this.semiCircleConeBase(apex, radius, theta, rotation);
-        arcCircle = this.semiCircleConeCircle(regionShape, regionShape.radius, theta, rotation);
+        arcCircle = this.semiCircleConeCircle(apex, radius, theta, rotation);
         arcStartAngle = Math.normalizeRadians(-Math.PI_1_2 + rotation);
         arcEndAngle = Math.normalizeRadians(Math.PI_1_2 + rotation);
         break;
       }
       case "round": {
         baseSegment = this.roundConeBase(apex, radius, theta, rotation);
-        arcCircle = this.roundConeCircle(regionShape, regionShape.radius);
+        arcCircle = this.roundConeCircle(apex, radius);
         arcStartAngle = Math.normalizeRadians(-(theta / 2) + rotation);
-        arcEndAngle = Math.normalizeRadians((theta / 2) + rotation)
+        arcEndAngle = Math.normalizeRadians((theta / 2) + rotation);
+        break;
       }
+      default: throw new Error("Cone type not recognized.");
     }
 
-    const out = new this()
+    let conePoly = this._createTrianglePrototype(`${id}_tri`, apex, baseSegment);
+    if ( curvature !== "flat" ) {
+      // Create the arc polygon.
+      density ||= PIXI.Circle.approximateVertexDensity(canvas.grid.size * 2);
+      const arcPoints = arcCircle.pointsForArc(arcStartAngle, arcEndAngle, { density, includeEndpoints: false });
+      const arcShape = new PIXI.Polygon(baseSegment.a, ...arcPoints, baseSegment.b);
 
-    const triShape = this._createTrianglePrimitive(`${id}_tri`, apex, baseSegment);
-    out.addChild(triShape);
-    if ( type === "flat" ) {
-      triShape.initialize();
-      out.initialize();
-      return out;
+      // Combine the triangle with the arc.
+      const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
+      conePoly = ClipperPaths.unionPolygons([conePoly, arcShape])[0];
     }
 
-    // Build the extruded polygon arc piece.
-    density ||= PIXI.Circle.approximateVertexDensity(canvas.grid.size * 2);
-    const arcPoints = arcCircle.pointsForArc(arcStartAngle, arcEndAngle, { density, includeEndpoints: false });
-    const poly = new PIXI.Polygon(baseSegment.a, ...arcPoints, baseSegment.b);
-    const arcShape = ExtrudedPolygonPrimitive.fromPrototypePolygon(`${id}`, poly, { density });
-    out.addChild(arcShape);
-
-    // Drop the shared wall between the triangle and the arc.
-    // First quad of the triangle shape is the base side.
-    triShape.prototypeFaces.splice(2, 1); // Top and bottom polygon are indices 0 and 1, respectively.
-
-    // Last side of the arc shape is the base side.
-    arcShape.prototypeFaces.pop();
-
-    triShape.initialize();
-    arcShape.initialize();
+    const out = this.fromPrototypePolygon(id, conePoly, { density });
+    out.curvature = curvature;
+    out.angle = angle;
     out.initialize();
-
     return out;
   }
 
-  /**
-   * Create a primitive for a flat cone.
-   * Can call this directly to avoid unnecessary combination.
-   * @param {number} angle      Angle of the apex of the triangle, in degrees.
-   * @returns {ConePrimitive}
-   */
-  static createFlatPrimitive(id, angle) {
-    using apex = PIXI.Point.tmp.set(-0.5, 0);
-    const theta = Math.toRadians(angle);
-    using baseSegment = this.flatConeBase(apex, 1, theta, 0);
-    return this._createTrianglePrimitive(`${id}_tri`, apex, baseSegment, 0.5, -0.5);
-  }
-
-  static _createTrianglePrimitive(id, apex, baseSegment, topZ = 0.5, bottomZ = -0.5) {
-    using a = Point3d.tmp.set(apex.x, apex.y, topZ);
-    using b = Point3d.tmp.set(baseSegment.a.x, baseSegment.a.y, topZ);
-    using c = Point3d.tmp.set(baseSegment.b.x, baseSegment.b.y, topZ);
-    const top = Triangle3d.from3Points(a, b, c);
-    const bottom = top.clone().setZ(bottomZ).reverseOrientation();
-    const protoFaces = [bottom, top, top.buildTopSides(bottomZ)];
-    return new ExtrudedPolygonPrimitive(`${id}_tri`, protoFaces);
+  static _createTrianglePrototype(id, apex, baseSegment) {
+    return new PIXI.Polygon([apex.x, apex.y, baseSegment.a.x, baseSegment.a.y, baseSegment.b.x, baseSegment.b.y]);
   }
 
   // ----- NOTE: Math helpers ----- //

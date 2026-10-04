@@ -333,6 +333,9 @@ export class Polygon3d {
    * For circles and ellipses, orientation is irrelevant (only a single point) and no other parameter
    * in a 2d PIXI shape, so `isHole` will control.
    * All parameters for factory methods are in an options object other than the initial shape/points.
+   *
+   * The standard 3d orientation test (facing) returns a positive value if t
+
    */
 
  /**
@@ -1505,11 +1508,13 @@ export class Ellipse3d extends Polygon3d {
 
   /**
    * For Ellipse, the plane normal typically must be set, not calculated.
-   * By default, the ellipse will face straight up, with normal {0, 0, 1}.
+   * By default, the ellipse will face straight down, with normal {0, 0, -1}.
+   * This is because Foundry's typical polygon orientation is clockwise with regard to the viewer (+z),
+   * whereas 3d clockwise points face down. See Plane#whichSide.
    */
   _calculatePlane(plane) {
-    // Default to straight up if not already defined.
-    plane.normal.set(0, 0, 1);
+    // Default to straight down if not already defined.
+    plane.normal.set(0, 0, -1);
     // plane.point.copyFrom(this.points[0]); // Unneeded b/c get plane does this.
   }
 

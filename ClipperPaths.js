@@ -71,6 +71,21 @@ export class ClipperPaths {
   }
 
   /**
+   * Use Clipper to join an array of polygons, using positive fill.
+   * @param {PIXI.Polygon[]} polys
+   * @param {object} [opts]
+   * @param {number} [opts.scalingFactor=100]
+   * @returns {PIXI.Polygon[]}
+   */
+  static combinePolygons(polys, opts) {
+    if ( polys.length < 2 ) return polys;
+    return this.fromPolygons(polys, opts)
+      .combine()
+      .clean()
+      .toPolygons();
+  }
+
+  /**
    * Use Clipper to subtract an array of polygon holes from the polygons.
    * @param {PIXI.Polygon[]} solids
    * @param {PIXI.Polygon[]} holes
@@ -78,7 +93,7 @@ export class ClipperPaths {
    * @param {number} [opts.scalingFactor=100]
    * @returns {PIXI.Polygon[]}
    */
-  static diffPolygons(solids, holes) {
+  static diffPolygons(solids, holes, opts) {
     if ( !holes.length ) return solids;
     if ( !solids.length ) return [];
 
@@ -332,19 +347,20 @@ export class ClipperPaths {
   }
 
   simplifyPolygons(type = ClipperLib.PolyFillType.pftNonZero) {
-    this.paths = ClipperLib.Clipper.SimplifyPolygons(this.paths, ClipperLib.PolyFillType.pftNonZero);
+    this.paths = ClipperLib.Clipper.SimplifyPolygons(this.paths, type);
     return this;
   }
 
   /**
    * Run CleanPolygons on the paths
-   * @param {number} cleanDelta   Value, multiplied by scalingFactor, passed to CleanPolygons.
+   * @param {number} cleanDelta   Distance under which to trim adjacent vertices.
+   *   Defaults in ClipperJS to 1.415.
    * @returns {ClipperPaths}  A new object.
    */
-  clean(cleanDelta = 0.1) {
+  clean(cleanDelta) {
     // Ensure no near-infinities
     // Can do this in place b/c near-infinite coordinates will throw errors in Clipper.
-    const MAX_SAFE = 1e15;
+    const MAX_SAFE = 1e50;
     for ( const path of this.paths ) {
       path.forEach(pt => {
         if ( pt.X > MAX_SAFE ) pt.X = MAX_SAFE;
@@ -356,7 +372,7 @@ export class ClipperPaths {
     }
 
     const scalingFactor = this.scalingFactor;
-    const cleanedPaths = ClipperLib.Clipper.CleanPolygons(this.paths, scalingFactor * cleanDelta);
+    const cleanedPaths = ClipperLib.Clipper.CleanPolygons(this.paths, cleanDelta);
     const out = new this.constructor(cleanedPaths, { scalingFactor });
 
     // Trim any empty paths or broken polygon paths.

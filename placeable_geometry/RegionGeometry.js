@@ -311,7 +311,7 @@ export class RegionGeometry extends PlaceableGeometry {
         // For flat cones, just create an extruded triangle.
         const angle = regionShape.angle;
         if ( regionShape.type === "flat" ) out =  ConePrimitive.createFlatPrimitive(id, angle);
-        else out = ConePrimitive.create(id, angle, { type: regionShape.type, density: PIXI.Circle.approximateVertexDensity(regionShape.radius) });
+        else out = ConePrimitive.create(id, angle, { curvature: regionShape.curvature, density: PIXI.Circle.approximateVertexDensity(regionShape.radius) });
         break;
       }
 

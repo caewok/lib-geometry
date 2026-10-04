@@ -317,8 +317,8 @@ export class Plane {
    * the plane and point, but the value should remain the same sign for other points on that side.
    * @param {Point3d} p
    * @returns {number}
-   *   - Positive: p is above the plane
-   *   - Negative: p is below the plane
+   *   - Positive: p is above the plane (on the side of the plane normal).
+   *   - Negative: p is below the plane (opposite the plane normal).
    *   - Zero: p is on the plane ()
    * Point nearly on the plane will return very small values.
    */

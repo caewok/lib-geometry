@@ -250,8 +250,8 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    * @returns {ExtrudedPolygonPrimitive}
    */
   static fromPrototypePolygon(id, poly, { topZ = 0.5, bottomZ = -0.5, density } = {}) {
-    const top = Polygon3d.fromPIXIShape(poly, { elevationZ: topZ, density });
-    const prototypeFaces = this._facesFromPolygon3d(top, bottomZ, { epsilon: 1e-08 });
+    const bottom = Polygon3d.fromPIXIShape(poly, { elevationZ: bottomZ, density });
+    const prototypeFaces = this._facesFromPolygon3d(bottom, { topZ, bottomZ, epsilon: 1e-08 });
     return new this(id, prototypeFaces);
   }
 
@@ -267,8 +267,8 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    */
   static fromPolygon(id, poly, opts = {}) {
     this._makeElevationFinite(opts);
-    const top = Polygon3d.fromPIXIShape(poly, { elevationZ: opts.topZ, density: opts.density });
-    const faces = this._facesFromPolygon3d(top, opts.bottomZ);
+    const bottom = Polygon3d.fromPIXIShape(poly, { elevationZ: opts.bottomZ, density: opts.density });
+    const faces = this._facesFromPolygon3d(bottom, opts);
     const prototypeFaces = this.canvasToPrototypeFaces(faces, opts);
     const out = new this(id, prototypeFaces);
     if ( !poly.isPositive ) out.isHole = true;
@@ -299,10 +299,10 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    * @param {number} bottomZ      The bottom elevation
    * @returns {Polygon3d[]}
    */
-  static _facesFromPolygon3d(top, bottomZ, { epsilon = 1e-04 } = {}) {
-    const bottom = top.clone();
-    bottom.setZ(bottomZ);
-    bottom.reverseOrientation();
+  static _facesFromPolygon3d(bottom, { bottomZ, topZ, epsilon = 1e-04 } = {}) {
+    const top = bottom.clone();
+    top.setZ(topZ);
+    top.reverseOrientation();
 
     // Larger epsilon because these side will eventually be transformed to a smaller prototype.
     return [bottom, top, ...top.buildTopSides(bottomZ, epsilon)];
@@ -459,10 +459,10 @@ export class ExtrudedPolygonPrimitiveWithHoles extends ExtrudedPolygonPrimitive 
     if ( !holes.length ) return super.fromPolygon(id, solid, opts);
     this._makeElevationFinite(opts);
 
-    const top = new Polygons3d();
-    top.polygons.push(Polygon3d.fromPIXIShape(solid, { elevationZ: opts.topZ, isHole: false }));
-    top.polygons.push(...holes.map(hole => Polygon3d.fromPIXIShape(hole, { elevationZ: opts.topZ, isHole: true })));
-    const faces = this._facesFromPolygon3d(top, opts.bottomZ, opts);
+    const bottom = new Polygons3d();
+    bottom.polygons.push(Polygon3d.fromPIXIShape(solid, { elevationZ: opts.bottomZ, isHole: false }));
+    bottom.polygons.push(...holes.map(hole => Polygon3d.fromPIXIShape(hole, { elevationZ: opts.bottomZ, isHole: true })));
+    const faces = this._facesFromPolygon3d(bottom, opts);
     const allProtoFaces = this.canvasToPrototypeFaces(faces, opts);
     return new this(id, allProtoFaces);
   }
