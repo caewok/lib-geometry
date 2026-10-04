@@ -60,4 +60,5 @@ export class EmptyGeometricPrimitive extends GeometricPrimitive {
 
   containsProjectedXY() { return false; }
 
+  *drawables() { }
 }

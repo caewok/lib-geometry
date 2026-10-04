@@ -8,6 +8,7 @@ import { gridUnitsToPixels, clamp } from "./util.js";
 import { Draw } from "./Draw.js";
 import { Polygon3d, Triangle3d, Quad3d } from "./3d/Polygon3d.js";
 import { ElevatedPoint } from "./3d/ElevatedPoint.js";
+import { GEOMETRY_LIB_ID } from "./const.js";
 
 /**
  * A cutaway polygon is a 2d representation of a vertical slice of a shape.
@@ -116,6 +117,24 @@ export class CutawayPolygon extends PIXI.Polygon {
     using dirAP = pt2d.subtract(start2d);
     if ( dirAB.dot(dirAP) < 0 ) outPoint.x *= -1;
     return outPoint;
+  }
+
+  /**
+   * Union 2d cutaways into non-overlapping CutawayPolygons.
+   * @param {CutawayPolygon[]} cutaways
+   * @param {PIXI.Point} [start]
+   * @param {PIXI.Point} [end]
+   * @returns {CutawayPolygon[]}
+   */
+  static union(cutaways, start, end) {
+    if ( cutaways.length < 2 ) return cutaways;
+    start ??= cutaways[0].start;
+    end ??= cutaways[0].end;
+    return CONFIG[GEOMETRY_LIB].CONFIG.ClipperPaths.fromPolygons(cutaways)
+      .union()
+      .clean()
+      .toPolygons()
+      .map(poly => this.fromPolygon(poly, start, end));
   }
 
   /**

@@ -53,6 +53,42 @@ export class ClipperPaths {
     this.#scalingFactor = value;
   }
 
+  // ----- NOTE: Static polygon helpers ----- //
+
+  /**
+   * Use Clipper to join an array of polygons.
+   * @param {PIXI.Polygon[]} polys
+   * @param {object} [opts]
+   * @param {number} [opts.scalingFactor=100]
+   * @returns {PIXI.Polygon[]}
+   */
+  static unionPolygons(polys, opts) {
+    if ( polys.length < 2 ) return polys;
+    return this.fromPolygons(polys, opts)
+      .union()
+      .clean()
+      .toPolygons();
+  }
+
+  /**
+   * Use Clipper to subtract an array of polygon holes from the polygons.
+   * @param {PIXI.Polygon[]} solids
+   * @param {PIXI.Polygon[]} holes
+   * @param {object} [opts]
+   * @param {number} [opts.scalingFactor=100]
+   * @returns {PIXI.Polygon[]}
+   */
+  static diffPolygons(solids, holes) {
+    if ( !holes.length ) return solids;
+    if ( !solids.length ) return [];
+
+    const solidPaths = this.fromPolygons(solids, opts).union();
+    const holePaths = this.fromPolygons(holes, opts).union();
+    return solidPaths.diffPaths(holePaths)
+      .clean()
+      .toPolygons();
+  }
+
   // ----- NOTE: Static conversion helpers ----- //
 
   static pathToPoints(path, scalingFactor = CONST.CLIPPER_SCALING_FACTOR) {

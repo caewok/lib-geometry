@@ -1,6 +1,5 @@
 /* globals
 CONFIG,
-PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
@@ -50,7 +49,7 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
    * @param {Point3d} [opts.anchors]
    * @returns {Polygon3d} Prototype faces, which may be same as faces.
    */
-  static canvasToPrototypeFaces(faces, opts) {
+  static canvasToPrototypeFaces(faces, opts = {}) {
     // Default approach is that the faces equal the prototype faces; model matrix is identity.
     if ( !(opts.center || opts.dims || opts.angles || opts.anchors ) ) return faces;
 
@@ -164,7 +163,97 @@ export class PlanarPolygonPrimitive extends ModelGeometricPrimitive {
  */
 export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
 
+  // Align with properties/methods of ExtrudedInstancePrimitive.
+
+  /** @type {Polygon3d[]} */
+  get bottomFaces() { return this.faces.slice(0,1); }
+
+  /** @type {Polygon3d[]} */
+  get topFaces() { return this.faces.slice(1,2); }
+
+  /** @type {Polygon3d[]} */
+  get sideFaces() { return this.faces.slice(2);}
+
+  get topZ() { return this.aabb.max.z; }
+
+  get bottomZ() { return this.aabb.min.z; }
+
+  /**
+   * Get the 2d polygon canvas representation of this shape, usually based on the bottom shape.
+   * Assumes no rotation around the x or y axis.
+   * @returns {PIXI.Polygon}
+   */
+  toPIXIShape() { return this.bottomFaces[0].toPolygon2d(); }
+
+  /**
+   * Does this shape's XY dimensions potentially contain this canvas location?
+   * Meant to be a relatively quick test. Should only reject if it is certain not to contain it.
+   * @param {PIXI.Point} canvasLoc
+   * @returns {boolean}
+   */
+  containsProjectedXY(canvasLoc) {
+    return this.bottomFaces.some(f => f.containsProjectedXY(canvasLoc));
+  }
+
+  // ----- NOTE: Drawables ----- //
+
+  /** @type {VertexObject} */
+
+  _sidesVO;
+
+  /**
+   * Vertices for the prototype's side walls only.
+   * By default, every prototype face after the bottom (0) and top (1) faces.
+   * Therefore assumes an extruded shape, which may require subclasses to override.
+   * @type {VertexObject}
+   */
+  get sidesVO() {
+    return (this._sidesVO ??= this.constructor.generateVerticesForFaces(this.prototypeFaces.slice(2)));
+  }
+
+  /**
+   * @typedef {Object} GeometricDrawableData
+   *
+   * @prop {GeometricPrimitive} primitive
+   * @prop {VertexObject} vo
+   * @prop {Matrix<4x4>} matrix
+   * @prop {number} direction
+   * @prop {number} version
+   */
+
+  /**
+   * Yield what a renderer needs to draw this primitive: prototype VO and the matrix to apply it.
+   * Leaves yield themselves; containers yield their descendant's drawables.
+   * @param {object} [opts]
+   * @param {boolean} [opts.sidesOnly=false]    Only the side walls (used for holed solids).
+   * @yields {GeometricDrawableData}
+   */
+  *drawables({ sidesOnly = false} = {}) {
+    if ( !sidesOnly ) return super.drawables();
+    for ( const drawable of super.drawables() ) {
+      drawable.vo = this.sidesVO;
+      yield drawable;
+    }
+  }
+
+
   // ----- NOTE: Factory functions ----- //
+
+  /**
+   * Build an extruded (along the z-axis) shape from a 2d prototype polygon.
+   * @param {string} id           Identifier for this shape.
+   * @param {PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse} poly   Polygon to use.
+   * @param {object} [opts]
+   * @param {number} [opts.topZ]        Top elevation
+   * @param {number} [opts.bottomZ]     Bottom elevation
+   * @param {number} [opts.density]     Density when dealing with circles, ellipses
+   * @returns {ExtrudedPolygonPrimitive}
+   */
+  static fromPrototypePolygon(id, poly, { topZ = 0.5, bottomZ = -0.5, density } = {}) {
+    const top = Polygon3d.fromPIXIShape(poly, { elevationZ: topZ, density });
+    const prototypeFaces = this._facesFromPolygon3d(top, bottomZ, { epsilon: 1e-08 });
+    return new this(id, prototypeFaces);
+  }
 
   /**
    * Build an extruded (along the z-axis) shape from a 2d polygon.
@@ -178,49 +267,12 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    */
   static fromPolygon(id, poly, opts = {}) {
     this._makeElevationFinite(opts);
-    const top = Polygon3d.fromPIXIShape(poly, { elevationZ: opts.topZ });
-    const faces = this._facesFromPolygon3d(top, opts.bottomZ, opts);
+    const top = Polygon3d.fromPIXIShape(poly, { elevationZ: opts.topZ, density: opts.density });
+    const faces = this._facesFromPolygon3d(top, opts.bottomZ);
     const prototypeFaces = this.canvasToPrototypeFaces(faces, opts);
-    return new this(id, prototypeFaces);
-  }
-
-  /**
-   * Extrudes multiple polygons for a single shape, handles holes.
-   * @param {string} id                 Identifier for this shape.
-   * @param {(PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse)[]} polys       2d polygons to use.
-   * @param {object} [opts]
-   * @param {number} [opts.topZ]        Top elevation
-   * @param {number} [opts.bottomZ]     Bottom elevation
-   * @param {number} [opts.density]     Density when dealing with circles, ellipses
-   * @returns {ExtrudedPolygonPrimitive}
-   */
-  static fromPolygons(id, polys, opts = {}) {
-    if ( polys.length === 1 ) return this.fromPolygon(id, polys[0], opts);
-    this._makeElevationFinite(opts);
-    const allProtoFaces = [];
-    for ( const poly of polys )  {
-      const top = Polygon3d.fromPIXIShape(poly, { elevationZ: opts.topZ });
-      const faces = this._facesFromPolygon3d(top, opts.bottomZ, opts)
-      const prototypeFaces = this.canvasToPrototypeFaces(faces, opts);
-      allProtoFaces.push(...prototypeFaces);
-    }
-    return new this(id, allProtoFaces);
-  }
-
-  get topFace() { return this.faces[1]; }
-
-  get bottomFace() { return this.faces[0]; }
-
-  get baseFace() { return this.faces[0]; }
-
-  /**
-   * Does this shape's XY dimensions potentially contain this canvas location?
-   * Meant to be a relatively quick test. Should only reject if it is certain not to contain it.
-   * @param {PIXI.Point} canvasLoc
-   * @returns {boolean}
-   */
-  containsProjectedXY(canvasLoc) {
-    return this.bottomFace.containsProjectedXY(canvasLoc);
+    const out = new this(id, prototypeFaces);
+    if ( !poly.isPositive ) out.isHole = true;
+    return out;
   }
 
   // ----- NOTE: Factory helpers to construct faces ----- //
@@ -247,14 +299,16 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    * @param {number} bottomZ      The bottom elevation
    * @returns {Polygon3d[]}
    */
-  static _facesFromPolygon3d(top, bottomZ, _opts) {
+  static _facesFromPolygon3d(top, bottomZ, { epsilon = 1e-04 } = {}) {
     const bottom = top.clone();
     bottom.setZ(bottomZ);
     bottom.reverseOrientation();
 
-    const EPSILON = 1e-04; // Larger epsilon because these side will eventually be transformed to a smaller prototype.
-    return [bottom, top, ...top.buildTopSides(bottomZ, EPSILON)];
+    // Larger epsilon because these side will eventually be transformed to a smaller prototype.
+    return [bottom, top, ...top.buildTopSides(bottomZ, epsilon)];
   }
+
+  // ----- NOTE: Queries ---- //
 
   /**
    * Determine all top, bottom, and mid corners along with midpoints between for the
@@ -271,21 +325,85 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    * @param {PIXI.Point} end        Ending point of the slice on the XY plane
    * @returns {CutawayPolygon[]}
    */
-  verticalSlice(start, end, { topZ, bottomZ } = {}) {
+  verticalSlice(start, end) {
     if ( start.almostEqual(end) ) return [];
     if ( !this.aabb.overlapsSegment(start, end) ) return [];
-    const { topFace, bottomFace } = this;
+
+    // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
+    const rot = this.modelMatrix.rotation;
+    if ( rot.x || rot.y ) return super.verticalSlice(start, end);
 
     // Because the bottom face is parallel to XY plane, we can just drop the Z axis.
-    const poly = bottomFace.toPolygon2d();
-    topZ ??= topFace.points[0].z;
-    bottomZ ??= bottomFace.points[0].z;
-
+    const { bottomFaces, topZ, bottomZ } = this;
+    const poly = bottomFaces[0].toPolygon2d();
     const opts = {
       topElevationFn: () => topZ,
       bottomElevationFn: () => bottomZ,
     };
     return poly.cutaway(start, end, opts);
+  }
+
+    /**
+   * Determine where a ray first hits this object in 3d.
+   * Ignores intersections behind the ray.
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @param {object} [opts]
+   * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
+   * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
+   * @returns {number|null} The distance along the ray, as a multiple of rayDirection
+   */
+  firstRayIntersection(rayOrigin, rayDirection, { minT = 0, maxT = 1, sidesOnly = false } = {}) {
+    const direction = this.constructor.CULL_FACES.BACK;
+    let best = null;
+    const faces = sidesOnly ? this.sideFaces : this.faces;
+    for ( const face of faces ) {
+      const t = this.constructor.rayIntersectionForFace(face, rayOrigin, rayDirection, maxT, minT, direction);
+      if ( t !== null && (best === null || t < best) ) best = t;
+    }
+    return best;
+  }
+
+  /**
+   * Does this ray hit this object in 3d?
+   * Stops at the first hit for a triangle facing the correct direction.
+   * Ignores intersections behind the ray.
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @param {object} [opts]
+   * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
+   * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
+   * @returns {number|null} The distance along the ray, as a multiple of rayDirection
+   */
+  rayIntersection(rayOrigin, rayDirection, { minT = 0, maxT = 1, sidesOnly = false } = {}) {
+    const direction = this.constructor.CULL_FACES.BACK;
+    const faces = sidesOnly ? this.sideFaces : this.faces;
+    for ( const face of faces ) {
+      const t = this.constructor.rayIntersectionForFace(face, rayOrigin, rayDirection, maxT, minT, direction);
+      if ( t !== null ) return t;
+    }
+    return null;
+  }
+
+  /**
+   * Determine all ray hits for this object in 3d.
+   * Ignores intersections behind the ray.
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @param {object} [opts]
+   * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
+   * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
+   * @returns {number[]} The distance along the ray, as a multiple of rayDirection
+   */
+  allRayIntersections(rayOrigin, rayDirection, { minT = 0, maxT = 1, sidesOnly = false } = {}) {
+    const direction = this.constructor.CULL_FACES.BACK;
+    const out = [];
+    const faces = sidesOnly ? this.sideFaces : this.faces;
+    for ( const face of faces ) {
+      const t = this.constructor.rayIntersectionForFace(face, rayOrigin, rayDirection, maxT, minT, direction);
+      if ( t !== null ) out.push(t);
+    }
+    return out;
   }
 
    // ----- NOTE: Debug ----- //
@@ -338,7 +456,7 @@ export class ExtrudedPolygonPrimitiveWithHoles extends ExtrudedPolygonPrimitive 
    * @returns {ExtrudedPolygonPrimitive}
    */
   static fromPolygon(id, solid, holes = [], opts) {
-    if ( !holes.length ) return super.fromPolygon(id, poly, opts);
+    if ( !holes.length ) return super.fromPolygon(id, solid, opts);
     this._makeElevationFinite(opts);
 
     const top = new Polygons3d();

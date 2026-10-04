@@ -7,15 +7,16 @@ PIXI,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "../const.js";
+import { GEOMETRY_CONFIG, GEOMETRY_LIB_ID } from "../const.js";
 import { Point3d } from "./Point3d.js";
 import { Plane } from "./Plane.js";
-import { cleanPolygonPoints } from "../util.js";
+import { cleanPolygonPoints, NULL_SET } from "../util.js";
 import { AABB3d } from "./AABB3d.js";
 import { Draw } from "../Draw.js";
 import { Matrix, MatrixFloat32 } from "../Matrix.js";
 import { Ellipse } from "../Ellipse.js";
 import { Segment } from "../Segment.js";
+
 
 /*
 3d Polygon representing a flat polygon plane.
@@ -576,6 +577,7 @@ export class Polygon3d {
       from2dM.multiplyPoint3d(c, c);
       const tri = Triangle3d.from3Points(a, b, c);
       tri.isHole = this.isHole;
+      return tri;
     });
     return out;
   }
@@ -3041,9 +3043,14 @@ export class Polygons3d extends Polygon3d {
 
     // Copy over the plane, which must be shared among the polygons.
     // Polygons3d defaults to making the first polygon the plane.
+    const debug = CONFIG[GEOMETRY_LIB_ID].CONFIG.debug;
     out.polygons[0] = polys[0];
     for ( let i = 1; i < n; i += 1 ) {
-      if ( !polys[i].plane.almostEqual(out.plane) ) console.warn("Polygon3d.from3dPolygons|Planes are not equivalent.", polys);
+      if ( debug
+        && !polys[i].plane.almostEqual(out.plane)
+        && (!(polys[i].isHole && polys[i].plane.abs.almostEqual(out.plane.abs))) ) {
+        console.warn("Polygon3d.from3dPolygons|Planes are not equivalent.", polys);
+      }
       out.polygons[i] = polys[i];
     }
     return out;
@@ -3458,50 +3465,36 @@ export class Polygons3d extends Polygon3d {
   /* ----- NOTE: Holes ----- */
 
   /**
-   * From this 3d polygon, construct a recursive tree of solid + holes
+   * Construct a recursive tree of solid + holes
    * A root solid pairs with its direct hole children only.
    * Each of those holes' direct solid children become new island roots one level down.
+   * @param {(PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse)[]} polygons         Solid and hole shapes
+   * @param {Set<number>} holeIndices                                               Indices of the polygons array indicating holes
    * @returns {object[]}
-   * - @prop {PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse} solid
-   * - @prop {PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse[]} holes
+   * - @prop {number} solidIndex
+   * - @prop {number[]} holeIndices
    */
-  buildIslands() {
-    // Sort the polygons into solids and holes.
-    const solids = [];
-    const holes = [];
-    const n = this.polygons.length;
-    for ( let i = 0; i < n; i += 1 ) {
-      const poly = this.polygons[i];
-      const arr = poly.isHole ? holes : solids;
-      arr.push(poly);
-    }
-
+  static buildIslands(polygons, holeIndices = NULL_SET) {
     // Group rings by their immediate parent shape.
-    const parent = this.constructor._buildRingParents(this.polygons);
-    const children = new Array(n).fill([]);
+    const parent = this._buildRingParents(polygons);
+    const children = new Array(polygons.length).fill([]);
     parent.forEach((p, i) => {
       if ( p !== null ) children[p].push(i);
     });
 
     const islands = []; // { solid: PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse, holes: PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse[] }
-
-    // The parent indices refer to the combined [...solids, ...holes]. Use the offset to find the original shape.
-    // Children similarly reference the combined [...solids, ...holes] array.
-    const holeOffsetIdx = solids.length;
-    const indexIsSolid = idx => idx < holeOffsetIdx;
-
-    function processSolid(solidIdx) {
-      const holeIdxs = children[solidIdx].filter(c => !indexIsSolid(c));
-      islands.push({ solid: solids[solidIdx], holes: holeIdxs.map(h => holes[h - holeOffsetIdx]) });
+    function processSolid(solidIndex) {
+      const holeIdxs = children[solidIndex].filter(c => holeIndices.has(c));
+      islands.push({ solidIndex, holeIndices: holeIdxs });
 
       // Recurse: Any solid ring nested inside one of these holes starts a new island.
       for ( const holeIdx of holeIdxs ) children[holeIdx]
-        .filter(c => indexIsSolid(c))
+        .filter(c => !holeIndices.has(c))
         .forEach(processSolid);
     }
 
-    solids.forEach((_solid, i) => {
-      if (parent[i] === null ) processSolid(i);
+    polygons.forEach((_solidOrHole, i) => {
+      if (parent[i] === null && !holeIndices.has(i) ) processSolid(i);
     });
 
     return islands;

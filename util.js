@@ -1420,6 +1420,30 @@ export function histogram(arr) {
   return m;
 }
 
+/**
+ * Check if four points form an axis aligned rectangle.
+ * @param {PIXI.Point} p1
+ * @param {PIXI.Point} p2
+ * @param {PIXI.Point} p3
+ * @param {PIXI.Point} p4
+ * @returns {boolean}
+ */
+export function isAxisAlignedRectangle(p1, p2, p3, p4, places = 6) {
+  const points = [p1, p2, p3, p4];
+
+  // Ensure all points are distinct
+  const uniquePoints = new Set(points.map(p => p.stringKey(places)));
+  if (uniquePoints.size !== 4) return false;
+
+  // Extract unique X and Y coordinates
+  const xCoords = new Set(points.map(p => p.x.toFixed(places)));
+  const yCoords = new Set(points.map(p => p.y.toFixed(places)));
+
+  // An axis-aligned rectangle has exactly 2 unique X and 2 unique Y values
+  return xCoords.size === 2 && yCoords.size === 2;
+}
+
+
 // Define properties on the Number environment
 if ( !Object.hasOwn(Number.prototype, "almostLessThan") ) {
   Object.defineProperties(Number.prototype, {

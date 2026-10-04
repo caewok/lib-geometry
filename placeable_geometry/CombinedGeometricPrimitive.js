@@ -5,199 +5,268 @@
 
 import { GeometricPrimitive } from "./GeometricPrimitive.js";
 import { AABB3d } from "../3d/AABB3d.js";
-import { MatrixFloat32 } from "../Matrix.js";
-import { Polygon3d } from "../3d/Polygon3d.js";
-import { Point3d } from "../3d/Point3d.js";
-import { getUniqueIntegerPoints, cutaway } from "../util.js";
 import { CutawayPolygon } from "../CutawayPolygon.js";
 
 /**
- * Container to facilitate combining multiple shapes.
- * This does not combine model matrices or vertices/indices.
- * Merely a wrapper for the underlying shapes.
- * Empty shapes are allowed.
+ * A container of 1 or more primitives.
+ * Stores no geometry of its own. Each child keeps its own prototype faces and model matrix.
+ *
+ * The container's model matrix is the transform of the frame the children live in.
+ * Identity by default, which is how FoundryVTT regions are handled: children matrices are
+ * canvas-space matrices. A child's world matrix is parent.world x child.model
+ *
+ * Rendering: iterable drawables. Each yields a prototype VO and the matrix to draw it with.
+ * Queries (e.g., aabb, rayIntersection, internalPoints, verticalSlice, containsProjectedXY)
+ * combine the children's answers.
  */
 export class CombinedGeometricPrimitive extends GeometricPrimitive {
 
-  /**
-   * Initialize the values for this geometric primitive.
-   */
-  initialize() { this.shapes.forEach(shape => shape.initialize()); super.initialize(); }
+  /** @type {GeometricPrimitive[]} */
+  children = [];
+
+  // ----- NOTE: Static factory methods ----- //
 
   /**
-   * Destroy this geometric primitive, releasing associated memory in buffers.
+   * Combine primitives.
+   * @param {string} id
+   * @param {GeometricPrimitive[]} [children]
+   * @returns {CombinedGeometricPrimitive}
+   */
+  static combine(id, children = []) {
+    const out = new this(id);
+    children.forEach(c => out.addChild(c));
+    out.initialize();
+    return out;
+  }
+
+  // ----- NOTE: Lifecycle ----- //
+
+  initialize() { this.dirty = this.constructor.DIRTY.ALL; }
+
+  /**
+   * Destroy this geometric primitive and the children.
    */
   destroy() {
-    this.shapes.forEach(shape => shape.destroy());
-    this.shapes.length = 0;
+    for ( const child of this.children ) {
+      child.parent = null;
+      child.destroy();
+    }
+    this.children.length = 0;
+    this.#faces.length = 0; // Faces belong to the children; do not release again in super.destroy.
+    super.destroy();
   }
 
-  // ----- NOTE: Dirty ----- //
-
-  get dirtyShapes() {
-    let dirty = 0;
-    this.shapes.forEach(shape => dirty |= shape.dirty);
-    return dirty;
-  }
-
-  set dirtyShapes(flag) { this.shapes.forEach(shape => shape.dirty = flag); }
-
-  isDirtyShapes(flag = this.constructor.DIRTY.ALL) {
-    return this.shapes.some(shape => shape.isDirty(flag));
-  }
-
-  _clearDirtyShapes(flag) { this.shapes.forEach(shape => shape._clearDirty(flag)) }
-
-  // ----- NOTE: Add/remove shapes ----- //
-
-  /** @type {GeometricPrimitive[]} */
-  shapes = [];
+  // ----- NOTE: Children ----- //
 
   /**
-   * Add a primitive shape to this container.
-   * @param {GeometricPrimitive} shape
+   * Add a child. Its model matrix is interpreted in this container's frame.
+   * @param {GeometricPrimitive} child
+   * @returns {GeometricPrimitive} Same child.
    */
-  addShape(shape) {
-    this.shapes.push(shape);
-    this.dirty = this.constructor.DIRTY.ALL;
-  }
-
-  replaceShapeAtIndex(newShape, idx) {
-    if ( this.shapes[idx] ) this.shapes[idx].destroy();
-    this.shapes[idx] = newShape;
-    this.dirty = this.constructor.DIRTY.ALL;
+  addChild(child) {
+    child.parent?.removeChild(child);
+    child.parent = this;
+    this.children.push(child);
+    child._markTransformChanged(); // The child's world matrix changed; this also notifies this container.
+    return child;
   }
 
   /**
-   * Remove a primitive shape from this container by id.
-   * @param {string} id
-   * @returns {GeometricPrimitive|null} Null if nothing removed
+   * Remove a child without destroying it.
+   * @param {GeometricPrimitive} child
+   * @returns {boolean} True if the child was present.
    */
-  removeShapeById(id) {
-    const idx = this.shapes.findIndex(shape => shape.id === id);
-    if ( !~idx ) return null;
-    return this.removeShapeByIndex(idx);
+  removeChild(child) {
+    const i = this.children.indexOf(child);
+    if ( !~i ) return false;
+    this.children.splice(i, 1);
+    child.parent = null;
+    child._markTransformChanged();
+    this.childChanged(child);
+    return true;
   }
 
   /**
-   * Remove a primitive shape from this container by its index.
-   *
+   * A child's transform or content changed. (Or a child was added/removed.)
+   * Everything cached here that depends on the children is stale, and so is whatever is above.
+   * @param {GeometricPrimitive} _child
    */
-  removeShapeByIndex(idx) {
-    const shape = this.shapes.splice(idx, 1)[0] || null;
-    if ( shape ) this.dirty = this.constructor.DIRTY.ALL;
-    return shape;
+  childChanged(_child) {
+    this.contentVersion = this.constructor._nextVersion();
+    this.dirty = this.constructor.DIRTY.TRANSFORM;
+    this.parent?.childChanged(this);
   }
+
+  // ----- NOTE: Prototype and drawables ----- //
+
+  /**
+   * Inspection and debugging only. Children have different matrices, so these cannot
+   * be drawn with one matrix. Use drawables() to render.
+   * @type {POlygon3d[]}
+   */
+  get prototypeFaces() { return this.children.flatMap(child => child.prototypeFaces); }
+
+  /**
+   * A container has no single instance VO.
+   * @type {VertexObject|null}
+   */
+  get instanceVO() { return null; }
+
+  /** A container has no single sides VO.
+   * @type {VertexObject|null}
+   */
+  get sidesVO() { return null; }
+
+  /**
+   * Drawable vertices for each of the children, in turn.
+   * @param {object} [opts]
+   * @param {boolean} [opts.sidesOnly]
+   * @yields {object}
+   */
+  *drawables(opts) {
+    for ( const child of this.children ) yield *child.drawables(opts);
+  }
+
+  // ----- NOTE: Faces ----- //
+
+  /** @type {Polygon3d[]} */
+  #faces = [];
+
+  /**
+   * Canvas faces of all children, borrowed (not cloned).
+   * @type {Polygon3d[]}
+   */
+  get faces() {
+    this._syncWorld();
+    if ( this.isDirty(this.constructor.DIRTY.FACES) ) {
+      this.#faces.length = 0;
+      this._collectFaces(this.#faces);
+      this._clearDirty(this.constructor.DIRTY.FACES);
+    }
+    return this.#faces;
+  }
+
+  /**
+   * Fill the array with the faces that represent this container for face-based tests.
+   * @param {Polygon3d[]} out
+   */
+  _collectFaces(out) {
+    for ( const child of this.children ) out.push(...child.faces);
+  }
+
+  validate() { return this.children.every(child => child.validate()); }
 
   // ----- NOTE: AABB ----- //
 
   _calculateAABB(aabb) {
-    const M = this.modelMatrix.model;
-    const aabbs = this.shapes.map(shape => {
-      shape.updateAABB();
-      return shape.aabb.transform(M);
-    });
-    AABB3d.union(aabbs, aabb);
+    return AABB3d.union(this.children.map(child => child.aabb), aabb);
   }
 
   /** @type {Point3d} */
-  get center() {
-    const centers = this.shapes.map(shape => shape.center);
+  get center() { return this.aabb.getCenter(); }
 
-    const M = this.modelMatrix.model;
-    const txCenters = centers.map(center => M.multiplyPoint3d(center));
-    const poly3d = Polygon3d.from3dPoints(txCenters);
-    return poly3d.centroid;
-  }
-
-  // ----- NOTE: Model Matrix ----- //
+  // ----- NOTE: Queries ----- //
 
   /**
-   * Mworld = Mlocal x M.container (row-major)
-   * @returns {Matrix}
+   * Does any child's XY footprint potentially contain this canvas location?
+   * @param {PIXI.Point} canvasLoc
+   * @returns {boolean}
    */
-  #worldModel = MatrixFloat32.create(4, 4);
-
-  worldModelForShape(shape) { return shape.modelMatrix.model.multiply4x4(this.modelMatrix.model, this.#worldModel); }
-
-  // ----- NOTE: Faces ----- //
-
-  // Prototype faces and faces are stored as a combined set of faces, modified by the world matrix.
-  get prototypeFaces() { return this.shapes.flatMap(s => s.prototypeFaces); }
-
-  updateFaces() {
-    // Don't need the subshape faces, so can skip.
-    // this.shapes.forEach(shape => shape.updateFaces(false)); // Do not trigger validation for subshapes.
-    super.updateFaces(); // This will trigger _generateFaces and clear the dirty tag.
+  containsProjectedXY(canvasLoc) {
+    return this.children.some(child => child.containsProjectedXY(canvasLoc));
   }
 
   /**
-   * Update the faces for this primitive.
-   * Default is to use the world matrix on the prototypes.
+   * Nearest hit among the children. Each child applies its own culling direction, so holes work.
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @param {object} [opts]
+   * @param {number} [opts.minT=0]
+   * @param {number} [opts.maxT=1]
+   * @returns {number|null} The t of the nearest intersection, if any
    */
-  _generateFaces(faces) {
-    // Release old face points before destroying them.
-    faces.forEach(face => face.release());
-    const protoFaces = this.prototypeFaces;
-    faces.length = protoFaces.length;
+  firstRayIntersection(rayOrigin, rayDirection, { minT = 0, maxT = 1 } = {}) {
+    let best = null;
+    const opts = { minT, maxT };
+    for ( const child of this.children ) {
+      opts.maxT = best ?? maxT;
+      const t = child.rayIntersection(rayOrigin, rayDirection, opts);
+      if ( t !== null && (best === null || t < best) ) best = t;
+    }
+    return best;
+  }
 
-    let i = 0;
-    for ( const shape of this.shapes ) {
-      // Calculate each face from the world model.
-      const worldM = this.worldModelForShape(shape);
-      const invTransposeM = worldM.invert().transpose();
-      for ( const protoFace of shape.prototypeFaces ) {
-        faces[i++] = protoFace.transform(worldM, invTransposeM)
+  /**
+   * Does this ray hit this object in 3d?
+   * Stops at the first hit for a triangle facing the correct direction.
+   * Ignores intersections behind the ray.
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @param {object} [opts]
+   * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
+   * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
+   * @returns {number|null} The distance along the ray, as a multiple of rayDirection
+   */
+  rayIntersection(rayOrigin, rayDirection, opts) {
+    for ( const child of this.children ) {
+      const t = child.rayIntersection(rayOrigin, rayDirection, opts);
+      if ( t !== null ) return t;
+    }
+    return null;
+  }
+
+  /**
+   * Determine all ray hits for this object in 3d.
+   * Ignores intersections behind the ray.
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @param {object} [opts]
+   * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
+   * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
+   * @returns {number[]} The distance along the ray, as a multiple of rayDirection
+   */
+  allRayIntersections(rayOrigin, rayDirection, opts) {
+    const out = [];
+    for ( const child of this.children ) {
+      const t = child.rayIntersection(rayOrigin, rayDirection, opts);
+      if ( t !== null ) out.push(t);
+    }
+    return out;
+  }
+
+  /**
+   * Union of the children's cross-sections. Child-specific options (topZ, thickness...) are not forwarded.
+   * @param {PIXI.Point} start
+   * @param {PIXI.Point} end
+   * @returns {CutawayPolygon[]}
+   */
+  verticalSlice(start, end) {
+    if ( start.almostEqual(end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end) ) return [];
+    const cutaways = [];
+    for ( const child of this.children ) cutaways.push(...child.verticalSlice(start, end));
+
+    const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
+    return ClipperPaths.union(cutaways).map(poly => CutawayPolygon.fromPolygon(poly, start, end));
+  }
+
+  /**
+   * Concatenate the children's internal points, bucket by bucket.
+   * @param {object} ip   Modified in place
+   * @returns {object}
+   */
+  _generateInternalPoints(ip) {
+    const BUCKETS = ["top", "middle", "bottom"];
+    ip.center = this.aabb.getCenter(); // Not guaranteed to be in a shape.
+    for ( const bucket of BUCKETS ) ip[bucket] = { corners: [], mids: [] };
+    for ( const child of this.children ) {
+      const childPoints = child.internalPoints;
+      for ( const bucket of BUCKETS ) {
+        ip[bucket].corners.push(...(childPoints[bucket].corners || []));
+        ip[bucket].mids.push(...(childPoints[bucket].mids || []));
       }
     }
+    return ip;
   }
-
-  // ----- NOTE: Vertices ----- //
-
-  updateInstanceVertices() {
-    this.shapes.forEach(shape => shape.updateInstanceVertices()); // Triggers _generateVerticesForFaces for each shape.
-    super.updateInstanceVertices();
-  }
-
-//   updateModelVertices() {
-//     this.shapes.forEach(shape => shape.updateModelVertices());
-//     super.updateModelVertices();
-//   }
-
-  // ----- NOTE: Face points ----- //
-
-//   updateFacePoints() {
-//     this.shapes.forEach(shape => shape.updateFacePoints());
-//     super.updateFacePoints();
-//   }
-
-
-  // ----- NOTE: Internal points ----- //
-
-  // Default is a single set of points based on AABB.
-  // TODO: More sophisticated version testing for containment.
-
-//   updateInternalPoints() {
-//     this.shapes.forEach(shape => shape.updateInternalPoints());
-//   }
-
-
-
-  _testFacesOutward(faces) {
-    if ( !faces || faces.length < 3 ) return false;
-
-    // Calling this.shapes.every(shape => shape.validate() only works if each subshape is
-    // a self-contained 3d shape. But if two adjacent shapes drop their shared face, then
-    // the overall shape might be valid but neither subshape would be. Instead, treat as one large object.
-
-    for ( let i = 0, n = faces.length; i < n; i += 1 ) {
-      const face = faces[i];
-      if ( !this.constructor.testFaceOrientation(face, faces) ) return false;
-    }
-    return true;
-  }
-
-
-
-
 }
+

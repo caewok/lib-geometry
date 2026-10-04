@@ -8,7 +8,7 @@ PIXI,
 
 import { GeometricPrimitive } from "./GeometricPrimitive.js";
 import { MatrixFloat32 } from "../Matrix.js";
-import { cutaway } from "../util.js";
+import { isAxisAlignedRectangle } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
 import { getHexagonalShape } from "../placeable_vertices/BasicVertices.js";
 import { Polygon3d, Quad3d, Ellipse3d, Circle3d } from "../3d/Polygon3d.js";
@@ -88,6 +88,20 @@ export class InstancedGeometricPrimitive extends GeometricPrimitive {
     this.generateVerticesForFaces(this.prototypeFaces, vo);
     return vo;
   }
+
+  /**
+   * Shared VO for just the side walls of the prototype. Build lazily, once per concrete class.
+   * @type {VertexObject}
+   */
+  static get wallsVO() {
+    if ( !Object.hasOwn(this, "_wallsVO") ) { // Don't let a subclass pick up a parent's VO through static prototype chain.
+      this._wallsVO = this.generateVerticesForFaces(this.prototypeFaces.slice(2));
+    }
+    return this._wallsVO;
+  }
+
+  get wallsVO() { return this.constructor.wallsVO; }
+
 }
 
 /**
@@ -245,9 +259,175 @@ export class TexturedQuadPrimitive extends QuadPrimitive {
 }
 
 /**
+ * Shape that is equivalent to an extruded polygon, with defined sides, top, bottom.
+ * Does not change the definitions upon rotation, but useful for FoundryVTT regions, etc.
+ * Top and bottom faces are arrays for consistency with more complex objects, like hills or steps.
+ */
+class ExtrudedInstancePrimitive extends InstancedGeometricPrimitive {
+
+  /** @type {Polygon3d[]} */
+  get bottomFaces() { return this.faces.slice(0,1); }
+
+  /** @type {Polygon3d[]} */
+  get topFaces() { return this.faces.slice(1,2); }
+
+  /** @type {Polygon3d[]} */
+  get sideFaces() { return this.faces.slice(2);}
+
+  get topZ() { return this.aabb.max.z; }
+
+  get bottomZ() { return this.aabb.min.z; }
+
+  /**
+   * Get the 2d polygon canvas representation of this shape, usually based on the bottom shape.
+   * Assumes no rotation around the x or y axis.
+   * @returns {PIXI.Polygon} Polygon, or possibly other PIXI shape for subclasses.
+   */
+  toPIXIShape() { return this.bottomFaces[0].toPolygon2d(); }
+
+  /**
+   * Does this shape's XY dimensions potentially contain this canvas location?
+   * Meant to be a relatively quick test. Should only reject if it is certain not to contain it.
+   * @param {PIXI.Point} canvasLoc
+   * @returns {boolean}
+   */
+  containsProjectedXY(canvasLoc) {
+    return this.bottomFaces.some(f => f.containsProjectedXY(canvasLoc));
+  }
+
+  /**
+   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
+   * @param {PIXI.Point} start     Starting point of the slice on the XY plane
+   * @param {PIXI.Point} end        Ending point of the slice on the XY plane
+   * @returns {CutawayPolygon[]}
+   */
+  verticalSlice(start, end) {
+    if ( start.almostEqual(end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end) ) return [];
+
+    // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
+    const rot = this.modelMatrix.rotation;
+    if ( rot.x || rot.y ) return super.verticalSlice(start, end);
+
+    // Because the bottom face is parallel to XY plane, we can just drop the Z axis.
+    const { bottomFaces, topZ, bottomZ } = this;
+    const poly = bottomFaces[0].toPolygon2d();
+    const opts = {
+      topElevationFn: () => topZ,
+      bottomElevationFn: () => bottomZ,
+    };
+    return poly.cutaway(start, end, opts);
+  }
+
+  // ----- NOTE: Drawables ----- //
+
+  /** @type {VertexObject} */
+
+  _sidesVO;
+
+  /**
+   * Vertices for the prototype's side walls only.
+   * By default, every prototype face after the bottom (0) and top (1) faces.
+   * Therefore assumes an extruded shape, which may require subclasses to override.
+   * @type {VertexObject}
+   */
+  get sidesVO() {
+    return (this._sidesVO ??= this.constructor.generateVerticesForFaces(this.prototypeFaces.slice(2)));
+  }
+
+  /**
+   * @typedef {Object} GeometricDrawableData
+   *
+   * @prop {GeometricPrimitive} primitive
+   * @prop {VertexObject} vo
+   * @prop {Matrix<4x4>} matrix
+   * @prop {number} direction
+   * @prop {number} version
+   */
+
+  /**
+   * Yield what a renderer needs to draw this primitive: prototype VO and the matrix to apply it.
+   * Leaves yield themselves; containers yield their descendant's drawables.
+   * @param {object} [opts]
+   * @param {boolean} [opts.sidesOnly=false]    Only the side walls (used for holed solids).
+   * @yields {GeometricDrawableData}
+   */
+  *drawables({ sidesOnly = false} = {}) {
+    if ( !sidesOnly ) return super.drawables();
+    for ( const drawable of super.drawables() ) {
+      drawable.vo = this.sidesVO;
+      yield drawable;
+    }
+  }
+
+  /**
+   * Determine where a ray first hits this object in 3d.
+   * Ignores intersections behind the ray.
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @param {object} [opts]
+   * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
+   * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
+   * @returns {number|null} The distance along the ray, as a multiple of rayDirection
+   */
+  firstRayIntersection(rayOrigin, rayDirection, { minT = 0, maxT = 1, sidesOnly = false } = {}) {
+    const direction = this.constructor.CULL_FACES.BACK;
+    let best = null;
+    const faces = sidesOnly ? this.sideFaces : this.faces;
+    for ( const face of faces ) {
+      const t = this.constructor.rayIntersectionForFace(rayOrigin, rayDirection, maxT, minT, direction);
+      if ( t !== null && (best === null || t < best) ) best = t;
+    }
+    return best;
+  }
+
+  /**
+   * Does this ray hit this object in 3d?
+   * Stops at the first hit for a triangle facing the correct direction.
+   * Ignores intersections behind the ray.
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @param {object} [opts]
+   * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
+   * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
+   * @returns {number|null} The distance along the ray, as a multiple of rayDirection
+   */
+  rayIntersection(rayOrigin, rayDirection, { minT = 0, maxT = 1, sidesOnly = false } = {}) {
+    const direction = this.constructor.CULL_FACES.BACK;
+    const faces = sidesOnly ? this.sideFaces : this.faces;
+    for ( const face of faces ) {
+      const t = this.constructor.rayIntersectionForFace(rayOrigin, rayDirection, maxT, minT, direction);
+      if ( t !== null ) return t;
+    }
+    return null;
+  }
+
+  /**
+   * Determine all ray hits for this object in 3d.
+   * Ignores intersections behind the ray.
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @param {object} [opts]
+   * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
+   * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
+   * @returns {number[]} The distance along the ray, as a multiple of rayDirection
+   */
+  allRayIntersections(rayOrigin, rayDirection, { minT = 0, maxT = 1, sidesOnly = false } = {}) {
+    const direction = this.constructor.CULL_FACES.BACK;
+    const out = [];
+    const faces = sidesOnly ? this.sideFaces : this.faces;
+    for ( const face of faces ) {
+      const t = this.constructor.rayIntersectionForFace(rayOrigin, rayDirection, maxT, minT, direction);
+      if ( t !== null ) out.push(t);
+    }
+    return out;
+  }
+}
+
+/**
  * Cube, e.g. for a square token.
  */
-export class CubePrimitive extends InstancedGeometricPrimitive {
+export class CubePrimitive extends ExtrudedInstancePrimitive {
 
   /**
    * Create the instance face shapes for a unit cube.
@@ -277,19 +457,6 @@ export class CubePrimitive extends InstancedGeometricPrimitive {
     return faces;
   }
 
-  get topFace() { return this.faces[1]; }
-
-  get bottomFace() { return this.faces[0]; }
-
-  /**
-   * Does this shape's XY dimensions potentially contain this canvas location?
-   * Meant to be a relatively quick test. Should only reject if it is certain not to contain it.
-   * @param {PIXI.Point} canvasLoc
-   * @returns {boolean}
-   */
-  containsProjectedXY(canvasLoc) {
-    return this.bottomFace.containsProjectedXY(canvasLoc);
-  }
 
   /** @type {Faces} */
   static prototypeFaces = this.createUnitCube();
@@ -299,36 +466,26 @@ export class CubePrimitive extends InstancedGeometricPrimitive {
   // Internal points follow the AABB.
 
   /**
-   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
-   * @param {PIXI.Point} start     Starting point of the slice on the XY plane
-   * @param {PIXI.Point} end        Ending point of the slice on the XY plane
-   * @returns {CutawayPolygon[]}
+   * Get the 2d polygon canvas representation of this shape, usually based on the bottom shape.
+   * Assumes no rotation around the x or y axis.
+   * @returns {PIXI.Polygon|PIXI.Rectangle} Polygon, or possibly other PIXI shape.
    */
-  verticalSlice(start, end) {
-    if ( start.almostEqual(end) ) return [];
-    if ( !this.aabb.overlapsSegment(start, end) ) return [];
-
-    // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
-    const rot = this.modelMatrix.rotation;
-    if ( rot.x || rot.y ) return super.verticalSlice(start, end);
-
-    const { topFace, bottomFace } = this;
-    const poly = topFace.toPolygon2d();
-    const topZ = topFace.points[0].z;
-    const bottomZ = bottomFace.points[0].z;
-
-    const opts = {
-      topElevationFn: () => topZ,
-      bottomElevationFn: () => bottomZ,
-    };
-    return poly.cutaway(start, end, opts);
+  toPIXIShape() {
+    // If the points are squared, return a rectangle.
+    const bottom = this.bottomFaces[0];
+    const points2d = bottom.points.map(pt => pt.to2d());
+    let out;
+    if ( isAxisAlignedRectangle(...points2d) ) out = this.aabb.toRectangle();
+    else out = bottom.toPolygon2d();
+    points2d.forEach(pt => pt.release());
+    return out;
   }
 }
 
 /**
  * Simple extruded (along z-axis) hexagon.
  */
-export class HexagonCylinderPrimitive extends InstancedGeometricPrimitive {
+export class HexagonCylinderPrimitive extends ExtrudedInstancePrimitive {
 
   /**
    * Create the face shapes for a unit hexagon.
@@ -349,20 +506,6 @@ export class HexagonCylinderPrimitive extends InstancedGeometricPrimitive {
     return [bottom, top, ...top.buildTopSides(-0.5)];
   }
 
-  get topFace() { return this.faces[1]; }
-
-  get bottomFace() { return this.faces[0]; }
-
-  /**
-   * Does this shape's XY dimensions potentially contain this canvas location?
-   * Meant to be a relatively quick test. Should only reject if it is certain not to contain it.
-   * @param {PIXI.Point} canvasLoc
-   * @returns {boolean}
-   */
-  containsProjectedXY(canvasLoc) {
-    return this.bottomFace.containsProjectedXY(canvasLoc);
-  }
-
   static #prototypeFaces; /* eslint-disable-line no-unused-private-class-members */
 
   static get prototypeFaces() { return (this.#prototypeFaces = this.createUnitHexagonCylinder()); }
@@ -375,39 +518,14 @@ export class HexagonCylinderPrimitive extends InstancedGeometricPrimitive {
    * @returns {object}
    */
   getInternalPoints() {
-    return this.constructor.calculatePolygonCylinderInternalPoints(this.topFace, this.bottomFace);
-  }
-
-  /**
-   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
-   * @param {PIXI.Point} start     Starting point of the slice on the XY plane
-   * @param {PIXI.Point} end        Ending point of the slice on the XY plane
-   * @returns {CutawayPolygon[]}
-   */
-  verticalSlice(start, end) {
-    if ( start.almostEqual(end) ) return [];
-    if ( !this.aabb.overlapsSegment(start, end) ) return [];
-
-    // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
-    const rot = this.modelMatrix.rotation;
-    if ( rot.x || rot.y ) return super.verticalSlice(start, end);
-    const { topFace, bottomFace } = this;
-    const poly = topFace.toPolygon2d();
-    const topZ = topFace.points[0].z;
-    const bottomZ = bottomFace.points[0].z;
-
-    const opts = {
-      topElevationFn: () => topZ,
-      bottomElevationFn: () => bottomZ,
-    };
-    return poly.cutaway(start, end, opts);
+    return this.constructor.calculatePolygonCylinderInternalPoints(this.topFaces[0], this.bottomFaces[0]);
   }
 }
 
 /**
  * Extruded (along z-axis) cylinder or ellipse
  */
-export class CylinderPrimitive extends InstancedGeometricPrimitive {
+export class CylinderPrimitive extends ExtrudedInstancePrimitive {
 
   /**
    * Assumed number of sides for the polygon approximation of the cylinder.
@@ -430,20 +548,6 @@ export class CylinderPrimitive extends InstancedGeometricPrimitive {
     return [bottom, top, ...top.buildTopSides(-0.5)];
   }
 
-  get topFace() { return this.faces[1]; }
-
-  get bottomFace() { return this.faces[0]; }
-
-  /**
-   * Does this shape's XY dimensions potentially contain this canvas location?
-   * Meant to be a relatively quick test. Should only reject if it is certain not to contain it.
-   * @param {PIXI.Point} canvasLoc
-   * @returns {boolean}
-   */
-  containsProjectedXY(canvasLoc) {
-    return this.bottomFace.containsProjectedXY(canvasLoc);
-  }
-
   static _prototypeFaces;
 
   static get prototypeFaces() { return this._prototypeFaces ||= this.createUnitCylinder(canvas.scene.dimensions.maxR / 10); }
@@ -456,36 +560,17 @@ export class CylinderPrimitive extends InstancedGeometricPrimitive {
    * @returns {object}
    */
   getInternalPoints() {
-    const top = this.topFace.toPolygon3d({ density: 8 })
-    const bottom = this.bottomFace.toPolygon3d({ density: 8 })
+    const top = this.topFaces[0].toPolygon3d({ density: 8 })
+    const bottom = this.bottomFaces[0].toPolygon3d({ density: 8 })
     return this.constructor.calculatePolygonCylinderInternalPoints(top, bottom);
   }
 
   /**
-   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
-   * @param {PIXI.Point} start     Starting point of the slice on the XY plane
-   * @param {PIXI.Point} end        Ending point of the slice on the XY plane
-   * @returns {CutawayPolygon[]}
+   * Get the 2d polygon canvas representation of this shape, usually based on the bottom shape.
+   * Assumes no rotation around the x or y axis.
+   * @returns {PIXI.Ellipse}
    */
-  verticalSlice(start, end) {
-    if ( start.almostEqual(end) ) return [];
-    if ( !this.aabb.overlapsSegment(start, end) ) return [];
-
-    // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
-    const rot = this.modelMatrix.rotation;
-    if ( rot.x || rot.y ) return super.verticalSlice(start, end);
-
-    const { topFace, bottomFace } = this;
-    const ellipse = topFace.toEllipse2d();
-    const topZ = topFace.points[0].z;
-    const bottomZ = bottomFace.points[0].z;
-
-    const opts = {
-      topElevationFn: () => topZ,
-      bottomElevationFn: () => bottomZ,
-    };
-    return ellipse.cutaway(start, end, opts);
-  }
+  toPIXIShape() { return this.bottomFaces[0].toEllipse2d(); }
 }
 
 /**
@@ -498,8 +583,8 @@ export class CircularCylinderPrimitive extends CylinderPrimitive {
    * @returns {Ellipse3d|Polygon3d[]}
    */
   static createUnitCylinder() {
-    const top = Circle3d.fromCenterPoint({ x: 0, y: 0, z: 0.5 }, 0.5);
-    const bottom = Circle3d.fromCenterPoint({ x: 0, y: 0, z: -0.5 }, 0.5);
+    const top = Circle3d.fromCenterPoint({ x: 0, y: 0, z: 0.5 }, { radius: 0.5 });
+    const bottom = Circle3d.fromCenterPoint({ x: 0, y: 0, z: -0.5 }, { radius: 0.5 });
     bottom.reverseOrientation();
 
     // Build the sides.
@@ -508,47 +593,12 @@ export class CircularCylinderPrimitive extends CylinderPrimitive {
     return [bottom, top, ...top.buildTopSides(-0.5)];
   }
 
-  get topFace() { return this.faces[1]; }
-
-  get bottomFace() { return this.faces[0]; }
-
   /**
-   * Does this shape's XY dimensions potentially contain this canvas location?
-   * Meant to be a relatively quick test. Should only reject if it is certain not to contain it.
-   * @param {PIXI.Point} canvasLoc
-   * @returns {boolean}
+   * Get the 2d polygon canvas representation of this shape, usually based on the bottom shape.
+   * Assumes no rotation around the x or y axis.
+   * @returns {PIXI.Ellipse}
    */
-  containsProjectedXY(canvasLoc) {
-    return this.bottomFace.containsProjectedXY(canvasLoc);
-  }
-
-  /**
-   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
-   * @param {PIXI.Point} start     Starting point of the slice on the XY plane
-   * @param {PIXI.Point} end        Ending point of the slice on the XY plane
-   * @returns {CutawayPolygon[]}
-   */
-  verticalSlice(start, end) {
-    if ( start.almostEqual(end) ) return [];
-    if ( !this.aabb.overlapsSegment(start, end) ) return [];
-
-    // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
-    const rot = this.modelMatrix.rotation;
-    if ( rot.x || rot.y ) return super.verticalSlice(start, end);
-
-    const { topFace, bottomFace } = this;
-    const circle = topFace.toCircle2d();
-    const topZ = topFace.points[0].z;
-    const bottomZ = bottomFace.points[0].z;
-
-    const opts = {
-      topElevationFn: () => topZ,
-      bottomElevationFn: () => bottomZ,
-    };
-    return circle.cutaway(start, end, opts);
-  }
-
-
+  toPIXIShape() { return this.bottomFaces[0].toCircle2d(); }
 }
 
 /**

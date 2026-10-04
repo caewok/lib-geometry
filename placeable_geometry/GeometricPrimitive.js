@@ -8,7 +8,7 @@ PIXI,
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { VertexObject } from "../placeable_vertices/VertexObject.js";
 import { AABB3d } from "../3d/AABB3d.js";
-import { cutaway, roundDecimals, isOdd } from "../util.js";
+import { roundDecimals, isOdd } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
 import { combineTypedArrays } from "../util.js";
 import { ModelMatrixAnchor } from "../ModelMatrix.js";
@@ -21,6 +21,13 @@ import { Segment } from "../Segment.js";
 /** @type {Matrix<4,4>} */
 const IDENTITY_MATRIX = MatrixFloat32.identity(4, 4);
 Object.freeze(IDENTITY_MATRIX);
+
+/**
+ * Global monotonic counter used to stamp transform changes.
+ * Stamps are never reused, so a primitive that is re-parented always looks "changed" to cached values.
+ */
+let VERSION_COUNTER = 0;
+
 
 /* Geometric Primitives
 
@@ -111,6 +118,12 @@ export class GeometricPrimitive {
   /** @type {string} */
   id;
 
+  /** @type {GeometricPrimitive} */
+  parent = null; // Parent container, if any. Change to model are flagged here.
+
+  /** @type {boolean} */
+  isHole = false;
+
   /**
    * @param {string} id       Unique string per instance; used for debugging and for child classes
    *                          to track model and vertices arrays.
@@ -130,6 +143,11 @@ export class GeometricPrimitive {
     return out;
   }
 
+  /**
+   * @returns {number} A new, never-before-used version stamp.
+   */
+  static _nextVersion() { return ++VERSION_COUNTER; }
+
   #center = new Point3d();
 
   /**
@@ -142,6 +160,21 @@ export class GeometricPrimitive {
       return this.modelMatrix._translation.multiplyPoint3d(this.#center);
     }
     return this.constructor.calculateCentroid(this.faces, this.#center);
+  }
+
+  /**
+   * By default, normal shape points out and holes point in.
+   * Flipping switches the plane orientation from out to in or vice-versa.
+   * Also flips the hole designation.
+   */
+  reverseOrientation() {
+    this.prototypeFaces.forEach(face => {
+      face.reverseOrientation();
+      face.isHole = !face.isHole;
+    });
+    this.isHole = !this.isHole;
+    this.dirty = this.constructor.DIRTY.ALL;
+    return this;
   }
 
   /**
@@ -178,8 +211,13 @@ export class GeometricPrimitive {
     AABB:             1 << 1, // 2
     FACE_POINTS:      1 << 2, // 4
     INTERNAL_POINTS:  1 << 3, // 8
-    MODEL_VERTICES:   1 << 5, // 32
-    INSTANCE_VERTICES: 1 << 6, // 64
+    MODEL_VERTICES:   1 << 4, // 16
+    INSTANCE_VERTICES: 1 << 5, // 32
+    DERIVED:          1 << 6, // 64. Geometry derived from other primitives (e.g. caps of a holed solid)
+
+    // Everything that depends on the world transform.
+    // Excludes INSTANCE_VERTICES, which depend only on the prototype faces and so survive any matrix change.
+    TRANSFORM:         (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 6),
     ALL:              ~0,     // All bits set
   };
 
@@ -194,6 +232,65 @@ export class GeometricPrimitive {
 
   _clearDirty(flag) { this.#dirtyFlags &= ~flag; }
 
+
+  // ----- NOTE: Update tracking ----- //
+
+  /**
+   * Stamp of this primitive's own transform.
+   * @type {number}
+   */
+  transformVersion = this.constructor._nextVersion();
+
+  /**
+   * Stamp bumped when something below this primitive changes (children added, removed, or changed).
+   * Stays 0 for leaves.
+   * @type {number}
+   */
+  contentVersion = 0;
+
+  /**
+   * Changes whenever this primitive's world transform chages: its own or any ancestor's.
+   * @type {number}
+   */
+  get worldVersion() { return Math.max(this.transformVersion, this.parent?.worldVersion ?? 0); }
+
+  /**
+   * One number a renderer can poll per root. Changes if anything in or above this subtree changed.
+   * @type {number}
+   */
+  get changeStamp() { return Math.max(this.worldVersion, this.contentVersion); }
+
+  /** @type {number} */
+  #syncedWorldVersion = -1;
+
+  /**
+   * If an ancestor's transform changed since this primitive last looked, flag the
+   * transform-dependent caches as dirty.
+   * Called at the top of every cached getter.
+   */
+  _syncWorld() {
+    const version = this.worldVersion;
+    if ( version === this.#syncedWorldVersion ) return;
+    this.#syncedWorldVersion = version;
+    this.dirty = this.constructor.DIRTY.TRANSFORM;
+  }
+
+  /**
+   * Call after any change to this primitive's own model matrix.
+   * Does not touch the instance vertices, which depend only on the prototype.
+   */
+  _markTransformChanged() {
+    this.transformVersion = this.constructor._nextVersion();
+    this.dirty = this.constructor.DIRTY.TRANSFORM;
+    this.parent?.childChanged(this);
+  }
+
+  /**
+   * Called by a child when its transform or content changed. Containers override.
+   * @param {GeometricPrimitive} _child
+   */
+  childChanged(_child) { }
+
   // ----- NOTE: Model Matrix ----- //
 
   // Every object has a model matrix, although some might be identity matrices.
@@ -203,37 +300,69 @@ export class GeometricPrimitive {
   /** @type {ModelMatrix} */
   modelMatrix = ModelMatrixAnchor.create();
 
+  /** {type} {Matrix<4x4>} */
+  #worldMatrix;
+
+  /** @type {number} */
+  #worldMatrixVersion = -1;
+
   /**
-   * @type {Point3d|object} center
+   * Local-to-canvas matrix: The parent's world matrix times this primitive's model matrix.
+   * Identical to the model matrix for a root primitive.
+   * @type {Matrix<4x4>}
+   */
+  get worldMatrix() {
+    const version = this.worldVersion;
+    if ( version !== this.#worldMatrixVersion ) {
+      const local = this.modelMatrix.model;
+      this.#worldMatrix = this.parent ? this.parent.worldMatrix.multiply4x4(local) : local;
+      this.#worldMatrixVersion = version;
+    }
+    return this.#worldMatrix;
+  }
+
+  /**
+   * @param {Point3d|object} center
+   * @returns {boolean} True if change was made. Triggers parent update, if any.
    */
   setPosition(center) {
-    if ( this.modelMatrix.translation.almostEqual(center) ) return;
+    if ( this.modelMatrix.translation.almostEqual(center) ) return false;
     this.modelMatrix.translation = center;
-    this.dirty = this.constructor.DIRTY.ALL;
+    this._markTransformChanged();
+    return true;
   }
 
   /**
-   * @type {Point3d|object} angles
+   * @param {Point3d|object} angles
+   * @returns {boolean} True if change was made. Triggers parent update, if any.
    */
   setRotation(angles) {
-    if ( this.modelMatrix.rotation.almostEqual(angles) ) return;
+    if ( this.modelMatrix.rotation.almostEqual(angles) ) return false;
     this.modelMatrix.rotation = angles;
-    this.dirty = this.constructor.DIRTY.ALL;
+    this._markTransformChanged();
+    return true;
   }
 
   /**
-   * @type {Point3d|object} dims
+   * @param {Point3d|object} dims
+   * @returns {boolean} True if change was made. Triggers parent update, if any.
    */
   setScale(dims) {
-    if ( this.modelMatrix.scale.almostEqual(dims) ) return;
+    if ( this.modelMatrix.scale.almostEqual(dims) ) return false;
     this.modelMatrix.scale = dims;
-    this.dirty = this.constructor.DIRTY.ALL;
+    this._markTransformChanged();
+    return true;
   }
 
+  /**
+   * @param {Point3d|object} anchors
+   * @returns {boolean} True if change was made. Triggers parent update, if any.
+   */
   setAnchor(anchors) {
-    if ( this.modelMatrix.anchor.almostEqual(anchors) ) return;
+    if ( this.modelMatrix.anchor.almostEqual(anchors) ) return false;
     this.modelMatrix.anchor = anchors;
-    this.dirty = this.constructor.DIRTY.ALL;
+    this._markTransformChanged();
+    return true;
   }
 
   // ----- NOTE: AABB ----- //
@@ -244,42 +373,41 @@ export class GeometricPrimitive {
   #prototypeAABB = new AABB3d();
 
   get aabb() {
+    this._syncWorld();
     if ( this.isDirty(this.constructor.DIRTY.AABB) ) this.updateAABB();
 
+    if ( this.faces.length && CONFIG[GEOMETRY_LIB_ID].CONFIG.debug ) {
+      if ( Number.isNaN(this.#prototypeAABB.min.x)
+        || Number.isNaN(this.#prototypeAABB.min.y)
+        || Number.isNaN(this.#prototypeAABB.min.z)
+        || Number.isNaN(this.#prototypeAABB.max.x)
+        || Number.isNaN(this.#prototypeAABB.max.y)
+        || Number.isNaN(this.#prototypeAABB.max.z) ) console.error(`${this.constructor.name}|Prototype AABB is NaN.`);
 
-    if ( this.faces.length) {
-      if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.debug ) {
-        if ( Number.isNaN(this.#prototypeAABB.min.x)
-          || Number.isNaN(this.#prototypeAABB.min.y)
-          || Number.isNaN(this.#prototypeAABB.min.z)
-          || Number.isNaN(this.#prototypeAABB.max.x)
-          || Number.isNaN(this.#prototypeAABB.max.y)
-          || Number.isNaN(this.#prototypeAABB.max.z) ) console.error(`${this.constructor.name}|Prototype AABB is NaN.`);
+      if ( Number.isNaN(this.#aabb.min.x)
+        || Number.isNaN(this.#aabb.min.y)
+        || Number.isNaN(this.#aabb.min.z)
+        || Number.isNaN(this.#aabb.max.x)
+        || Number.isNaN(this.#aabb.max.y)
+        || Number.isNaN(this.#aabb.max.z)
 
-        if ( Number.isNaN(this.#aabb.min.x)
-          || Number.isNaN(this.#aabb.min.y)
-          || Number.isNaN(this.#aabb.min.z)
-          || Number.isNaN(this.#aabb.max.x)
-          || Number.isNaN(this.#aabb.max.y)
-          || Number.isNaN(this.#aabb.max.z)
+       ) console.error(`${this.constructor.name}|AABB is NaN.`);
 
-         ) console.error(`${this.constructor.name}|AABB is NaN.`);
+      if ( !(Number.isFinite(this.#prototypeAABB.min.x)
+          && Number.isFinite(this.#prototypeAABB.min.y)
+          && Number.isFinite(this.#prototypeAABB.min.z)
+          && Number.isFinite(this.#prototypeAABB.max.x)
+          && Number.isFinite(this.#prototypeAABB.max.y)
+          && Number.isFinite(this.#prototypeAABB.max.z)) ) console.warn(`${this.constructor.name}|Prototype AABB is not finite.`);
 
-        if ( !(Number.isFinite(this.#prototypeAABB.min.x)
-            && Number.isFinite(this.#prototypeAABB.min.y)
-            && Number.isFinite(this.#prototypeAABB.min.z)
-            && Number.isFinite(this.#prototypeAABB.max.x)
-            && Number.isFinite(this.#prototypeAABB.max.y)
-            && Number.isFinite(this.#prototypeAABB.max.z)) ) console.warn(`${this.constructor.name}|Prototype AABB is not finite.`);
-
-        if ( !(Number.isFinite(this.#aabb.min.x)
-            && Number.isFinite(this.#aabb.min.y)
-            && Number.isFinite(this.#aabb.min.z)
-            && Number.isFinite(this.#aabb.max.x)
-            && Number.isFinite(this.#aabb.max.y)
-            && Number.isFinite(this.#aabb.max.z)) ) console.warn(`${this.constructor.name}|AABB is not finite.`);
-      }
+      if ( !(Number.isFinite(this.#aabb.min.x)
+          && Number.isFinite(this.#aabb.min.y)
+          && Number.isFinite(this.#aabb.min.z)
+          && Number.isFinite(this.#aabb.max.x)
+          && Number.isFinite(this.#aabb.max.y)
+          && Number.isFinite(this.#aabb.max.z)) ) console.warn(`${this.constructor.name}|AABB is not finite.`);
     }
+
 
     return this.#aabb;
   }
@@ -302,7 +430,7 @@ export class GeometricPrimitive {
   }
 
   _calculateAABB(aabb) {
-    this.#prototypeAABB.transform(this.modelMatrix.model, aabb);
+    this.#prototypeAABB.transform(this.worldMatrix, aabb);
   }
 
   /**
@@ -324,6 +452,7 @@ export class GeometricPrimitive {
 
   /** @type {Polygon3d[]} */
   get faces() {
+    this._syncWorld();
     if ( this.isDirty(this.constructor.DIRTY.FACES) ) this.updateFaces();
     return this.#faces;
   }
@@ -353,7 +482,7 @@ export class GeometricPrimitive {
 
     // Transform the prototype faces by the model matrix.
     // Pre-calculate the inverse transpose to use with transforming the normal.
-    const M = this.modelMatrix.model;
+    const M = this.worldMatrix;
     const invTransposeM = M.invert().transpose();
     for ( let i = 0; i < numSides; i += 1 ) faces[i] = protoFaces[i].transform(M, invTransposeM);
     this._clearDirty(this.constructor.DIRTY.FACES);
@@ -362,7 +491,27 @@ export class GeometricPrimitive {
   // ----- NOTE: Intersection testing ----- //
 
   /**
-   * Determine where a ray hits this object in 3d.
+   * Determine where a ray first hits this object in 3d.
+   * Ignores intersections behind the ray.
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @param {object} [opts]
+   * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
+   * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
+   * @returns {number|null} The distance along the ray, as a multiple of rayDirection
+   */
+  firstRayIntersection(rayOrigin, rayDirection, { minT = 0, maxT = 1 } = {}) {
+    const direction = this.constructor.CULL_FACES.BACK;
+    let best = null;
+    for ( const face of this.faces ) {
+      const t = this.constructor.rayIntersectionForFace(face, rayOrigin, rayDirection, maxT, minT, direction);
+      if ( t !== null && (best === null || t < best) ) best = t;
+    }
+    return best;
+  }
+
+  /**
+   * Does this ray hit this object in 3d?
    * Stops at the first hit for a triangle facing the correct direction.
    * Ignores intersections behind the ray.
    * @param {Point3d} rayOrigin
@@ -372,15 +521,53 @@ export class GeometricPrimitive {
    * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
    * @returns {number|null} The distance along the ray, as a multiple of rayDirection
    */
-  rayIntersection(rayOrigin, rayDirection, { minT = 0, maxT = 1, direction = this.constructor.CULL_FACES.BACK } = {}) {
+  rayIntersection(rayOrigin, rayDirection, { minT = 0, maxT = 1 } = {}) {
+    const direction = this.constructor.CULL_FACES.BACK;
     for ( const face of this.faces ) {
-      if ( (direction * face.plane.whichSide(rayOrigin)) >= 0 ) {
-         const t = face.intersectionT(rayOrigin, rayDirection);
-         if ( t !== null && t >= minT && t <= maxT ) return t;
-      }
+      const t = this.constructor.rayIntersectionForFace(face, rayOrigin, rayDirection, maxT, minT, direction);
+      if ( t !== null ) return t;
     }
     return null;
   }
+
+  /**
+   * Determine all ray hits for this object in 3d.
+   * Ignores intersections behind the ray.
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @param {object} [opts]
+   * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
+   * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
+   * @returns {number[]} The distance along the ray, as a multiple of rayDirection
+   */
+  allRayIntersections(rayOrigin, rayDirection, { minT = 0, maxT = 1 } = {}) {
+    const direction = this.constructor.CULL_FACES.BACK;
+    const out = [];
+    for ( const face of this.faces ) {
+      const t = this.constructor.rayIntersectionForFace(face, rayOrigin, rayDirection, maxT, minT, direction);
+      if ( t !== null ) out.push(t);
+    }
+    return out;
+  }
+
+  /**
+   * Helper to get t for a given face.
+   * @param {Polygon3d} face
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @param {number} maxT=1
+   * @param {number} minT=0
+   * @param {number} direction=CULL_FACES_BACK
+   * @returns {number|null}
+   */
+  static rayIntersectionForFace(face, rayOrigin, rayDirection, maxT = 1, minT = 0, direction = this.CULL_FACES_BACK) {
+    if ( (direction * face.plane.whichSide(rayOrigin)) < 0 ) return null;
+    const t = face.intersectionT(rayOrigin, rayDirection);
+    if ( t !== null && t >= minT && t <= maxT ) return t;
+    return null;
+  }
+
+
 
   // ----- NOTE: Debug ----- //
 
@@ -527,6 +714,7 @@ export class GeometricPrimitive {
 
   /** @type {VertexObject} */
   get modelVO() {
+    this._syncWorld();
     if ( this.isDirty(this.constructor.DIRTY.MODEL_VERTICES) ) this.updateModelVertices();
     return this.#modelVO;
   }
@@ -563,7 +751,7 @@ export class GeometricPrimitive {
    * @returns {VertexObject}
    */
   static generateVerticesForFaces(faces, vo) {
-    vo ??= new VertexObject();
+    vo ||= new VertexObject();
     // Add vertices from faces.
     vo.vertices = this.verticesFromFaces(faces, true);
     vo.indices = null;
@@ -585,12 +773,41 @@ export class GeometricPrimitive {
     return combineTypedArrays(vertices);
   }
 
+  // ----- NOTE: Drawables ----- //
+
+  /**
+   * @typedef {Object} GeometricDrawableData
+   *
+   * @prop {GeometricPrimitive} primitive
+   * @prop {VertexObject} vo
+   * @prop {Matrix<4x4>} matrix
+   * @prop {number} direction
+   * @prop {number} version
+   */
+
+  /**
+   * Yield what a renderer needs to draw this primitive: prototype VO and the matrix to apply it.
+   * Leaves yield themselves; containers yield their descendant's drawables.
+   * @param {object} [opts]
+   * @yields {GeometricDrawableData}
+   */
+  *drawables(_opts) {
+    yield {
+      primitive: this,
+      vo: this.instanceVO,
+      matrix: this.worldMatrix,
+      direction: this.direction,
+      version: this.version,
+    };
+  }
+
   // ----- NOTE: Face points ----- //
 
   /** @typedef {Point3d[][]} */
   #facePoints = [];
 
   get facePoints() {
+    this._syncWorld();
     if ( this.isDirty(this.constructor.DIRTY.FACE_POINTS) ) this.updateFacePoints();
     return this.#facePoints;
   }
@@ -679,7 +896,8 @@ export class GeometricPrimitive {
   #internalPoints = {};
 
   get internalPoints() {
-    if ( this.isDirty(this.constructor.INTERNAL_POINTS) ) this.updateInternalPoints();
+    this._syncWorld();
+    if ( this.isDirty(this.constructor.DIRTY.INTERNAL_POINTS) ) this.updateInternalPoints();
     return this.#internalPoints;
   }
 
@@ -760,6 +978,7 @@ export class GeometricPrimitive {
     for ( let i = 0; i < numPts; i += 1 ) {
       const b = cornerPoints[i];
       midPts[i] = Point3d.midPoint(a, b);
+      a = b;
     }
     return midPts;
   }
@@ -858,12 +1077,8 @@ export class GeometricPrimitive {
 
       // Map 3D endpoints to 2D Cutaway coordinates (u = distance along slice, v = z elevation)
       segments.forEach(segment => {
-        cutaway.to2d(segment.a, start, end, a2d);
-        cutaway.to2d(segment.b, start, end, b2d);
-
-        // Use the pixel distance, not distance squared, to assemble the points.
-        cutaway.convertToDistance(a2d);
-        cutaway.convertToDistance(b2d);
+        CutawayPolygon.to2d(segment.a, start, end, a2d);
+        CutawayPolygon.to2d(segment.b, start, end, b2d);
 
         if ( PIXI.Point.distanceSquaredBetween(a2d, b2d) < 1e-06 ) return;
         dirSegments2d.push(new Segment(a2d.clone(), b2d.clone()));
