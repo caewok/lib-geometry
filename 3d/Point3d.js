@@ -46,7 +46,17 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
   toJSON() { return { ...this }; }
 
   static [Symbol.hasInstance](instance) {
-    return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
+    if ( !instance || typeof instance !== "object" ) return false;
+
+    // Walk up the inheritance chain..
+    let currentConstructor = instance.constructor;
+    while ( currentConstructor ) {
+      if ( currentConstructor._geoLibType === this._geoLibType ) return true;
+
+      // Move to the parent class.
+      currentConstructor = Object.getPrototypeOf(currentConstructor);
+    }
+    return false;
   }
 
   static _geoLibType = "Point3d";

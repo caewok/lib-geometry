@@ -500,7 +500,7 @@ export class HexagonCylinderPrimitive extends ExtrudedInstancePrimitive {
     if ( poly.isPositive ) poly.reverseOrientation();
     const top = Polygon3d.fromPolygon(poly, { elevationZ: 0.5 });
     const bottom = top.clone();
-    top.reverseOrientation();
+    bottom.reverseOrientation();
     top.setZ(0.5);
     bottom.setZ(-0.5);
     return [bottom, top, ...top.buildTopSides(-0.5)];
@@ -540,7 +540,7 @@ export class CylinderPrimitive extends ExtrudedInstancePrimitive {
   static createUnitCylinder() {
     const top = Ellipse3d.fromCenterPoint({ x: 0, y: 0, z: 0.5 }, { radiusX: 0.5, radiusY: 0.5 });
     const bottom = Ellipse3d.fromCenterPoint({ x: 0, y: 0, z: -0.5 }, { radiusX: 0.5, radiusY: 0.5 });
-    top.reverseOrientation();
+    bottom.reverseOrientation();
 
     // Build the sides.
     top.density = this.DENSITY;
@@ -585,7 +585,7 @@ export class CircularCylinderPrimitive extends CylinderPrimitive {
   static createUnitCylinder() {
     const top = Circle3d.fromCenterPoint({ x: 0, y: 0, z: 0.5 }, { radius: 0.5 });
     const bottom = Circle3d.fromCenterPoint({ x: 0, y: 0, z: -0.5 }, { radius: 0.5 });
-    top.reverseOrientation();
+    bottom.reverseOrientation();
 
     // Build the sides.
     top.density = this.DENSITY;

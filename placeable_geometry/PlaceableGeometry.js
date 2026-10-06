@@ -349,4 +349,8 @@ export class PlaceableGeometry {
       bottomZ: this.constructor.finiteElevation(this.placeableDocument.bottomZ),
     };
   }
+
+  // ----- NOTE: Debugging ----- //
+
+  validate() { return this.shapes.every(shape => shape.validate()); }
 }

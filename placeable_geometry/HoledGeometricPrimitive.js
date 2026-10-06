@@ -144,7 +144,7 @@ export class HoledPrimitive extends CombinedGeometricPrimitive {
 
   #buildCaps() {
     const topFaces = this._buildTopFaces();
-    const bottomFaces = this.buildBottomFaces();
+    const bottomFaces = this._buildBottomFaces();
 
     // Treat the faces as prototypes, using an identity matrix.
     return ExtrudedPolygonPrimitiveWithHoles.create(`${this.id}_caps`, [...bottomFaces, ...topFaces]);
@@ -185,11 +185,12 @@ export class HoledPrimitive extends CombinedGeometricPrimitive {
    * @param {Polygon3d[]} out
    */
   _collectFaces(out) {
-    for ( const face of this.sideFaces(this.solid) ) out.push(face);
+    for ( const face of this.solid.sideFaces ) out.push(face);
     for ( const hole of this.holes ) {
-      for ( const face of this.sideFaces(hole) ) out.push(face);
+      for ( const face of hole.sideFaces ) out.push(face);
     }
     for ( const face of this.caps.faces ) out.push(face);
+
   }
 
   // ----- NOTE: AABB ---- //

@@ -16,6 +16,7 @@ import { MatrixFloat32 } from "../Matrix.js";
 import { CutawayPolygon } from "../CutawayPolygon.js";
 import { Plane } from "../3d/Plane.js";
 import { Segment } from "../Segment.js";
+import { Polygon3d } from "../3d/Polygon3d.js";
 
 
 /** @type {Matrix<4,4>} */
@@ -160,21 +161,6 @@ export class GeometricPrimitive {
       return this.modelMatrix._translation.multiplyPoint3d(this.#center);
     }
     return this.constructor.calculateCentroid(this.faces, this.#center);
-  }
-
-  /**
-   * By default, normal shape points out and holes point in.
-   * Flipping switches the plane orientation from out to in or vice-versa.
-   * Also flips the hole designation.
-   */
-  reverseOrientation() {
-    this.prototypeFaces.forEach(face => {
-      face.reverseOrientation();
-      face.isHole = !face.isHole;
-    });
-    this.isHole = !this.isHole;
-    this.dirty = this.constructor.DIRTY.ALL;
-    return this;
   }
 
   /**
@@ -484,7 +470,8 @@ export class GeometricPrimitive {
     // Pre-calculate the inverse transpose to use with transforming the normal.
     const M = this.worldMatrix;
     const invTransposeM = M.invert().transpose();
-    for ( let i = 0; i < numSides; i += 1 ) faces[i] = protoFaces[i].transform(M, invTransposeM);
+    const mirrors = Polygon3d.isMirroringTransform(M);
+    for ( let i = 0; i < numSides; i += 1 ) faces[i] = protoFaces[i].transform(M, invTransposeM, mirrors);
     this._clearDirty(this.constructor.DIRTY.FACES);
   }
 

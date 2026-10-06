@@ -29,8 +29,21 @@ export class Plane {
   get normal() { return this.#normal; }
 
   set normal(value) {
+    if ( this.#normal.equals(value) ) return;
     this.#normal.copyFrom(value).normalize(this.normal);
-    if ( Number.isNaN(this.#normal.x) || Number.isNaN(this.#normal.x) || Number.isNaN(this.#normal.x) ) throw Error("Plane#normal is undefined.");
+    if ( Number.isNaN(this.#normal.x) || Number.isNaN(this.#normal.y) || Number.isNaN(this.#normal.z) ) throw Error("Plane#normal is undefined.");
+    this.clearCache();
+  }
+
+  /** @type {Point3d} */
+  #point = new Point3d();
+
+  get point() { return this.#point; }
+
+  set point(value) {
+    if ( this.#point.equals(value) ) return;
+    this.#point.copyFrom(value);
+    this.clearCache();
   }
 
   /**
@@ -40,17 +53,23 @@ export class Plane {
    */
   get constant() { return -this.normal.dot(this.point); }
 
-  /** @type {Point3d} */
-  point = new Point3d();
-
   /**
    * Default construction is the XY canvas plane
    * @param {Point3d} normal    Normal vector to the plane
    * @param {Point3d} point     Point on the plane, representing the plane's origin point
    */
-  constructor(point = Point3d.ZERO, normal) {
+  constructor(point, normal) {
+    if ( point ) this.point = point;
     if ( normal ) this.normal = normal;
-    this.point.copyFrom(point);
+  }
+
+  clearCache() {
+    this._conversion2dMatrix = undefined;
+    this._conversion2dMatrixInverse = undefined;
+    this._axisVectors = undefined;
+    this._denom2d = undefined;
+    this._numeratorFn2d = undefined;
+    this._threePoints = undefined;
   }
 
   /**
@@ -62,6 +81,7 @@ export class Plane {
     out ??= new Plane();
     out.point.copyFrom(this.point);
     out.normal.copyFrom(this.normal); // Should already be normalized.
+    out.clearCache();
     return out;
   }
 
@@ -73,6 +93,17 @@ export class Plane {
   copyFrom(other) {
     this.point.copyFrom(other.point);
     this.normal.copyFrom(other.normal); // Should already be normalized.
+    this.clearCache();
+    return this;
+  }
+
+  /**
+   * Flip the plane normal.
+   * @returns {this}
+   */
+  reverse() {
+    this.normal.multiplyScalar(-1, this.normal);
+    this.clearCache();
     return this;
   }
 
@@ -113,7 +144,10 @@ export class Plane {
     outPoint ??= Point3d.tmp;
     using vAB = b.subtract(a);
     using vAC = c.subtract(a);
-    const out = vAC.cross(vAB, outPoint); // Ordered so the orientation matches.
+
+    // Ordered so the orientation matches. Is -(AB x AC), opposite of the right-hand rule.
+    // Enforces rule that points counterclockwise as seen from the front side give a normal pointing at the viewer.
+    const out = vAC.cross(vAB, outPoint);
     return out;
   }
 
@@ -133,15 +167,76 @@ export class Plane {
     c = c.clone();
     const N = this.normalFromPoints(a, b, c);
     out ??= new Plane();
-    out.point.copyFrom(a);
+    out.point = a;
     out.normal = N;
     out._threePoints = {a, b, c};
     return out;
   }
 
+  /**
+   * Plane normal for a possibly concave planar polygon using Newell's method.
+   * Sign matches that of Plane#normalFromPoints (vAC x vAB):
+   * PIXI-positive (clockwise on canvas) ring --> normal.z < 0 (solid, faces down)
+   *                counterclockwise ring     --> normal.z > 0 (hole, faces up)
+   * @param {Point3d[]} pts       Ring points, at least 3, not closed
+   * @returns {Plane}
+   */
   static fromMultiplePoints(pts, out) {
     pts = cleanPolygonPoints([...pts]);
-    return this.fromPoints(pts[0], pts[1], pts[2], out);
+
+    const res = this._fromPointsNewell(pts, out);
+    if ( !res ) {
+      console.warn("Plane.fromMultiplePoints|Insufficient points to create the plane.");
+      return null;
+    }
+    out ??= new Plane();
+    out.point = pts[0];
+    out.normal = res.normal;
+    return out;
+  }
+
+  static _fromPointsNewell(pts) {
+    const n = pts.length;
+    if ( n < 3 ) return null;
+
+    // Shift by the first point so large coordinates do not lose precision.
+    const ref = pts[0];
+    using tmpPt = Point3d.tmp;
+    using shiftedA = Point3d.tmp;
+    using shiftedB = Point3d.tmp;
+
+    let a = pts.at(-1); // Wrap to close the ring.
+
+    const normal = Point3d.tmp.set(0, 0, 0);
+    const centroid = Point3d.tmp.set(0, 0, 0);
+    for ( let i = 0; i < n; i += 1 ) {
+      const b = pts[i];
+
+      // Sum of cross products a x b.
+      a.subtract(ref, shiftedA);
+      b.subtract(ref, shiftedB);
+
+      shiftedA.cross(shiftedB, tmpPt);
+      normal.add(tmpPt, normal);
+      centroid.add(shiftedA, centroid);
+      a = b;
+    }
+
+    // (nx, ny, nz) is now the right-and area vector (2 * area * normal)
+    // Negate to match vAX x vAB convention.
+    normal.multiplyScalar(-1, normal);
+
+    const mag = normal.magnitude();
+    if ( mag < 1e-12 ) return null; // Collinear or zero-area.
+
+    // Area
+    const area = 0.5 * normal.dot(normal) / mag;
+
+
+    // Get the vertex average: a point on the plane.
+    ref.add(centroid.multiplyScalar(1/n, tmpPt), centroid);
+
+    return { normal, centroid, area };
   }
 
 
@@ -359,8 +454,8 @@ export class Plane {
             : n.y < n.z ? w.set(0, 1, 0)
               : w.set(0, 0, 1);
 
-    const u = tmpPt2;
-    const v = tmpPt3;
+    const u = Point3d.tmp;
+    const v = Point3d.tmp;
     w.cross(n, u).normalize(u);
     n.cross(u, v).normalize(v);
     return { v: u, u: v }; // Swap so the x-axis is first.
