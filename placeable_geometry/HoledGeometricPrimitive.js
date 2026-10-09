@@ -18,7 +18,7 @@ import { Polygons3d } from "../3d/Polygon3d.js";
  *   (cube, cylinder, hexagon, extruded polygon). Its prototype and matrix are untouched.
  * - holes: the same kinds of shape. Each hole is a normal primitive, so resizing a hole is a matrix change.
  *
- * Drawing: the solid and the holes contribute only their side walls (holes culled the other way).
+ * Drawing: the solid and the holes contribute only their side walls.
  * The top and bottom caps cannot be a unit prototype times a matrix, because they depend on the solid and
  * every hole together. They are one derived primitive, rebuilt lazily when any child changes.
  *
@@ -51,7 +51,6 @@ export class HoledPrimitive extends CombinedGeometricPrimitive {
   }
 
   destroy() {
-    this.#caps?.destroy();
     this.#caps = null;
     this.holes.length = 0;
     super.destroy();
@@ -66,8 +65,7 @@ export class HoledPrimitive extends CombinedGeometricPrimitive {
    * @returns {HolePrimitive}
    */
   addHole(hole) {
-    if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.debug
-      && hole.facesOutward() ) console.warn("HoledSolidPrimitive|Hole faces outward", { hole });
+    if ( !hole.isHole ) hole.reverseOrientation();
     this.holes.push(hole);
     return this.addChild(hole);
   }
@@ -80,7 +78,6 @@ export class HoledPrimitive extends CombinedGeometricPrimitive {
   removeHole(hole) {
     const i = this.holes.indexOf(hole);
     if ( !~i ) return false;
-    this.holes.splice(i, 1);
     this.holes.splice(i, 1);
     return this.removeChild(hole);
   }
@@ -137,7 +134,7 @@ export class HoledPrimitive extends CombinedGeometricPrimitive {
     if ( !this.#caps || this.isDirty(this.constructor.DIRTY.DERIVED) ) {
       this.#caps?.destroy();
       this.#caps = this.#buildCaps();
-      this._clearDirty(this.constructor.DIRTY_DERIVED);
+      this._clearDirty(this.constructor.DIRTY.DERIVED);
     }
     return this.#caps;
   }
@@ -175,8 +172,8 @@ export class HoledPrimitive extends CombinedGeometricPrimitive {
    * @yields {GeometricDrawableData}
    */
   *drawables(_opts) {
-    yield* this.solid.drawables({ wallsOnly: true });
-    for ( const hole of this.holes ) yield* hole.drawables({ wallsOnly: true });
+    yield* this.solid.drawables({ sidesOnly: true });
+    for ( const hole of this.holes ) yield* hole.drawables({ sidesOnly: true });
     yield* this.caps.drawables();
   }
 
@@ -220,66 +217,18 @@ export class HoledPrimitive extends CombinedGeometricPrimitive {
    * @param {Point3d} rayOrigin
    * @param {Point3d} rayDirection
    * @param {object} [opts]
+   * @param {boolean} [opts.sidesOnly=false]
    * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
    * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
    * @returns {number|null} The distance along the ray, as a multiple of rayDirection
    */
-  firstRayIntersection(rayOrigin, rayDirection, opts) {
-    opts.sidesOnly = false;
-
-
-    let best = this.solid.firstRayIntersection(rayOrigin, rayDirection, opts);
-    opts.sidesOnly = true;
-    for ( const hole of this.holes ) {
-      const t = hole.firstRayIntersection(rayOrigin, rayDirection, opts);
-      if ( t !== null && (best === null || t < best) ) best = t;
+  rayIntersection(rayOrigin, rayDirection, { _sidesOnly = false, ...opts } = {}) {
+    const crossings = [];
+    for ( const child of [this.solid, ...this.holes] ) {
+      for ( const face of child.faces ) this.constructor.faceCrossings(face, rayOrigin, rayDirection, crossings);
     }
-    return best;
-  }
-
-  /**
-   * Nearest hit over the solid's walls, the holes' walls (each with its own direction), and the caps.
-   * The caps' holes are open, so a ray passing through one is not a hit.
-   * @param {Point3d} rayOrigin
-   * @param {Point3d} rayDirection
-   * @param {object} [opts]
-   * @param {number} [opts.minT=0]
-   * @param {number} [opts.maxT=1]
-   * @returns {number|null}
-   */
-  rayIntersection(rayOrigin, rayDirection, opts) {
-    opts.sidesOnly = false;
-    let t = this.solid.rayIntersection(rayOrigin, rayDirection, opts);
-    if ( t !== null ) return t;
-    opts.sidesOnly = true;
-    for ( const hole of this.holes ) {
-      const t = hole.rayIntersection(rayOrigin, rayDirection, opts);
-      if ( t !== null ) return t;
-    }
-    return null;
-  }
-
-  /**
-   * Determine all ray hits for this object in 3d.
-   * Ignores intersections behind the ray.
-   * @param {Point3d} rayOrigin
-   * @param {Point3d} rayDirection
-   * @param {object} [opts]
-   * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
-   * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
-   * @returns {number[]} The distance along the ray, as a multiple of rayDirection
-   */
-  allRayIntersections(rayOrigin, rayDirection, opts) {
-    const out = [];
-    opts.sidesOnly = false;
-    const t = this.solid.firstRayIntersection(rayOrigin, rayDirection, opts);
-    if ( t !== null ) out.push(t);
-    opts.sidesOnly = true;
-    for ( const hole of this.holes ) {
-      const t = hole.firstRayIntersection(rayOrigin, rayDirection, opts);
-      if ( t !== null ) out.push(t);
-    }
-    return out;
+    const clustered = this.constructor.clusterCrossings(crossings);
+    return this.constructor.firstBlockedT(clustered, { ...opts, direction: this.direction });
   }
 
   /**
@@ -298,11 +247,12 @@ export class HoledPrimitive extends CombinedGeometricPrimitive {
 
     // Slice each hole.
     const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
-    const holeCuts = this.holes.flatMpa(hole => hole.verticalSlice(start, end));
+    const holeCuts = this.holes.flatMap(hole => hole.verticalSlice(start, end));
     if ( !holeCuts.length ) return ClipperPaths.union(solidCuts)
       .map(poly => CutawayPolygon.fromPolygon(poly, start, end));
 
     // Cut the holes out from the solid cutaway.
+    holeCuts.forEach(holeCut => holeCut.reverseOrientation());
     return ClipperPaths.diffPaths(solidCuts, holeCuts)
       .map(poly => CutawayPolygon.fromPolygon(poly, start, end));
   }

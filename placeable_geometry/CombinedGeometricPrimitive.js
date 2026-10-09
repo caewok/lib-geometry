@@ -1,4 +1,5 @@
 /* globals
+CONFIG,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
@@ -6,6 +7,7 @@
 import { GeometricPrimitive } from "./GeometricPrimitive.js";
 import { AABB3d } from "../3d/AABB3d.js";
 import { CutawayPolygon } from "../CutawayPolygon.js";
+import { GEOMETRY_LIB_ID } from "../const.js";
 
 /**
  * A container of 1 or more primitives.
@@ -95,6 +97,14 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
     this.contentVersion = this.constructor._nextVersion();
     this.dirty = this.constructor.DIRTY.TRANSFORM;
     this.parent?.childChanged(this);
+  }
+
+  /**
+   * Toggle hole status of this shape, and mark the children as changed.
+   */
+  reverseOrientation() {
+    this.children.forEach(child => child.reverseOrientation());
+    return super.reverseOrientation();
   }
 
   // ----- NOTE: Prototype and drawables ----- //

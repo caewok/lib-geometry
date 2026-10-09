@@ -7,6 +7,8 @@ import { Point3d } from "./Point3d.js";
 import { Matrix } from "../Matrix.js";
 import { cleanPolygonPoints } from "../util.js";
 
+Symbol.dispose ??= Symbol("Symbol.dispose");
+
 const originPt3d = new Point3d();
 Object.freeze(originPt3d);
 
@@ -21,10 +23,36 @@ export class Plane {
     return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
   }
 
+  release() {
+    this.clearCache();
+    this.normal.release();
+    this.point.release();
+  }
+
+  [Symbol.dispose]() { this.release(); }
+
   static _geoLibType = "Plane";
 
   /** @type {Point3d} */
-  #normal = new Point3d(0, 0, 1);
+  #normal = Point3d.tmp.set(0, 0, 1);
+
+  /** @type {Point3d[3]} */
+  _threePoints = [];
+
+  /** @type {number} */
+  _denom2d;
+
+  /** @type {function} */
+  _numeratorFn2d;
+
+  /** @type {object} { u: Point3d, v: Point3d } */
+  _axisVectors = {};
+
+  /** @type {Matrix<4x4>} */
+  _conversion2dMatrix;
+
+  /** @type {Matrix<4x4>} */
+  _conversion2dMatrixInverse;
 
   get normal() { return this.#normal; }
 
@@ -36,7 +64,7 @@ export class Plane {
   }
 
   /** @type {Point3d} */
-  #point = new Point3d();
+  #point = Point3d.tmp.set(0, 0, 0);
 
   get point() { return this.#point; }
 
@@ -64,12 +92,18 @@ export class Plane {
   }
 
   clearCache() {
+    this._threePoints.forEach(pt => pt.release());
+    if ( this._axisVectors.v ) this._axisVectors.v.release();
+    if ( this._axisVectors.u ) this._axisVectors.u.release();
+    if ( this._conversion2dMatrix ) this._conversion2dMatrix.release();
+    if ( this._conversion2dMatrixInverse ) this._conversion2dMatrixInverse.release();
+
     this._conversion2dMatrix = undefined;
     this._conversion2dMatrixInverse = undefined;
-    this._axisVectors = undefined;
+    this._axisVectors = {};
     this._denom2d = undefined;
     this._numeratorFn2d = undefined;
-    this._threePoints = undefined;
+    this._threePoints = [];
   }
 
   /**
@@ -319,12 +353,14 @@ export class Plane {
 
   /** @type {object} { u: Point3d, v: Point3d } */
   get axisVectors() {
-    return this._axisVectors || (this._axisVectors = this._calculateAxisVectors());
+    if ( !this._axisVectors.u ) this._axisVectors = this._calculateAxisVectors();
+    return this._axisVectors;
   }
 
   /** @type {Point3d[3]} */
   get threePoints() {
-    return this._threePoints || (this._threePoints = this._findThreePoints());
+    if ( !this._threePoints.length ) this._threePoints = this._findThreePoints()
+    return this._threePoints;
   }
 
   _findThreePoints() {

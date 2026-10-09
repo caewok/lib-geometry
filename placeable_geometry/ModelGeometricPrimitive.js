@@ -57,7 +57,7 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
     const M = this.toPrototypeModel(opts);
     const invTransposeM = M.invert().transpose();
     const mirrors = Polygon3d.isMirroringTransform(M);
-    return faces.map(face => face.transform(M, undefined, invTransposeM, mirrors));
+    return faces.map(face => face.transform(M, invTransposeM, mirrors));
   }
 
   /**
@@ -120,9 +120,9 @@ export class PlanarPolygonPrimitive extends ModelGeometricPrimitive {
 
   get baseFace() { return this.faces[0]; }
 
-  prototypeFacesOutward() { return true; } // Handled with facesOutward.
+  validate() { return this._hasConsistentFaceDirection(); }
 
-  facesOutward() {
+  _hasConsistentFaceDirection() {
     // Confirm the prototype face is oriented same as the original.
     const prototypeFace = this.prototypeFaces[0];
     const poly3d = this.baseFace;
@@ -196,6 +196,11 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
     return this.bottomFaces.some(f => f.containsProjectedXY(canvasLoc));
   }
 
+  reverseOrientation() {
+    this._sidesVO = null;
+    return super.reverseOrientation();
+  }
+
   // ----- NOTE: Drawables ----- //
 
   /** @type {VertexObject} */
@@ -210,6 +215,13 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    */
   get sidesVO() {
     return (this._sidesVO ??= this.constructor.generateVerticesForFaces(this.prototypeFaces.slice(2)));
+  }
+
+  _generateInstanceVertices(vo) {
+    const faces = this.reversed ? this.prototypeFaces.map(f => f.clone().invertRole()) : this.prototypeFaces;
+    this.constructor.generateVerticesForFaces(faces, vo);
+    if ( this.reversed ) faces.forEach(f => f.release());
+    return vo;
   }
 
   /**
@@ -229,12 +241,9 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    * @param {boolean} [opts.sidesOnly=false]    Only the side walls (used for holed solids).
    * @yields {GeometricDrawableData}
    */
-  *drawables({ sidesOnly = false} = {}) {
-    if ( !sidesOnly ) return super.drawables();
-    for ( const drawable of super.drawables() ) {
-      drawable.vo = this.sidesVO;
-      yield drawable;
-    }
+  *drawables({ _sidesOnly = false} = {}) {
+    yield { primitive: this, vo: this.instanceVO, matrix: this.worldMatrix, direction: this.direction,
+      mirrored: Polygon3d.isMirroringTransform(this.worldMatrix), version: this.changeStamp };
   }
 
 
@@ -268,11 +277,12 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    */
   static fromPolygon(id, poly, opts = {}) {
     this._makeElevationFinite(opts);
-    const top = Polygon3d.fromPIXIShape(poly, { elevationZ: opts.topZ, density: opts.density });
+    const isHole = !poly.isPositive;
+    const top = Polygon3d.fromPIXIShape(poly, { elevationZ: opts.topZ, density: opts.density, isHole });
     const faces = this._facesFromPolygon3d(top, opts);
     const prototypeFaces = this.canvasToPrototypeFaces(faces, opts);
     const out = new this(id, prototypeFaces);
-    if ( !poly.isPositive ) out.isHole = true;
+    out.isHole = isHole;
     return out;
   }
 
@@ -344,72 +354,10 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
     return poly.cutaway(start, end, opts);
   }
 
-    /**
-   * Determine where a ray first hits this object in 3d.
-   * Ignores intersections behind the ray.
-   * @param {Point3d} rayOrigin
-   * @param {Point3d} rayDirection
-   * @param {object} [opts]
-   * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
-   * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
-   * @returns {number|null} The distance along the ray, as a multiple of rayDirection
-   */
-  firstRayIntersection(rayOrigin, rayDirection, { minT = 0, maxT = 1, sidesOnly = false } = {}) {
-    const direction = this.constructor.CULL_FACES.BACK;
-    let best = null;
-    const faces = sidesOnly ? this.sideFaces : this.faces;
-    for ( const face of faces ) {
-      const t = this.constructor.rayIntersectionForFace(face, rayOrigin, rayDirection, maxT, minT, direction);
-      if ( t !== null && (best === null || t < best) ) best = t;
-    }
-    return best;
-  }
-
-  /**
-   * Does this ray hit this object in 3d?
-   * Stops at the first hit for a triangle facing the correct direction.
-   * Ignores intersections behind the ray.
-   * @param {Point3d} rayOrigin
-   * @param {Point3d} rayDirection
-   * @param {object} [opts]
-   * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
-   * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
-   * @returns {number|null} The distance along the ray, as a multiple of rayDirection
-   */
-  rayIntersection(rayOrigin, rayDirection, { minT = 0, maxT = 1, sidesOnly = false } = {}) {
-    const direction = this.constructor.CULL_FACES.BACK;
-    const faces = sidesOnly ? this.sideFaces : this.faces;
-    for ( const face of faces ) {
-      const t = this.constructor.rayIntersectionForFace(face, rayOrigin, rayDirection, maxT, minT, direction);
-      if ( t !== null ) return t;
-    }
-    return null;
-  }
-
-  /**
-   * Determine all ray hits for this object in 3d.
-   * Ignores intersections behind the ray.
-   * @param {Point3d} rayOrigin
-   * @param {Point3d} rayDirection
-   * @param {object} [opts]
-   * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
-   * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
-   * @returns {number[]} The distance along the ray, as a multiple of rayDirection
-   */
-  allRayIntersections(rayOrigin, rayDirection, { minT = 0, maxT = 1, sidesOnly = false } = {}) {
-    const direction = this.constructor.CULL_FACES.BACK;
-    const out = [];
-    const faces = sidesOnly ? this.sideFaces : this.faces;
-    for ( const face of faces ) {
-      const t = this.constructor.rayIntersectionForFace(face, rayOrigin, rayDirection, maxT, minT, direction);
-      if ( t !== null ) out.push(t);
-    }
-    return out;
-  }
 
    // ----- NOTE: Debug ----- //
 
-  _testFacesOutward(faces) {
+  _hasConsistentFaceDirection(faces) {
     if ( !faces || faces.length < 3 ) return false;
 
     // Must account for concave polygons, where the face could be facing opposite a centroid.
@@ -421,11 +369,14 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
 
     // Could test top and bottom using the centroid, but not guaranteed to have top at 0 and bottom at 1.
     // Simpler to test all faces using shoelace.
-    for ( let i = 0, n = faces.length; i < n; i += 1 ) {
-      const face = faces[i];
-      if ( !this.constructor.testFaceOrientation(face, faces) ) return false;
+    const iter = faces.values();
+    const firstFace = iter.next().value;
+    const isInside = this.constructor.testFaceOrientation(firstFace, faces);
+    for ( const face of iter ) {
+      // TODO: Special handling for Polygons3d, which may have solid + holes?
+      if ( this.constructor.testFaceOrientation(face, faces) !== isInside ) return 0;
     }
-    return true;
+    return isInside ? 1 : -1;
   }
 }
 

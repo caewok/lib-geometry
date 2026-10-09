@@ -79,9 +79,11 @@ export class InstancedGeometricPrimitive extends GeometricPrimitive {
    */
   static _instanceVO;
 
+  static _reversedInstanceVO;
+
   static get instanceVO() { return (this._instanceVO ??= this.generateInstanceVertices()); }
 
-  get instanceVO() { return this.constructor.instanceVO; }
+  get instanceVO() { return this.reversed ? this.constructor.reversedInstanceVO : this.constructor.instanceVO; }
 
   static generateInstanceVertices() {
     const vo = new VertexObject();
@@ -89,18 +91,18 @@ export class InstancedGeometricPrimitive extends GeometricPrimitive {
     return vo;
   }
 
-  /**
-   * Shared VO for just the side walls of the prototype. Build lazily, once per concrete class.
-   * @type {VertexObject}
-   */
-  static get wallsVO() {
-    if ( !Object.hasOwn(this, "_wallsVO") ) { // Don't let a subclass pick up a parent's VO through static prototype chain.
-      this._wallsVO = this.generateVerticesForFaces(this.prototypeFaces.slice(2));
-    }
-    return this._wallsVO;
+  static _generateReversedVO(faces) { // Not #private so subclasses can access.
+    const reversed = faces.map(face => face.clone().reverseOrientation());
+    const vo = this.generateVerticesForFaces(reversed);
+    reversed.forEach(face => face.release());
+    return vo;
   }
 
-  get wallsVO() { return this.constructor.wallsVO; }
+  static get reversedInstanceVO() {
+    if ( !(Object.hasOwn(this, "_reversedInstanceVO")
+      && this._reversedInstanceVO) ) this._reverseInstancedVO = this._generateReversedVO(this.prototypeFaces);
+    return this._reversedInstanceVO;
+  }
 
 }
 
@@ -213,6 +215,14 @@ export class VerticalQuadPrimitive extends QuadPrimitive {
     return poly.cutaway(start, end, opts);
   }
 
+  /**
+   * Validate that this quad faces the correct direction.
+   * @returns {boolean} True if valid (tests pass).
+   */
+  validate() {
+    return (this.prototypeFacesOutward() ^ this.isHole) && (this.facesOutward() ^ this.isHole);
+  }
+
   prototypeFacesOutward() {
     // Should face north before any rotations.
     using ctr = Point3d.tmp.set(0, -1, 0);
@@ -285,6 +295,7 @@ class ExtrudedInstancePrimitive extends InstancedGeometricPrimitive {
    */
   toPIXIShape() { return this.bottomFaces[0].toPolygon2d(); }
 
+
   /**
    * Does this shape's XY dimensions potentially contain this canvas location?
    * Meant to be a relatively quick test. Should only reject if it is certain not to contain it.
@@ -322,8 +333,33 @@ class ExtrudedInstancePrimitive extends InstancedGeometricPrimitive {
   // ----- NOTE: Drawables ----- //
 
   /** @type {VertexObject} */
+  static _sidesVO;
 
-  _sidesVO;
+  /**
+   * Shared VO for just the side walls of the prototype. Build lazily, once per concrete class.
+   * @type {VertexObject}
+   */
+  static get sidesVO() {
+    if ( !(Object.hasOwn(this, "_sidesVO") && this._sidesVO) ) { // Don't let a subclass pick up a parent's VO through static prototype chain.
+      this._sidesVO = this.generateVerticesForFaces(this.prototypeFaces.slice(2));
+    }
+    return this._sidesVO;
+  }
+
+  static _reversedSidesVO;
+
+  static get reversedSidesVO() {
+    if ( !(Object.hasOwn(this, "_reversedSidesVO") && this._reversedSidesVO) ) this._reversedSidesVO = this._generateReversedVO(this.prototypeFaces.slice(2));
+    return this._reversedSidesVO;
+  }
+
+  static _generateReversedVO(faces) {
+    const inverted = faces.map(face => face.clone().invertRole()); // Same op as _generateFaces.
+    const vo = this.generateVerticesForFaces(inverted);
+    inverted.forEach(face => face.release());
+    return vo;
+  }
+
 
   /**
    * Vertices for the prototype's side walls only.
@@ -353,74 +389,11 @@ class ExtrudedInstancePrimitive extends InstancedGeometricPrimitive {
    * @yields {GeometricDrawableData}
    */
   *drawables({ sidesOnly = false} = {}) {
-    if ( !sidesOnly ) return super.drawables();
+    if ( !sidesOnly ) { yield* super.drawables(); return; }
     for ( const drawable of super.drawables() ) {
       drawable.vo = this.sidesVO;
       yield drawable;
     }
-  }
-
-  /**
-   * Determine where a ray first hits this object in 3d.
-   * Ignores intersections behind the ray.
-   * @param {Point3d} rayOrigin
-   * @param {Point3d} rayDirection
-   * @param {object} [opts]
-   * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
-   * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
-   * @returns {number|null} The distance along the ray, as a multiple of rayDirection
-   */
-  firstRayIntersection(rayOrigin, rayDirection, { minT = 0, maxT = 1, sidesOnly = false } = {}) {
-    const direction = this.constructor.CULL_FACES.BACK;
-    let best = null;
-    const faces = sidesOnly ? this.sideFaces : this.faces;
-    for ( const face of faces ) {
-      const t = this.constructor.rayIntersectionForFace(rayOrigin, rayDirection, maxT, minT, direction);
-      if ( t !== null && (best === null || t < best) ) best = t;
-    }
-    return best;
-  }
-
-  /**
-   * Does this ray hit this object in 3d?
-   * Stops at the first hit for a triangle facing the correct direction.
-   * Ignores intersections behind the ray.
-   * @param {Point3d} rayOrigin
-   * @param {Point3d} rayDirection
-   * @param {object} [opts]
-   * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
-   * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
-   * @returns {number|null} The distance along the ray, as a multiple of rayDirection
-   */
-  rayIntersection(rayOrigin, rayDirection, { minT = 0, maxT = 1, sidesOnly = false } = {}) {
-    const direction = this.constructor.CULL_FACES.BACK;
-    const faces = sidesOnly ? this.sideFaces : this.faces;
-    for ( const face of faces ) {
-      const t = this.constructor.rayIntersectionForFace(rayOrigin, rayDirection, maxT, minT, direction);
-      if ( t !== null ) return t;
-    }
-    return null;
-  }
-
-  /**
-   * Determine all ray hits for this object in 3d.
-   * Ignores intersections behind the ray.
-   * @param {Point3d} rayOrigin
-   * @param {Point3d} rayDirection
-   * @param {object} [opts]
-   * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
-   * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
-   * @returns {number[]} The distance along the ray, as a multiple of rayDirection
-   */
-  allRayIntersections(rayOrigin, rayDirection, { minT = 0, maxT = 1, sidesOnly = false } = {}) {
-    const direction = this.constructor.CULL_FACES.BACK;
-    const out = [];
-    const faces = sidesOnly ? this.sideFaces : this.faces;
-    for ( const face of faces ) {
-      const t = this.constructor.rayIntersectionForFace(rayOrigin, rayDirection, maxT, minT, direction);
-      if ( t !== null ) out.push(t);
-    }
-    return out;
   }
 }
 
@@ -497,7 +470,7 @@ export class HexagonCylinderPrimitive extends ExtrudedInstancePrimitive {
     poly = poly.translate(-res.center.x, -res.center.y);
     const bounds = poly.getBounds();
     poly = poly.scale(1/bounds.width, 1/bounds.height);
-    if ( poly.isPositive ) poly.reverseOrientation();
+    if ( !poly.isPositive ) poly.reverseOrientation();
     const top = Polygon3d.fromPolygon(poly, { elevationZ: 0.5 });
     const bottom = top.clone();
     bottom.reverseOrientation();
@@ -506,9 +479,9 @@ export class HexagonCylinderPrimitive extends ExtrudedInstancePrimitive {
     return [bottom, top, ...top.buildTopSides(-0.5)];
   }
 
-  static #prototypeFaces; /* eslint-disable-line no-unused-private-class-members */
+  static #prototypeFaces;
 
-  static get prototypeFaces() { return (this.#prototypeFaces = this.createUnitHexagonCylinder()); }
+  static get prototypeFaces() { return (this.#prototypeFaces ??= this.createUnitHexagonCylinder()); }
 
   static _instanceVO;
 
@@ -550,7 +523,11 @@ export class CylinderPrimitive extends ExtrudedInstancePrimitive {
 
   static _prototypeFaces;
 
-  static get prototypeFaces() { return this._prototypeFaces ||= this.createUnitCylinder(canvas.scene.dimensions.maxR / 10); }
+  static get prototypeFaces() {
+    if ( !(Object.hasOwn(this, "_prototypeFaces")
+      && this._prototypeFaces) ) this._prototypeFaces = this.createUnitCylinder(canvas.scene.dimensions.maxR / 10);
+    return this._prototypeFaces;
+  }
 
   static _instanceVO;
 

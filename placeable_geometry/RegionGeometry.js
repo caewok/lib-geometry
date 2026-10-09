@@ -274,7 +274,8 @@ export class RegionGeometry extends PlaceableGeometry {
     // (b) polygon + hole polygon (ring)
     // (c) multiple solid polygons (self-intersecting polygon, cleaned)
 
-    const opts = this._shapeDimensions(regionShape);
+    let opts = this._shapeDimensions(regionShape);
+    if ( regionShape.type === "ring" ) opts = opts.outer;
     let out;
     if ( polys.length === 1 ) out = ExtrudedPolygonPrimitive.fromPolygon(id, polys[0], opts)
     else if ( !polys[1].isPositive ) {
@@ -494,7 +495,27 @@ export class RegionGeometry extends PlaceableGeometry {
     if ( !shape ) return;
 
     const regionShape = this.regionShapes[shapeIdx];
-    const opts = this._shapeDimensions(regionShape);
+    let opts = this._shapeDimensions(regionShape);
+
+    if ( regionShape.type === "ring" ) {
+      const regionD = this.placeableDocument;
+      const restricted = this.constructor.shapeIsGridConstrained(regionShape)
+        || this.constructor.shapeIsWallRestricted(regionShape, regionD);
+      if ( restricted ) opts = opts.outer;
+      else {
+        shape.solid.setPosition(opts.outer.center);
+        shape.solid.setRotation(opts.outer.angles);
+        shape.solid.setScale(opts.outer.dims);
+        shape.solid.setAnchor(opts.outer.anchors);
+
+        shape.holes[0].setPosition(opts.inner.center);
+        shape.holes[0].setRotation(opts.inner.angles);
+        shape.holes[0].setScale(opts.inner.dims);
+        shape.holes[0].setAnchor(opts.inner.anchors);
+        return;
+      }
+    }
+
     shape.setPosition(opts.center);
     shape.setRotation(opts.angles);
     shape.setScale(opts.dims);
@@ -587,8 +608,12 @@ export class RegionGeometry extends PlaceableGeometry {
 
       case "ring": {
         const outerRadius = regionShape.radius + regionShape.outerWidth;
+        const innerRadius = regionShape.radius;
         dims.set(outerRadius * 2, outerRadius * 2, zHeight);
-        break;
+        return {
+          outer: { center, angles, dims, anchors, topZ, bottomZ },
+          inner: { center, angles, dims: dims.clone().set(innerRadius * 2, innerRadius * 2, zHeight), anchors, topZ, bottomZ },
+        };
       }
 
       case "cone": dims.set(regionShape.radius, regionShape.radius, zHeight); break;

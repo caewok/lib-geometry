@@ -5,9 +5,6 @@
 
 import { GeometricPrimitive } from "./GeometricPrimitive.js";
 import { AABB3d } from "../3d/AABB3d.js";
-import { ModelMatrixAnchor } from "../ModelMatrix.js";
-import { MatrixFloat32 } from "../Matrix.js";
-import { Polygon3d } from "../3d/Polygon3d.js";
 
 /**
  * Container to represent a null or empty geometric primitive.

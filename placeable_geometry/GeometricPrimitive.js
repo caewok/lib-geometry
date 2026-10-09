@@ -8,7 +8,6 @@ PIXI,
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { VertexObject } from "../placeable_vertices/VertexObject.js";
 import { AABB3d } from "../3d/AABB3d.js";
-import { roundDecimals, isOdd } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
 import { combineTypedArrays } from "../util.js";
 import { ModelMatrixAnchor } from "../ModelMatrix.js";
@@ -124,6 +123,31 @@ export class GeometricPrimitive {
 
   /** @type {boolean} */
   isHole = false;
+
+  /** @type {boolean} */
+  #reversed = false;
+
+  get reversed() { return this.#reversed; }
+
+  /**
+   * Toggle hole status of this shape, and mark the children as changed.
+   */
+  reverseOrientation() {
+    this.#reversed = !this.#reversed;
+    this.isHole = !this.isHole;
+    this._markOrientationChanged();
+    return this;
+  }
+
+  /**
+   * Mark as dirty based on an orientation change.
+   */
+  _markOrientationChanged() {
+    const D = this.constructor.DIRTY;
+    this.dirty = D.FACES | D.MODEL_VERTICES | D.INSTANCE_VERTICES | D.DERIVED;
+    this.contentVersion = this.constructor._nextVersion(); // Track change for any renderer.
+    this.parent?.childChanged(this);
+  }
 
   /**
    * @param {string} id       Unique string per instance; used for debugging and for child classes
@@ -471,11 +495,85 @@ export class GeometricPrimitive {
     const M = this.worldMatrix;
     const invTransposeM = M.invert().transpose();
     const mirrors = Polygon3d.isMirroringTransform(M);
-    for ( let i = 0; i < numSides; i += 1 ) faces[i] = protoFaces[i].transform(M, invTransposeM, mirrors);
+    for ( let i = 0; i < numSides; i += 1 ) {
+      const face = protoFaces[i].transform(M, invTransposeM, mirrors);
+      faces[i] = this.reversed ? face.invertRole() : face;
+    }
     this._clearDirty(this.constructor.DIRTY.FACES);
   }
 
   // ----- NOTE: Intersection testing ----- //
+
+  /**
+   * @typedef {Object} CrossingData
+   * @prop {number} t       Where along the ray the crossing occurs
+   * @prop {-1|1} s         Direction of the crossing: +1 enters (see faceCrossings)
+   * @prop {-1|1|0} ds      Combined direction (see clusterCrossings)
+   */
+
+  /**
+   * Count the number of faces crossed by a given ray for a given polygon or polygons.
+   * @param {Polygon3d} face
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @param {CrossingData[]} [out=[]]     Where to store the crossing data
+   */
+  static faceCrossings(face, rayOrigin, rayDirection, out = []) {
+    for ( const poly of face.polygons ?? [face] ) {
+      // Treat hole rings as real surfaces here, to facilitate the shoelace counting.
+      const t = poly.intersectionT(rayOrigin, rayDirection, { holesBlock: true, signed: true });
+      if ( t === null ) continue;
+      out.push({ t, s: poly.plane.normal.dot(rayDirection) < 0 ? 1 : -1, ds: null }); // +1 enters material.
+    }
+    return out;
+  }
+
+  /**
+   * Organize crossing data by distance along the ray.
+   * @param {CrossingData[]} crossings
+   * @param {number} [epsilon=1e-06]
+   * @returns {CrossingData[]}
+   */
+  static clusterCrossings(crossings, epsilon = 1e-06) {
+    crossings.sort((a, b) => a.t - b.t); // Sort by distance along the ray.
+    const out = [];
+    for ( let i = 0, n = crossings.length; i < n; ) {
+      const first = crossings[i];
+      let pos = false;
+      let neg = false;
+      while ( i < n && (crossings[i].t - first.t <= epsilon) ) {
+        if ( crossings[i].s > 0 ) pos = true;
+        else neg = true;
+        i += 1;
+      }
+      first.ds = pos - neg;
+      out.push(first); // { t: first.t, s: first.s, ds: pos - neg }
+    }
+    return out;
+  }
+
+  /**
+   * Locate the position along the ray when the first crossing occurs.
+   * @param {CrossingData[]} crossings    Output from clusterCrossings
+   * @param {object} [opts]
+   * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
+   * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
+   * @param {number} [opts.direction=this.CULL_FACES.BACK]    Orientation of a blocking face
+   * @returns {number|null} The direction along the ray if it is blocked
+   */
+  static firstBlockedT(crossings, { minT = 0, maxT = 1, direction = this.CULL_FACES.BACK }) {
+    let depth = 0; // Crossings behind the origin still count, so a ray that starts inside material is handled.
+    for ( const { t, ds } of crossings ) {
+      const before = depth;
+      depth += ds;
+      if ( t < minT || t > maxT ) continue;
+      const entered = before <= 0 && depth > 0;
+      const exited = before > 0 && depth <= 0;
+      if ( (direction >= 0 && entered)
+        || (direction <= 0 && exited) ) return t;
+    }
+    return null;
+  }
 
   /**
    * Determine where a ray first hits this object in 3d.
@@ -483,78 +581,18 @@ export class GeometricPrimitive {
    * @param {Point3d} rayOrigin
    * @param {Point3d} rayDirection
    * @param {object} [opts]
+   * @param {boolean} [opts.sidesOnly=false]
    * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
    * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
    * @returns {number|null} The distance along the ray, as a multiple of rayDirection
    */
-  firstRayIntersection(rayOrigin, rayDirection, { minT = 0, maxT = 1 } = {}) {
-    const direction = this.constructor.CULL_FACES.BACK;
-    let best = null;
-    for ( const face of this.faces ) {
-      const t = this.constructor.rayIntersectionForFace(face, rayOrigin, rayDirection, maxT, minT, direction);
-      if ( t !== null && (best === null || t < best) ) best = t;
-    }
-    return best;
+  rayIntersection(rayOrigin, rayDirection, { sidesOnly = false, ...opts } = {}) {
+    const crossings = [];
+    const faces = sidesOnly ? this.sideFaces : this.faces;
+    for ( const face of faces ) this.constructor.faceCrossings(face, rayOrigin, rayDirection, crossings);
+    const clustered = this.constructor.clusterCrossings(crossings);
+    return this.constructor.firstBlockedT(clustered, { ...opts, direction: this.direction });
   }
-
-  /**
-   * Does this ray hit this object in 3d?
-   * Stops at the first hit for a triangle facing the correct direction.
-   * Ignores intersections behind the ray.
-   * @param {Point3d} rayOrigin
-   * @param {Point3d} rayDirection
-   * @param {object} [opts]
-   * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
-   * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
-   * @returns {number|null} The distance along the ray, as a multiple of rayDirection
-   */
-  rayIntersection(rayOrigin, rayDirection, { minT = 0, maxT = 1 } = {}) {
-    const direction = this.constructor.CULL_FACES.BACK;
-    for ( const face of this.faces ) {
-      const t = this.constructor.rayIntersectionForFace(face, rayOrigin, rayDirection, maxT, minT, direction);
-      if ( t !== null ) return t;
-    }
-    return null;
-  }
-
-  /**
-   * Determine all ray hits for this object in 3d.
-   * Ignores intersections behind the ray.
-   * @param {Point3d} rayOrigin
-   * @param {Point3d} rayDirection
-   * @param {object} [opts]
-   * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
-   * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
-   * @returns {number[]} The distance along the ray, as a multiple of rayDirection
-   */
-  allRayIntersections(rayOrigin, rayDirection, { minT = 0, maxT = 1 } = {}) {
-    const direction = this.constructor.CULL_FACES.BACK;
-    const out = [];
-    for ( const face of this.faces ) {
-      const t = this.constructor.rayIntersectionForFace(face, rayOrigin, rayDirection, maxT, minT, direction);
-      if ( t !== null ) out.push(t);
-    }
-    return out;
-  }
-
-  /**
-   * Helper to get t for a given face.
-   * @param {Polygon3d} face
-   * @param {Point3d} rayOrigin
-   * @param {Point3d} rayDirection
-   * @param {number} maxT=1
-   * @param {number} minT=0
-   * @param {number} direction=CULL_FACES_BACK
-   * @returns {number|null}
-   */
-  static rayIntersectionForFace(face, rayOrigin, rayDirection, maxT = 1, minT = 0, direction = this.CULL_FACES_BACK) {
-    if ( (direction * face.plane.whichSide(rayOrigin)) < 0 ) return null;
-    const t = face.intersectionT(rayOrigin, rayDirection);
-    if ( t !== null && t >= minT && t <= maxT ) return t;
-    return null;
-  }
-
-
 
   // ----- NOTE: Debug ----- //
 
@@ -565,10 +603,11 @@ export class GeometricPrimitive {
     for ( const face of this.faces ) face.draw2d(opts);
   }
 
-  drawTransformed(M, opts, invTransposeM) {
+  drawTransformed(M, opts, invTransposeM, mirrors) {
     invTransposeM ??= M.invert().transpose();
+    mirrors ??= Polygon3d.isMirroringTransform(M);
     for ( const face of this.faces ) {
-      face.transform(M, undefined, invTransposeM).draw2d(opts);
+      face.transform(M, invTransposeM, mirrors).draw2d(opts);
     }
   }
 
@@ -581,36 +620,34 @@ export class GeometricPrimitive {
 
   /**
    * Validate aspects of this shape, to be defined by child class.
-   * At a minimum, calls validateFacesOutward
+   * The parent tests faces for consistent
    * @returns {boolean} True if valid (tests pass).
    */
   validate() {
-    return this.prototypeFacesOutward() && this.facesOutward();
+    // Outward for solids, inward for holes.
+    const worldDir = this.isHole ? -1 : 1;
+    const protoDir = (this.isHole !== this.reversed) ? -1 : 1;
+    return this._hasConsistentFaceDirection(this.prototypeFaces) === protoDir
+      && this._hasConsistentFaceDirection(this.faces) === worldDir;
   }
 
   /**
-   * Test whether all faces of this shape's prototype face outward as expected.
+   * Test whether all provided faces face a consistent direction: all inward or all outward.
    * Outward means from an outside viewer, the face is counter-clockwise.
-   * @returns {boolean} True if all faces point outward.
+   * @returns {1|-1|0} 1 if all face outward; -1 if all face inward; 0 if mixed.
    */
-  prototypeFacesOutward() { return this._testFacesOutward(this.prototypeFaces); }
+  _hasConsistentFaceDirection(faces) {
+    if ( !faces || faces.length < 3 ) return 0;
 
-  /**
-   * Test whether all faces of this shape face outward as expected.
-   * Outward means from an outside viewer, the face is counter-clockwise.
-   * @returns {boolean} True if all faces point outward.
-   */
-  facesOutward() { return this._testFacesOutward(this.faces); }
-
-  _testFacesOutward(faces) {
-    if ( !faces || faces.length < 3 ) return false;
-
-    // Test each face against the centroid.
+    // Default to simple version: Test each face against the centroid.
     const centroid = this.constructor.calculateCentroid(faces);
-    for ( const face of faces ) {
-      if ( face.isFacing(centroid) ) return false;
+    const iter = faces.values();
+    const firstFace = iter.next().value;
+    const dir = -Math.sign(firstFace.plane.whichSide(centroid));
+    for ( const face of iter ) {
+      if ( -Math.sign(face.plane.whichSide(centroid)) !== dir ) return 0;
     }
-    return true;
+    return dir;
   }
 
   /**
@@ -624,6 +661,7 @@ export class GeometricPrimitive {
   static testFaceOrientation(face, faces) {
     const rayOrigin = face.interiorPoint();
     const otherFaces = faces.filter(f => f !== face);
+    const MAX_ATTEMPTS = 10;
 
     /*
     Start with the face's own -normal (guarantees the ray starts by heading into
@@ -639,32 +677,22 @@ export class GeometricPrimitive {
     Detect that degeneracy and nudge the ray direction until no other face's
     plane is (nearly) parallel to it.
     */
-    using baseDirection = face.plane.normal.multiplyScalar(-1);
-    using rayDirection = baseDirection.clone();
 
-    let attempts = 0;
-    const MAX_ATTEMPTS = 10;
-    for (; attempts < MAX_ATTEMPTS; attempts += 1 ) {
-      if ( !rayIsDegenerate(rayDirection, otherFaces) ) break;
-      using newDirection = perturbDirection(baseDirection);
-      rayDirection.copyFrom(newDirection);
-    }
+    const netAlong = baseDirection => {
+       using rayDirection = baseDirection.clone();
+       for ( let attempts = 0; attempts < MAX_ATTEMPTS && rayIsDegenerate(rayDirection, otherFaces); attempts += 1 ) {
+         using nudged = perturbDirection(baseDirection);
+         rayDirection.copyFrom(nudged);
+       }
+       const crossings = [];
+       for ( const other of otherFaces ) this.faceCrossings(other, rayOrigin, rayDirection, crossings);
+       return this.clusterCrossings(crossings.filter(c => c.t > 1e-06)).reduce((sum, c) => sum + c.ds, 0);
+    };
 
-    if ( attempts >= MAX_ATTEMPTS ) {
-      console.warn(`GeometricPrimitive.testFaceOrientation|No non-degenerate ray direction found after ${MAX_ATTEMPTS} attempts; `
-        + "proceeding with a possibly-degenerate ray.", { face, faces });
-    }
-
-    const tIntersections = new Set();
-    for ( const otherFace of otherFaces ) {
-      // Round so we can ignore multiple intersections at a single point, like with edge endpoints.
-      // Note that for prototype faces, t might be quite small.
-      const t = otherFace.intersectionT(rayOrigin, rayDirection, { holesBlock: false });
-      if ( !t || t.almostLessThan(0) ) continue;
-      const roundedT = roundDecimals(t, 6);
-      tIntersections.add(roundedT);
-    }
-    return isOdd(tIntersections.size);
+    using into = face.plane.normal.multiplyScalar(-1);
+    if ( netAlong(into) === -1 ) return 1;                // Heads into material, leaves once.
+    if ( netAlong(face.plane.normal) === 1 ) return -1;   // Heads into a void, leaves once.
+    return 0;
   }
 
   // ----- NOTE: Vertices ----- //
@@ -693,7 +721,10 @@ export class GeometricPrimitive {
    * Default approach uses the prototype faces.
    */
   _generateInstanceVertices(vo) {
-    return this.constructor.generateVerticesForFaces(this.prototypeFaces, vo);
+    const reversed = this.reversed !== Polygon3d.isMirroringTransform(this.worldMatrix);
+    const protoFaces = reversed
+      ? this.prototypeFaces.map(face => face.clone().reverseOrientation()) : this.prototypeFaces;
+    return this.constructor.generateVerticesForFaces(protoFaces, vo);
   }
 
   /** @type {VertexObject} */
