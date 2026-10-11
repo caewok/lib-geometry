@@ -1583,7 +1583,14 @@ export class Ellipse3d extends Polygon3d {
   // ----- NOTE: Synonyms/Aliases -----
 
   /** @type {Point3d} */
-  get centroid() { return this.center; }
+  _calculateAreaWeightedCentroid() { return this.center; }
+
+  get centroid() { return super.centroid; }
+
+  set centroid(_value) {
+    super.centroid(value);
+    this.points[0].copyFrom(value);
+  }
 
   /** @type {number} */
   get halfWidth() { return this.radiusX }
@@ -3607,7 +3614,7 @@ export class Polygons3d extends Polygon3d {
   static buildIslands(polygons, holeIndices = NULL_SET) {
     // Group rings by their immediate parent shape.
     const parent = this._buildRingParents(polygons);
-    const children = new Array(polygons.length).fill([]);
+    const children = Array.from({ length: polygons.length }, () => []); // Create new array for each.
     parent.forEach((p, i) => {
       if ( p !== null ) children[p].push(i);
     });
