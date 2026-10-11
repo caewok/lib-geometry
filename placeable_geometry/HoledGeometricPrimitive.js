@@ -45,15 +45,71 @@ export class HoledPrimitive extends CombinedGeometricPrimitive {
    */
   constructor(id, solid, holes = []) {
     super(id);
-    this.solid = solid;
-    this.addChild(solid);
+    if ( solid ) this.addChild(solid);
     holes.forEach(hole => this.addHole(hole));
   }
 
-  destroy() {
+  destroy(children = true) {
     this.#caps = null;
     this.holes.length = 0;
-    super.destroy();
+    super.destroy(children);
+  }
+
+  // ----- NOTE: Children ----- //
+
+  /**
+   * Ensure consistency between children and the solids/holes.
+   * It is assumed the child will be marked as hole if it is a hole.
+   * May result in a stranded solid if not handled by user.
+   * @param {GeometricPrimitive} child
+   * @returns {boolean} True if added
+   */
+  addChild(child) {
+    if ( !super.addChild(child) ) return false;
+    if ( child.isHole ) this.holes.push(child);
+    else {
+      if ( this.solid ) this.removeChild(this.solid);
+      this.solid = child;
+    }
+    return true;
+  }
+
+  /**
+   * Ensure consistency between children and the solids/holes.
+   * It is assumed the child will be marked as hole if it is a hole.
+   * May result in a stranded solid if not destroyed or captured by the user.
+   * @param {GeometricPrimitive} child
+   * @returns {boolean} True if added
+   */
+  removeChild(child) {
+    if ( !super.removeChild(child) ) return false;
+    if ( child.isHole ) {
+      const i = this.holes.indexOf(hole);
+      if ( ~i ) this.holes.splice(i, 1);
+    } else this.solid = null;
+    return true;
+  }
+
+
+  // ----- NOTE: Single solid ----- //
+
+  /**
+   * Replace the solid for this region.
+   * May result in a stranded solid if not destroyed or captured by the user.
+   * @param {HolePrimitive} solid
+   * @returns {Boolean} True if replacement was needed.
+   */
+  replaceSolid(solid) {
+    if ( this.solid === solid ) return false;
+
+    // Remove the old solid
+    if ( this.solid && !this.removeChild(this.solid) ) return false;
+    this.solid = null;
+
+    // Add the new solid.
+    if ( solid.isHole ) solid.reverseOrientation();
+    this.addChild(solid);
+    return true;
   }
 
   // ----- NOTE: Holes ----- //
@@ -62,11 +118,10 @@ export class HoledPrimitive extends CombinedGeometricPrimitive {
    * Add a hole to this shape.
    * A hole's walls (normals) should face toward its center.
    * @param {HolePrimitive} hole
-   * @returns {HolePrimitive}
+   * @returns {HolePrimitive|undefined}
    */
   addHole(hole) {
     if ( !hole.isHole ) hole.reverseOrientation();
-    this.holes.push(hole);
     return this.addChild(hole);
   }
 
@@ -75,12 +130,9 @@ export class HoledPrimitive extends CombinedGeometricPrimitive {
    * @param {HolePrimitive} hole
    * @returns {boolean} True if the hole was in this shape.
    */
-  removeHole(hole) {
-    const i = this.holes.indexOf(hole);
-    if ( !~i ) return false;
-    this.holes.splice(i, 1);
-    return this.removeChild(hole);
-  }
+  removeHole(hole) { return this.removeChild(hole); }
+
+  // ----- NOTE: Elevation ----- //
 
    /**
    * Set the elevation range of the solid and all holes together, so they cannot drift apart.
@@ -144,7 +196,7 @@ export class HoledPrimitive extends CombinedGeometricPrimitive {
     const bottomFaces = this._buildBottomFaces();
 
     // Treat the faces as prototypes, using an identity matrix.
-    return ExtrudedPolygonPrimitiveWithHoles.create(`${this.id}_caps`, [...bottomFaces, ...topFaces]);
+    return new ExtrudedPolygonPrimitiveWithHoles(`${this.id}_caps`, [...bottomFaces, ...topFaces]);
   }
 
   /**
