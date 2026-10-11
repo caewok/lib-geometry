@@ -88,7 +88,6 @@ export class ConePrimitive extends ExtrudedPolygonPrimitive {
     const out = this.fromPrototypePolygon(id, conePoly, { density });
     out.curvature = curvature;
     out.angle = angle;
-    out.initialize();
     return out;
   }
 

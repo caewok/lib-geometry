@@ -26,10 +26,7 @@ export class RingPrimitive extends HoledPrimitive {
     const solid = new CircularCylinderPrimitive(`${id}_solid`);
     const hole = new CircularCylinderPrimitive(`${id}_hole`);
     hole.reverseOrientation();
-    solid.initialize();
-    hole.initialize();
     const out = new this(id, solid, [hole]);
-    out.initialize();
     return out;
   }
 

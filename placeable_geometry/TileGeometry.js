@@ -202,7 +202,6 @@ export class TileSubGeometry extends mix(PlaceableGeometry).with(TileDocumentCal
     this.shapes[0] = new TexturedQuadPrimitive(this.placeableId);
     this.shapes[0].direction = TexturedQuadPrimitive.CULL_FACES.DOUBLE; // Tiles block on both sides.
     this.shapes[0].textureURL = this.constructor.textureSource(this.placeableDocument);
-    this.shapes[0].initialize();
   }
 
   // ----- NOTE: Update ----- //
@@ -312,7 +311,6 @@ export class TileBoundingRectGeometry extends TileSubGeometry {
     this.shapes.forEach(shape => shape.destroy());
     this.shapes.length = 0;
     const shape = new QuadPrimitive(this.placeableId);
-    shape.initialize();
     this.shapes.push(shape);
   }
 
@@ -394,7 +392,6 @@ export class TileBoundingPolygonGeometry extends TileSubGeometry {
       angles: this.constructor.tileRotation(this.placeableDocument),
     };
     const shape = PlanarPolygonPrimitive.fromPolygon3d(this.placeableId, poly3d, opts)
-    shape.initialize();
     this.shapes.push(shape);
   }
 
@@ -447,7 +444,6 @@ export class TilePolygonsGeometry extends TileFullGeometry {
       angles: this.constructor.tileRotation(this.placeableDocument),
     };
     const shape = PlanarPolygonPrimitive.fromPolygon3d(`${this.placeableId}_alphaThresholdPolygons`, polys3d, opts);
-    shape.initialize();
     this.shapes.push(shape);
   }
 
@@ -511,7 +507,6 @@ export class TileTrianglesGeometry extends TileSubGeometry {
       .fromVertices(topTrimmed)
       .filter(tri => !foundry.utils.orient2dFast(tri.a, tri.b, tri.c).almostEqual(0, 1e-06));
     const shape = PlanarPolygonPrimitive.fromPolygon3d(`${this.placeableId}`, triTop);
-    shape.initialize();
     this.shapes.push(shape);
   }
 

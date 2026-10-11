@@ -12,8 +12,6 @@ import { AABB3d } from "../3d/AABB3d.js";
  */
 export class EmptyGeometricPrimitive extends GeometricPrimitive {
 
-  initialize() { }
-
   destroy() { }
 
   get dirty() { return this.constructor.DIRTY.NONE; }

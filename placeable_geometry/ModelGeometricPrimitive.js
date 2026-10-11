@@ -10,6 +10,7 @@ import { ModelMatrixAnchor } from "../ModelMatrix.js";
 import { Point3d } from "../3d/Point3d.js";
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { CutawayPolygon } from "../CutawayPolygon.js";
+import { AABB3d } from "../3d/AABB3d.js";
 
 /**
  * ModelGeometricPrimitives are one-offs.
@@ -21,7 +22,8 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
 
   constructor(id, prototypeFaces) {
     super(id);
-    this._prototypeFaces = prototypeFaces;
+    this.prototypeFaces = prototypeFaces;
+    AABB3d.union(this.prototypeFaces.map(face => face.aabb), this.prototypeAABB);
   }
 
   /**
@@ -34,11 +36,6 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
   }
 
   // ----- NOTE: Faces ----- //
-
-  /** @type {Polygon3d[]} */
-  _prototypeFaces = [];
-
-  get prototypeFaces() { return this._prototypeFaces ?? []; } // Needed for constructor, when _prototypeFaces not yet initialized but this getter is.
 
   /**
    * @param {Polygon3d[]} faces

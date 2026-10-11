@@ -157,17 +157,6 @@ export class GeometricPrimitive {
     this.id = id;
   }
 
-  initialize() {
-    this.dirty = this.constructor.DIRTY.ALL;
-    this.#calculatePrototypeAABB();
-  }
-
-  static create(...args) {
-    const out = new this(...args);
-    out.initialize();
-    return out;
-  }
-
   /**
    * @returns {number} A new, never-before-used version stamp.
    */
@@ -378,21 +367,23 @@ export class GeometricPrimitive {
   // ----- NOTE: AABB ----- //
 
   /** @type {AABB3d} */
+  prototypeAABB = new AABB3d(); // Must be calculated by child class along with prototype faces.
+
+  /** @type {AABB3d} */
   #aabb = new AABB3d();
 
-  #prototypeAABB = new AABB3d();
 
   get aabb() {
     this._syncWorld();
     if ( this.isDirty(this.constructor.DIRTY.AABB) ) this.updateAABB();
 
     if ( this.faces.length && CONFIG[GEOMETRY_LIB_ID].CONFIG.debug ) {
-      if ( Number.isNaN(this.#prototypeAABB.min.x)
-        || Number.isNaN(this.#prototypeAABB.min.y)
-        || Number.isNaN(this.#prototypeAABB.min.z)
-        || Number.isNaN(this.#prototypeAABB.max.x)
-        || Number.isNaN(this.#prototypeAABB.max.y)
-        || Number.isNaN(this.#prototypeAABB.max.z) ) console.error(`${this.constructor.name}|Prototype AABB is NaN.`);
+      if ( Number.isNaN(this.prototypeAABB.min.x)
+        || Number.isNaN(this.prototypeAABB.min.y)
+        || Number.isNaN(this.prototypeAABB.min.z)
+        || Number.isNaN(this.prototypeAABB.max.x)
+        || Number.isNaN(this.prototypeAABB.max.y)
+        || Number.isNaN(this.prototypeAABB.max.z) ) console.error(`${this.constructor.name}|Prototype AABB is NaN.`);
 
       if ( Number.isNaN(this.#aabb.min.x)
         || Number.isNaN(this.#aabb.min.y)
@@ -403,12 +394,12 @@ export class GeometricPrimitive {
 
        ) console.error(`${this.constructor.name}|AABB is NaN.`);
 
-      if ( !(Number.isFinite(this.#prototypeAABB.min.x)
-          && Number.isFinite(this.#prototypeAABB.min.y)
-          && Number.isFinite(this.#prototypeAABB.min.z)
-          && Number.isFinite(this.#prototypeAABB.max.x)
-          && Number.isFinite(this.#prototypeAABB.max.y)
-          && Number.isFinite(this.#prototypeAABB.max.z)) ) console.warn(`${this.constructor.name}|Prototype AABB is not finite.`);
+      if ( !(Number.isFinite(this.prototypeAABB.min.x)
+          && Number.isFinite(this.prototypeAABB.min.y)
+          && Number.isFinite(this.prototypeAABB.min.z)
+          && Number.isFinite(this.prototypeAABB.max.x)
+          && Number.isFinite(this.prototypeAABB.max.y)
+          && Number.isFinite(this.prototypeAABB.max.z)) ) console.warn(`${this.constructor.name}|Prototype AABB is not finite.`);
 
       if ( !(Number.isFinite(this.#aabb.min.x)
           && Number.isFinite(this.#aabb.min.y)
@@ -430,17 +421,8 @@ export class GeometricPrimitive {
     this._clearDirty(this.constructor.DIRTY.AABB);
   }
 
-  /**
-   * Define the prototype aabb based on prototype.
-   * @param {AABB3d} aabb       The prototype AABB object to modify
-   */
-  #calculatePrototypeAABB() {
-    const aabb = this.#prototypeAABB;
-    AABB3d.union(this.prototypeFaces.map(face => face.aabb), aabb);
-  }
-
   _calculateAABB(aabb) {
-    this.#prototypeAABB.transform(this.worldMatrix, aabb);
+    this.prototypeAABB.transform(this.worldMatrix, aabb);
   }
 
   /**
@@ -456,14 +438,15 @@ export class GeometricPrimitive {
   // Prototype faces should be set at initialization and not otherwise be dirty.
 
   /** @type {Polygon3d[]} */
-  get prototypeFaces() { return []; }
+  prototypeFaces = [];
 
   #faces = [];
 
   /** @type {Polygon3d[]} */
   get faces() {
     this._syncWorld();
-    if ( this.isDirty(this.constructor.DIRTY.FACES) ) this.updateFaces();
+    if ( this.isDirty(this.constructor.DIRTY.FACES)
+      || (!this.#faces.length && this.prototypeFaces.length) ) this.updateFaces();
     return this.#faces;
   }
 
@@ -482,7 +465,7 @@ export class GeometricPrimitive {
 
   /**
    * Update the faces for this primitive.
-   * Default is to use the model matrix.
+   * Default is to use the world matrix.
    */
   _generateFaces(faces) {
     // Release old face points before destroying them.
@@ -490,7 +473,10 @@ export class GeometricPrimitive {
     const protoFaces = this.prototypeFaces;
     const numSides = faces.length = protoFaces.length;
 
-    // Transform the prototype faces by the model matrix.
+    // Guard: If prototype faces not yet ready, do not clear the dirty flag.
+    if ( !numSides ) return;
+
+    // Transform the prototype faces by the world matrix.
     // Pre-calculate the inverse transpose to use with transforming the normal.
     const M = this.worldMatrix;
     const invTransposeM = M.invert().transpose();

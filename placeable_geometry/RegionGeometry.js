@@ -182,7 +182,6 @@ export class RegionGeometry extends PlaceableGeometry {
     // Track whether base shapes must be recreated by storing a signature linked to each.
     // (Cannot use the region shape as a key because it changes when any shape in the region is updated.)
     this.baseShapes.forEach((baseShape, idx) => this.structuralSignatureMap.set(baseShape, this._getStructuralSignature(regionShapes[idx])));
-    this.shapes.forEach(shape => shape.initialize());
   }
 
   /**
@@ -198,7 +197,7 @@ export class RegionGeometry extends PlaceableGeometry {
     // Each base shape corresponds to a region shape.
     const n = regionShapes.length;
     baseShapes.length = n;
-    for ( let i = 0; i < n; i += 1 ) baseShapes[i] = this._createBaseShape(i);
+    for ( let i = 0; i < n; i += 1 ) this._createBaseShape(i);
   }
 
   _createBaseShape(i) {
@@ -209,7 +208,9 @@ export class RegionGeometry extends PlaceableGeometry {
       || this.constructor.shapeIsWallRestricted(regionShape, regionD))
       ? "_instantiateRestrictedBaseShape" : "_instantiateBasicBaseShape";
     const out = this[baseMethod](id, regionShape);
-    out.initialize();
+    if ( regionShape.hole ) out.reverseOrientation();
+    this.baseShapes[i] = out;
+    this._updateShapeDimensions(i);
     return out;
   }
 
@@ -221,8 +222,11 @@ export class RegionGeometry extends PlaceableGeometry {
     const baseShapes = this.baseShapes;
     const shapes = this.shapes;
 
-    // Clear the old shapes.
-    shapes.forEach(subshape => subshape?.destroy());
+    // Clear the old shapes, keeping HolePrimitives. Don't destroy shapes b/c either a reused base shape or a HolePrimitive.
+    const oldShapes = new Set();
+    for ( const shape of shapes ) {
+      if ( shape instanceof HoledPrimitive ) oldShapes.add(shape);
+    }
     shapes.length = 0;
 
     // If no holes, we can just use the base shapes as the final primitive shapes.
@@ -235,7 +239,7 @@ export class RegionGeometry extends PlaceableGeometry {
     }
 
     // Now figure out which region shape holes correspond to which solid islands to build the actual shapes.
-    // Get the 2d shape for each base shape.
+    // Get the 2d shape for each base shape. Need the model shape.
     const polys2d = baseShapes.map(shape => shape.toPIXIShape());
     const holeIndices = new Set(regionShapes.map((shape, idx) => shape.hole ? idx : -1));
     // holeIndices.delete(-1); // Can skip this because buildIslands will ignore it.
@@ -247,12 +251,21 @@ export class RegionGeometry extends PlaceableGeometry {
       let shape;
       const solid = baseShapes[island.solidIndex];
       if ( island.holeIndices.length ) {
+        for ( shape of oldShapes ) {
+          if ( shape.solid === solid ) { oldShapes.delete(shape); break; }
+        }
         const id = `${this._shapeId(island.solidIndex)}_island}`;
+
+        // For either the new or existing primitive, update the solid and holes.
+        shape ??= new HoledPrimitive(id)
+        shape.replaceSolid(solid);
         const holes = island.holeIndices.map(idx => baseShapes[idx]);
-        shape = new HoledPrimitive(id, solid, holes);
+        holes.forEach(hole => shape.addHole(hole))
+
       } else shape = solid;
       shapes.push(shape)
     }
+    oldShapes.forEach(oldShape => oldShape.destroy(false));
   }
 
   /**
@@ -358,9 +371,14 @@ export class RegionGeometry extends PlaceableGeometry {
       || this.activeUpdates.has("shapeConstraints") ) {
 
       const { deleted, added } = this._updateBaseShapes();
-      this._updateTransforms();
 
-      // TODO: Is the best approach here to just rebuild the actual shapes?
+      // For deleted shapes, remove from any parent and destroy.
+      for ( const deletedShape of deleted ) {
+        if ( !deletedShape.parent ) continue;
+        deletedShape.parent.removeChild(deletedShape);
+        deletedShape.destroy();
+      }
+      this._updateTransforms();
       if ( deleted.size || added.size ) this._createShapesFromBaseShapes();
 
     } else if ( this.activeUpdates.has("elevation") ) this._updateTransforms();
@@ -382,7 +400,6 @@ export class RegionGeometry extends PlaceableGeometry {
 
     // For each shape, a mis-matched signature indicates either the shape was changed or
     // one before it was deleted. Reuse shapes where possible.
-    const deleted = new Set();
     const added = new Set();
     const oldShapes = new Set(baseShapes);
     for ( let i = 0; i < numRegionShapes; i += 1 ) {
@@ -402,86 +419,20 @@ export class RegionGeometry extends PlaceableGeometry {
       if ( reusedShape ) {
         reusedShape.id = this._shapeId(i); // Relabel to track the new shape index.
         baseShapes[i] = reusedShape;
-      } else added.add(baseShapes[i] = this._createBaseShape(i));
+      } else added.add(this._createBaseShape(i));
     }
-    return { deleted, added };
+    return { deleted: oldShapes, added };
   }
 
   _updateTransforms() {
-    this.baseShapes.forEach((_shape, i) => this._updateShapeDimensions(i));
+    this.baseShapes.forEach((shape, i) => {
+      if ( this.regionShapes[i].hole !== shape.isHole ) shape.reverseOrientation();
+      this._updateShapeDimensions(i)
+    });
   }
 
   /** @type {Map<GeometricPrimitive, string>} */
   structuralSignatureMap = new WeakMap();
-
-  /**
-   * Remove shapes when region shapes have been removed.
-   */
-  _updateShapes() {
-    console.debug(`RegionGeometry|_updateShapes ${this.placeableDocument.name} (${this.placeableId})`);
-
-    const { shapes, regionShapes } = this;
-    const numRegionShapes = regionShapes.length;
-
-    // Determine the shape/hole grouping.
-    const groupedHoles = this._groupHoles();
-
-    // For each shape, a mis-matched class indicates either the shape was changed
-    // or a shape prior to it was deleted. Reuse shapes where possible, creating new as needed and
-    // deleting shapes as necessary.
-    // Create a pool of existing shapes available for reuse, and reset this.shapes.
-    const oldShapes = new Set(shapes);
-    shapes.length = numRegionShapes;
-    shapes.fill(null);
-
-    for ( let i = 0; i < numRegionShapes; i += 1 ) {
-      // If the shape is just a hole, no primary shape to create or update.
-      const holeGroup = groupedHoles[i];
-      if ( !holeGroup ) {
-        console.debug(`RegionGeometry|_updateShapes ${this.placeableDocument.name} (${this.placeableId})|Using empty (hole) for ${i}`);
-        shapes[i] = this._buildRegionShape(i);
-        continue;
-      };
-
-      // Check if the current shape is already correct.
-      const regionShape = regionShapes[i];
-      const newSignature = this._getStructuralSignature(regionShape, holeGroup);
-
-      // Check pool for a matching structural signature.
-      let reusedShape = null;
-      for ( const potentialMatch of oldShapes ) {
-        const oldSignature = this.structuralSignatureMap.get(potentialMatch);
-        if ( !oldSignature ) { // Should not happen.
-          console.warn(`RegionGeometry#_updateShapes|No old signature for ${potentialMatch.id}`, { newSignature, potentialMatch });
-          continue;
-        };
-        if ( newSignature === oldSignature ) {
-          reusedShape = potentialMatch;
-          oldShapes.delete(potentialMatch);
-          break;
-        }
-      }
-
-      // Reuse or rebuild.
-      if ( reusedShape ) {
-        console.debug(`RegionGeometry|_updateShapes ${this.placeableDocument.name} (${this.placeableId})|Reusing shape for ${i}`);
-        shapes[i] = reusedShape;
-        shapes[i].id = this._shapeId(i); // Relabel to track the new shape index.
-      } else {
-        console.debug(`RegionGeometry|_updateShapes ${this.placeableDocument.name} (${this.placeableId})|Rebuilding shape for ${i}`);
-        shapes[i] = this._buildRegionShape(i, holeGroup);
-      }
-
-      // Apply dimensional updates to the shape.
-      this._updateShapeDimensions(i);
-    }
-
-    // Clean up any remaining unused shapes from the pool.
-    oldShapes.forEach(shape => shape.destroy());
-
-    // Should not be any nulls in the shape array.
-    if ( this.shapes.some(shape => !shape) ) console.error(`RegionGeometry#_updateShapes|Some shapes in region ${this.placeableDocument.name} (${this.placeableDocument.id}) are null.`);
-  }
 
   /**
    * Update a specific shape.

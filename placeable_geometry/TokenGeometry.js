@@ -406,7 +406,6 @@ export class TokenSubGeometry extends mix(PlaceableGeometry).with(TokenDocumentC
         center: this.constructor.tokenCenter(this.placeableDocument),
       });
     } else shape = new primitiveCl(this.placeableId);
-    shape.initialize();
     this.shapes.push(shape);
   }
 

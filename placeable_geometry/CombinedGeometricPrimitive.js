@@ -37,21 +37,18 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
   static combine(id, children = []) {
     const out = new this(id);
     children.forEach(c => out.addChild(c));
-    out.initialize();
     return out;
   }
 
   // ----- NOTE: Lifecycle ----- //
 
-  initialize() { this.dirty = this.constructor.DIRTY.ALL; }
-
   /**
    * Destroy this geometric primitive and the children.
    */
-  destroy() {
+  destroy(children = true) {
     for ( const child of this.children ) {
       child.parent = null;
-      child.destroy();
+      if ( children ) child.destroy();
     }
     this.children.length = 0;
     this.#faces.length = 0; // Faces belong to the children; do not release again in super.destroy.
@@ -63,14 +60,16 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
   /**
    * Add a child. Its model matrix is interpreted in this container's frame.
    * @param {GeometricPrimitive} child
-   * @returns {GeometricPrimitive} Same child.
+   * @returns {boolean} True if added
    */
   addChild(child) {
+    if ( this.children.includes(child) ) return false;
     child.parent?.removeChild(child);
     child.parent = this;
     this.children.push(child);
     child._markTransformChanged(); // The child's world matrix changed; this also notifies this container.
-    return child;
+    this.childChanged(child);
+    return true;
   }
 
   /**
@@ -115,6 +114,8 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
    * @type {POlygon3d[]}
    */
   get prototypeFaces() { return this.children.flatMap(child => child.prototypeFaces); }
+
+  get prototypeAABB() { return AABB3d.union(this.prototypeFaces.map(face => face.aabb)); }
 
   /**
    * A container has no single instance VO.

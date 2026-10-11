@@ -16,6 +16,7 @@ import { Sphere } from "../3d/Sphere.js";
 import { HorizontalQuadVertices } from "../placeable_vertices/BasicVertices.js";
 import { CutawayPolygon } from "../CutawayPolygon.js";
 import { VertexObject } from "../placeable_vertices/VertexObject.js";
+import { AABB3d } from "../3d/AABB3d.js";
 
 /** @type {Matrix<4,4>} */
 const IDENTITY_MATRIX = MatrixFloat32.identity(4, 4);
@@ -64,12 +65,17 @@ const QUADS = {
 
 export class InstancedGeometricPrimitive extends GeometricPrimitive {
 
+  constructor(id) {
+    super(id);
+    delete this.prototypeFaces;
+    delete this.prototypeAABB;
+  }
+
   // ----- NOTE: FACES ----- //
 
-  /** @type {Polygon3d} */
-  static prototypeFaces = [] // Defined by child class.
-
   get prototypeFaces() { return this.constructor.prototypeFaces; }
+
+  get prototypeAABB() { return this.constructor.prototypeAABB; }
 
   // ----- NOTE: Vertices ----- //
 
@@ -114,6 +120,8 @@ export class QuadPrimitive extends InstancedGeometricPrimitive {
 
   /** @type {Polygon3d} */
   static prototypeFaces = [QUADS.up.clone()];
+
+  static prototypeAABB = AABB3d.fromPolygon3d(QUADS.up);
 
   static _instanceVO;
 
@@ -166,6 +174,8 @@ export class VerticalQuadPrimitive extends QuadPrimitive {
   static prototypeFaces = [QUADS.north.clone()];
 
   static _instanceVO;
+
+  static prototypeAABB = AABB3d.fromPolygon3d(QUADS.north);
 
   setDims({ lengthXY, zHeight } = {}) {
     // For the horizontal quad (before rotation), length is the x-axis, height is z-axis.
@@ -434,6 +444,8 @@ export class CubePrimitive extends ExtrudedInstancePrimitive {
   /** @type {Faces} */
   static prototypeFaces = this.createUnitCube();
 
+  static prototypeAABB = AABB3d.union(this.prototypeFaces.map(face => face.aabb));
+
   static _instanceVO;
 
   // Internal points follow the AABB.
@@ -483,6 +495,10 @@ export class HexagonCylinderPrimitive extends ExtrudedInstancePrimitive {
 
   static get prototypeFaces() { return (this.#prototypeFaces ??= this.createUnitHexagonCylinder()); }
 
+  static #prototypeAABB;
+
+  static get prototypeAABB() { return this.#prototypeAABB ??= AABB3d.union(this.prototypeFaces.map(face => face.aabb)); }
+
   static _instanceVO;
 
   /**
@@ -527,6 +543,14 @@ export class CylinderPrimitive extends ExtrudedInstancePrimitive {
     if ( !(Object.hasOwn(this, "_prototypeFaces")
       && this._prototypeFaces) ) this._prototypeFaces = this.createUnitCylinder(canvas.scene.dimensions.maxR / 10);
     return this._prototypeFaces;
+  }
+
+  static _prototypeAABB;
+
+  static get prototypeAABB() {
+     if ( !(Object.hasOwn(this, "_prototypeAABB")
+       && this._prototypeAABB) ) this._prototypeAABB ??= AABB3d.union(this._prototypeFaces.map(face => face.aabb));
+    return this._prototypeAABB;
   }
 
   static _instanceVO;
@@ -584,6 +608,8 @@ export class CircularCylinderPrimitive extends CylinderPrimitive {
 export class SpherePrimitive extends InstancedGeometricPrimitive {
 
   static prototypeFaces = [new Sphere({ x: 0, y: 0 }, 0.5)];
+
+  static prototypeAABB = AABB3d.fromSphere(this.prototypeFaces[0]);
 
   static _instanceVO;
 
