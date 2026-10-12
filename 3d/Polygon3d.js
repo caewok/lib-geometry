@@ -1587,8 +1587,8 @@ export class Ellipse3d extends Polygon3d {
 
   get centroid() { return super.centroid; }
 
-  set centroid(_value) {
-    super.centroid(value);
+  set centroid(value) {
+    super.centroid = value;
     this.points[0].copyFrom(value);
   }
 
