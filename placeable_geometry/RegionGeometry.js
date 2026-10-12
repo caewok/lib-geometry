@@ -10,7 +10,7 @@ PIXI,
 import { PlaceableGeometry } from "./PlaceableGeometry.js";
 import { CubePrimitive, CylinderPrimitive, CircularCylinderPrimitive } from "./InstancedGeometricPrimitive.js";
 import { ConePrimitive } from "./ConeGeometricPrimitive.js";
-import { ExtrudedPolygonPrimitive } from "./ModelGeometricPrimitive.js";
+import { ExtrudedPolygonPrimitive, ExtrudedPolygonPrimitiveWithHoles } from "./ModelGeometricPrimitive.js";
 import { HoledPrimitive } from "./HoledGeometricPrimitive.js";
 import { RingPrimitive } from "./RingGeometricPrimitive.js";
 import { CombinedGeometricPrimitive } from "./CombinedGeometricPrimitive.js";
@@ -231,25 +231,29 @@ export class RegionGeometry extends PlaceableGeometry {
 
     // If no holes, we can just use the base shapes as the final primitive shapes.
     const hasHoles = regionShapes.some(shape => shape.hole);
+    const numBaseShapes = this.baseShapes.length;
     if ( !hasHoles ) {
-      const n = this.baseShapes.length;
-      shapes.length = n;
-      for ( let i = 0; i < n; i += 1 ) shapes[i] = baseShapes[i];
+      shapes.length = numBaseShapes;
+      for ( let i = 0; i < numBaseShapes; i += 1 ) shapes[i] = baseShapes[i];
+      oldShapes.forEach(oldShape => oldShape.destroy(false));
       return;
     }
 
+    // For each solid shape, combine with any overlapping holes.
+    // (Contained holes are handled using islands, below.)
+    const { pixiShapes, combinedBaseShapes } = this.#processOverlappingHoles();
+
     // Now figure out which region shape holes correspond to which solid islands to build the actual shapes.
     // Get the 2d shape for each base shape. Need the model shape.
-    const polys2d = baseShapes.map(shape => shape.toPIXIShape());
-    const holeIndices = new Set(regionShapes.map((shape, idx) => shape.hole ? idx : -1));
+    const holeIndices = new Set(combinedBaseShapes.map((shape, idx) => shape.isHole ? idx : -1));
     // holeIndices.delete(-1); // Can skip this because buildIslands will ignore it.
-    const islands = Polygons3d.buildIslands(polys2d, holeIndices);
+    const islands = Polygons3d.buildIslands(pixiShapes, holeIndices);
 
     // Actual shapes use HoledPrimitive to combine with holes, linking to the base geometric shapes.
     // Build a shape for each islandÑeither the primitive or a combined.
     for ( const island of islands ) {
       let shape;
-      const solid = baseShapes[island.solidIndex];
+      const solid = combinedBaseShapes[island.solidIndex];
       if ( island.holeIndices.length ) {
         for ( shape of oldShapes ) {
           if ( shape.solid === solid ) { oldShapes.delete(shape); break; }
@@ -266,6 +270,71 @@ export class RegionGeometry extends PlaceableGeometry {
       shapes.push(shape)
     }
     oldShapes.forEach(oldShape => oldShape.destroy(false));
+  }
+
+  /**
+   * For each solid shape, determine if one or more holes overlap but are not contained by it.
+   * Combine these using Clipper to form 1+ solid polygons.
+   * Track index to reuse base shapes where possible.
+   * Contained holes handled separately, using islands.
+   * @returns {object}
+   *   - @prop {(PIXI.Polygon|PIXI.Ellipse|PIXI.Circle|PIXI.Circle)[]} pixiShapes       2d polygons: 1 for each base shape + any extra solids or holes
+   *   - @prop {GeometricPrimitive[]} combinedBaseShapes                                Either original base shapes or newly combined extruded polygons
+   */
+  #processOverlappingHoles() {
+    const baseShapes = this.baseShapes;
+    const numBaseShapes = this.baseShapes.length;
+    const pixiShapes = baseShapes.map(shape => shape.toPIXIShape());
+    const overlappingHoleIndices = Array.from({ length: 5 }, () => []);
+    for ( let i = 0; i < numBaseShapes; i += 1 ) {
+      if ( baseShapes[i].isHole ) continue;
+      const solid = pixiShapes[i];
+      for ( let j = 0; j < numBaseShapes; j += 1 ) {
+        if ( !baseShapes[j].isHole ) continue;
+        const hole = pixiShapes[j];
+        if ( solid.overlaps(hole) && !solid.envelops(hole) ) overlappingHoleIndices[i].push(j);
+      }
+    }
+
+    // For each solid with overlapping holes, create new solids and holes.
+    const combinedBaseShapes = [];
+    const polys2d = pixiShapes.map(shape2d => shape2d.toPolygon());
+    for ( let i = 0; i < numBaseShapes; i += 1 ) {
+      // Non-polygon PIXI shapes do not have isPositive/hole property, so add after conversion to 2d polygon.
+      if ( polys2d[i].isPositive ^ !baseShapes[i].isHole ) polys2d[i].reverseOrientation();
+    }
+
+    for ( let i = 0; i < numBaseShapes; i += 1 ) {
+      combinedBaseShapes[i] = baseShapes[i];
+      const holeIndices = overlappingHoleIndices[i];
+      if ( !holeIndices.length ) continue;
+
+      // Combine the solid with its holes.
+      const solid = polys2d[i];
+      const combinedPolys = this.#subtractHoles([solid.toPolygon()], holeIndices.map(idx => polys2d[idx]));
+
+      // Sort by solid, then area. The largest solid is the primary for this shape.
+      combinedPolys.sort((a, b) => (a.isPositive - b.isPositive) || (a.area - b.area));
+      pixiShapes[i] = combinedPolys[0];
+      pixiShapes.push(...combinedPolys.slice(1));
+      let solids = [];
+      let holes = [];
+      combinedPolys.forEach(poly => poly.isPositive ? solids.push(poly) : holes.push(poly));
+      const hasHoles = holes.length;
+
+      // The first solid (island) replaces the base shape at that index.
+      if ( solids.length ) combinedBaseShapes[i] = hasHoles
+          ? ExtrudedPolygonPrimitiveWithHoles.fromPolygon(`${baseShapes[i].id}_combined_holes`, solids[0], holes)
+            : ExtrudedPolygonPrimitive.fromPolygon(`${baseShapes[i].id}_combined`, solids[0]);
+
+      // Additional solids (islands) are added at the end.
+      for ( let j = 1, n = solids.length; j < n; i += 1 ) {
+        combinedBaseShapes.push(hasHoles
+          ? ExtrudedPolygonPrimitiveWithHoles.fromPolygon(`${baseShapes[i].id}_combined_holes`, solids[j], holes)
+            : ExtrudedPolygonPrimitive.fromPolygon(`${baseShapes[i].id}_combined`, solids[j]));
+      }
+    }
+    return { pixiShapes, combinedBaseShapes };
   }
 
   /**
@@ -361,6 +430,24 @@ export class RegionGeometry extends PlaceableGeometry {
     return polyPaths.clean().toPolygons();
   }
 
+  /**
+   * Subtract hole polygons from solid polygons using Clipper.
+   * @param {PIXI.Polygon|PIXI.Circle|PIXI.Ellipse[]} solids
+   * @param {PIXI.Polygon|PIXI.Circle|PIXI.Ellipse[]} holes
+   * @returns {PIXI.Polygon[]} Object containing solid and hole polygons.
+   */
+  #subtractHoles(solids, holes) {
+    // Only required if a solid overlaps but does not envelop a hole.
+    // Calculate boolean difference (solid - hole).
+    const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
+    const solidPaths = ClipperPaths.fromPolygons(solids);
+    const holePaths = ClipperPaths.fromPolygons(holes);
+    return holePaths
+      .diffPaths(solidPaths)
+      .clean()
+      .toPolygons();
+  }
+
   // ----- NOTE: Shape Updating -----
 
   _update() {
@@ -447,6 +534,8 @@ export class RegionGeometry extends PlaceableGeometry {
 
     const regionShape = this.regionShapes[shapeIdx];
     let opts = this._shapeDimensions(regionShape);
+
+    if ( shape.isHole ^ regionShape.hole ) shape.reverseOrientation();
 
     if ( regionShape.type === "ring" ) {
       const regionD = this.placeableDocument;
