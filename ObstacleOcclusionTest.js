@@ -51,9 +51,9 @@ export class ObstacleOcclusionTest {
    * @param {string} [opts.levelId]                           If provided, will return early if geometry does not affect this level.
    * @yields {GeometricPrimitive}
    */
-  *iterateObstacleShapes({ geomSubtype = "full", ...opts } = {}) {
+  *iterateObstacleShapes({ geomSubtypeFn = () => "calculated", ...opts } = {}) {
     for ( const geom of this.iterateObstacleGeoms(opts) ) {
-      if ( geom.constructor.HAS_SUBTYPES ) yield* geom[geomSubtype].shapes;
+      if ( geom.constructor.HAS_SUBTYPES ) yield* geom[geomSubtypeFn(geom)].shapes;
       else yield* geom.shapes;
     }
   }
@@ -64,9 +64,9 @@ export class ObstacleOcclusionTest {
    * @param {string} [opts.levelId]                           If provided, will return early if geometry does not affect this level.
    * @yields {Polygon3d}
    */
-  *iterateObstacleFaces({ geomSubtype = "full", ...opts } = {}) {
+  *iterateObstacleFaces({ geomSubtypeFn = () => "calculated", ...opts } = {}) {
     for ( const geom of this.iterateObstacleGeoms(opts) ) {
-      if ( geom.constructor.HAS_SUBTYPES ) yield* geom[geomSubtype].iterateFaces();
+      if ( geom.constructor.HAS_SUBTYPES ) yield* geom[geomSubtypeFn(geom)].iterateFaces();
       else yield* geom.iterateFaces();
     }
   }
@@ -249,10 +249,11 @@ export class ObstacleOcclusionTest {
    * Test if a ray is occluded.
    * @param {Point3d} rayOrigin       Start of the ray
    * @param {Point3d} rayDirection    Direction of the ray
+   * @param {function} geomSubtypeFn  Function to select the correct geometry subtype for tokens and tiles
    * @returns {boolean} True if collision occurs
    */
-  rayIsOccluded(rayOrigin, rayDirection) {
-    return this.obstacleTester.call(this, rayOrigin, rayDirection);
+  rayIsOccluded(rayOrigin, rayDirection, geomSubtypeFn = () => "calculated") {
+    return this.obstacleTester.call(this, rayOrigin, rayDirection, geomSubtypeFn);
   }
 
   /**
@@ -263,9 +264,9 @@ export class ObstacleOcclusionTest {
    */
   #rayDirection = new Point3d();
 
-  segmentIsOccluded(rayOrigin, rayEnd) {
+  segmentIsOccluded(rayOrigin, rayEnd, geomSubtypeFn) {
     rayEnd.subtract(rayOrigin, this.#rayDirection);
-    return this.rayIsOccluded(rayOrigin, this.#rayDirection);
+    return this.rayIsOccluded(rayOrigin, this.#rayDirection, geomSubtypeFn);
   }
 
   update() {
@@ -428,7 +429,7 @@ export class ObstacleOcclusionTest {
   // see https://nikoheikkila.fi/blog/layman-s-guide-to-higher-order-functions/
   #occlusionTester(fnNames) {
     return function(rayOrigin, rayDirection, collisionTest) {
-      return fnNames.some(name => this[name](rayOrigin, rayDirection, collisionTest));
+      return fnNames.some(name => this[name](rayOrigin, rayDirection, geomSubtypeFn));
     }
   }
 
@@ -461,10 +462,10 @@ export class ObstacleOcclusionTest {
       && geom.rayIntersection(rayOrigin, rayDirection));
   }
 
-  #subGeometriesOcclude(geoms, rayOrigin, rayDirection, geomSubtype = "full") {
+  #subGeometriesOcclude(geoms, rayOrigin, rayDirection, geomSubtypeFn = () => "calculated") {
     const rayEnd = rayOrigin.add(rayDirection, tmpPt1);
     return geoms.some(geom => this.#geomWithinRayBounds(geom, rayOrigin, rayEnd)
-      && geom[geomSubtype].rayIntersection(rayOrigin, rayDirection));
+      && geom[geomSubtypeFn(geom)].rayIntersection(rayOrigin, rayDirection));
   }
 
   /**
@@ -514,19 +515,19 @@ export class ObstacleOcclusionTest {
    * @param {"full"|"boundingRect"|"boundingPolygon"|"polygons"|"triangles"} [ixType="full"]
    * @returns {boolean}
    */
-  tilesOcclude(rayOrigin, rayDirection, geomSubtype = "full") {
-    return this.#subGeometriesOcclude(this.obstacleGeometries.tiles, rayOrigin, rayDirection, geomSubtype);
+  tilesOcclude(rayOrigin, rayDirection, geomSubtypeFn) {
+    return this.#subGeometriesOcclude(this.obstacleGeometries.tiles, rayOrigin, rayDirection, geomSubtypeFn);
   }
 
   /**
    * Does a token occlude this ray?
    * @param {Pointd} rayOrigin
    * @param {Point3d}  rayDirection
-   * @param {"full"|"constrained"|"lit"|"bright"} [ixType="constrained"]
+   * @param {function} [geomSubtypeFn]
    * @returns {boolean}
    */
-  tokensOcclude(rayOrigin, rayDirection, geomSubtype = "constrained") {
-    return this.#subGeometriesOcclude(this.obstacleGeometries.tokens, rayOrigin, rayDirection, geomSubtype);
+  tokensOcclude(rayOrigin, rayDirection, geomSubtypeFn) {
+    return this.#subGeometriesOcclude(this.obstacleGeometries.tokens, rayOrigin, rayDirection, geomSubtypeFn);
   }
 
   regionsOcclude(rayOrigin, rayDirection) {

@@ -531,32 +531,18 @@ export class TileGeometry extends mix(Object).with(GeometrySubclassMixin, TileDo
     AABB3d.fromTileDocument(this.placeableDocument, this.aabb);
   }
 
-  _calculatedSubtype = "full";
+  #calculatedSubtype = "full";
 
-  get alphaBlockingType() {
-    const MODULE_ID = "tokenvisibility";
-    const TILE_ALPHA_SHAPE_FLAG = "tileAlphaShape";
-    return this.placeableDocument.flags[MODULE_ID]?.[TILE_ALPHA_SHAPE_FLAG] || "calculated";
-  }
+  get ignore() { return this.full; }
+
+  get calculated() { return this[this.#calculatedSubtype]; }
 
   /** @type {TileSubGeometry} */
-  get subtype() {
-    const alphaBlockingType = this.alphaBlockingType;
-    if ( alphaBlockingType === "ignore" ) return this.full;
-    if ( alphaBlockingType === "calculated" ) return this[this._calculatedSubtype];
-    return this[alphaBlockingType];
-  }
-
-  /** @type {TileSubGeometry} */
-  get boundarySubtype() {
-    // Don't use polygons for the boundary because too resource intensive.
-    const alphaBlockingType = this.alphaBlockingType;
-    return ( alphaBlockingType === "polygons" ) ? this.boundingPolygon : this.subtype;
-  }
+  get boundarySubtype() { return this.full; }
 
   _update() {
     // TODO: Is there an easy way to limit when this is called? Note that _updateFlags are not in this class.
-    this._calculatedSubtype = this.constructor.estimateTileShape(this.placeableDocument);
+    this.#calculatedSubtype = this.constructor.estimateTileShape(this.placeableDocument);
     return super._update();
   }
 

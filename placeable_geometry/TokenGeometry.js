@@ -571,13 +571,12 @@ export class TokenGeometry extends mix(Object).with(GeometrySubclassMixin, Token
   /** @type {TokenSubGeometry} */
   get boundarySubtype() { return this.full; }
 
-  /** @type {TokenSubGeometry} */
-  get subtype() { return this.isConstrained ? this.constrained : this.full; }
+  get calculated() { return this.isConstrained ? this.constrained : this.full; }
 
-  /** @type {TokenSubGeometry} */
-  get brightSubtype() { return this.isConstrainedBrightLit ? this.bright : this.full; }
+  get constrained() { return this.isConstrained ? super.constrained : this.full; }
 
-  /** @type {TokenSubGeometry} */l
-  get litSubtype() { return this.isConstrainedLit ? this.lit : this.full; }
+  get lit () { return this.isConstrainedLit ? super.lit : this.full; }
+
+  get bright () { return this.isConstrainedBrightLit ? super.bright : this.full; }
 
 }
