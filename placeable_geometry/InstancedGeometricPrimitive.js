@@ -133,7 +133,7 @@ export class QuadPrimitive extends InstancedGeometricPrimitive {
    */
   verticalSlice(start, end, { thickness = 1 } = {}) {
     if ( start.almostEqual(end) ) return [];
-    if ( !this.aabb.overlapsSegment(start, end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end, ["x", "y"]) ) return [];
 
     // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
     const rot = this.modelMatrix.rotation;
@@ -192,7 +192,7 @@ export class VerticalQuadPrimitive extends QuadPrimitive {
    */
   verticalSlice(start, end) {
     if ( start.almostEqual(end) ) return [];
-    if ( !this.aabb.overlapsSegment(start, end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end, ["x", "y"]) ) return [];
 
     // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
     const rot = this.modelMatrix.rotation;
@@ -324,7 +324,7 @@ class ExtrudedInstancePrimitive extends InstancedGeometricPrimitive {
    */
   verticalSlice(start, end) {
     if ( start.almostEqual(end) ) return [];
-    if ( !this.aabb.overlapsSegment(start, end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end, ["x", "y"]) ) return [];
 
     // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
     const rot = this.modelMatrix.rotation;
@@ -659,7 +659,7 @@ export class SpherePrimitive extends InstancedGeometricPrimitive {
    */
   verticalSlice(start, end) {
     if ( start.almostEqual(end) ) return [];
-    if ( !this.aabb.overlapsSegment(start, end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end, ["x", "y"]) ) return [];
 
     // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
     const rot = this.modelMatrix.rotation;

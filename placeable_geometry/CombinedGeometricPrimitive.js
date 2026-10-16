@@ -253,7 +253,7 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
    */
   verticalSlice(start, end) {
     if ( start.almostEqual(end) ) return [];
-    if ( !this.aabb.overlapsSegment(start, end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end, ["x", "y"]) ) return [];
     const cutaways = [];
     for ( const child of this.children ) cutaways.push(...child.verticalSlice(start, end));
 

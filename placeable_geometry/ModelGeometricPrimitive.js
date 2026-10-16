@@ -137,7 +137,7 @@ export class PlanarPolygonPrimitive extends ModelGeometricPrimitive {
    */
   verticalSlice(start, end, { thickness = 1 } = {}) {
     if ( start.almostEqual(end) ) return [];
-    if ( !this.aabb.overlapsSegment(start, end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end, ["x", "y"]) ) return [];
     const polys = this.baseFace.polygons ?? [this.baseFace];
     const topZ = polys[0].points[0].z;
     const bottomZ = topZ - thickness;
@@ -333,17 +333,18 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    * @param {PIXI.Point} end        Ending point of the slice on the XY plane
    * @returns {CutawayPolygon[]}
    */
-  verticalSlice(start, end) {
+  verticalSlice(start, end, { topZ, bottomZ } = {}) {
     if ( start.almostEqual(end) ) return [];
-    if ( !this.aabb.overlapsSegment(start, end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end, ["x", "y"]) ) return [];
 
     // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
     const rot = this.modelMatrix.rotation;
     if ( rot.x || rot.y ) return super.verticalSlice(start, end);
 
     // Because the bottom face is parallel to XY plane, we can just drop the Z axis.
-    const { bottomFaces, topZ, bottomZ } = this;
-    const poly = bottomFaces[0].toPolygon2d();
+    bottomZ ??= this.bottomZ;
+    topZ ??= this.topZ;
+    const poly = this.bottomFaces[0].toPolygon2d();
     const opts = {
       topElevationFn: () => topZ,
       bottomElevationFn: () => bottomZ,
@@ -423,7 +424,7 @@ export class ExtrudedPolygonPrimitiveWithHoles extends ExtrudedPolygonPrimitive 
    * @returns {CutawayPolygon[]} Array of CutawayPolygon cross-sections (solids and holes)   */
   verticalSlice(start, end, { topZ, bottomZ } = {}) {
     if ( start.almostEqual(end) ) return [];
-    if ( !this.aabb.overlapsSegment(start, end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end, ["x", "y"]) ) return [];
 
     // Construct the 2d cutaway polygons, accounting for holes.
     const { topFace, bottomFace } = this;

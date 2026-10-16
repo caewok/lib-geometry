@@ -1062,7 +1062,7 @@ export class GeometricPrimitive {
    */
   verticalSlice(start, end) {
     if ( start.almostEqual(end) ) return [];
-    if ( !this.aabb.overlapsSegment(start, end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end, ["x", "y"]) ) return [];
 
     // Build the vertical plane for the start|end line.
     if ( !Object.hasOwn(start, "z") ) start = Point3d.tmp.set(start.x, start.y, 0);

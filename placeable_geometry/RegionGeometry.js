@@ -762,6 +762,31 @@ export class RegionGeometry extends PlaceableGeometry {
    * @returns {boolean}
    */
   static topInclusive(regionD) { return regionD.elevation.topInclusive; }
+
+  /**
+   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s) as CutawayPolygons.
+   * Correctly handles shapes with holes (internal cavities, Polygons3d hole faces, etc.).
+   * @param {PIXI.Point|Point3d} start     Starting point of the slice on the XY plane
+   * @param {PIXI.Point|Point3d} end       Ending point of the slice on the XY plane
+   * @returns {CutawayPolygon[]} Array of CutawayPolygon cross-sections (solids and holes)
+   */
+  verticalSlice(start, end) {
+    // Vertical slices sometimes need the top and bottom elevation.
+
+    const cutaways = [];
+    const { topZ, bottomZ } = this.elevationZ;
+    for ( const s of this.shapes ) cutaways.push(...s.verticalSlice(start, end, { topZ, bottomZ }));
+    if ( cutaways.length < 2 ) return cutaways;
+
+    // Use Clipper to union the cutaways. Holes go straight through, leaving 1+ solid polygons.
+    const paths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths.fromPolygons(cutaways);
+    const out = paths
+      .union()
+      .clean()
+      .toPolygons();
+    return out.map(poly => CutawayPolygon.fromPolygon(poly, start, end));
+  }
+
 }
 
 

@@ -291,7 +291,7 @@ export class HoledPrimitive extends CombinedGeometricPrimitive {
    */
   verticalSlice(start, end) {
     if ( start.almostEqual(end) ) return [];
-    if ( !this.aabb.overlapsSegment(start, end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end, ["x", "y"]) ) return [];
 
     // Slice the solid first to get the cutaway before subtracting holes.
     const solidCuts = this.solid.verticalSlice(start, end);
