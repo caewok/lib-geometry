@@ -497,23 +497,23 @@ export class AABB2d {
         // Segment is parallel to the slab for this axis.
         // If segment origin is outside the slab, it can never intersect.
         if ( p0 < min || p0 > max ) return false;
-        // Otherwise, the infinite line is always within this slab. Proceed to next axis.
+      } else {
+
+        // Segment is not parallel.
+        const invD = 1.0 / rayDirection[axis];
+        let t1 = (min - p0) * invD;
+        let t2 = (max - p0) * invD;
+
+        // Ensure t1 is the intersection with the "near" plane and t2 with the "far" plane.
+        if ( t1 > t2 ) [t1, t2] = [t2, t1]; // Swap.
+
+        // Update the overall intersection interval [tmin, tmax].
+        tmin = Math.max(tmin, t1);
+        tmax = Math.min(tmax, t2);
+
+        // If the intersection interval becomes invalid, the line misses the box.
+        if ( tmin > tmax ) return false;
       }
-
-      // Segment is not parallel.
-      const invD = 1.0 / rayDirection[axis];
-      let t1 = (min - p0) * invD;
-      let t2 = (max - p0) * invD;
-
-      // Ensure t1 is the intersection with the "near" plane and t2 with the "far" plane.
-      if ( t1 > t2 ) [t1, t2] = [t2, t1]; // Swap.
-
-      // Update the overall intersection interval [tmin, tmax].
-      tmin = Math.max(tmin, t1);
-      tmax = Math.min(tmax, t2);
-
-      // If the intersection interval becomes invalid, the line misses the box.
-      if ( tmin > tmax ) return false;
     }
 
     // After checking all axes, [tmin, tmax] is the interval where the infinite
