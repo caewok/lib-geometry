@@ -197,9 +197,17 @@ export class RegionGeometry extends PlaceableGeometry {
     // Each base shape corresponds to a region shape.
     const n = regionShapes.length;
     baseShapes.length = n;
-    for ( let i = 0; i < n; i += 1 ) this._createBaseShape(i);
+    for ( let i = 0; i < n; i += 1 ) {
+      baseShapes[i] = this._createBaseShape(i);
+      this._updateShapeDimensions(i);
+    }
   }
 
+  /**
+   * Create a geometric primitive representing the region shape at the given index.
+   * @param {number} i      Index of the region shape in region.document.shapes
+   * @returns {GeometricPrimitive}
+   */
   _createBaseShape(i) {
     const regionD = this.placeableDocument;
     const id = this._shapeId(i);
@@ -209,8 +217,6 @@ export class RegionGeometry extends PlaceableGeometry {
       ? "_instantiateRestrictedBaseShape" : "_instantiateBasicBaseShape";
     const out = this[baseMethod](id, regionShape);
     if ( regionShape.hole ) out.reverseOrientation();
-    this.baseShapes[i] = out;
-    this._updateShapeDimensions(i);
     return out;
   }
 
@@ -506,7 +512,11 @@ export class RegionGeometry extends PlaceableGeometry {
       if ( reusedShape ) {
         reusedShape.id = this._shapeId(i); // Relabel to track the new shape index.
         baseShapes[i] = reusedShape;
-      } else added.add(this._createBaseShape(i));
+      } else {
+        const baseShape = this._createBaseShape(i);
+        this._updateShapeDimensions(i);
+        added.add(baseShape);
+      }
     }
     return { deleted: oldShapes, added };
   }
