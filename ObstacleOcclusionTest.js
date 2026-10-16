@@ -428,7 +428,7 @@ export class ObstacleOcclusionTest {
 
   // see https://nikoheikkila.fi/blog/layman-s-guide-to-higher-order-functions/
   #occlusionTester(fnNames) {
-    return function(rayOrigin, rayDirection, collisionTest) {
+    return function(rayOrigin, rayDirection, geomSubtypeFn) {
       return fnNames.some(name => this[name](rayOrigin, rayDirection, geomSubtypeFn));
     }
   }
