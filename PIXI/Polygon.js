@@ -12,6 +12,7 @@ PATCHES.PIXI = {};
 import { AABB2d } from "../AABB.js";
 import { lineSegmentCrosses } from "../util.js";
 import { CutawayPolygon } from "../CutawayPolygon.js";
+import { Segment } from "../Segment.js";
 
 /**
  * Calculate the area of this polygon.
@@ -199,13 +200,13 @@ function* iterateEdges({ close = true } = {}) {
   let a = firstA;
   for (let i = 2; i < ln; i += 2) {
     const b = PIXI.Point.tmp.set(this.points[i], this.points[i + 1]);
-    yield { a, b };
+    yield new Segment(a, b);
     a = b;
   }
 
   if ( close ) {
     const b = firstA;
-    yield { a, b };
+    yield new Segment(a, b);
   }
 }
 
@@ -224,13 +225,13 @@ function* reverseIterateEdges({ close = true } = {}) {
   let a = firstA;
   for (let i = ln - 4; i > -1; i -= 2) {
     const b = PIXI.Point.tmp.set(this.points[i], this.points[i + 1]);
-    yield { a, b };
+    yield new Segment(a, b);
     a = b;
   }
 
   if ( close ) {
     const b = firstA;
-    yield { a, b };
+    yield new Segment(a, b);
   }
 }
 

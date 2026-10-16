@@ -5,6 +5,7 @@ PIXI,
 
 import { Matrix } from "../Matrix.js";
 import { CutawayPolygon } from "../CutawayPolygon.js";
+import { Segment } from "../Segment.js";
 
 export const PATCHES = {};
 PATCHES.PIXI = {};
@@ -67,14 +68,14 @@ function* iteratePoints() {
 function* iterateEdges({close = true} = {}) {
   const a = PIXI.Point.tmp.set(this.x, this.y);
   const b = PIXI.Point.tmp.set(this.x + this.width, this.y);
-  yield { a, b };
+  yield new Segment(a, b);
 
   const c = PIXI.Point.tmp.set(this.x + this.width, this.y + this.height);
-  yield { a: b, b: c };
+  yield new Segment(b, c);
 
   const d = PIXI.Point.tmp.set(this.x, this.y + this.height);
   yield { a: c, b: d };
-  if ( close ) yield { a: d, b: a };
+  if ( close ) new Segment(d, a);
 }
 
 /**
