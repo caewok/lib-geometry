@@ -489,7 +489,6 @@ export class RegionGeometry extends PlaceableGeometry {
     const baseShapes = this.baseShapes;
     const numRegionShapes = regionShapes.length;
     const numBaseShapes = baseShapes.length;
-    if ( numRegionShapes <= numBaseShapes ) return { deleted: NULL_SET, added: NULL_SET };
 
     // For each shape, a mis-matched signature indicates either the shape was changed or
     // one before it was deleted. Reuse shapes where possible.
@@ -516,8 +515,13 @@ export class RegionGeometry extends PlaceableGeometry {
         const baseShape = this._createBaseShape(i);
         this._updateShapeDimensions(i);
         added.add(baseShape);
+        baseShapes[i] = baseShape;
       }
+      this.structuralSignatureMap.set(baseShapes[i], newSignature);
     }
+
+    // Truncate baseShapes in case shapes were deleted.
+    baseShapes.length = numRegionShapes;
     return { deleted: oldShapes, added };
   }
 
