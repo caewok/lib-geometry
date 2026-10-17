@@ -2194,17 +2194,11 @@ export class Circle3d extends Ellipse3d {
 
   get radiusX() { return super.radiusX; }
 
-  set radiusX(value) {
-    super.radiusX = value;
-    super.radiusY = value;
-  }
+  set radiusX(value) { this.radius = value; }
 
   get radiusY() { return super.radiusY; }
 
-  set radiusY(value) {
-    super.radiusX = value;
-    super.radiusY = value;
-  }
+  set radiusY(value) { this.radius = value; }
 
   get radius() { return super.radius; }
 
