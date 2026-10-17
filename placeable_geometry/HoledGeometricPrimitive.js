@@ -305,7 +305,7 @@ export class HoledPrimitive extends CombinedGeometricPrimitive {
 
     // Cut the holes out from the solid cutaway.
     holeCuts.forEach(holeCut => holeCut.reverseOrientation());
-    return ClipperPaths.diffPaths(solidCuts, holeCuts)
+    return ClipperPaths.diffPolygons(solidCuts, holeCuts)
       .map(poly => CutawayPolygon.fromPolygon(poly, start, end));
   }
 
