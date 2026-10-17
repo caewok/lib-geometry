@@ -2203,23 +2203,27 @@ export class Circle3d extends Ellipse3d {
   get radius() { return super.radius; }
 
   set radius(value) {
-    using v = PIXI.Point.tmp.copyFrom(value);
+    using v = PIXI.Point.tmp;
     if ( Number.isNumeric(value) ) v.set(value, value);
     else if ( !value.x.almostEqual(value.y) ) {
       if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.debug ) console.warn("Cannot set unequal radii on Circle3d.");
       const max = Math.max(value.x, value.y);
       v.set(max, max);
-    }
-    super.radius = value;
+    } else v.copyFrom(value);
+    super.radius = v;
   }
 
   get radiusSquared() { return super.radiusSquared; }
 
   set radiusSquared(value) {
-    if ( Number.isNumeric(value) ) {
-      using v = PIXI.Point.tmp.set(value, value);
-      super.radiusSquared = v;
-    } else super.radiusSquared = value;
+    using v = PIXI.Point.tmp;
+    if ( Number.isNumeric(value) ) v.set(value, value);
+    else if ( !value.x.almostEqual(value.y) ) {
+      if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.debug ) console.warn("Cannot set unequal radii on Circle3d.");
+      const max = Math.max(value.x, value.y);
+      v.set(max, max);
+    } else v.copyFrom(value);
+    super.radiusSquared = v;
   }
 
   _setDimensions(opts = {}) {
