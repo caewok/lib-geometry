@@ -106,7 +106,7 @@ export class InstancedGeometricPrimitive extends GeometricPrimitive {
 
   static get reversedInstanceVO() {
     if ( !(Object.hasOwn(this, "_reversedInstanceVO")
-      && this._reversedInstanceVO) ) this._reverseInstancedVO = this._generateReversedVO(this.prototypeFaces);
+      && this._reversedInstanceVO) ) this._reversedInstancedVO = this._generateReversedVO(this.prototypeFaces);
     return this._reversedInstanceVO;
   }
 
@@ -578,6 +578,8 @@ export class CylinderPrimitive extends ExtrudedInstancePrimitive {
  * Extruded (along z-axis) but always a circular top and bottom.
  */
 export class CircularCylinderPrimitive extends CylinderPrimitive {
+
+  static _instanceVO;
 
   /**
    * Create the faces for a unit cylinder.

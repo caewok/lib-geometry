@@ -300,7 +300,7 @@ export class HoledPrimitive extends CombinedGeometricPrimitive {
     // Slice each hole.
     const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
     const holeCuts = this.holes.flatMap(hole => hole.verticalSlice(start, end));
-    if ( !holeCuts.length ) return ClipperPaths.union(solidCuts)
+    if ( !holeCuts.length ) return ClipperPaths.unionPolygons(solidCuts)
       .map(poly => CutawayPolygon.fromPolygon(poly, start, end));
 
     // Cut the holes out from the solid cutaway.

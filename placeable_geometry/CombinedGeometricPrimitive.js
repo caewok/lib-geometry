@@ -258,7 +258,7 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
     for ( const child of this.children ) cutaways.push(...child.verticalSlice(start, end));
 
     const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
-    return ClipperPaths.union(cutaways).map(poly => CutawayPolygon.fromPolygon(poly, start, end));
+    return ClipperPaths.unionPolygons(cutaways).map(poly => CutawayPolygon.fromPolygon(poly, start, end));
   }
 
   /**
