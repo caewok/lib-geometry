@@ -18,8 +18,10 @@ import { CombinedGeometricPrimitive } from "./CombinedGeometricPrimitive.js";
 // LibGeometry
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { Point3d } from "../3d/Point3d.js";
-import { gridUnitsToPixels, NULL_SET } from "../util.js";
+import { gridUnitsToPixels } from "../util.js";
 import { Polygons3d } from "../3d/Polygon3d.js";
+import { CutawayPolygon } from "../CutawayPolygon.js";
+
 
 /**
   Region will either be a single shape or a group of polygons.
@@ -488,7 +490,6 @@ export class RegionGeometry extends PlaceableGeometry {
     const regionShapes = this.regionShapes;
     const baseShapes = this.baseShapes;
     const numRegionShapes = regionShapes.length;
-    const numBaseShapes = baseShapes.length;
 
     // For each shape, a mis-matched signature indicates either the shape was changed or
     // one before it was deleted. Reuse shapes where possible.
