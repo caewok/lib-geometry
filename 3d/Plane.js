@@ -36,9 +36,6 @@ export class Plane {
   /** @type {Point3d} */
   #normal = Point3d.tmp.set(0, 0, 1);
 
-  /** @type {Point3d[3]} */
-  _threePoints = [];
-
   /** @type {number} */
   _denom2d;
 
@@ -92,7 +89,6 @@ export class Plane {
   }
 
   clearCache() {
-    this._threePoints.forEach(pt => pt.release());
     if ( this._axisVectors.v ) this._axisVectors.v.release();
     if ( this._axisVectors.u ) this._axisVectors.u.release();
     if ( this._conversion2dMatrix ) this._conversion2dMatrix.release();
@@ -103,7 +99,6 @@ export class Plane {
     this._axisVectors = {};
     this._denom2d = undefined;
     this._numeratorFn2d = undefined;
-    this._threePoints = [];
   }
 
   /**
@@ -113,8 +108,8 @@ export class Plane {
    */
   clone(out) {
     out ??= new Plane();
-    out.point.copyFrom(this.point);
-    out.normal.copyFrom(this.normal); // Should already be normalized.
+    out.#point.copyFrom(this.point);
+    out.#normal.copyFrom(this.normal); // Should already be normalized.
     out.clearCache();
     return out;
   }
@@ -125,8 +120,8 @@ export class Plane {
    * @returns {this}
    */
   copyFrom(other) {
-    this.point.copyFrom(other.point);
-    this.normal.copyFrom(other.normal); // Should already be normalized.
+    this.#point.copyFrom(other.point);
+    this.#normal.copyFrom(other.normal); // Should already be normalized.
     this.clearCache();
     return this;
   }
@@ -203,7 +198,6 @@ export class Plane {
     out ??= new Plane();
     out.point = a;
     out.normal = N;
-    out._threePoints = {a, b, c};
     return out;
   }
 
@@ -359,14 +353,9 @@ export class Plane {
 
   /** @type {Point3d[3]} */
   get threePoints() {
-    if ( !this._threePoints.length ) this._threePoints = this._findThreePoints()
-    return this._threePoints;
-  }
-
-  _findThreePoints() {
     const { u, v } = this.axisVectors;
     const p0 = this.point;
-    return { a: p0, b: p0.add(u), c: p0.add(v) };
+    return [p0, p0.add(u), p0.add(v)];
   }
 
   /**
