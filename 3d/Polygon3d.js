@@ -1304,7 +1304,7 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
    * Assumes the line is on this plane.
    * @param {Point3d} origin
    * @param {Point3d} direction
-   * @returns {number[]} T-values along the line.
+   * @returns {boolean} T-values along the line.
    */
   _hasPlanarLineIntersections(origin, direction) {
     // First half from planarLineIntersections
@@ -1472,7 +1472,7 @@ export class Ellipse3d extends Polygon3d {
   set density(value) { this.#density = value; }
 
   /** @type {Point3d} */
-  get center() { return this.points[0]; }
+  get center() { return this.points[0].clone(); }
 
   set center(value) {
     this.points[0].copyFrom(value);
@@ -1552,12 +1552,16 @@ export class Ellipse3d extends Polygon3d {
 
   get majorAxisEndpoints() {
     const v = this.majorRadiusAxis;
-    return [this.center.add(v), this.center.subtract(v)];
+    const out = [this.center.add(v), this.center.subtract(v)];
+    v.release();
+    return out;
   }
 
   get minorAxisEndpoints() {
     const v = this.minorRadiusAxis;
-    return [this.center.add(v), this.center.subtract(v)];
+    const out = [this.center.add(v), this.center.subtract(v)];
+    v.release();
+    return out;
   }
 
 
@@ -1583,7 +1587,10 @@ export class Ellipse3d extends Polygon3d {
   // ----- NOTE: Synonyms/Aliases -----
 
   /** @type {Point3d} */
-  _calculateAreaWeightedCentroid() { return this.center; }
+  _calculateAreaWeightedCentroid(out) {
+    out ??= Point3d.tmp;
+    return this.center.clone(out);
+  }
 
   get centroid() { return super.centroid; }
 
@@ -1768,6 +1775,7 @@ export class Ellipse3d extends Polygon3d {
     out.radiusX = this.radiusX;
     out.radiusY = this.radiusY;
     out.angle = this.angle;
+    out.density = this.#density;
     return out;
   }
 
@@ -1776,6 +1784,7 @@ export class Ellipse3d extends Polygon3d {
     out.radiusX = this.radiusX;
     out.radiusY = this.radiusY;
     out.angle = this.angle;
+    out.density = this.#density;
     return out;
   }
 
@@ -1831,6 +1840,8 @@ export class Ellipse3d extends Polygon3d {
         .add(vx.multiplyScalar(cTheta, tmpPt), pt)
         .add(vy.multiplyScalar(sTheta, tmpPt), pt);
     }
+    vx.release();
+    vy.release();
     const out = new Polygon3d();
     out.points = points;
     out.isHole = this.isHole;
@@ -1944,6 +1955,8 @@ export class Ellipse3d extends Polygon3d {
     // Project 3d direction onto local 2d axes.
     const dx = direction.dot(vx) / r2.x;
     const dy = direction.dot(vy) / r2.y;
+    vx.release();
+    vy.release();
 
     // Quadratic coefficients.
     const A = (dx * dx) + (dy * dy);
@@ -2047,7 +2060,7 @@ export class Ellipse3d extends Polygon3d {
    * @returns {Ellipse3d|Circle3d} The modified ellipse or circle if the radii are equal.
    */
   transform(M, invTransposeM, mirrors) {
-    const out = super.transform(M, invTransposeM, mirrors);
+    let out = super.transform(M, invTransposeM, mirrors);
 
     // Calculate the ellipse-specific parameters.
     const { angle, radiusX, radiusY } = this;
@@ -2103,7 +2116,21 @@ export class Ellipse3d extends Polygon3d {
     out.radiusY = minorAxis.magnitude();
 
     // If the radii are equal, return a circle. (Angle doesn't matter here.)
-    if ( out.radiusX.almostEqual(out.radiusY) ) return Circle3d.fromEllipse3d(out);
+    if ( out.radiusX.almostEqual(out.radiusY) ) {
+      if ( !(out instanceof Circle3d) ) {
+        const circle = Circle3d.fromEllipse3d(out);
+        out.release();
+        out = circle;
+      }
+      return out;
+    }
+
+    // Unequal radii; convert to an ellipse.
+    if ( out instanceof Circle3d ) {
+      const ellipse = out.clone(new Ellipse3d());
+      out.release();
+      out = ellipse;
+    }
 
     // Calculate the new angle in the new plane's 2d coordinate system.
     const newTo2dM = out.plane.conversion2dMatrix;
@@ -2165,13 +2192,31 @@ export class Circle3d extends Ellipse3d {
 
   static _geoLibType = "Circle3d";
 
+  get radiusX() { return super.radiusX; }
+
+  set radiusX(value) {
+    super.radiusX = value;
+    super.radiusY = value;
+  }
+
+  get radiusY() { return super.radiusY; }
+
+  set radiusY(value) {
+    super.radiusX = value;
+    super.radiusY = value;
+  }
+
   get radius() { return super.radius; }
 
   set radius(value) {
-    if ( Number.isNumeric(value) ) {
-      using v = PIXI.Point.tmp.set(value, value);
-      super.radius = v;
-    } else super.radius = value;
+    using v = PIXI.Point.tmp.copyFrom(value);
+    if ( Number.isNumeric(value) ) v.set(value, value);
+    else if ( !value.x.almostEqual(value.y) ) {
+      if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.debug ) console.warn("Cannot set unequal radii on Circle3d.");
+      const max = Math.max(value.x, value.y);
+      v.set(max, max);
+    }
+    super.radius = value;
   }
 
   get radiusSquared() { return super.radiusSquared; }
@@ -2187,6 +2232,11 @@ export class Circle3d extends Ellipse3d {
     using tmpPt = PIXI.Point.tmp;
     if ( Number.isNumeric(opts.radius) ) opts.radius = tmpPt.set(opts.radius, opts.radius);
     if ( Number.isNumeric(opts.radiusSquared) ) opts.radiusSquared = tmpPt.set(opts.radiusSquared, opts.radiusSquared);
+
+    const r = opts.radius ?? (opts.radiusSquared && opts.radiusSquared.sqrt());
+    const rx = r?.x ?? opts.radiusX;
+    const ry = r?.y ?? opts.radiusY;
+    if ( rx !== undefined && ry !== undefined && !rx.almostEqual(ry) ) return Ellipse3d.fromCenterPoint(opts.center, { ...opts });
     return super._setDimensions(opts);
   }
 
@@ -2346,11 +2396,6 @@ export class Circle3d extends Ellipse3d {
     this.clone(circle3d);
     circle3d.radius = this.radius.x * multiplier;
     return circle3d;
-  }
-
-  scale(axes, circle3d) {
-    circle3d ??= this._cloneEmpty();
-    return super.scale(axes, circle3d);
   }
 }
 
@@ -3597,6 +3642,34 @@ export class Polygons3d extends Polygon3d {
     const out = this._cloneEmpty();
     out.polygons = this.#applyMethodToAllWithReturn("clipZ", ...args);
     return out;
+  }
+
+  /**
+   * Find the intervals of a line (ray) that intersects this polygon.
+   * Assumes the line is on this plane.
+   * @param {Point3d} origin
+   * @param {Point3d} direction
+   * @returns {number[]} T-values along the line.
+   */
+  _planarLineIntersections(origin, direction) {
+    // Intersect both solids and holes.
+    const out = [];
+    for ( const poly of this.polygons ) out.push(...poly._planarLineIntersections(origin, direction));
+    return out;
+  }
+
+  /**
+   * Does a line (ray) intersect this polygon?
+   * Assumes the line is on this plane.
+   * @param {Point3d} origin
+   * @param {Point3d} direction
+   * @returns {boolean} T-values along the line.
+   */
+  _hasPlanarLineIntersections(origin, direction) {
+    for ( const poly of this.polygons ) {
+      if ( poly._hasPlanarLineIntersections(origin, direction) ) return true;
+    }
+    return false;
   }
 
   /* ----- NOTE: Holes ----- */
