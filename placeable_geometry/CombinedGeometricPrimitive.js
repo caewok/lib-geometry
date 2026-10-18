@@ -51,7 +51,7 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
       if ( children ) child.destroy();
     }
     this.children.length = 0;
-    this.#faces.length = 0; // Faces belong to the children; do not release again in super.destroy.
+    this.faces.length = 0; // Faces belong to the children; do not release again in super.destroy.
     super.destroy();
   }
 
@@ -115,7 +115,7 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
    */
   get prototypeFaces() { return this.children.flatMap(child => child.prototypeFaces); }
 
-  get prototypeAABB() { return AABB3d.union(this.prototypeFaces.map(face => face.aabb)); }
+  get prototypeAABB() { return AABB3d.union(this.children.map(child => child.prototypeAABB)); }
 
   /**
    * A container has no single instance VO.
@@ -140,29 +140,13 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
 
   // ----- NOTE: Faces ----- //
 
-  /** @type {Polygon3d[]} */
-  #faces = [];
-
-  /**
-   * Canvas faces of all children, borrowed (not cloned).
-   * @type {Polygon3d[]}
-   */
-  get faces() {
-    this._syncWorld();
-    if ( this.isDirty(this.constructor.DIRTY.FACES) ) {
-      this.#faces.length = 0;
-      this._collectFaces(this.#faces);
-      this._clearDirty(this.constructor.DIRTY.FACES);
-    }
-    return this.#faces;
-  }
-
   /**
    * Fill the array with the faces that represent this container for face-based tests.
-   * @param {Polygon3d[]} out
    */
-  _collectFaces(out) {
-    for ( const child of this.children ) out.push(...child.faces);
+  _generateFaces(facesArr) {
+    facesArr.length = 0; // Do not release; linked from children.
+    for ( const child of this.children ) facesArr.push(...child.faces);
+    this._clearDirty(this.constructor.DIRTY.FACES);
   }
 
   validate() { return this.children.every(child => child.validate()); }
