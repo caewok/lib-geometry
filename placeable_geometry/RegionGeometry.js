@@ -6,16 +6,22 @@ PIXI,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-// Geometry
+// Primitives
 import { PlaceableGeometry } from "./PlaceableGeometry.js";
 import { CubePrimitive, CylinderPrimitive, CircularCylinderPrimitive } from "./InstancedGeometricPrimitive.js";
 import { ConePrimitive } from "./ConeGeometricPrimitive.js";
 import { ExtrudedPolygonPrimitive, ExtrudedPolygonPrimitiveWithHoles } from "./ModelGeometricPrimitive.js";
-import { EmptyGeometricPrimitive } from "./EmptyGeometricPrimitive.js";
+import { HoledPrimitive } from "./HoledGeometricPrimitive.js";
+import { RingPrimitive } from "./RingGeometricPrimitive.js";
+import { CombinedGeometricPrimitive } from "./CombinedGeometricPrimitive.js";
 
 // LibGeometry
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { Point3d } from "../3d/Point3d.js";
+import { gridUnitsToPixels } from "../util.js";
+import { Polygons3d } from "../3d/Polygon3d.js";
+import { CutawayPolygon } from "../CutawayPolygon.js";
+
 
 /**
   Region will either be a single shape or a group of polygons.
@@ -76,6 +82,8 @@ export class RegionGeometry extends PlaceableGeometry {
   get regionShapes() { return this.placeableDocument.shapes; }
 
   get regionPolygons() { return this.placeableDocument.polygons; }
+
+  get polygonTree() { return this.placeableDocument.polygonTree; }
 
   /**
    * Is this region currently restricted by walls? Ignores the scene rect.
@@ -157,68 +165,264 @@ export class RegionGeometry extends PlaceableGeometry {
 
   // ----- NOTE: Shape Creation ----- //
 
+  /**
+   * Representation of region shape at each index.
+   * Each shape may be combined with others, e.g. to create solid/hole islands.
+   * These get stored in the shapes property for the geometry.
+   * @type {GeometricPrimitive} The primitive shape corresponding to each region shape.
+   *   Should be marked as isHole if the region shape is a hole.
+   */
+  baseShapes = [];
+
   createShapes() {
     console.debug(`RegionGeometry|createShapes ${this.placeableDocument.name} (${this.placeableId})`);
     const regionShapes = this.regionShapes;
-    const shapes = this.shapes;
-    this.shapes.forEach(subshape => subshape?.destroy());
 
-    // If no shapes for this region, return.
+    this._createBaseShapes();
+    this._createShapesFromBaseShapes();
+
+    // Track whether base shapes must be recreated by storing a signature linked to each.
+    // (Cannot use the region shape as a key because it changes when any shape in the region is updated.)
+    this.baseShapes.forEach((baseShape, idx) => this.structuralSignatureMap.set(baseShape, this._getStructuralSignature(regionShapes[idx])));
+  }
+
+  /**
+   * Create base shapes from region shapes.
+   */
+  _createBaseShapes() {
+    const regionShapes = this.regionShapes;
+    const baseShapes = this.baseShapes;
+
+    // Clear the old base shapes.
+    baseShapes.forEach(subshape => subshape?.destroy());
+
+    // Each base shape corresponds to a region shape.
     const n = regionShapes.length;
-    if ( n === 0 ) {
-      shapes.length = 0;
+    baseShapes.length = n;
+    for ( let i = 0; i < n; i += 1 ) {
+      baseShapes[i] = this._createBaseShape(i);
+      this._updateShapeDimensions(i);
+    }
+  }
+
+  /**
+   * Create a geometric primitive representing the region shape at the given index.
+   * @param {number} i      Index of the region shape in region.document.shapes
+   * @returns {GeometricPrimitive}
+   */
+  _createBaseShape(i) {
+    const regionD = this.placeableDocument;
+    const id = this._shapeId(i);
+    const regionShape = this.regionShapes[i];
+    const baseMethod = (this.constructor.shapeIsGridConstrained(regionShape)
+      || this.constructor.shapeIsWallRestricted(regionShape, regionD))
+      ? "_instantiateRestrictedBaseShape" : "_instantiateBasicBaseShape";
+    const out = this[baseMethod](id, regionShape);
+    if ( regionShape.hole ) out.reverseOrientation();
+    return out;
+  }
+
+  /**
+   * Create shapes from the base shapes, accounting for holes.
+   */
+  _createShapesFromBaseShapes() {
+    const regionShapes = this.regionShapes;
+    const baseShapes = this.baseShapes;
+    const shapes = this.shapes;
+
+    // Clear the old shapes, keeping HolePrimitives. Don't destroy shapes b/c either a reused base shape or a HolePrimitive.
+    const oldShapes = new Set();
+    for ( const shape of shapes ) {
+      if ( shape instanceof HoledPrimitive ) oldShapes.add(shape);
+    }
+    shapes.length = 0;
+
+    // If no holes, we can just use the base shapes as the final primitive shapes.
+    const hasHoles = regionShapes.some(shape => shape.hole);
+    const numBaseShapes = this.baseShapes.length;
+    if ( !hasHoles ) {
+      shapes.length = numBaseShapes;
+      for ( let i = 0; i < numBaseShapes; i += 1 ) shapes[i] = baseShapes[i];
+      oldShapes.forEach(oldShape => oldShape.destroy(false));
       return;
     }
 
-    // Identify holes, if any.
-    const groupedShapes = this._groupShapesAndHoles();
+    // For each solid shape, combine with any overlapping holes.
+    // (Contained holes are handled using islands, below.)
+    const { pixiShapes, combinedBaseShapes } = this.#processOverlappingHoles();
 
-    // Create a primitive shape for each region shape.
-    this.shapes.length = n;
-    for ( let i = 0; i < n; i += 1 ) {
-      const holes = groupedShapes[i];
-      shapes[i] = this._buildRegionShape(i, holes);
+    // Now figure out which region shape holes correspond to which solid islands to build the actual shapes.
+    // Get the 2d shape for each base shape. Need the model shape.
+    const holeIndices = new Set(combinedBaseShapes.map((shape, idx) => shape.isHole ? idx : -1));
+    // holeIndices.delete(-1); // Can skip this because buildIslands will ignore it.
+    const islands = Polygons3d.buildIslands(pixiShapes, holeIndices);
+
+    // Actual shapes use HoledPrimitive to combine with holes, linking to the base geometric shapes.
+    // Build a shape for each islandÑeither the primitive or a combined.
+    for ( const island of islands ) {
+      let shape;
+      const solid = combinedBaseShapes[island.solidIndex];
+      if ( island.holeIndices.length ) {
+        for ( shape of oldShapes ) {
+          if ( shape.solid === solid ) { oldShapes.delete(shape); break; }
+        }
+        const id = `${this._shapeId(island.solidIndex)}_island}`;
+
+        // For either the new or existing primitive, update the solid and holes.
+        shape ??= new HoledPrimitive(id)
+        shape.replaceSolid(solid);
+        const holes = island.holeIndices.map(idx => baseShapes[idx]);
+        holes.forEach(hole => shape.addHole(hole))
+
+      } else shape = solid;
+      shapes.push(shape)
     }
-    return shapes;
+    oldShapes.forEach(oldShape => oldShape.destroy(false));
   }
 
   /**
-   * Parses region shapes to group base shapes with their associated holes
-   * @returns {object[RegionShape[]|null]} Array of arrays, with each subarray holding
-   *   holes for the shape at that index. If no shape for that index, null.
+   * For each solid shape, determine if one or more holes overlap but are not contained by it.
+   * Combine these using Clipper to form 1+ solid polygons.
+   * Track index to reuse base shapes where possible.
+   * Contained holes handled separately, using islands.
+   * @returns {object}
+   *   - @prop {(PIXI.Polygon|PIXI.Ellipse|PIXI.Circle|PIXI.Circle)[]} pixiShapes       2d polygons: 1 for each base shape + any extra solids or holes
+   *   - @prop {GeometricPrimitive[]} combinedBaseShapes                                Either original base shapes or newly combined extruded polygons
    */
-  _groupShapesAndHoles() {
-    const n = this.regionShapes.length;
-    const grouped = new Array(n).fill(null);
-    let currentBaseIdx = -1;
-    for ( let i = 0; i < n; i += 1 ){
-      const regionShape = this.regionShapes[i];
-      if ( this.constructor.shapeIsHole(regionShape) ) {
-        if ( ~currentBaseIdx ) grouped[currentBaseIdx].push(regionShape);
-      } else {
-        currentBaseIdx = i;
-        grouped[i] = [];
+  #processOverlappingHoles() {
+    const baseShapes = this.baseShapes;
+    const numBaseShapes = this.baseShapes.length;
+    const pixiShapes = baseShapes.map(shape => shape.toPIXIShape());
+    const overlappingHoleIndices = Array.from({ length: 5 }, () => []);
+    for ( let i = 0; i < numBaseShapes; i += 1 ) {
+      if ( baseShapes[i].isHole ) continue;
+      const solid = pixiShapes[i];
+      for ( let j = 0; j < numBaseShapes; j += 1 ) {
+        if ( !baseShapes[j].isHole ) continue;
+        const hole = pixiShapes[j];
+        if ( solid.overlaps(hole) && !solid.envelops(hole) ) overlappingHoleIndices[i].push(j);
       }
     }
-    return grouped;
+
+    // For each solid with overlapping holes, create new solids and holes.
+    const combinedBaseShapes = [];
+    const polys2d = pixiShapes.map(shape2d => shape2d.toPolygon());
+    for ( let i = 0; i < numBaseShapes; i += 1 ) {
+      // Non-polygon PIXI shapes do not have isPositive/hole property, so add after conversion to 2d polygon.
+      if ( polys2d[i].isPositive ^ !baseShapes[i].isHole ) polys2d[i].reverseOrientation();
+    }
+
+    for ( let i = 0; i < numBaseShapes; i += 1 ) {
+      combinedBaseShapes[i] = baseShapes[i];
+      const holeIndices = overlappingHoleIndices[i];
+      if ( !holeIndices.length ) continue;
+
+      // Combine the solid with its holes.
+      const solid = polys2d[i];
+      const combinedPolys = this.#subtractHoles([solid.toPolygon()], holeIndices.map(idx => polys2d[idx]));
+
+      // Sort by solid, then area. The largest solid is the primary for this shape.
+      combinedPolys.sort((a, b) => (a.isPositive - b.isPositive) || (a.area - b.area));
+      pixiShapes[i] = combinedPolys[0];
+      pixiShapes.push(...combinedPolys.slice(1));
+      let solids = [];
+      let holes = [];
+      combinedPolys.forEach(poly => poly.isPositive ? solids.push(poly) : holes.push(poly));
+      const hasHoles = holes.length;
+
+      // The first solid (island) replaces the base shape at that index.
+      if ( solids.length ) combinedBaseShapes[i] = hasHoles
+          ? ExtrudedPolygonPrimitiveWithHoles.fromPolygon(`${baseShapes[i].id}_combined_holes`, solids[0], holes)
+            : ExtrudedPolygonPrimitive.fromPolygon(`${baseShapes[i].id}_combined`, solids[0]);
+
+      // Additional solids (islands) are added at the end.
+      for ( let j = 1, n = solids.length; j < n; i += 1 ) {
+        combinedBaseShapes.push(hasHoles
+          ? ExtrudedPolygonPrimitiveWithHoles.fromPolygon(`${baseShapes[i].id}_combined_holes`, solids[j], holes)
+            : ExtrudedPolygonPrimitive.fromPolygon(`${baseShapes[i].id}_combined`, solids[j]));
+      }
+    }
+    return { pixiShapes, combinedBaseShapes };
   }
 
   /**
-   * Construct primitive shapes for a given region shape.
-   * @param {number} idx        Index of the region shape in the region.document.shapes array
-   * @param {object} shapeGroup
-   *   - @prop {RegionShape} shape
-   *   - @prop {RegionShape[]} holes
-   * @returns {GeometricPrimitive[]}
+   * Use the region shape polygons along with wall constraints to create the base shape for a region shape.
+   * Handles wall restrictions, grid constraints, or both.
+   * @param {string} id                 The base id for this region shape.
+   * @param {RegionShapeData} regionShape
+   * @returns {GeometricPrimitive}
    */
-  _buildRegionShape(shapeIdx, holeShapes = []) {
-    console.debug(`RegionGeometry|_buildRegionShape ${this.placeableDocument.name} (${this.placeableId})`);
-    const regionShape = this.regionShapes[shapeIdx];
-    const id = this._shapeId(shapeIdx);
-    const shape = this._instantiateShape(regionShape, holeShapes, id);
-    this.structuralSignatureMap.set(shape, this._getStructuralSignature(regionShape, holeShapes));
-    shape.initialize();
-    return shape;
+  _instantiateRestrictedBaseShape(id, regionShape) {
+    let polys = this.regionShapePolygons(regionShape);
+    if ( this.placeableDocument._shapeConstraints ) {
+      const constraintPolys = this.placeableDocument._shapeConstraints.map(arr => new PIXI.Polygon(arr));
+      const polys = this.#intersectConstraints(polys, constraintPolys);
+    }
+
+    // Should only be either:
+    // (a) single polygon
+    // (b) polygon + hole polygon (ring)
+    // (c) multiple solid polygons (self-intersecting polygon, cleaned)
+
+    let opts = this._shapeDimensions(regionShape);
+    if ( regionShape.type === "ring" ) opts = opts.outer;
+    let out;
+    if ( polys.length === 1 ) out = ExtrudedPolygonPrimitive.fromPolygon(id, polys[0], opts)
+    else if ( !polys[1].isPositive ) {
+      // Solid and 1+ holes.
+      const solid = ExtrudedPolygonPrimitive.fromPolygon(`${id}_0`, solid);
+      const holes = polys.slice(1).map((poly, i) => ExtrudedPolygonPrimitive.fromPolygon(`${id}_${i + 1}`, poly, opts));
+      out = new HoledPrimitive(id, solid, holes);
+    } else {
+      // 2+ solids.
+      const solids = polys.map((poly, i) => ExtrudedPolygonPrimitive.fromPolygon(`${id}_${i}`, poly, opts));
+      out = CombinedGeometricPrimitive.combine(id, solids);
+    }
+    if ( regionShape.hole ) out.reverseOrientation();
+    return out;
+  }
+
+  /**
+   * Create a base geometric primitive shape for the region, ignoring any wall restrictions or grid constraints.
+   * @param {string} id                 The base id for this region shape.
+   * @param {RegionShapeData} regionShape
+   * @returns {GeometricPrimitive}
+   */
+  _instantiateBasicBaseShape(id, regionShape) {
+    let out;
+    // See shape.constructor.TYPES
+    switch ( regionShape.type ) {
+      case "circle": out = new CircularCylinderPrimitive(id); break;
+      case "ellipse": out = new CylinderPrimitive(id); break;
+
+      case "line":
+      case "rectangle": out = new CubePrimitive(id); break;
+
+      case "cone": {
+        // For flat cones, just create an extruded triangle.
+        const angle = regionShape.angle;
+        if ( regionShape.type === "flat" ) out =  ConePrimitive.createFlatPrimitive(id, angle);
+        else out = ConePrimitive.create(id, angle, { curvature: regionShape.curvature, density: PIXI.Circle.approximateVertexDensity(regionShape.radius) });
+        break;
+      }
+
+       // Rings have holes built in, so use ExtrudedPolygonPrimitiveWithHoles.
+      case "ring": out = RingPrimitive.create(id); break;
+
+      // Other shapes use the basic extruded polygon shape.
+      case "emanation":
+      case "polygon":
+      case "grid":
+      case "token":
+
+      default: { /* eslint-disable-line no-fallthrough */
+        const opts = this._shapeDimensions(regionShape);
+        out = ExtrudedPolygonPrimitive.fromPolygon(id, this.regionShapePolygons(regionShape)[0], opts);
+        break;
+      }
+    }
+    if ( regionShape.hole ) out.reverseOrientation();
+    return out;
   }
 
   /**
@@ -238,179 +442,18 @@ export class RegionGeometry extends PlaceableGeometry {
    * Subtract hole polygons from solid polygons using Clipper.
    * @param {PIXI.Polygon|PIXI.Circle|PIXI.Ellipse[]} solids
    * @param {PIXI.Polygon|PIXI.Circle|PIXI.Ellipse[]} holes
-   * @returns {object} Object containing separated solid and hole polygons
+   * @returns {PIXI.Polygon[]} Object containing solid and hole polygons.
    */
   #subtractHoles(solids, holes) {
     // Only required if a solid overlaps but does not envelop a hole.
-    const solidsForClipper = new Set();
-    const holesForClipper = new Set();
-    for ( const solid of solids ) {
-      for ( const hole of holes ) {
-        if ( !solid.envelops(hole) && solid.overlaps(hole) ) {
-          solidsForClipper.add(solid);
-          holesForClipper.add(hole);
-        }
-      }
-    }
-    if ( !solidsForClipper.size ) return { solids, holes };
-
     // Calculate boolean difference (solid - hole).
     const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
-    const solidPaths = ClipperPaths.fromPolygons([...solidsForClipper]);
-    const holePaths = ClipperPaths.fromPolygons([...holesForClipper]);
-    const resolvedPolys = holePaths
+    const solidPaths = ClipperPaths.fromPolygons(solids);
+    const holePaths = ClipperPaths.fromPolygons(holes);
+    return holePaths
       .diffPaths(solidPaths)
       .clean()
       .toPolygons();
-
-    // Separate clipper paths by their spatial orientation and add in skipped shapes.
-    solids = solids.filter(poly => !solidsForClipper.has(poly));
-    holes = holes.filter(poly => !holesForClipper.has(poly));
-    solids.push(...resolvedPolys.filter(poly => poly.isPositive));
-    holes.push(...resolvedPolys.filter(poly => !poly.isPositive));
-    return { solids, holes };
-  }
-
-  /**
-   * Instantiate the correct primitive shape based on constraints and type.
-   * @param {RegionShape} regionShape
-   * @param {RegionShape[]} holeShapes
-   * @param {string} id
-   * @param {GeometricPrimitive}
-   */
-  _instantiateShape(regionShape, holeShapes, id) {
-    if ( regionShape.hole || regionShape.isEmpty ) return new EmptyGeometricPrimitive(id);
-
-    const opts = this._shapeDimensions(regionShape);
-
-    // 1. Wall Restricted.
-    if ( this.isWallRestricted
-      && this.constructor.shapeIsWallRestricted(regionShape, this.placeableDocument) ) return this._instantiateRestrictedShape(regionShape, holeShapes, id);
-
-    // 2. Grid constrained
-    if ( this.constructor.shapeIsGridConstrained(regionShape) ) return this._instantiateGridConstrainedShape(regionShape, holeShapes, id);
-
-    // 3. Otherwise contains holes. Use base PIXI geometric shapes where possible.
-    if ( holeShapes.length ) return this._instantiateHoleShape(regionShape, holeShapes, id);
-
-    // 4. Base primitive types. See shape.constructor.TYPES
-    switch ( regionShape.type ) {
-      case "circle": return new CircularCylinderPrimitive(id);
-      case "ellipse": return new CylinderPrimitive(id);
-
-      case "line":
-      case "rectangle": return new CubePrimitive(id);
-
-      case "cone": return ConePrimitive.fromRegionShape(id, regionShape, opts);
-
-       // Rings have holes built in, so use ExtrudedPolygonPrimitiveWithHoles.
-      case "ring": {
-        // Radius is the circle between the inner and outer portions.
-        // radius + outerwidth defines the outermost circle radius.
-        // radius - innerwidth defines the innermost circle radius (the hole)
-        const innerRadius = regionShape.radius - regionShape.innerWidth;
-        const outerRadius = regionShape.radius + regionShape.outerWidth;
-        const outer = new PIXI.Circle(regionShape.x, regionShape.y, outerRadius);
-        if ( innerRadius > 0 ) {
-          const inner = new PIXI.Circle(regionShape.x, regionShape.y, innerRadius);
-          return ExtrudedPolygonPrimitiveWithHoles.fromPolygons(id, [outer], [inner], opts);
-        }
-        return new CircularCylinderPrimitive(id);
-      }
-
-      // Other shapes use the basic extruded polygon shape.
-      case "emanation":
-      case "polygon":
-      case "grid":
-      case "token":
-
-      default: return ExtrudedPolygonPrimitive.fromPolygons(id, this.regionShapePolygons(regionShape), opts); /* eslint-disable-line no-fallthrough */
-    }
-  }
-
-  /**
-   * Build a shape assuming it is wall restricted.
-   * @param {RegionShape} regionShape
-   * @param {RegionShape[]} holeShapes
-   * @param {string} id
-   * @returns {ExtrudedPolygonPrimitive|ExtrudedPolygonPrimitiveWithHoles|EmptyGeometricPrimitive}
-   */
-  _instantiateWallRestrictedShape(regionShape, holeShapes, id) {
-    // Must intersect the polygon against the constraints. Only the region.document.polygons are already constrained.
-    // Batch all constraints into a single clipper object.
-    const constraintPolys = this.placeableDocument._shapeConstraints.map(arr => new PIXI.Polygon(arr));
-    const ixPolys = this.#intersectConstraints(this.regionShapePolygons(regionShape), constraintPolys)
-    if ( !ixPolys.length ) return new EmptyGeometricPrimitive(id);
-
-    // Intersect hole polygons with constraints and clean, if applicable.
-    let ixHolePolys = [];
-    if ( holeShapes.length ) {
-      const allHolePolygons = holeShapes.flatMap(h => h.polygons);
-      ixHolePolys = this.#intersectConstraints(allHolePolygons, constraintPolys);
-    }
-
-    // Instantiate the appropriate primitive.
-    // A. With holes.
-    const opts = this._shapeDimensions(regionShape);
-    if ( ixHolePolys.length ) return this.#instantiateShapeFromSolidsAndHoles(id, ixPolys, ixHolePolys, opts);
-
-    // B. Without holes.
-    return ExtrudedPolygonPrimitive.fromPolygons(id, ixPolys, opts);
-  }
-
-  /**
-   * Build a shape assuming it is wall restricted.
-   * @param {RegionShape} regionShape
-   * @param {RegionShape[]} holeShapes
-   * @param {string} id
-   * @returns {ExtrudedPolygonPrimitive|ExtrudedPolygonPrimitiveWithHoles|EmptyGeometricPrimitive}
-   */
-  _instantiateGridConstrainedShape(regionShape, holeShapes, id) {
-    const baseSolids = [];
-    const baseHoles = holeShapes.flatMap(shape => shape.polygons);
-    if ( regionShape.type === "ring" && (regionShape.radius - regionShape.innerWidth > 0) ) {
-      // By convention, the first polygon is the solid ring, the second is the hole.
-      baseSolids.push(regionShape.polygons[0]);
-      baseHoles.push(regionShape.polygons[1]);
-    } else baseSolids.push(...this.regionShapePolygons(regionShape));
-
-    const opts = this._shapeDimensions(regionShape);
-    return this.#instantiateShapeFromSolidsAndHoles(id, baseSolids, baseHoles, opts);
-  }
-
-  /**
-   * Build a shape that contains holes.
-   * Uses base PIXI geometric shapes where possible.
-   * @param {RegionShape} regionShape
-   * @param {RegionShape[]} holeShapes
-   * @param {string} id
-   * @returns {ExtrudedPolygonPrimitive|ExtrudedPolygonPrimitiveWithHoles|EmptyGeometricPrimitive}
-   */
-  _instantiateHoleShape(regionShape, holeShapes, id) {
-    const baseSolids = this._shapeToPIXI(regionShape);
-    const baseHoles = holeShapes.flatMap(shape => this._shapeToPIXI(shape));
-    if ( baseSolids.length === 2 ) baseHoles.push(baseSolids.pop()); // Ring shape: solid + hole.
-
-    const opts = this._shapeDimensions(regionShape);
-    return this.#instantiateShapeFromSolidsAndHoles(id, baseSolids, baseHoles, opts);
-  }
-
-  /**
-   * Check for intersecting holes and return a 3d extruded polygon from a set of base solids and holes.
-   * @param {string} id
-   * @param {(PIXI.Polygon|PIXI.Ellipse|PIXI.Circle)[]} baseSolids        Solids for this shape
-   * @param {(PIXI.Polygon|PIXI.Ellipse|PIXI.Circle)[]} baseHoles         Potential holes affecting this shape
-   * @param {object} opts                                                 From _shapeDimensions method
-   * @returns {ExtrudedPolygonPrimitive|ExtrudedPolygonPrimitiveWithHoles|EmptyGeometricPrimitive}
-   */
-  #instantiateShapeFromSolidsAndHoles(id, baseSolids, baseHoles, opts) {
-    // Handle intersecting holes.
-    const { solids, holes } = this.#subtractHoles(baseSolids, baseHoles);
-
-    // Could end up with only solids, only holes, or both solids and holes.
-    if ( !solids.length ) return new EmptyGeometricPrimitive(id);
-    if ( holes.length ) return ExtrudedPolygonPrimitiveWithHoles.fromPolygons(id, solids, holes, opts);
-    return ExtrudedPolygonPrimitive.fromPolygons(id, solids, opts);
   }
 
   // ----- NOTE: Shape Updating -----
@@ -420,61 +463,45 @@ export class RegionGeometry extends PlaceableGeometry {
 
     if ( this.activeUpdates.has("shapes")
       || this.activeUpdates.has("wallRestriction")
-      || this.activeUpdates.has("shapeConstraints") ) this._updateShapes();
-    else if ( this.activeUpdates.has("elevation") ) {
-      this.shapes.forEach((_shape, i) => this._updateShapeDimensions(i));
-    }
+      || this.activeUpdates.has("shapeConstraints") ) {
+
+      const { deleted, added } = this._updateBaseShapes();
+
+      // For deleted shapes, remove from any parent and destroy.
+      for ( const deletedShape of deleted ) {
+        if ( !deletedShape.parent ) continue;
+        deletedShape.parent.removeChild(deletedShape);
+        deletedShape.destroy();
+      }
+      this._updateTransforms();
+      if ( deleted.size || added.size ) this._createShapesFromBaseShapes();
+
+    } else if ( this.activeUpdates.has("elevation") ) this._updateTransforms();
+
     super._update();
   }
 
-  _updateTransforms() {
-    this.shapes.forEach((_shape, i) => this._updateShapeDimensions(i));
-  }
-
-  /** @type {Map<GeometricPrimitive, string>} */
-  structuralSignatureMap = new WeakMap();
-
   /**
-   * Remove shapes when region shapes have been removed.
+   * The base shape array is smaller than the region shape array: remove shapes deleted by user.
+   * Unfortunately, FoundryVTT will not tell us explicitly, so we have to infer.
+   * Changes the base shape array in place.
    */
-  _updateShapes() {
-    console.debug(`RegionGeometry|_updateShapes ${this.placeableDocument.name} (${this.placeableId})`);
-
-    const { shapes, regionShapes } = this;
+  _updateBaseShapes() {
+    const regionShapes = this.regionShapes;
+    const baseShapes = this.baseShapes;
     const numRegionShapes = regionShapes.length;
 
-    // Determine the shape/hole grouping.
-    const groupedShapes = this._groupShapesAndHoles();
-
-    // For each shape, a mis-matched class indicates either the shape was changed
-    // or a shape prior to it was deleted. Reuse shapes where possible, creating new as needed and
-    // deleting shapes as necessary.
-    // Create a pool of existing shapes available for reuse, and reset this.shapes.
-    const oldShapes = new Set(shapes);
-    shapes.length = numRegionShapes;
-    shapes.fill(null);
-
+    // For each shape, a mis-matched signature indicates either the shape was changed or
+    // one before it was deleted. Reuse shapes where possible.
+    const added = new Set();
+    const oldShapes = new Set(baseShapes);
     for ( let i = 0; i < numRegionShapes; i += 1 ) {
-      // If the shape is just a hole, no primary shape to create or update.
-      const holeGroup = groupedShapes[i];
-      if ( !holeGroup ) {
-        console.debug(`RegionGeometry|_updateShapes ${this.placeableDocument.name} (${this.placeableId})|Using empty (hole) for ${i}`);
-        shapes[i] = this._buildRegionShape(i);
-        continue;
-      };
-
-      // Check if the current shape is already correct.
+       // Check if the current shape is already correct.
       const regionShape = regionShapes[i];
-      const newSignature = this._getStructuralSignature(regionShape, holeGroup);
-
-      // Check pool for a matching structural signature.
+      const newSignature = this._getStructuralSignature(regionShape);
       let reusedShape = null;
       for ( const potentialMatch of oldShapes ) {
         const oldSignature = this.structuralSignatureMap.get(potentialMatch);
-        if ( !oldSignature ) { // Should not happen.
-          console.warn(`RegionGeometry#_updateShapes|No old signature for ${potentialMatch.id}`, { newSignature, potentialMatch });
-          continue;
-        };
         if ( newSignature === oldSignature ) {
           reusedShape = potentialMatch;
           oldShapes.delete(potentialMatch);
@@ -482,26 +509,32 @@ export class RegionGeometry extends PlaceableGeometry {
         }
       }
 
-      // Reuse or rebuild.
       if ( reusedShape ) {
-        console.debug(`RegionGeometry|_updateShapes ${this.placeableDocument.name} (${this.placeableId})|Reusing shape for ${i}`);
-        shapes[i] = reusedShape;
-        shapes[i].id = this._shapeId(i); // Relabel to track the new shape index.
+        reusedShape.id = this._shapeId(i); // Relabel to track the new shape index.
+        baseShapes[i] = reusedShape;
       } else {
-        console.debug(`RegionGeometry|_updateShapes ${this.placeableDocument.name} (${this.placeableId})|Rebuilding shape for ${i}`);
-        shapes[i] = this._buildRegionShape(i, holeGroup);
+        const baseShape = this._createBaseShape(i);
+        this._updateShapeDimensions(i);
+        added.add(baseShape);
+        baseShapes[i] = baseShape;
       }
-
-      // Apply dimensional updates to the shape.
-      this._updateShapeDimensions(i);
+      this.structuralSignatureMap.set(baseShapes[i], newSignature);
     }
 
-    // Clean up any remaining unused shapes from the pool.
-    oldShapes.forEach(shape => shape.destroy());
-
-    // Should not be any nulls in the shape array.
-    if ( this.shapes.some(shape => !shape) ) console.error(`RegionGeometry#_updateShapes|Some shapes in region ${this.placeableDocument.name} (${this.placeableDocument.id}) are null.`);
+    // Truncate baseShapes in case shapes were deleted.
+    baseShapes.length = numRegionShapes;
+    return { deleted: oldShapes, added };
   }
+
+  _updateTransforms() {
+    this.baseShapes.forEach((shape, i) => {
+      if ( this.regionShapes[i].hole !== shape.isHole ) shape.reverseOrientation();
+      this._updateShapeDimensions(i)
+    });
+  }
+
+  /** @type {Map<GeometricPrimitive, string>} */
+  structuralSignatureMap = new WeakMap();
 
   /**
    * Update a specific shape.
@@ -511,11 +544,33 @@ export class RegionGeometry extends PlaceableGeometry {
    */
   _updateShapeDimensions(shapeIdx) {
     console.debug(`RegionGeometry|_updateShapeDimensions ${shapeIdx} ${this.placeableDocument.name} (${this.placeableId})`);
-    const shape = this.shapes[shapeIdx];
+    const shape = this.baseShapes[shapeIdx];
     if ( !shape ) return;
 
     const regionShape = this.regionShapes[shapeIdx];
-    const opts = this._shapeDimensions(regionShape);
+    let opts = this._shapeDimensions(regionShape);
+
+    if ( shape.isHole ^ regionShape.hole ) shape.reverseOrientation();
+
+    if ( regionShape.type === "ring" ) {
+      const regionD = this.placeableDocument;
+      const restricted = this.constructor.shapeIsGridConstrained(regionShape)
+        || this.constructor.shapeIsWallRestricted(regionShape, regionD);
+      if ( restricted ) opts = opts.outer;
+      else {
+        shape.solid.setPosition(opts.outer.center);
+        shape.solid.setRotation(opts.outer.angles);
+        shape.solid.setScale(opts.outer.dims);
+        shape.solid.setAnchor(opts.outer.anchors);
+
+        shape.holes[0].setPosition(opts.inner.center);
+        shape.holes[0].setRotation(opts.inner.angles);
+        shape.holes[0].setScale(opts.inner.dims);
+        shape.holes[0].setAnchor(opts.inner.anchors);
+        return;
+      }
+    }
+
     shape.setPosition(opts.center);
     shape.setRotation(opts.angles);
     shape.setScale(opts.dims);
@@ -532,10 +587,7 @@ export class RegionGeometry extends PlaceableGeometry {
    * @param {RegionShape[]} holes
    * @returns {string}
    */
-  _getStructuralSignature(regionShape, holes = []) {
-    // Holes can all get the same signature.
-    if ( regionShape.hole || regionShape.isEmpty ) return "empty";
-
+  _getStructuralSignature(regionShape) {
     // Note: Translation (x, y) might change overlap status, correctly forcing a rebuild.
     const isRestricted = this.isWallRestricted && this.constructor.shapeIsWallRestricted(regionShape, this.placeableDocument);
     const parts = [
@@ -557,12 +609,6 @@ export class RegionGeometry extends PlaceableGeometry {
       }
     }
     parts.push(...keys.map(key => `${key}:${regionShape[key]}`));
-
-    // Recursively append hole signatures.
-    if ( holes.length ) {
-      const holeStrings = holes.map(hole => this._getStructuralSignature(hole)); // eslint-disable-line no-unused-vars
-      parts.push(`holes:(${holeStrings.join('|')})`);
-    }
     return parts.join("|");
   }
 
@@ -617,8 +663,12 @@ export class RegionGeometry extends PlaceableGeometry {
 
       case "ring": {
         const outerRadius = regionShape.radius + regionShape.outerWidth;
+        const innerRadius = regionShape.radius;
         dims.set(outerRadius * 2, outerRadius * 2, zHeight);
-        break;
+        return {
+          outer: { center, angles, dims, anchors, topZ, bottomZ },
+          inner: { center, angles, dims: dims.clone().set(innerRadius * 2, innerRadius * 2, zHeight), anchors, topZ, bottomZ },
+        };
       }
 
       case "cone": dims.set(regionShape.radius, regionShape.radius, zHeight); break;
@@ -681,9 +731,21 @@ export class RegionGeometry extends PlaceableGeometry {
    * - @prop {number} bottomZ
    */
   get elevationZ() {
-    const elevs = super.elevationZ
-    if ( !this.constructor.topInclusive(this.placeableDocument) ) elevs.topZ -= 1; // Subtract 1 pixel if not inclusive.
-    return elevs;
+    return this.constructor.elevationZ(this.placeableDocument);
+  }
+
+  static elevationZ(regionD) {
+    const { top, topInclusive } = regionD.elevation;
+    const topE = this.finiteElevation(topInclusive ? top : top - 1); // Subtract 1 grid distance if not inclusive.
+    const topZ = gridUnitsToPixels(topE);
+    const bottomZ = this.finiteElevation(regionD.bottomZ);
+    return { topZ, bottomZ };
+  }
+
+  /** @type {number} */
+  static zHeight(regionD) {
+    const { bottomZ, topZ } = this.elevationZ(regionD);
+    return topZ - bottomZ;
   }
 
   // ------ NOTE: Static property retrieval ----- //
@@ -701,6 +763,31 @@ export class RegionGeometry extends PlaceableGeometry {
    * @returns {boolean}
    */
   static topInclusive(regionD) { return regionD.elevation.topInclusive; }
+
+  /**
+   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s) as CutawayPolygons.
+   * Correctly handles shapes with holes (internal cavities, Polygons3d hole faces, etc.).
+   * @param {PIXI.Point|Point3d} start     Starting point of the slice on the XY plane
+   * @param {PIXI.Point|Point3d} end       Ending point of the slice on the XY plane
+   * @returns {CutawayPolygon[]} Array of CutawayPolygon cross-sections (solids and holes)
+   */
+  verticalSlice(start, end) {
+    // Vertical slices sometimes need the top and bottom elevation.
+
+    const cutaways = [];
+    const { topZ, bottomZ } = this.elevationZ;
+    for ( const s of this.shapes ) cutaways.push(...s.verticalSlice(start, end, { topZ, bottomZ }));
+    if ( cutaways.length < 2 ) return cutaways;
+
+    // Use Clipper to union the cutaways. Holes go straight through, leaving 1+ solid polygons.
+    const paths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths.fromPolygons(cutaways);
+    const out = paths
+      .union()
+      .clean()
+      .toPolygons();
+    return out.map(poly => CutawayPolygon.fromPolygon(poly, start, end));
+  }
+
 }
 
 

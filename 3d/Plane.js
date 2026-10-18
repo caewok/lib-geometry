@@ -5,7 +5,9 @@ PIXI
 
 import { Point3d } from "./Point3d.js";
 import { Matrix } from "../Matrix.js";
-import { pointsAreCollinear } from "../util.js";
+import { cleanPolygonPoints } from "../util.js";
+
+Symbol.dispose ??= Symbol("Symbol.dispose");
 
 const originPt3d = new Point3d();
 Object.freeze(originPt3d);
@@ -21,16 +23,52 @@ export class Plane {
     return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
   }
 
+  release() {
+    this.clearCache();
+    this.normal.release();
+    this.point.release();
+  }
+
+  [Symbol.dispose]() { this.release(); }
+
   static _geoLibType = "Plane";
 
   /** @type {Point3d} */
-  #normal = new Point3d(0, 0, 1);
+  #normal = Point3d.tmp.set(0, 0, 1);
+
+  /** @type {number} */
+  _denom2d;
+
+  /** @type {function} */
+  _numeratorFn2d;
+
+  /** @type {object} { u: Point3d, v: Point3d } */
+  _axisVectors = {};
+
+  /** @type {Matrix<4x4>} */
+  _conversion2dMatrix;
+
+  /** @type {Matrix<4x4>} */
+  _conversion2dMatrixInverse;
 
   get normal() { return this.#normal; }
 
   set normal(value) {
+    if ( this.#normal.equals(value) ) return;
     this.#normal.copyFrom(value).normalize(this.normal);
-    if ( Number.isNaN(this.#normal.x) || Number.isNaN(this.#normal.x) || Number.isNaN(this.#normal.x) ) throw Error("Plane#normal is undefined.");
+    if ( Number.isNaN(this.#normal.x) || Number.isNaN(this.#normal.y) || Number.isNaN(this.#normal.z) ) throw Error("Plane#normal is undefined.");
+    this.clearCache();
+  }
+
+  /** @type {Point3d} */
+  #point = Point3d.tmp.set(0, 0, 0);
+
+  get point() { return this.#point; }
+
+  set point(value) {
+    if ( this.#point.equals(value) ) return;
+    this.#point.copyFrom(value);
+    this.clearCache();
   }
 
   /**
@@ -40,17 +78,27 @@ export class Plane {
    */
   get constant() { return -this.normal.dot(this.point); }
 
-  /** @type {Point3d} */
-  point = new Point3d();
-
   /**
    * Default construction is the XY canvas plane
    * @param {Point3d} normal    Normal vector to the plane
    * @param {Point3d} point     Point on the plane, representing the plane's origin point
    */
-  constructor(point = Point3d.ZERO, normal) {
+  constructor(point, normal) {
+    if ( point ) this.point = point;
     if ( normal ) this.normal = normal;
-    this.point.copyFrom(point);
+  }
+
+  clearCache() {
+    if ( this._axisVectors.v ) this._axisVectors.v.release();
+    if ( this._axisVectors.u ) this._axisVectors.u.release();
+    if ( this._conversion2dMatrix ) this._conversion2dMatrix.release();
+    if ( this._conversion2dMatrixInverse ) this._conversion2dMatrixInverse.release();
+
+    this._conversion2dMatrix = undefined;
+    this._conversion2dMatrixInverse = undefined;
+    this._axisVectors = {};
+    this._denom2d = undefined;
+    this._numeratorFn2d = undefined;
   }
 
   /**
@@ -60,8 +108,9 @@ export class Plane {
    */
   clone(out) {
     out ??= new Plane();
-    out.point.copyFrom(this.point);
-    out.normal.copyFrom(this.normal); // Should already be normalized.
+    out.#point.copyFrom(this.point);
+    out.#normal.copyFrom(this.normal); // Should already be normalized.
+    out.clearCache();
     return out;
   }
 
@@ -71,8 +120,19 @@ export class Plane {
    * @returns {this}
    */
   copyFrom(other) {
-    this.point.copyFrom(other.point);
-    this.normal.copyFrom(other.normal); // Should already be normalized.
+    this.#point.copyFrom(other.point);
+    this.#normal.copyFrom(other.normal); // Should already be normalized.
+    this.clearCache();
+    return this;
+  }
+
+  /**
+   * Flip the plane normal.
+   * @returns {this}
+   */
+  reverse() {
+    this.normal.multiplyScalar(-1, this.normal);
+    this.clearCache();
     return this;
   }
 
@@ -111,18 +171,12 @@ export class Plane {
 
   static normalFromPoints(a, b, c, outPoint) {
     outPoint ??= Point3d.tmp;
-    const tmpPoints = Point3d.createN(3);
+    using vAB = b.subtract(a);
+    using vAC = c.subtract(a);
 
-    // In JavaScript (and math, really), ∞ - ∞ is NaN.
-    // For our purposes, we can assume these would go to 0.
-    // To catch this possibility, make a, b, c finite before subtracting.
-    const aTmp = a.makeFinite(tmpPoints[0]);
-    const bTmp = b.makeFinite(tmpPoints[1]);
-    const cTmp = c.makeFinite(tmpPoints[2]);
-    const vAB = bTmp.subtract(aTmp, bTmp);
-    const vAC = cTmp.subtract(aTmp, cTmp);
-    const out = vAC.cross(vAB, outPoint); // Ordered so the orientation matches.
-    Point3d.release(...tmpPoints);
+    // Ordered so the orientation matches. Is -(AB x AC), opposite of the right-hand rule.
+    // Enforces rule that points counterclockwise as seen from the front side give a normal pointing at the viewer.
+    const out = vAC.cross(vAB, outPoint);
     return out;
   }
 
@@ -142,37 +196,75 @@ export class Plane {
     c = c.clone();
     const N = this.normalFromPoints(a, b, c);
     out ??= new Plane();
-    out.point.copyFrom(a);
+    out.point = a;
     out.normal = N;
-    out._threePoints = {a, b, c};
     return out;
   }
 
+  /**
+   * Plane normal for a possibly concave planar polygon using Newell's method.
+   * Sign matches that of Plane#normalFromPoints (vAC x vAB):
+   * PIXI-positive (clockwise on canvas) ring --> normal.z < 0 (solid, faces down)
+   *                counterclockwise ring     --> normal.z > 0 (hole, faces up)
+   * @param {Point3d[]} pts       Ring points, at least 3, not closed
+   * @returns {Plane}
+   */
   static fromMultiplePoints(pts, out) {
-    const iter = Iterator.from(pts);
-    const a = iter.next().value;
+    pts = cleanPolygonPoints([...pts]);
 
-    // Ensure no duplicates or collinearity
-    let b = null;
-    for (const point of iter) {
-      if (!point.almostEqual(a)) {
-        b = point;
-        break;
-      }
+    const res = this._fromPointsNewell(pts, out);
+    if ( !res ) {
+      console.warn("Plane.fromMultiplePoints|Insufficient points to create the plane.");
+      return null;
+    }
+    out ??= new Plane();
+    out.point = pts[0];
+    out.normal = res.normal;
+    return out;
+  }
+
+  static _fromPointsNewell(pts) {
+    const n = pts.length;
+    if ( n < 3 ) return null;
+
+    // Shift by the first point so large coordinates do not lose precision.
+    const ref = pts[0];
+    using tmpPt = Point3d.tmp;
+    using shiftedA = Point3d.tmp;
+    using shiftedB = Point3d.tmp;
+
+    let a = pts.at(-1); // Wrap to close the ring.
+
+    const normal = Point3d.tmp.set(0, 0, 0);
+    const centroid = Point3d.tmp.set(0, 0, 0);
+    for ( let i = 0; i < n; i += 1 ) {
+      const b = pts[i];
+
+      // Sum of cross products a x b.
+      a.subtract(ref, shiftedA);
+      b.subtract(ref, shiftedB);
+
+      shiftedA.cross(shiftedB, tmpPt);
+      normal.add(tmpPt, normal);
+      centroid.add(shiftedA, centroid);
+      a = b;
     }
 
-    let c = null;
-    for (const point of iter) {
-      if (!point.almostEqual(a) && !point.almostEqual(b) && !pointsAreCollinear(a, b, point)) {
-        c = point;
-        break;
-      }
-    }
-    if (!c) {
-      console.error("Insufficient number of points to calculate plane.", pts);
-      return new this();
-    }
-    return this.fromPoints(a, b, c, out);
+    // (nx, ny, nz) is now the right-and area vector (2 * area * normal)
+    // Negate to match vAX x vAB convention.
+    normal.multiplyScalar(-1, normal);
+
+    const mag = normal.magnitude();
+    if ( mag < 1e-12 ) return null; // Collinear or zero-area.
+
+    // Area
+    const area = 0.5 * normal.dot(normal) / mag;
+
+
+    // Get the vertex average: a point on the plane.
+    ref.add(centroid.multiplyScalar(1/n, tmpPt), centroid);
+
+    return { normal, centroid, area };
   }
 
 
@@ -255,18 +347,15 @@ export class Plane {
 
   /** @type {object} { u: Point3d, v: Point3d } */
   get axisVectors() {
-    return this._axisVectors || (this._axisVectors = this._calculateAxisVectors());
+    if ( !this._axisVectors.u ) this._axisVectors = this._calculateAxisVectors();
+    return this._axisVectors;
   }
 
   /** @type {Point3d[3]} */
   get threePoints() {
-    return this._threePoints || (this._threePoints = this._findThreePoints());
-  }
-
-  _findThreePoints() {
     const { u, v } = this.axisVectors;
     const p0 = this.point;
-    return { a: p0, b: p0.add(u), c: p0.add(v) };
+    return [p0, p0.add(u), p0.add(v)];
   }
 
   /**
@@ -348,8 +437,8 @@ export class Plane {
    * the plane and point, but the value should remain the same sign for other points on that side.
    * @param {Point3d} p
    * @returns {number}
-   *   - Positive: p is above the plane
-   *   - Negative: p is below the plane
+   *   - Positive: p is above the plane (on the side of the plane normal).
+   *   - Negative: p is below the plane (opposite the plane normal).
    *   - Zero: p is on the plane ()
    * Point nearly on the plane will return very small values.
    */
@@ -390,8 +479,8 @@ export class Plane {
             : n.y < n.z ? w.set(0, 1, 0)
               : w.set(0, 0, 1);
 
-    const u = tmpPt2;
-    const v = tmpPt3;
+    const u = Point3d.tmp;
+    const v = Point3d.tmp;
     w.cross(n, u).normalize(u);
     n.cross(u, v).normalize(v);
     return { v: u, u: v }; // Swap so the x-axis is first.
@@ -567,7 +656,7 @@ export class Plane {
    * @returns {boolean}
    */
   isCoincidentWithPlane(other, { testParallel = true, epsilon = 1e-06 } = {}) {
-    if ( testParallel && !isParallelToPlane(other, epsilon) ) return false;
+    if ( testParallel && !this.isParallelToPlane(other, epsilon) ) return false;
 
     // Coincident if one point lies on another.
     return this.whichSide(other.point).almostEqual(0, epsilon);

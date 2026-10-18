@@ -40,6 +40,12 @@ export class Sphere {
     this.#radius = Math.sqrt(value);
   }
 
+  /** @type {Point3d} */
+  center = new Point3d();
+
+  /** @type {boolean} */
+  isHole = false;
+
   /**
    * @param {Point3d} [center]
    * @param {number} [radius = 0]
@@ -47,6 +53,22 @@ export class Sphere {
   constructor(center, radius = 0) {
     if ( center ) this.center.copyFrom(center);
     if ( radius ) this.radius = radius;
+  }
+
+
+  invertRole() { this.isHole = !this.isHole; }
+
+  transform(M) {
+    const out = this.clone();
+
+    // TODO: A scaling transform that varies by axis will result in an Ellipsoid.
+    //       It will also require testing points along each axis to determine.
+    using radiusPoint = this.center.add({ x: this.radius, y: 0, z: 0 });
+
+    M.multiplyPoint3d(this.center, out.center);
+    M.multiplyPoint3d(radiusPoint, radiusPoint);
+    out.radius = Point3d.distanceBetween(out.center, radiusPoint);
+    return out;
   }
 
   /**
@@ -68,10 +90,7 @@ export class Sphere {
    * @param {Point3d} p
    * @returns {boolean} True if point is outside the sphere.
    */
-  isFacing(p) { return this.whichSide(p) > 0; }
-
-  /** @type {Point3d} */
-  center = new Point3d();
+  isFacing(p) { return this.isHole ? this.whichSide(p) < 0 : this.whichSide(p) > 0; }
 
   /** @type {object<min: Point3d, max: Point3d>} */
   #aabb = {
@@ -90,6 +109,7 @@ export class Sphere {
     out ??= new this.constructor();
     out.radius = this.radius;
     out.center.copyFrom(this.center);
+    out.isHole = this.isHole;
     return out;
   }
 
@@ -338,7 +358,7 @@ export class Sphere {
    * @param {Matrix} perspectiveMatrix
    * @returns {Ellipse3d|null} Null if camera is within the sphere.
    */
-  transform(M, out) {
+  perspectiveProjection(M, out) {
     /* Dual Quadrics
     Represent sphere as 4x4 matrix. Transform directly using the matrices and extract 2d ellipse parameters.
     Sphere can be represented in homogenous coordinates as a 4x4 quadric matrix. Represents the
@@ -659,7 +679,10 @@ export class Sphere {
       const a = pts3d[triangles[i++]];
       const b = pts3d[triangles[i++]];
       const c = pts3d[triangles[i++]];
-      tris[j++] = Triangle3d.from3Points(a, b, c);
+      const tri = Triangle3d.from3Points(a, b, c);
+      tris[j++] = tri;
+
+      if ( this.isHole ) tri.invertRole();
     }
 
     return tris;

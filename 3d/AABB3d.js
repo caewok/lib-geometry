@@ -260,50 +260,41 @@ export class AABB3d extends AABB2d {
   }
 
   /**
+   * @param {Ellipse3d} ellipse3d
+   * @param {AABB3d} [out]
+   * @returns {AABB3d}
+   */
+  static fromEllipse3d(ellipse3d, out) {
+    out ??= new this();
+
+    // Half-extent along each axis is hypot(vx[axis], vy[axis]).
+    const { vx, vy } = ellipse3d.radiusVectors();
+    const c = ellipse3d.center;
+    const ex = Math.hypot(vx.x, vy.x);
+    const ey = Math.hypot(vx.y, vy.y);
+    const ez = Math.hypot(vx.z, vy.z);
+    out.min.set(c.x - ex, c.y - ey, c.z - ez);
+    out.max.set(c.x + ex, c.y + ey, c.z + ez);
+    vx.release();
+    vy.release();
+    return out;
+  }
+
+  /**
    * @param {Circle3d} circle3d
+   * @param {AABB3d} [out]
    * @returns {AABB3d}
    */
   static fromCircle3d(circle3d, out) {
     out ??= new this();
-
-    // Project the radius onto each axis: sqrt(1 - normal[axis]**2)
-    // Normal must be normalized.
-    const rX = Math.sqrt(1 - (circle3d.plane.normal.x ** 2));
-    const rY = Math.sqrt(1 - (circle3d.plane.normal.y ** 2));
-    const rZ = Math.sqrt(1 - (circle3d.plane.normal.z ** 2));
-
-    const { center, radius } = circle3d;
-    out.min.set(
-      center.x - (radius * rX),
-      center.y - (radius * rY),
-      center.z - (radius * rZ),
-    );
-    out.max.set(
-      center.x + (radius * rX),
-      center.y + (radius * rY),
-      center.z + (radius * rZ),
-    );
-    return out;
-  }
-
-  static fromCircle3d_2(circle3d, out) {
-    out ??= new this();
-
-    // See https://stackoverflow.com/questions/2592011/bounding-boxes-for-circle-and-arcs-in-3d
-    const angle = (A , B) => {
-      const dot = A.dot(B);
-      return dot <= -1.0 ? Math.PI
-        : dot >= 1.0 ? 0.0
-        : Math.acos(dot);
-    }
-    const N = circle3d.plane.normal;
-    const ax = angle(N, axes.x);
-    const ay = angle(N, axes.y);
-    const az = angle(N, axes.z);
-    const R = tmpPoints[0].set(Math.sin(ax), Math.sin(ay), Math.sin(az)) * circle3d.radius;
-    const { x, y, z } = this.center;
-    out.min.set(x - R.x, y - R.y, z - R.z);
-    out.max.set(x + R.x, y + R.y, z + R.z);
+    const { x: cx, y: cy, z: cz } = circle3d.center;
+    const n = circle3d.plane.normal; // Unit length; Ellipse3d#transform normalizes it.
+    const r = circle3d.radius.x;
+    const ex = r * Math.sqrt(Math.max(0, 1 - (n.x * n.x)));
+    const ey = r * Math.sqrt(Math.max(0, 1 - (n.y * n.y)));
+    const ez = r * Math.sqrt(Math.max(0, 1 - (n.z * n.z)));
+    out.min.set(cx - ex, cy - ey, cz - ez);
+    out.max.set(cx + ex, cy + ey, cz + ez);
     return out;
   }
 

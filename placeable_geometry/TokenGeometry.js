@@ -16,6 +16,7 @@ import {
   HexagonCylinderPrimitive
   } from "./InstancedGeometricPrimitive.js";
 import { ExtrudedPolygonPrimitive } from "./ModelGeometricPrimitive.js";
+import { TokenProperties } from "../placeable_properties/TokenProperties.js";
 
 // LibGeometry
 import { GEOMETRY_LIB_ID } from "../const.js";
@@ -405,7 +406,6 @@ export class TokenSubGeometry extends mix(PlaceableGeometry).with(TokenDocumentC
         center: this.constructor.tokenCenter(this.placeableDocument),
       });
     } else shape = new primitiveCl(this.placeableId);
-    shape.initialize();
     this.shapes.push(shape);
   }
 
@@ -571,13 +571,12 @@ export class TokenGeometry extends mix(Object).with(GeometrySubclassMixin, Token
   /** @type {TokenSubGeometry} */
   get boundarySubtype() { return this.full; }
 
-  /** @type {TokenSubGeometry} */
-  get subtype() { return this.isConstrained ? this.constrained : this.full; }
+  get calculated() { return this.isConstrained ? this.constrained : this.full; }
 
-  /** @type {TokenSubGeometry} */
-  get brightSubtype() { return this.isConstrainedBrightLit ? this.bright : this.full; }
+  get constrained() { return this.isConstrained ? super.constrained : this.full; }
 
-  /** @type {TokenSubGeometry} */l
-  get litSubtype() { return this.isConstrainedLit ? this.lit : this.full; }
+  get lit () { return this.isConstrainedLit ? super.lit : this.full; }
+
+  get bright () { return this.isConstrainedBrightLit ? super.bright : this.full; }
 
 }

@@ -12,6 +12,7 @@ PATCHES.PIXI = {};
 import { AABB2d } from "../AABB.js";
 import { lineSegmentCrosses } from "../util.js";
 import { CutawayPolygon } from "../CutawayPolygon.js";
+import { Segment } from "../Segment.js";
 
 /**
  * Calculate the area of this polygon.
@@ -199,13 +200,13 @@ function* iterateEdges({ close = true } = {}) {
   let a = firstA;
   for (let i = 2; i < ln; i += 2) {
     const b = PIXI.Point.tmp.set(this.points[i], this.points[i + 1]);
-    yield { a, b };
+    yield new Segment(a, b);
     a = b;
   }
 
   if ( close ) {
     const b = firstA;
-    yield { a, b };
+    yield new Segment(a, b);
   }
 }
 
@@ -224,13 +225,13 @@ function* reverseIterateEdges({ close = true } = {}) {
   let a = firstA;
   for (let i = ln - 4; i > -1; i -= 2) {
     const b = PIXI.Point.tmp.set(this.points[i], this.points[i + 1]);
-    yield { a, b };
+    yield new Segment(a, b);
     a = b;
   }
 
   if ( close ) {
     const b = firstA;
-    yield { a, b };
+    yield new Segment(a, b);
   }
 }
 
@@ -1110,11 +1111,11 @@ function almostEqual(other, epsilon = 1e-08) {
 /**
  * Cutaway a line segment start|end that moves through this polygon.
  * Depending on the line and the polygon, could have multiple quads.
- * @param {Point3d} a     Starting endpoint for the segment
- * @param {Point3d} b       Ending endpoint for the segment
+ * @param {PIXI.Point} a     Starting endpoint for the segment
+ * @param {PIXI.Point} b       Ending endpoint for the segment
  * @param {object} [opts]
- * @param {Point3d} [opts.start]              Starting endpoint for the segment
- * @param {Point3d} [opts.end]                Ending endpoint for the segment
+ * @param {PIXI.Point} [opts.start]              Starting endpoint for the segment
+ * @param {PIXI.Point} [opts.end]                Ending endpoint for the segment
  * @param {number} [opts.top=1e06]        Top (elevation in pixel units) of the polygon
  * @param {number} [opts.bottom=-1e06]    Bottom (elevation in pixel units) of the polygon
  * @returns {CutawayPolygon[]}

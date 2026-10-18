@@ -30,6 +30,8 @@ class AbstractMatrix {
 
   static _geoLibType = "AbstractMatrix";
 
+  release() { this.arr.length = 0; }
+
   /** @type {Array} */
   arr = [];
 

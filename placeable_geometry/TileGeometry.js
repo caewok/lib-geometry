@@ -202,7 +202,6 @@ export class TileSubGeometry extends mix(PlaceableGeometry).with(TileDocumentCal
     this.shapes[0] = new TexturedQuadPrimitive(this.placeableId);
     this.shapes[0].direction = TexturedQuadPrimitive.CULL_FACES.DOUBLE; // Tiles block on both sides.
     this.shapes[0].textureURL = this.constructor.textureSource(this.placeableDocument);
-    this.shapes[0].initialize();
   }
 
   // ----- NOTE: Update ----- //
@@ -312,7 +311,6 @@ export class TileBoundingRectGeometry extends TileSubGeometry {
     this.shapes.forEach(shape => shape.destroy());
     this.shapes.length = 0;
     const shape = new QuadPrimitive(this.placeableId);
-    shape.initialize();
     this.shapes.push(shape);
   }
 
@@ -387,14 +385,13 @@ export class TileBoundingPolygonGeometry extends TileSubGeometry {
 
     const poly = this._boundingPolygon;
     const elevationZ = this.elevationZ;
-    const poly3d = Polygon3d.fromPolygon(poly, elevationZ);
+    const poly3d = Polygon3d.fromPolygon(poly, { elevationZ });
     const opts = {
       center: this.constructor.tileCenter(this.placeableDocument),
       dims: this.constructor.tileDimensions(this.placeableDocument),
       angles: this.constructor.tileRotation(this.placeableDocument),
     };
     const shape = PlanarPolygonPrimitive.fromPolygon3d(this.placeableId, poly3d, opts)
-    shape.initialize();
     this.shapes.push(shape);
   }
 
@@ -447,7 +444,6 @@ export class TilePolygonsGeometry extends TileFullGeometry {
       angles: this.constructor.tileRotation(this.placeableDocument),
     };
     const shape = PlanarPolygonPrimitive.fromPolygon3d(`${this.placeableId}_alphaThresholdPolygons`, polys3d, opts);
-    shape.initialize();
     this.shapes.push(shape);
   }
 
@@ -511,7 +507,6 @@ export class TileTrianglesGeometry extends TileSubGeometry {
       .fromVertices(topTrimmed)
       .filter(tri => !foundry.utils.orient2dFast(tri.a, tri.b, tri.c).almostEqual(0, 1e-06));
     const shape = PlanarPolygonPrimitive.fromPolygon3d(`${this.placeableId}`, triTop);
-    shape.initialize();
     this.shapes.push(shape);
   }
 
@@ -536,32 +531,18 @@ export class TileGeometry extends mix(Object).with(GeometrySubclassMixin, TileDo
     AABB3d.fromTileDocument(this.placeableDocument, this.aabb);
   }
 
-  _calculatedSubtype = "full";
+  #calculatedSubtype = "full";
 
-  get alphaBlockingType() {
-    const MODULE_ID = "tokenvisibility";
-    const TILE_ALPHA_SHAPE_FLAG = "tileAlphaShape";
-    return this.placeableDocument.flags[MODULE_ID]?.[TILE_ALPHA_SHAPE_FLAG] || "calculated";
-  }
+  get ignore() { return this.full; }
+
+  get calculated() { return this[this.#calculatedSubtype]; }
 
   /** @type {TileSubGeometry} */
-  get subtype() {
-    const alphaBlockingType = this.alphaBlockingType;
-    if ( alphaBlockingType === "ignore" ) return this.full;
-    if ( alphaBlockingType === "calculated" ) return this[this._calculatedSubtype];
-    return this[alphaBlockingType];
-  }
-
-  /** @type {TileSubGeometry} */
-  get boundarySubtype() {
-    // Don't use polygons for the boundary because too resource intensive.
-    const alphaBlockingType = this.alphaBlockingType;
-    return ( alphaBlockingType === "polygons" ) ? this.boundingPolygon : this.subtype;
-  }
+  get boundarySubtype() { return this.full; }
 
   _update() {
     // TODO: Is there an easy way to limit when this is called? Note that _updateFlags are not in this class.
-    this._calculatedSubtype = this.constructor.estimateTileShape(this.placeableDocument);
+    this.#calculatedSubtype = this.constructor.estimateTileShape(this.placeableDocument);
     return super._update();
   }
 

@@ -1,85 +1,98 @@
 /* globals
-
+canvas,
+CONFIG,
 PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
 // Geometry
-import { CombinedGeometricPrimitive } from "./CombinedGeometricPrimitive.js";
 import { ExtrudedPolygonPrimitive } from "./ModelGeometricPrimitive.js";
 
 // LibGeometry
 import { Segment } from "../Segment.js";
+import { GEOMETRY_LIB_ID } from "../const.js";
 
 /**
  * A ConePrimitive can represent a 3d extruded cone that is either flat, round, or semicircular.
- * Represents it as 1 or 2 pieces: the triangle base and arc shape, if any.
+ * Made up of a triangle base and arc shape, if any.
  */
-export class ConePrimitive extends CombinedGeometricPrimitive {
+export class ConePrimitive extends ExtrudedPolygonPrimitive {
 
   /** @type {"flat"|"round"|"semicircle"} */
-  type = "flat";
+  curvature = "flat";
 
-  /** @type {number<radians>} */
-  theta = 0; // Angle of the cone at the apex.
+  /** @type {number<degrees>} */
+  angle = 0; // Angle of the cone at the apex.
 
-  /** @type {number} */
-  radius = 0;
+  /**
+   * Get the 2d polygon canvas representation of this shape, usually based on the bottom shape.
+   * Assumes no rotation around the x or y axis.
+   * @returns {PIXI.Polygon}
+   */
+  toPIXIShape() {
+    const polys2d = this.children.map(child => child.toPIXIShape());
+    if ( polys2d.length === 1 ) return polys2d[0];
+    const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
+    return ClipperPaths.unionPolygons(polys2d);
+  }
 
   // ----- NOTE: Static factory methods ----- //
 
   /**
-   * Cone is built from extruded triangle + extruded arc.
+   * Cone built from a single triangle or a triangle + arc or half-circle.
+   * The default position is centered, with the apex at x = -0.5, y = 0 and the base vertical along x = 0.5
    */
-  static fromRegionShape(id, regionShape, { density, ...opts } = {}) {
-    if ( regionShape.type !== "cone" ) throw Error("ConePrimitive|Only cone types may be used.", { regionShape });
-
-    using apex = PIXI.Point.tmp.copyFrom(regionShape);
-    const rotation = Math.toRadians(regionShape.rotation);
-    const theta = Math.toRadians(regionShape.angle);
-    const radius = regionShape.radius;
-    density ??= PIXI.Circle.approximateVertexDensity(regionShape.radius);
-
-    // Track shape parameters, primarily for debugging.
-    const out = new this(id);
-    out.type = regionShape.curvature;
-    out.radius = radius;
-    out.theta = theta;
-
+  static create(id, angle, { curvature = "rounded", density } = {}) {
     let baseSegment;
     let arcCircle;
     let arcStartAngle;
     let arcEndAngle;
-    switch ( regionShape.curvature ) {
+    const rotation = 0;
+    const theta = Math.toRadians(angle);
+    const radius = 1;
+    using apex = PIXI.Point.tmp.set(0, 0);
+    switch ( curvature ) {
       case "flat":
         baseSegment = this.flatConeBase(apex, radius, theta, rotation);
         break;
       case "semicircle": {
         baseSegment = this.semiCircleConeBase(apex, radius, theta, rotation);
-        arcCircle = this.semiCircleConeCircle(regionShape, regionShape.radius, theta, rotation);
+        arcCircle = this.semiCircleConeCircle(apex, radius, theta, rotation);
         arcStartAngle = Math.normalizeRadians(-Math.PI_1_2 + rotation);
         arcEndAngle = Math.normalizeRadians(Math.PI_1_2 + rotation);
         break;
       }
       case "round": {
         baseSegment = this.roundConeBase(apex, radius, theta, rotation);
-        arcCircle = this.roundConeCircle(regionShape, regionShape.radius);
+        arcCircle = this.roundConeCircle(apex, radius);
         arcStartAngle = Math.normalizeRadians(-(theta / 2) + rotation);
-        arcEndAngle = Math.normalizeRadians((theta / 2) + rotation)
+        arcEndAngle = Math.normalizeRadians((theta / 2) + rotation);
+        break;
       }
+      default: throw new Error("Cone type not recognized.");
     }
 
-    const triShape = ExtrudedPolygonPrimitive.fromPolygon(`baseTri_${id}`, new PIXI.Polygon(apex, baseSegment.a, baseSegment.b), opts);
-    out.addShape(triShape);
-    if ( regionShape.curvature === "flat" ) return out;
+    let conePoly = this._createTrianglePrototype(`${id}_tri`, apex, baseSegment);
+    if ( curvature !== "flat" ) {
+      // Create the arc polygon.
+      density ||= PIXI.Circle.approximateVertexDensity(canvas.grid.size * 2);
+      const arcPoints = arcCircle.pointsForArc(arcStartAngle, arcEndAngle, { density, includeEndpoints: false });
+      const arcShape = new PIXI.Polygon(baseSegment.a, ...arcPoints, baseSegment.b);
 
-    // Build the extruded polygon arc piece.
-    const arcPoints = arcCircle.pointsForArc(arcStartAngle, arcEndAngle, { density, includeEndpoints: false });
-    const poly = new PIXI.Polygon(baseSegment.a, ...arcPoints, baseSegment.b);
-    const arcShape = ExtrudedPolygonPrimitive.fromPolygon(`${regionShape.curvature}_${id}`, poly, opts);
-    out.addShape(arcShape);
+      // Combine the triangle with the arc.
+      const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
+      conePoly = ClipperPaths.unionPolygons([conePoly, arcShape])[0];
+    }
+
+    const out = this.fromPrototypePolygon(id, conePoly, { density });
+    out.curvature = curvature;
+    out.angle = angle;
     return out;
+  }
+
+  static _createTrianglePrototype(id, apex, baseSegment) {
+    return new PIXI.Polygon([apex.x, apex.y, baseSegment.a.x, baseSegment.a.y, baseSegment.b.x, baseSegment.b.y]);
   }
 
   // ----- NOTE: Math helpers ----- //

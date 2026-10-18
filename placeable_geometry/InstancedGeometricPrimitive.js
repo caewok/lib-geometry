@@ -8,14 +8,15 @@ PIXI,
 
 import { GeometricPrimitive } from "./GeometricPrimitive.js";
 import { MatrixFloat32 } from "../Matrix.js";
-import { cutaway } from "../util.js";
+import { isAxisAlignedRectangle } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
 import { getHexagonalShape } from "../placeable_vertices/BasicVertices.js";
-import { Polygon3d, Quad3d, Ellipse3d, Circle3d, Triangle3d } from "../3d/Polygon3d.js";
+import { Polygon3d, Quad3d, Ellipse3d, Circle3d } from "../3d/Polygon3d.js";
 import { Sphere } from "../3d/Sphere.js";
 import { HorizontalQuadVertices } from "../placeable_vertices/BasicVertices.js";
 import { CutawayPolygon } from "../CutawayPolygon.js";
 import { VertexObject } from "../placeable_vertices/VertexObject.js";
+import { AABB3d } from "../3d/AABB3d.js";
 
 /** @type {Matrix<4,4>} */
 const IDENTITY_MATRIX = MatrixFloat32.identity(4, 4);
@@ -64,12 +65,17 @@ const QUADS = {
 
 export class InstancedGeometricPrimitive extends GeometricPrimitive {
 
+  constructor(id) {
+    super(id);
+    delete this.prototypeFaces;
+    delete this.prototypeAABB;
+  }
+
   // ----- NOTE: FACES ----- //
 
-  /** @type {Polygon3d} */
-  static prototypeFaces = [] // Defined by child class.
-
   get prototypeFaces() { return this.constructor.prototypeFaces; }
+
+  get prototypeAABB() { return this.constructor.prototypeAABB; }
 
   // ----- NOTE: Vertices ----- //
 
@@ -79,15 +85,31 @@ export class InstancedGeometricPrimitive extends GeometricPrimitive {
    */
   static _instanceVO;
 
+  static _reversedInstanceVO;
+
   static get instanceVO() { return (this._instanceVO ??= this.generateInstanceVertices()); }
 
-  get instanceVO() { return this.constructor.instanceVO; }
+  get instanceVO() { return this.reversed ? this.constructor.reversedInstanceVO : this.constructor.instanceVO; }
 
   static generateInstanceVertices() {
     const vo = new VertexObject();
     this.generateVerticesForFaces(this.prototypeFaces, vo);
     return vo;
   }
+
+  static _generateReversedVO(faces) { // Not #private so subclasses can access.
+    const reversed = faces.map(face => face.clone().reverseOrientation());
+    const vo = this.generateVerticesForFaces(reversed);
+    reversed.forEach(face => face.release());
+    return vo;
+  }
+
+  static get reversedInstanceVO() {
+    if ( !(Object.hasOwn(this, "_reversedInstanceVO")
+      && this._reversedInstanceVO) ) this._reversedInstancedVO = this._generateReversedVO(this.prototypeFaces);
+    return this._reversedInstanceVO;
+  }
+
 }
 
 /**
@@ -99,6 +121,8 @@ export class QuadPrimitive extends InstancedGeometricPrimitive {
   /** @type {Polygon3d} */
   static prototypeFaces = [QUADS.up.clone()];
 
+  static prototypeAABB = AABB3d.fromPolygon3d(QUADS.up);
+
   static _instanceVO;
 
   /**
@@ -107,21 +131,30 @@ export class QuadPrimitive extends InstancedGeometricPrimitive {
    * @param {PIXI.Point} end        Ending point of the slice on the XY plane
    * @returns {CutawayPolygon[]}
    */
-  verticalSlice(start, end) {
+  verticalSlice(start, end, { thickness = 1 } = {}) {
+    if ( start.almostEqual(end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end, ["x", "y"]) ) return [];
+
     // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
     const rot = this.modelMatrix.rotation;
     if ( rot.x || rot.y ) return super.verticalSlice(start, end);
 
     const top = this.faces[0];
-    const poly = top.toPlanarPolygon();
+    const poly = top.toPolygon2d();
     const topZ = top.points[0].z;
-    const bottomZ = topZ - 1;
-
+    const bottomZ = topZ - thickness;
     const opts = {
       topElevationFn: () => topZ,
       bottomElevationFn: () => bottomZ,
     };
-    return poly.cutaway(start, end, opts);
+    const cutaways = poly.cutaway(start, end, opts);
+
+    // Reverse orientation if the shape is a hole. Cutaway holes are isPositive === true.
+    const isHole = this.isHole;
+    cutaways.forEach(poly => {
+      if ( poly.isPositive ^ isHole ) poly.reverseOrientation();
+    });
+    return cutaways
   }
 
   prototypeFacesOutward() {
@@ -149,6 +182,8 @@ export class VerticalQuadPrimitive extends QuadPrimitive {
 
   static _instanceVO;
 
+  static prototypeAABB = AABB3d.fromPolygon3d(QUADS.north);
+
   setDims({ lengthXY, zHeight } = {}) {
     // For the horizontal quad (before rotation), length is the x-axis, height is z-axis.
     // Set y scale to 1 to avoid collapsing the matrix.
@@ -163,6 +198,9 @@ export class VerticalQuadPrimitive extends QuadPrimitive {
    * @returns {CutawayPolygon[]}
    */
   verticalSlice(start, end) {
+    if ( start.almostEqual(end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end, ["x", "y"]) ) return [];
+
     // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
     const rot = this.modelMatrix.rotation;
     if ( rot.x || rot.y ) return super.verticalSlice(start, end);
@@ -191,7 +229,22 @@ export class VerticalQuadPrimitive extends QuadPrimitive {
       topElevationFn: () => topZ,
       bottomElevationFn: () => bottomZ,
     };
-    return poly.cutaway(start, end, opts);
+    const cutaways = poly.cutaway(start, end, opts);
+
+    // Reverse orientation if the shape is a hole. Cutaway holes are isPositive === true.
+    const isHole = this.isHole;
+    cutaways.forEach(poly => {
+      if ( poly.isPositive ^ isHole ) poly.reverseOrientation();
+    });
+    return cutaways
+  }
+
+  /**
+   * Validate that this quad faces the correct direction.
+   * @returns {boolean} True if valid (tests pass).
+   */
+  validate() {
+    return (this.prototypeFacesOutward() ^ this.isHole) && (this.facesOutward() ^ this.isHole);
   }
 
   prototypeFacesOutward() {
@@ -240,9 +293,145 @@ export class TexturedQuadPrimitive extends QuadPrimitive {
 }
 
 /**
+ * Shape that is equivalent to an extruded polygon, with defined sides, top, bottom.
+ * Does not change the definitions upon rotation, but useful for FoundryVTT regions, etc.
+ * Top and bottom faces are arrays for consistency with more complex objects, like hills or steps.
+ */
+class ExtrudedInstancePrimitive extends InstancedGeometricPrimitive {
+
+  /** @type {Polygon3d[]} */
+  get bottomFaces() { return this.faces.slice(0,1); }
+
+  /** @type {Polygon3d[]} */
+  get topFaces() { return this.faces.slice(1,2); }
+
+  /** @type {Polygon3d[]} */
+  get sideFaces() { return this.faces.slice(2);}
+
+  get topZ() { return this.aabb.max.z; }
+
+  get bottomZ() { return this.aabb.min.z; }
+
+  /**
+   * Get the 2d polygon canvas representation of this shape, usually based on the bottom shape.
+   * Assumes no rotation around the x or y axis.
+   * @returns {PIXI.Polygon} Polygon, or possibly other PIXI shape for subclasses.
+   */
+  toPIXIShape() { return this.bottomFaces[0].toPolygon2d(); }
+
+
+  /**
+   * Does this shape's XY dimensions potentially contain this canvas location?
+   * Meant to be a relatively quick test. Should only reject if it is certain not to contain it.
+   * @param {PIXI.Point} canvasLoc
+   * @returns {boolean}
+   */
+  containsProjectedXY(canvasLoc) {
+    return this.bottomFaces.some(f => f.containsProjectedXY(canvasLoc));
+  }
+
+  /**
+   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
+   * @param {PIXI.Point} start     Starting point of the slice on the XY plane
+   * @param {PIXI.Point} end        Ending point of the slice on the XY plane
+   * @returns {CutawayPolygon[]}
+   */
+  verticalSlice(start, end) {
+    if ( start.almostEqual(end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end, ["x", "y"]) ) return [];
+
+    // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
+    const rot = this.modelMatrix.rotation;
+    if ( rot.x || rot.y ) return super.verticalSlice(start, end);
+
+    // Because the bottom face is parallel to XY plane, we can just drop the Z axis.
+    const { bottomFaces, topZ, bottomZ } = this;
+    const poly = bottomFaces[0].toPolygon2d();
+    const opts = {
+      topElevationFn: () => topZ,
+      bottomElevationFn: () => bottomZ,
+    };
+    const cutaways = poly.cutaway(start, end, opts);
+
+    // Reverse orientation if the shape is a hole. Cutaway holes are isPositive === true.
+    const isHole = this.isHole;
+    cutaways.forEach(poly => {
+      if ( poly.isPositive ^ isHole ) poly.reverseOrientation();
+    });
+    return cutaways
+  }
+
+  // ----- NOTE: Drawables ----- //
+
+  /** @type {VertexObject} */
+  static _sidesVO;
+
+  /**
+   * Shared VO for just the side walls of the prototype. Build lazily, once per concrete class.
+   * @type {VertexObject}
+   */
+  static get sidesVO() {
+    if ( !(Object.hasOwn(this, "_sidesVO") && this._sidesVO) ) { // Don't let a subclass pick up a parent's VO through static prototype chain.
+      this._sidesVO = this.generateVerticesForFaces(this.prototypeFaces.slice(2));
+    }
+    return this._sidesVO;
+  }
+
+  static _reversedSidesVO;
+
+  static get reversedSidesVO() {
+    if ( !(Object.hasOwn(this, "_reversedSidesVO") && this._reversedSidesVO) ) this._reversedSidesVO = this._generateReversedVO(this.prototypeFaces.slice(2));
+    return this._reversedSidesVO;
+  }
+
+  static _generateReversedVO(faces) {
+    const inverted = faces.map(face => face.clone().invertRole()); // Same op as _generateFaces.
+    const vo = this.generateVerticesForFaces(inverted);
+    inverted.forEach(face => face.release());
+    return vo;
+  }
+
+
+  /**
+   * Vertices for the prototype's side walls only.
+   * By default, every prototype face after the bottom (0) and top (1) faces.
+   * Therefore assumes an extruded shape, which may require subclasses to override.
+   * @type {VertexObject}
+   */
+  get sidesVO() {
+    return (this._sidesVO ??= this.constructor.generateVerticesForFaces(this.prototypeFaces.slice(2)));
+  }
+
+  /**
+   * @typedef {Object} GeometricDrawableData
+   *
+   * @prop {GeometricPrimitive} primitive
+   * @prop {VertexObject} vo
+   * @prop {Matrix<4x4>} matrix
+   * @prop {number} direction
+   * @prop {number} version
+   */
+
+  /**
+   * Yield what a renderer needs to draw this primitive: prototype VO and the matrix to apply it.
+   * Leaves yield themselves; containers yield their descendant's drawables.
+   * @param {object} [opts]
+   * @param {boolean} [opts.sidesOnly=false]    Only the side walls (used for holed solids).
+   * @yields {GeometricDrawableData}
+   */
+  *drawables({ sidesOnly = false} = {}) {
+    if ( !sidesOnly ) { yield* super.drawables(); return; }
+    for ( const drawable of super.drawables() ) {
+      drawable.vo = this.sidesVO;
+      yield drawable;
+    }
+  }
+}
+
+/**
  * Cube, e.g. for a square token.
  */
-export class CubePrimitive extends InstancedGeometricPrimitive {
+export class CubePrimitive extends ExtrudedInstancePrimitive {
 
   /**
    * Create the instance face shapes for a unit cube.
@@ -251,16 +440,16 @@ export class CubePrimitive extends InstancedGeometricPrimitive {
    */
   static createUnitCube() {
     const faces = [
-      QUADS.up.clone(),
       QUADS.down.clone(),
+      QUADS.up.clone(),
       QUADS.north.clone(),
       QUADS.west.clone(),
       QUADS.south.clone(),
       QUADS.east.clone(),
     ];
 
-    faces[0].setZ(0.5);
-    faces[1].setZ(-0.5);
+    faces[1].setZ(0.5);
+    faces[0].setZ(-0.5);
 
     // Adjust the sides so that they are at the region edge.
     for ( let i = 0; i < 4; i += 1 ) {
@@ -272,41 +461,37 @@ export class CubePrimitive extends InstancedGeometricPrimitive {
     return faces;
   }
 
+
   /** @type {Faces} */
   static prototypeFaces = this.createUnitCube();
+
+  static prototypeAABB = AABB3d.union(this.prototypeFaces.map(face => face.aabb));
 
   static _instanceVO;
 
   // Internal points follow the AABB.
 
   /**
-   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
-   * @param {PIXI.Point} start     Starting point of the slice on the XY plane
-   * @param {PIXI.Point} end        Ending point of the slice on the XY plane
-   * @returns {CutawayPolygon[]}
+   * Get the 2d polygon canvas representation of this shape, usually based on the bottom shape.
+   * Assumes no rotation around the x or y axis.
+   * @returns {PIXI.Polygon|PIXI.Rectangle} Polygon, or possibly other PIXI shape.
    */
-  verticalSlice(start, end) {
-    // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
-    const rot = this.modelMatrix.rotation;
-    if ( rot.x || rot.y ) return super.verticalSlice(start, end);
-    const top = this.faces[0];
-    const bottom = this.faces[1];
-    const poly = top.toPlanarPolygon();
-    const topZ = top.points[0].z;
-    const bottomZ = bottom.points[0].z;
-
-    const opts = {
-      topElevationFn: () => topZ,
-      bottomElevationFn: () => bottomZ,
-    };
-    return poly.cutaway(poly, start, end, opts);
+  toPIXIShape() {
+    // If the points are squared, return a rectangle.
+    const bottom = this.bottomFaces[0];
+    const points2d = bottom.points.map(pt => pt.to2d());
+    let out;
+    if ( isAxisAlignedRectangle(...points2d) ) out = this.aabb.toRectangle();
+    else out = bottom.toPolygon2d();
+    points2d.forEach(pt => pt.release());
+    return out;
   }
 }
 
 /**
  * Simple extruded (along z-axis) hexagon.
  */
-export class HexagonCylinderPrimitive extends InstancedGeometricPrimitive {
+export class HexagonCylinderPrimitive extends ExtrudedInstancePrimitive {
 
   /**
    * Create the face shapes for a unit hexagon.
@@ -318,18 +503,22 @@ export class HexagonCylinderPrimitive extends InstancedGeometricPrimitive {
     poly = poly.translate(-res.center.x, -res.center.y);
     const bounds = poly.getBounds();
     poly = poly.scale(1/bounds.width, 1/bounds.height);
-    if ( poly.isPositive ) poly.reverseOrientation();
-    const top = Polygon3d.fromPolygon(poly, 0.5);
+    if ( !poly.isPositive ) poly.reverseOrientation();
+    const top = Polygon3d.fromPolygon(poly, { elevationZ: 0.5 });
     const bottom = top.clone();
     bottom.reverseOrientation();
     top.setZ(0.5);
     bottom.setZ(-0.5);
-    return [top, bottom, ...top.buildTopSides(-0.5)];
+    return [bottom, top, ...top.buildTopSides(-0.5)];
   }
 
-  static #prototypeFaces; /* eslint-disable-line no-unused-private-class-members */
+  static #prototypeFaces;
 
-  static get prototypeFaces() { return (this.#prototypeFaces = this.createUnitHexagonCylinder()); }
+  static get prototypeFaces() { return (this.#prototypeFaces ??= this.createUnitHexagonCylinder()); }
+
+  static #prototypeAABB;
+
+  static get prototypeAABB() { return this.#prototypeAABB ??= AABB3d.union(this.prototypeFaces.map(face => face.aabb)); }
 
   static _instanceVO;
 
@@ -339,39 +528,14 @@ export class HexagonCylinderPrimitive extends InstancedGeometricPrimitive {
    * @returns {object}
    */
   getInternalPoints() {
-    const top = this.faces[0];
-    const bottom = this.faces[1];
-    return this.constructor.calculatePolygonCylinderInternalPoints(top, bottom);
-  }
-
-  /**
-   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
-   * @param {PIXI.Point} start     Starting point of the slice on the XY plane
-   * @param {PIXI.Point} end        Ending point of the slice on the XY plane
-   * @returns {CutawayPolygon[]}
-   */
-  verticalSlice(start, end) {
-    // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
-    const rot = this.modelMatrix.rotation;
-    if ( rot.x || rot.y ) return super.verticalSlice(start, end);
-    const top = this.faces[0];
-    const bottom = this.faces[1];
-    const poly = top.toPlanarPolygon();
-    const topZ = top.points[0].z;
-    const bottomZ = bottom.points[0].z;
-
-    const opts = {
-      topElevationFn: () => topZ,
-      bottomElevationFn: () => bottomZ,
-    };
-    return poly.cutaway(start, end, opts);
+    return this.constructor.calculatePolygonCylinderInternalPoints(this.topFaces[0], this.bottomFaces[0]);
   }
 }
 
 /**
  * Extruded (along z-axis) cylinder or ellipse
  */
-export class CylinderPrimitive extends InstancedGeometricPrimitive {
+export class CylinderPrimitive extends ExtrudedInstancePrimitive {
 
   /**
    * Assumed number of sides for the polygon approximation of the cylinder.
@@ -391,12 +555,24 @@ export class CylinderPrimitive extends InstancedGeometricPrimitive {
     // Build the sides.
     top.density = this.DENSITY;
     bottom.density = this.DENSITY;
-    return [top, bottom, ...top.buildTopSides(-0.5)];
+    return [bottom, top, ...top.buildTopSides(-0.5)];
   }
 
   static _prototypeFaces;
 
-  static get prototypeFaces() { return this._prototypeFaces ||= this.createUnitCylinder(canvas.scene.dimensions.maxR / 10); }
+  static get prototypeFaces() {
+    if ( !(Object.hasOwn(this, "_prototypeFaces")
+      && this._prototypeFaces) ) this._prototypeFaces = this.createUnitCylinder(canvas.scene.dimensions.maxR / 10);
+    return this._prototypeFaces;
+  }
+
+  static _prototypeAABB;
+
+  static get prototypeAABB() {
+     if ( !(Object.hasOwn(this, "_prototypeAABB")
+       && this._prototypeAABB) ) this._prototypeAABB ??= AABB3d.union(this._prototypeFaces.map(face => face.aabb));
+    return this._prototypeAABB;
+  }
 
   static _instanceVO;
 
@@ -406,34 +582,17 @@ export class CylinderPrimitive extends InstancedGeometricPrimitive {
    * @returns {object}
    */
   getInternalPoints() {
-    const top = this.faces[0].toPolygon3d({ density: 8 })
-    const bottom = this.faces[1].toPolygon3d({ density: 8 })
+    const top = this.topFaces[0].toPolygon3d({ density: 8 })
+    const bottom = this.bottomFaces[0].toPolygon3d({ density: 8 })
     return this.constructor.calculatePolygonCylinderInternalPoints(top, bottom);
   }
 
   /**
-   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
-   * @param {PIXI.Point} start     Starting point of the slice on the XY plane
-   * @param {PIXI.Point} end        Ending point of the slice on the XY plane
-   * @returns {CutawayPolygon[]}
+   * Get the 2d polygon canvas representation of this shape, usually based on the bottom shape.
+   * Assumes no rotation around the x or y axis.
+   * @returns {PIXI.Ellipse}
    */
-  verticalSlice(start, end) {
-    // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
-    const rot = this.modelMatrix.rotation;
-    if ( rot.x || rot.y ) return super.verticalSlice(start, end);
-
-    const top = this.faces[0];
-    const bottom = this.faces[1];
-    const ellipse = top.toPlanarEllipse();
-    const topZ = top.points[0].z;
-    const bottomZ = bottom.points[0].z;
-
-    const opts = {
-      topElevationFn: () => topZ,
-      bottomElevationFn: () => bottomZ,
-    };
-    return ellipse.cutaway(start, end, opts);
-  }
+  toPIXIShape() { return this.bottomFaces[0].toEllipse2d(); }
 }
 
 /**
@@ -441,46 +600,29 @@ export class CylinderPrimitive extends InstancedGeometricPrimitive {
  */
 export class CircularCylinderPrimitive extends CylinderPrimitive {
 
+  static _instanceVO;
+
   /**
    * Create the faces for a unit cylinder.
    * @returns {Ellipse3d|Polygon3d[]}
    */
   static createUnitCylinder() {
-    const top = Circle3d.fromCenterPoint({ x: 0, y: 0, z: 0.5 }, 0.5);
-    const bottom = Circle3d.fromCenterPoint({ x: 0, y: 0, z: -0.5 }, 0.5);
+    const top = Circle3d.fromCenterPoint({ x: 0, y: 0, z: 0.5 }, { radius: 0.5 });
+    const bottom = Circle3d.fromCenterPoint({ x: 0, y: 0, z: -0.5 }, { radius: 0.5 });
     bottom.reverseOrientation();
 
     // Build the sides.
     top.density = this.DENSITY;
     bottom.density = this.DENSITY;
-    return [top, bottom, ...top.buildTopSides(-0.5)];
+    return [bottom, top, ...top.buildTopSides(-0.5)];
   }
 
   /**
-   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
-   * @param {PIXI.Point} start     Starting point of the slice on the XY plane
-   * @param {PIXI.Point} end        Ending point of the slice on the XY plane
-   * @returns {CutawayPolygon[]}
+   * Get the 2d polygon canvas representation of this shape, usually based on the bottom shape.
+   * Assumes no rotation around the x or y axis.
+   * @returns {PIXI.Ellipse}
    */
-  verticalSlice(start, end) {
-    // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
-    const rot = this.modelMatrix.rotation;
-    if ( rot.x || rot.y ) return super.verticalSlice(start, end);
-
-    const top = this.faces[0];
-    const bottom = this.faces[1];
-    const circle = top.toPlanarCircle();
-    const topZ = top.points[0].z;
-    const bottomZ = bottom.points[0].z;
-
-    const opts = {
-      topElevationFn: () => topZ,
-      bottomElevationFn: () => bottomZ,
-    };
-    return circle.cutaway(start, end, opts);
-  }
-
-
+  toPIXIShape() { return this.bottomFaces[0].toCircle2d(); }
 }
 
 /**
@@ -489,6 +631,8 @@ export class CircularCylinderPrimitive extends CylinderPrimitive {
 export class SpherePrimitive extends InstancedGeometricPrimitive {
 
   static prototypeFaces = [new Sphere({ x: 0, y: 0 }, 0.5)];
+
+  static prototypeAABB = AABB3d.fromSphere(this.prototypeFaces[0]);
 
   static _instanceVO;
 
@@ -537,6 +681,9 @@ export class SpherePrimitive extends InstancedGeometricPrimitive {
    * @returns {CutawayPolygon[]}
    */
   verticalSlice(start, end) {
+    if ( start.almostEqual(end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end, ["x", "y"]) ) return [];
+
     // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
     const rot = this.modelMatrix.rotation;
     if ( rot.x || rot.y ) return super.verticalSlice(start, end);
@@ -566,17 +713,13 @@ export class SpherePrimitive extends InstancedGeometricPrimitive {
     using circleCenter = PIXI.Point.tmp.set(distAlongPlane, center.z);
 
     // Convert to cutaway.
+    // TODO: Add CutawayCircle and CutawayEllipse classes
     const circle = new PIXI.Circle(circleCenter.x, circleCenter.y, circleRadius);
-    const poly = CutawayPolygon.fromCutawayPoints(circle.toPolygon().points, start, end);
 
-    // Convert to squared distance.
-    let i = 0;
-    for ( using pt of poly.iteratePoints() ) {
-      cutaway.convertFromDistance(pt);
-      poly.points[i++] = pt.x;
-      poly.points[i++] = pt.y;
-    }
-    return [poly]; // TODO: Add CutawayCircle class.
+    const cutaway = CutawayPolygon.fromCutawayPoints(circle.toPolygon().points, start, end);
+    // Reverse orientation if the shape is a hole.
+    if ( cutaway.isPositive ^ !this.isHole ) cutaway.reverseOrientation();
+    return [cutaway];
   }
 
   // ----- NOTE: Debug ----- //
@@ -600,84 +743,4 @@ export class SpherePrimitive extends InstancedGeometricPrimitive {
     return !this.faces[0].isFacing(this.center)
   }
 }
-
-/**
- * Wedge-shape used for ramps with rectangular bases.
- */
-export class WedgeRectangularBasePrimitive extends InstancedGeometricPrimitive {
-
-  static #prototypeFaces; /* eslint-disable-line no-unused-private-class-members */
-
-  static get prototypeFaces() { return (this.#prototypeFaces = this.createUnitWedge()); }
-
-  static _instanceVO;
-
-  static createUnitWedge() {
-    // Right-angled isoceles triangle.
-    // Centered at 0,0,0 so rotation works.
-    // To modify the angle requires translation to/from.
-    const faces = [];
-    using a = Point3d.tmp;
-    using b = Point3d.tmp;
-    using c = Point3d.tmp;
-    using d = Point3d.tmp;
-    const min = -0.5;
-    const max = 0.5;
-
-    // Base is a square centered at 0,0, elevation at -0.5.
-    const down = QUADS.down.clone();
-    down.translate({ z: min });
-    faces.push(down);
-
-    // Back is a quad.
-    // Back is at x = 0.5
-    const back = QUADS.east.clone();
-    back.translate({ x: max });
-    faces.push(back);
-
-    // Sides are triangles. From base to top of back.
-    faces.push(Triangle3d.from3Points(
-      a.set(min, max, min),
-      b.set(max, max, min),
-      c.set(max, max, max),
-    ));
-    faces.push(Triangle3d.from3Points(
-      a.set(max, min, max),
-      b.set(max, min, min),
-      c.set(min, min, min),
-    ));
-
-    // Ramp is a quad. From base to top of back.
-    faces.push(Quad3d.from3Points(
-      a.set(min, min, min),
-      b.set(min, max, min),
-      c.set(max, max, max),
-      d.set(max, min, max),
-    ));
-
-    return faces;
-  }
-
-  // Height as a percentage of the base.
-  #rampPercentageHeight = 1;
-
-  get rampPercentageHeight() { return this.#rampPercentageHeight; }
-
-  set rampPercentageHeight(value) {
-    if ( this.#rampPercentageHeight === value ) return;
-
-    const transformM = this.modelMatrix.transformM;
-    using translateM = MatrixFloat32.translation({ x: -0.5, z: 0.5 });
-    using scaleM = MatrixFloat32.scale({ z: value });
-    using invTranslateM = translateM.invert();
-    translateM
-      .multiply4x4(scaleM, transformM)
-      .multiply4x4(invTranslateM, transformM);
-
-    // TODO: Need to finish this. Multiply the prototype faces?
-  }
-}
-
-
-
 

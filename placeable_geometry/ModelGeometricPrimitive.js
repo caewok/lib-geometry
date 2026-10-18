@@ -1,15 +1,16 @@
 /* globals
-PIXI,
+CONFIG,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
 import { GeometricPrimitive } from "./GeometricPrimitive.js";
-import { VertexObject } from "../placeable_vertices/VertexObject.js";
-import { Polygon3d, Triangle3d, Circle3d, Ellipse3d, Quad3d, Polygons3d } from "../3d/Polygon3d.js";
+import { Polygon3d, Polygons3d } from "../3d/Polygon3d.js";
 import { ModelMatrixAnchor } from "../ModelMatrix.js";
 import { Point3d } from "../3d/Point3d.js";
-import { roundDecimals, isOdd } from "../util.js";
+import { GEOMETRY_LIB_ID } from "../const.js";
+import { CutawayPolygon } from "../CutawayPolygon.js";
+import { AABB3d } from "../3d/AABB3d.js";
 
 /**
  * ModelGeometricPrimitives are one-offs.
@@ -21,7 +22,8 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
 
   constructor(id, prototypeFaces) {
     super(id);
-    this._prototypeFaces = prototypeFaces;
+    this.prototypeFaces = prototypeFaces;
+    AABB3d.union(this.prototypeFaces.map(face => face.aabb), this.prototypeAABB);
   }
 
   /**
@@ -35,11 +37,6 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
 
   // ----- NOTE: Faces ----- //
 
-  /** @type {Polygon3d[]} */
-  _prototypeFaces = [];
-
-  get prototypeFaces() { return this._prototypeFaces ?? []; } // Needed for constructor, when _prototypeFaces not yet initialized but this getter is.
-
   /**
    * @param {Polygon3d[]} faces
    * @param {object} [opts]                   Parameters used to translate canvas faces back to prototype
@@ -49,14 +46,15 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
    * @param {Point3d} [opts.anchors]
    * @returns {Polygon3d} Prototype faces, which may be same as faces.
    */
-  static canvasToPrototypeFaces(faces, opts) {
+  static canvasToPrototypeFaces(faces, opts = {}) {
     // Default approach is that the faces equal the prototype faces; model matrix is identity.
     if ( !(opts.center || opts.dims || opts.angles || opts.anchors ) ) return faces;
 
     // Build a matrix to transform each face;
     const M = this.toPrototypeModel(opts);
     const invTransposeM = M.invert().transpose();
-    return faces.map(face => face.transform(M, undefined, invTransposeM));
+    const mirrors = Polygon3d.isMirroringTransform(M);
+    return faces.map(face => face.transform(M, invTransposeM, mirrors));
   }
 
   /**
@@ -80,13 +78,6 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
     // Use the inverse to construct the prototype faces.
     return modelMatrix.model.invert();
   }
-
-  // ----- NOTE: Vertices ----- //
-
-  static instanceVO = null;
-
-  /** @type {VertexObject} */
-  instanceVO = new VertexObject();
 
 }
 
@@ -124,17 +115,49 @@ export class PlanarPolygonPrimitive extends ModelGeometricPrimitive {
     return new this(id, [prototypeFace]);
   }
 
-  prototypeFacesOutward() { return true; } // Handled with facesOutward.
+  get baseFace() { return this.faces[0]; }
 
-  facesOutward() {
+  validate() { return this._hasConsistentFaceDirection(); }
+
+  _hasConsistentFaceDirection() {
     // Confirm the prototype face is oriented same as the original.
     const prototypeFace = this.prototypeFaces[0];
-    const poly3d = this.faces[0];
+    const poly3d = this.baseFace;
     const ctr = poly3d.centroid.clone();
     ctr.z += 1;
     const protoCenter = Point3d.tmp.set(0, 0, 1); // 1 above the origin.
     return !(prototypeFace.isFacing(protoCenter) ^ poly3d.isFacing(ctr));
   }
+
+  /**
+   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
+   * @param {PIXI.Point} start     Starting point of the slice on the XY plane
+   * @param {PIXI.Point} end        Ending point of the slice on the XY plane
+   * @returns {CutawayPolygon[]}
+   */
+  verticalSlice(start, end, { thickness = 1 } = {}) {
+    if ( start.almostEqual(end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end, ["x", "y"]) ) return [];
+    const polys = this.baseFace.polygons ?? [this.baseFace];
+    const topZ = polys[0].points[0].z;
+    const bottomZ = topZ - thickness;
+    const opts = { topElevationFn: () => topZ, bottomElevationFn: () => bottomZ };
+    let cutaways = polys.map(poly => poly.toPolygon2d().cutaway(start, end, opts));
+    if ( cutaways.length > 2 ) cutaways = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths.fromPolygons(cutaways)
+      .union()
+      .clean()
+      .toPolygons()
+      .map(p => CutawayPolygon.fromPolygon(p, start, end));
+
+    // Reverse orientation if the shape is a hole. Cutaway holes are isPositive === true.
+    const isHole = this.isHole;
+    cutaways.forEach(poly => {
+      if ( poly.isPositive ^ isHole ) poly.reverseOrientation();
+    });
+    return cutaways;
+  }
+
+
 }
 
 /**
@@ -144,7 +167,106 @@ export class PlanarPolygonPrimitive extends ModelGeometricPrimitive {
  */
 export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
 
+  // Align with properties/methods of ExtrudedInstancePrimitive.
+
+  /** @type {Polygon3d[]} */
+  get bottomFaces() { return this.faces.slice(0,1); }
+
+  /** @type {Polygon3d[]} */
+  get topFaces() { return this.faces.slice(1,2); }
+
+  /** @type {Polygon3d[]} */
+  get sideFaces() { return this.faces.slice(2);}
+
+  get topZ() { return this.aabb.max.z; }
+
+  get bottomZ() { return this.aabb.min.z; }
+
+  /**
+   * Get the 2d polygon canvas representation of this shape, usually based on the bottom shape.
+   * Assumes no rotation around the x or y axis.
+   * @returns {PIXI.Polygon}
+   */
+  toPIXIShape() { return this.bottomFaces[0].toPolygon2d(); }
+
+  /**
+   * Does this shape's XY dimensions potentially contain this canvas location?
+   * Meant to be a relatively quick test. Should only reject if it is certain not to contain it.
+   * @param {PIXI.Point} canvasLoc
+   * @returns {boolean}
+   */
+  containsProjectedXY(canvasLoc) {
+    return this.bottomFaces.some(f => f.containsProjectedXY(canvasLoc));
+  }
+
+  reverseOrientation() {
+    this._sidesVO = null;
+    return super.reverseOrientation();
+  }
+
+  // ----- NOTE: Drawables ----- //
+
+  /** @type {VertexObject} */
+
+  _sidesVO;
+
+  /**
+   * Vertices for the prototype's side walls only.
+   * By default, every prototype face after the bottom (0) and top (1) faces.
+   * Therefore assumes an extruded shape, which may require subclasses to override.
+   * @type {VertexObject}
+   */
+  get sidesVO() {
+    return (this._sidesVO ??= this.constructor.generateVerticesForFaces(this.prototypeFaces.slice(2)));
+  }
+
+  _generateInstanceVertices(vo) {
+    const faces = this.reversed ? this.prototypeFaces.map(f => f.clone().invertRole()) : this.prototypeFaces;
+    this.constructor.generateVerticesForFaces(faces, vo);
+    if ( this.reversed ) faces.forEach(f => f.release());
+    return vo;
+  }
+
+  /**
+   * @typedef {Object} GeometricDrawableData
+   *
+   * @prop {GeometricPrimitive} primitive
+   * @prop {VertexObject} vo
+   * @prop {Matrix<4x4>} matrix
+   * @prop {number} direction
+   * @prop {number} version
+   */
+
+  /**
+   * Yield what a renderer needs to draw this primitive: prototype VO and the matrix to apply it.
+   * Leaves yield themselves; containers yield their descendant's drawables.
+   * @param {object} [opts]
+   * @param {boolean} [opts.sidesOnly=false]    Only the side walls (used for holed solids).
+   * @yields {GeometricDrawableData}
+   */
+  *drawables({ _sidesOnly = false} = {}) {
+    yield { primitive: this, vo: this.instanceVO, matrix: this.worldMatrix, direction: this.direction,
+      mirrored: Polygon3d.isMirroringTransform(this.worldMatrix), version: this.changeStamp };
+  }
+
+
   // ----- NOTE: Factory functions ----- //
+
+  /**
+   * Build an extruded (along the z-axis) shape from a 2d prototype polygon.
+   * @param {string} id           Identifier for this shape.
+   * @param {PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse} poly   Polygon to use.
+   * @param {object} [opts]
+   * @param {number} [opts.topZ]        Top elevation
+   * @param {number} [opts.bottomZ]     Bottom elevation
+   * @param {number} [opts.density]     Density when dealing with circles, ellipses
+   * @returns {ExtrudedPolygonPrimitive}
+   */
+  static fromPrototypePolygon(id, poly, { topZ = 0.5, bottomZ = -0.5, density } = {}) {
+    const top = Polygon3d.fromPIXIShape(poly, { elevationZ: topZ, density });
+    const prototypeFaces = this._facesFromPolygon3d(top, { topZ, bottomZ, epsilon: 1e-08 });
+    return new this(id, prototypeFaces);
+  }
 
   /**
    * Build an extruded (along the z-axis) shape from a 2d polygon.
@@ -158,35 +280,14 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    */
   static fromPolygon(id, poly, opts = {}) {
     this._makeElevationFinite(opts);
-    const top = Polygon3d.fromPIXIShape(poly, { z: opts.topZ });
-    const faces = this._facesFromPolygon3d(top, opts.bottomZ, opts);
+    const isHole = !poly.isPositive;
+    const top = Polygon3d.fromPIXIShape(poly, { elevationZ: opts.topZ, density: opts.density, isHole });
+    const faces = this._facesFromPolygon3d(top, opts);
     const prototypeFaces = this.canvasToPrototypeFaces(faces, opts);
-    return new this(id, prototypeFaces);
+    const out = new this(id, prototypeFaces);
+    out.isHole = isHole;
+    return out;
   }
-
-  /**
-   * Extrudes multiple polygons for a single shape, handles holes.
-   * @param {string} id                 Identifier for this shape.
-   * @param {(PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse)[]} polys       2d polygons to use.
-   * @param {object} [opts]
-   * @param {number} [opts.topZ]        Top elevation
-   * @param {number} [opts.bottomZ]     Bottom elevation
-   * @param {number} [opts.density]     Density when dealing with circles, ellipses
-   * @returns {ExtrudedPolygonPrimitive}
-   */
-  static fromPolygons(id, polys, opts = {}) {
-    if ( polys.length === 1 ) return this.fromPolygon(id, polys[0], opts);
-    this._makeElevationFinite(opts);
-    const allProtoFaces = [];
-    for ( const poly of polys )  {
-      const top = Polygon3d.fromPIXIShape(poly, { z: opts.topZ });
-      const faces = this._facesFromPolygon3d(top, opts.bottomZ, opts)
-      const prototypeFaces = this.canvasToPrototypeFaces(faces, opts);
-      allProtoFaces.push(...prototypeFaces);
-    }
-    return new this(id, allProtoFaces);
-  }
-
 
   // ----- NOTE: Factory helpers to construct faces ----- //
 
@@ -212,14 +313,16 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    * @param {number} bottomZ      The bottom elevation
    * @returns {Polygon3d[]}
    */
-  static _facesFromPolygon3d(top, bottomZ, opts) {
+  static _facesFromPolygon3d(top, { bottomZ, epsilon = 1e-04 } = {}) {
     const bottom = top.clone();
     bottom.setZ(bottomZ);
     bottom.reverseOrientation();
 
-    const EPSILON = 1e-04; // Larger epsilon because these side will eventually be transformed to a smaller prototype.
-    return [top, bottom, ...top.buildTopSides(bottomZ, EPSILON)];
+    // Larger epsilon because these side will eventually be transformed to a smaller prototype.
+    return [bottom, top, ...top.buildTopSides(bottomZ, epsilon)];
   }
+
+  // ----- NOTE: Queries ---- //
 
   /**
    * Determine all top, bottom, and mid corners along with midpoints between for the
@@ -227,9 +330,7 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    * @returns {object}
    */
   getInternalPoints() {
-    const top = this.faces[0];
-    const bottom = this.faces[1];
-    return this.constructor.calculatePolygonCylinderInternalPoints(top, bottom);
+    return this.constructor.calculatePolygonCylinderInternalPoints(this.topFace, this.bottomFace);
   }
 
   /**
@@ -238,23 +339,36 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    * @param {PIXI.Point} end        Ending point of the slice on the XY plane
    * @returns {CutawayPolygon[]}
    */
-  verticalSlice(start, end) {
-    const top = this.faces[0];
-    const bottom = this.faces[1];
-    const poly = top.toPlanarPolygon();
-    const topZ = top.points[0].z;
-    const bottomZ = bottom.points[0].z;
+  verticalSlice(start, end, { topZ, bottomZ } = {}) {
+    if ( start.almostEqual(end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end, ["x", "y"]) ) return [];
 
+    // If this object is rotated such that the top face is not parallel to XY, cutawayBasicShape will fail.
+    const rot = this.modelMatrix.rotation;
+    if ( rot.x || rot.y ) return super.verticalSlice(start, end);
+
+    // Because the bottom face is parallel to XY plane, we can just drop the Z axis.
+    bottomZ ??= this.bottomZ;
+    topZ ??= this.topZ;
+    const poly = this.bottomFaces[0].toPolygon2d();
     const opts = {
       topElevationFn: () => topZ,
       bottomElevationFn: () => bottomZ,
     };
-    return poly.cutaway(start, end, opts);
+    const cutaways = poly.cutaway(start, end, opts);
+
+    // Reverse orientation if the shape is a hole. Cutaway holes are isPositive === true.
+    const isHole = this.isHole;
+    cutaways.forEach(poly => {
+      if ( poly.isPositive ^ isHole ) poly.reverseOrientation();
+    });
+    return cutaways;
   }
+
 
    // ----- NOTE: Debug ----- //
 
-  _testFacesOutward(faces) {
+  _hasConsistentFaceDirection(faces) {
     if ( !faces || faces.length < 3 ) return false;
 
     // Must account for concave polygons, where the face could be facing opposite a centroid.
@@ -266,133 +380,104 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
 
     // Could test top and bottom using the centroid, but not guaranteed to have top at 0 and bottom at 1.
     // Simpler to test all faces using shoelace.
-    for ( let i = 0, n = faces.length; i < n; i += 1 ) {
-      const face = faces[i];
-      if ( !this.constructor.testFaceOrientation(face, faces) ) return false;
+    const iter = faces.values();
+    const firstFace = iter.next().value;
+    const isInside = this.constructor.testFaceOrientation(firstFace, faces);
+    for ( const face of iter ) {
+      // TODO: Special handling for Polygons3d, which may have solid + holes?
+      if ( this.constructor.testFaceOrientation(face, faces) !== isInside ) return 0;
     }
-    return true;
+    return isInside ? 1 : -1;
   }
 }
 
 export class ExtrudedPolygonPrimitiveWithHoles extends ExtrudedPolygonPrimitive {
 
   /**
-   * Build an extruded (along the z-axis) shape from a 2d polygon.
-   * @param {string} id           Identifier for this shape.
-   * @param {PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse} poly   Polygon to use.
-   * @param {object} [opts]
-   * @param {number} [opts.topZ]        Top elevation
-   * @param {number} [opts.bottomZ]     Bottom elevation
-   * @returns {ExtrudedPolygonPrimitive}
-   */
-  static fromPolygon(id, poly, holes = [], opts) {
-    if ( !holes.length ) return super.fromPolygon(id, poly, opts);
-    return this.fromPolygons(id, [poly], holes, opts);
-  }
-
-  /**
-   * Extrudes multiple polygons for a single shape, handles holes.
+   * Extrudes polygons for a single island (one solid + its holes).
    * @param {string} id                 Identifier for this shape.
-   * @param {(PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse)[]} polys      2d polygons to use.
+   * @param {(PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse)[]} solids        Solid 2d polygon to use
+   * @param {(PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse)[]} holes      2d polygon holes to use
    * @param {object} [opts]
    * @param {number} [opts.topZ]        Top elevation
    * @param {number} [opts.bottomZ]     Bottom elevation
    * @param {number} [opts.density]     Density when dealing with circles, ellipses
    * @returns {ExtrudedPolygonPrimitive}
    */
-  static fromPolygons(id, polys, holes = [], opts = {}) {
-    if ( !holes.length ) return super.fromPolygons(id, polys, opts);
-    this._makeElevationFinite(opts);
-    const islands = this._buildIslands(polys, holes);
+  static fromPolygons() {
+    console.error("ExtrudedPolygonPrimitiveWithHoles#fromPolygons is not implemented. Use only 1 solid per extruded shape.");
+  }
 
-    const allProtoFaces = [];
-    for ( const { solid, holes } of islands ) {
-      const top = new Polygons3d();
-      top.polygons.push(Polygon3d.fromPIXIShape(solid, { z: opts.topZ }));
-      top.polygons.push(...holes.map(hole => Polygon3d.fromPIXIShape(hole, { z: opts.topZ, isHole: true })));
-      const faces = this._facesFromPolygon3d(top, opts.bottomZ, opts);
-      allProtoFaces.push(...this.canvasToPrototypeFaces(faces, opts));
-    }
+  /**
+   * Extrudes polygons for a single island (one solid + its holes).
+   * @param {string} id           Identifier for this shape.
+   * @param {PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse} solid   Polygon to use.
+   * @param {(PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse)[]} holes      2d polygon holes to use
+   * @param {object} [opts]
+   * @param {number} [opts.topZ]        Top elevation
+   * @param {number} [opts.bottomZ]     Bottom elevation
+   * @returns {ExtrudedPolygonPrimitive}
+   */
+  static fromPolygon(id, solid, holes = [], opts) {
+    if ( !holes.length ) return super.fromPolygon(id, solid, opts);
+    this._makeElevationFinite(opts);
+
+    const top = new Polygons3d();
+    top.polygons.push(Polygon3d.fromPIXIShape(solid, { elevationZ: opts.topZ, isHole: false }));
+    top.polygons.push(...holes.map(hole => Polygon3d.fromPIXIShape(hole, { elevationZ: opts.topZ, isHole: true })));
+    const faces = this._facesFromPolygon3d(top, opts);
+    const allProtoFaces = this.canvasToPrototypeFaces(faces, opts);
     return new this(id, allProtoFaces);
   }
 
   /**
-   * From 3d polygons, construct a recursive tree of solid + holes
-   * A root solid pairs with its direct hole children only.
-   * Each of those holes' direct solid children become new island roots one level down.
-   * @param {(PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse)[]} solids
-   * @param {(PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse)[]} holes
-   * @returns {object[]}
-   * - @prop {PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse} solid
-   * - @prop {PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse[]} holes
-   */
-  static _buildIslands(solids, holes) {
-    const parent = this._buildRingParents([...solids, ...holes]);
-    const children = new Array(solids.length + holes.length).fill([]);
-    parent.forEach((p, i) => {
-      if ( p !== null ) children[p].push(i);
-    });
+   * Cuts the extruded polygon with a vertical plane and returns 2D rectangular cross-sections.
+   * @param {PIXI.Point|Point3d} start     Starting point of the slice on the XY plane
+   * @param {PIXI.Point|Point3d} end       Ending point of the slice on the XY plane
+   * @returns {CutawayPolygon[]} Array of CutawayPolygon cross-sections (solids and holes)   */
+  verticalSlice(start, end, { topZ, bottomZ } = {}) {
+    if ( start.almostEqual(end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end, ["x", "y"]) ) return [];
 
-    const islands = []; // { solid: PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse, holes: PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse[] }
+    // Construct the 2d cutaway polygons, accounting for holes.
+    const { topFace, bottomFace } = this;
+    if ( !bottomFace.polygons ) return super.verticalSlice(start, end, { topZ, bottomZ });
 
-    // The parent indices refer to the combined [...solids, ...holes]. Use the offset to find the original shape.
-    // Children similarly reference the combined [...solids, ...holes] array.
-    const holeOffsetIdx = solids.length;
-    const indexIsSolid = idx => idx < holeOffsetIdx;
+    // Determine top and bottom elevations.
+    topZ ??= topFace.points[0].z;
+    bottomZ ??= bottomFace.points[0].z;
+    const opts = {
+      topElevationFn: () => topZ,
+      bottomElevationFn: () => bottomZ,
+    };
 
-    function processSolid(solidIdx) {
-      const holeIdxs = children[solidIdx].filter(c => !indexIsSolid(c));
-      islands.push({ solid: solids[solidIdx], holes: holeIdxs.map(h => holes[h - holeOffsetIdx]) });
-
-      // Recurse: Any solid ring nested inside one of these holes starts a new island.
-      for ( const holeIdx of holeIdxs ) children[holeIdx]
-        .filter(c => indexIsSolid(c))
-        .forEach(processSolid);
+    // Because the bottom face is parallel to XY plane, we can just drop the Z axis.
+    let cutaways = [];
+    for ( const poly of this.bottomFace.polygons ) {
+      const poly2d = poly.toPolygon2d().cutaway(start, end, opts);
+      if ( poly2d ) cutaways.push(...poly2d);
     }
+    if ( !cutaways.length ) return [];
 
-    solids.forEach((_solid, i) => {
-      if (parent[i] === null ) processSolid(i);
+    // Use Clipper to union the cutaways. Holes go straight through, leaving 1+ solid polygons.
+    // Must convert from distance squared to ensure correct intersections of any diagonals.
+    // For this basic ExtrudedPolygonPrimitiveWithHoles, no diagonals should exist.
+    // (Flat top + flat bottom + vertical sides ==> rectangle cutaways)
+    const paths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths.fromPolygons(cutaways);
+    const out = paths
+      .union()
+      .clean()
+      .toPolygons();
+
+    cutaways = out.map(poly => CutawayPolygon.fromPolygon(poly, start, end));
+
+    // Reverse orientation if the shape is a hole. Cutaway holes are isPositive === true.
+    const isHole = this.isHole;
+    cutaways.forEach(poly => {
+      if ( poly.isPositive ^ isHole ) poly.reverseOrientation();
     });
-
-    return islands;
+    return cutaways;
   }
 
-  /**
-   * Find each ring's immediate parent: the smallest other ring (solid or hole)
-   * that contains it. Assumes clean, non-self-intersecting rings that are either
-   * disjoint or fully nested (true for Clipper-cleaned region shapes).
-   * @param {(PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse)[]} solids
-   * @param {(PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse)[]} holes
-   * @returns {number[]} Index of parent polygon for each ring
-   */
-  static _buildRingParents(planarRings) {
-    const areas = planarRings.map(r => r.area); // Note: Must be positive area, not signed.
 
-    // Ensure the test point is strictly inside the polygon, not on an edge.
-    // which could cause the `contains` method to fail for tightly nested shapes.
-    const testPoints = planarRings.map(r => {
-      if ( typeof r.interiorPoint === "function" ) {
-        const pt = r.interiorPoint();
-        if ( pt ) return pt;
-      }
-      // Fallback on centroid or manual bounding box center if interiorPoint fails.
-      return r.center || PIXI.Point.tmp.set(r.x, r.y);
-    });
-
-    // Construct the parent-child relationship based on area comparison. Parent area > child area.
-    return planarRings.map((ring, i) => {
-      let parent = null;
-      let parentArea = Number.POSITIVE_INFINITY;
-      for ( let j = 0, n = planarRings.length; j < n; j += 1 ) {
-        if ( i === j ) continue; // Skip self-test.
-        if ( areas[j] <= areas[i] ) continue; // A parent must be strictly larger than the ring it contains.
-        if ( areas[j] >= parentArea ) continue; // Already have a tighter-fitting candidate.
-        if ( planarRings[j].contains(testPoints[i].x, testPoints[i].y) ) {
-          parent = j;
-          parentArea = areas[j];
-        }
-      }
-      return parent;
-    });
-  }
 }

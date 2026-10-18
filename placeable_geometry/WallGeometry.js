@@ -104,7 +104,6 @@ export class WallGeometry extends PlaceableGeometry {
     shapes.forEach(shape => shape.destroy());
     this.shapes.length = 1;
     const shape = new VerticalQuadPrimitive(this.placeableId);
-    shape.initialize();
     this.shapes[0] = shape;
     this._updateShapeDirection();
   }

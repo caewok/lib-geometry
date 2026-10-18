@@ -7,15 +7,16 @@ PIXI,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "../const.js";
+import { GEOMETRY_CONFIG, GEOMETRY_LIB_ID } from "../const.js";
 import { Point3d } from "./Point3d.js";
 import { Plane } from "./Plane.js";
-import { cleanPolygonPoints } from "../util.js";
+import { cleanPolygonPoints, NULL_SET } from "../util.js";
 import { AABB3d } from "./AABB3d.js";
 import { Draw } from "../Draw.js";
 import { Matrix, MatrixFloat32 } from "../Matrix.js";
 import { Ellipse } from "../Ellipse.js";
 import { Segment } from "../Segment.js";
+
 
 /*
 3d Polygon representing a flat polygon plane.
@@ -24,6 +25,32 @@ Can be clipped at a specific z value.
 
 Points in a Polygon3d are assumed to not be modified in place after creation.
 */
+
+
+/** Re orientation and holes:
+When constructing a Polygon3d from a 2d object, the `isHole` parameter controls.
+For polygons, orientation of the points will be used if isHole is null. (Positive orientation ==> solid.)
+For circles and ellipses, orientation is irrelevant (only a single point) and no other parameter
+in a 2d PIXI shape, so `isHole` will control.
+All parameters for factory methods are in an options object other than the initial shape/points.
+
+FoundryVTT canvas is y-down (left-handed). So right-hand cross product gives wrong sign for CCW twoard viewer.
+Plane#from3Points compensates for this by using vAC x vAB instead of vice-versa.
+
+2d Operations (PIXI, Clipper): CW-positive convention, only for 2d.
+3d Operations: CCW from above for a top face. Outward normals, so dot(rayDir, N) < 0 means a ray entering a volume.
+orient2dFast: Positive for CCW, so orient2dFast > 0 means up-facing horizontal polygon is front-facing.
+
+Polygon from above, parallel to canvas  | Winding | isPositive  | orient2dFast  | Normal z
+Top face outer ring                     | CCW     | false       | > 0           | +z
+Hole in a top face                      | CW      | true        | < 0           | -z (In Polygons3d, solid plane controls.)
+PIXI solid, 2d                          | CW      | true        | < 0           | convert to 3d by reversing
+Bottom face outer ring                  | CW      | true        | < 0           | -z
+Hole in a bottom face                   | CCW     | false       | > 0           | +z
+
+*/
+
+
 Symbol.dispose ??= Symbol("Symbol.dispose");
 
 
@@ -33,7 +60,17 @@ export class Polygon3d {
   static EPSILON = 1e-08;
 
   static [Symbol.hasInstance](instance) {
-    return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
+    if ( !instance || typeof instance !== "object" ) return false;
+
+    // Walk up the inheritance chain..
+    let currentConstructor = instance.constructor;
+    while ( currentConstructor ) {
+      if ( currentConstructor._geoLibType === this._geoLibType ) return true;
+
+      // Move to the parent class.
+      currentConstructor = Object.getPrototypeOf(currentConstructor);
+    }
+    return false;
   }
 
   static _geoLibType = "Polygon3d";
@@ -60,6 +97,7 @@ export class Polygon3d {
     this.#dirtyAABB = true;
     this.#dirtyPlane = true;
     this.#dirtyCentroid = true;
+    this.#planarPoints.length = 0;
     this.#cleaned = false;
   }
 
@@ -87,7 +125,8 @@ export class Polygon3d {
    */
   setZ(z = 0) {
     this.points.forEach(pt => pt.z = z);
-    if ( !this.dirtyPlane ) this.plane.point.z = z;
+    this.#dirtyPlane = true;
+    this.#planarPoints.length = 0;
     if ( !this.dirtyAABB ) {
       this.aabb.min.z = z;
       this.aabb.max.z = z;
@@ -101,10 +140,21 @@ export class Polygon3d {
    * Reverse the orientation of this polygon. Done in place.
    */
   reverseOrientation() {
-    if ( !this.dirtyPlane ) this.plane.normal.multiplyScalar(-1, this.plane.normal);
+    if ( !this.dirtyPlane ) this.plane.reverse();
+    this.#planarPoints.length = 0;
     this.points.reverse();
     return this;
   }
+
+  // Valid if it forms a polygon, not a line or a point (or null).
+  isValid() {
+    this.clean();
+    return this.points.length > 2;
+  }
+
+  /**
+   * True for rings that add area (same role as the first ring); false for cut-outs.
+   * Needed in addition to `isHole`
 
   // ----- NOTE: Bounds ----- //
 
@@ -149,7 +199,7 @@ export class Polygon3d {
       this._calculatePlane(this.#plane);
 
       // Set the plane point to the first point of the polygon.
-      this.#plane.point.copyFrom(this.points[0] || { x: 0, y: 0, z: 0 });
+      this.#plane.point = this.points[0] || { x: 0, y: 0, z: 0 };
       this.#dirtyPlane = false;
     }
     return this.#plane;
@@ -158,14 +208,24 @@ export class Polygon3d {
   set plane(value) {
     this.#plane ??= new Plane();
     this.#plane.copyFrom(value);
-    if ( this.points[0] ) this.#plane.point.copyFrom(this.points[0]);
+    if ( this.points[0] ) this.#plane.point = this.points[0];
     this.#dirtyPlane = false;
   }
 
   _calculatePlane(plane) {
-    // Construct the plane so the center of the polygon is the origin.
-    if ( !this.cleaned ) this.clean(); // Avoid basing the plane on collinear points.
-    Plane.fromMultiplePoints(this.points, plane);
+    if ( !Plane.fromMultiplePoints(this.points, plane) ) return; // Degenerate; keep the previous plane.
+  }
+
+  /**
+   * Switch from solid to hole, or vice-versa.
+   * Reverses winding, normal, and toggles `isHole`.
+   * Does not modify the winding/hole/normal relationship—call `reverseOrientation` for that.
+   * @returns {this}
+   */
+  invertRole() {
+    this.reverseOrientation(); // Winding and normal.
+    this.isHole = !this.isHole;
+    return this;
   }
 
   /** @type {PIXI.Point[]} */
@@ -324,52 +384,43 @@ export class Polygon3d {
 
   // ----- NOTE: Factory methods ----- //
 
+
  /**
    * Helper to create a 3d polygon for different polygon shapes.
    * @param {PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse} poly
        Polygon shape to use for top and bottom faces.
-   * @param {object} [opts]                     Options that modify the resulting shape
-   * @param {number} [opts.z=0]                 Planar elevation
-   * @param {boolean} [opts.isHole]             Whether the shape represents a hole;
-   *   for polygons, this overrides `isPositive` property
-   * @param {number} [opts.density]             Density to set for Circle3d or Ellipse3d
+   * @param {object} [opts]                     Options that modify the resulting shape; see `from` methods
    * @returns {Polygon3d|Triangle3d|Quad3d|Circle3d|Ellipse3d} A Polygon3d representing this shape.
    */
-  static fromPIXIShape(shape, { z = 0, isHole, density = 0 } = {}) {
-    let face;
+  static fromPIXIShape(shape, opts = {}) {
     switch ( shape.type ) {
-      case PIXI.SHAPES.ELIP: face ??= Ellipse3d.fromPIXIEllipse(shape, z);
-      case PIXI.SHAPES.CIRC:  /* eslint-disable-line no-fallthrough */
-        face ??= Circle3d.fromCircle(shape, z);
-        if ( density ) face.density = density;
-      case PIXI.SHAPES.RECT: face ??= Quad3d.fromRectangle(shape, z);  /* eslint-disable-line no-fallthrough */
-      case PIXI.SHAPES.RREC:  /* eslint-disable-line no-fallthrough */
-        face ??= Polygon3d.fromPolygon(shape.toPolygon(), z);
-        if ( isHole ) face.reverseOrientation(); // This reverses the plane. Rect/circ/ellip 2d polys don't track orientation.
-        break;
+      case PIXI.SHAPES.ELIP: return Ellipse3d.fromPIXIEllipse(shape, opts);
+      case PIXI.SHAPES.CIRC: return Circle3d.fromCircle(shape, opts);
+      case PIXI.SHAPES.RECT: return Quad3d.fromRectangle(shape, opts);
+      case PIXI.SHAPES.RREC: return Polygon3d.fromPolygon(shape.toPolygon(), opts);
 
       case PIXI.SHAPES.POLY: {
-        isHole ??= !shape.isPositive;
-        if ( isHole && !shape.isPositive ) shape.reverseOrientation();
-        if ( shape.points.length === 6 ) face = Triangle3d.fromPolygon(shape, z);
-        else if ( shape.points.length === 8 ) face = Quad3d.fromPolygon(shape, z);
-        else face = Polygon3d.fromPolygon(shape, z);
-        break;
+        const points = cleanPolygonPoints([...shape.iteratePoints()]);
+        let cl;
+        switch ( points.length ) {
+          case 3: cl = Triangle3d; break;
+          case 4: cl = Quad3d; break;
+          default: cl = Polygon3d;
+        }
+        return cl.fromPolygon(shape, opts);
       }
 
       default: throw new Error("Polygon3d.fromPIXIShape|Shape not recognized", { shape });
     }
-    if ( isHole ) face.isHole = true;
-    return face;
   }
 
-  static from2dPoints(pts, elevation = 0, out) {
+  static from2dPoints(pts, opts) {
     // While faster to just set the points, use a polygon to test for holes.
     const poly = new PIXI.Polygon(pts);
-    return this.fromPolygon(poly, elevation, out);
+    return this.fromPolygon(poly, opts);
   }
 
-  static from3dPoints(pts, out) {
+  static from3dPoints(pts, { isHole = null, out } = {}) {
     const n = pts.length;
     if ( out ) {
       Point3d.release(...out.points.slice(n));
@@ -380,58 +431,67 @@ export class Polygon3d {
       const outPt = out.points[i] ??= Point3d.tmp; // May require adding points.
       outPt.copyFrom(pts[i]);
     }
+    out.isHole = isHole || false;
+    out.clearCache();
     out.clean();
     return out;
   }
 
-  static fromPolygon(poly, elevation = 0, out) {
+  /**
+   * Convert a 2d PIXI polygon to a Polygon 3d.
+   * Solid ring ends up counterclockwise (isPositive --> !isPositive)
+   * Hole ring ends up clockwise.
+   */
+  static fromPolygon(poly, { elevationZ = 0, isHole = null, out } = {}) {
+    isHole ??= !poly.isPositive;
+
     // Clean the points before adding them to the polygon.
     const points = cleanPolygonPoints([...poly.iteratePoints()]);
     const n = points.length;
 
     // Release excess points and set the out.points to the correct length.
     out ??= new this(n);
-    Point3d.release(...out.points.slice(n));
-    out.points.length = points.length;
+    if ( out.points.length > n ) Point3d.release(...out.points.splice(n));
+    for ( let j = out.points.length; j < n; j += 1 ) out.points[j] = Point3d.tmp;
+
+    // 3d winding convention, when facing from above:
+    // solid ring --> CCW; hole ring --> CW
+    const reverse = poly.isPositive !== isHole;
 
     // Set the out polygon points, using the provided elevation for the z coordinate.
+    // Write points directly; no separate reverse pass.
     let i = 0;
-    for ( const pt of points ) out.points[i++].set(pt.x, pt.y, elevation);
-
-    // Release the 2d polygon points.
+    if ( reverse ) points.reverse();
+    for ( const pt of points ) out.points[i++].set(pt.x, pt.y, elevationZ);
     PIXI.Point.release(...points);
 
-    // 3d polygon faces up if the poly is not a hole.
-    // Confirm orientation manually b/c this always gets screwed up.
-    const isHole = poly.isHole ?? !poly.isPositive;
-    const ctr = poly.center;
-    using ctr3d = Point3d.tmp.set(ctr.x, ctr.y, elevation + 1);
-    if ( out.isFacing(ctr3d) ^ !isHole ) out.reverseOrientation();
+    // Set properties. Winding already set per above.
     out.isHole = isHole;
+    out.clearCache();
     return out;
   }
 
-  static fromClipperPaths(cpObj, elevation = 0) {
-    return cpObj.toPolygons().map(poly => this.fromPolygon(poly, elevation));
+  static fromClipperPaths(cpObj, opts) {
+    return cpObj.toPolygons().map(poly => this.fromPolygon(poly, opts));
   }
 
-  static fromPlanarPolygon(poly2d, plane, out) {
+  static fromPlanarPolygon(poly2d, plane, opts) {
     // First create a 3d polygon at elevation 0.
     // This will also test for holes.
-    out = this.fromPolygon(poly2d, 0, out);
+    const out = this.fromPolygon(poly2d, { ...opts, elevationZ: 0 });
 
     // Now translate the XY polygon in the z direction.
     return this._matchPolygon3dToPlane(out, plane);
   }
 
   /**
-   * Shift the points of a polygon tha tis parallel to the XY canvas based on a plane.
+   * Shift the points of a polygon that is parallel to the XY canvas based on a plane.
    * @param {Polygon3d} poly3d        Poly3d set at elevation 0 with a plane normal z value only.
    * @param {Plane} plane
    * @returns {Polygon3d} Same polygon, possibly shifted to match the plane.
    */
   static _matchPolygon3dToPlane(poly3d, plane) {
-    if ( poly3d.plane.almostEqual(plane) ) return poly3d;
+    if ( !poly3d.isHole && poly3d.plane.almostEqual(plane) ) return poly3d;
     if ( poly3d.points[0].z !== 0 ) console.error("_matchPolygon3dToPlane|Should be at 0 elevation.");
     if ( poly3d.plane.normal.x || poly3d.plane.normal.y ) console.error("_matchPolygon3dToPlane|Should be pointing straight up or down.");
 
@@ -440,7 +500,9 @@ export class Polygon3d {
     for ( const pt3d of poly3d.iteratePoints() ) invM2d.multiplyPoint3d(pt3d, pt3d);
 
     // The plane is not dirty because we checked it for equality at the beginning. So we must reset it.
-    poly3d.plane.copyFrom(plane);
+    poly3d.clearCache();
+    poly3d.plane = plane;
+    if ( poly3d.isHole ) poly3d.plane.reverse();
     return poly3d;
   }
 
@@ -466,10 +528,12 @@ export class Polygon3d {
 
     // Copy over key properties.
     out.isHole = this.isHole;
-    if ( !this.dirtyPlane ) out.plane = this.plane;  // Uses a setter to copy from, unset dirty value.
+    if ( !this.dirtyPlane ) out.plane = this.plane; // Uses a setter to copy from, unset dirty value.
+    else out.dirtyPlane = true;
     if ( !this.dirtyCentroid ) out.centroid = this.centroid; // Uses a setter to copy from, unset dirty value.
+    else out.dirtyCentroid = true;
     if ( !this.dirtyAABB ) out.aabb = this.aabb; // Uses a setter to copy from, unset dirty value.
-
+    else out.dirtyAABB = true;
     return out;
   }
 
@@ -559,11 +623,24 @@ export class Polygon3d {
     const tris2d = poly.triangulate(opts);
     points2d.forEach(pt => pt.release());
 
+    // Orientation helper.
+    using ab = Point3d.tmp;
+    using ac = Point3d.tmp;
+    using abcCross = Point3d.tmp;
+    const orientTriangleToward = (tri, normal) => {
+      const [a, b, c] = tri.points;
+      b.subtract(a, ab);
+      c.subtract(a, ac);
+      ab.cross(ac, abcCross).multiplyScalar(-1, abcCross);
+      if ( abcCross.dot(normal) < 0 ) tri.reverseOrientation();
+    }
+
     // Convert back to 3d. For speed, do with tmp points instead of using _convert2dPointsTo3d.
     const from2dM = this.plane.conversion2dMatrixInverse;
     using a = Point3d.tmp;
     using b = Point3d.tmp;
     using c = Point3d.tmp;
+    const thisNormal = this.plane.normal;
     const out = tris2d.map(tri2d => {
       const pts = tri2d.points;
       a.set(pts[0], pts[1], 0);
@@ -573,7 +650,9 @@ export class Polygon3d {
       from2dM.multiplyPoint3d(b, b);
       from2dM.multiplyPoint3d(c, c);
       const tri = Triangle3d.from3Points(a, b, c);
+      orientTriangleToward(tri, thisNormal);
       tri.isHole = this.isHole;
+      return tri;
     });
     return out;
   }
@@ -618,6 +697,7 @@ export class Polygon3d {
     using a = Point3d.tmp;
     using b = Point3d.tmp;
     let filterSides = false;
+    const opts = { isHole: this.isHole };
     for ( const edge of this.iterateEdges({ close: true }) ) {
       // Cannot form a quad without 4 distinct points. Quick test here.
       if ( edge.a.z.almostEqual(bottomZ) && edge.b.z.almostEqual(bottomZ) ) {
@@ -630,14 +710,12 @@ export class Polygon3d {
       const bottomB = b.set(edge.b.x, edge.b.y, bottomZ);
 
       const pts = cleanPolygonPoints([edge.b, edge.a, bottomA, bottomB], epsilon)
-      if ( this.isHole ) pts.reverse();
       let side;
       switch ( pts.length ) {
-        case 3: side = Triangle3d.from3Points(...pts); break;
-        case 4: side = Quad3d.from4Points(...pts); break;
+        case 3: side = Triangle3d.from3Points(...pts, opts); break;
+        case 4: side = Quad3d.from4Points(...pts, opts); break;
         default: filterSides = true; continue;
       }
-      side.isHole = this.isHole;
       sides[i++] = side;
     }
     if ( filterSides ) return sides.filter(elem => Boolean(elem));
@@ -688,8 +766,9 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
 
   // Bucket by plane. Groups are few in practice, so a linear scan per member is fine.
   const groups = [];
+  const facing = poly => (poly.isHole ? poly.plane.clone().reverse() : poly.plane);
   for ( const poly of flat ) {
-    const plane = poly.plane;
+    const plane = facing(poly);
     const group = groups.find(g => g.plane.almostEqual(plane));
     if ( group ) group.members.push(poly);
     else groups.push({ plane, members: [poly] });
@@ -728,6 +807,7 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
       Polygon3d._matchPolygon3dToPlane(poly3d, plane);
       polys3d.push(poly3d);
     }
+    polys3d.sort((a, b) => a.isHole - b.isHole);
 
     out.push(polys3d.length === 1 ? polys3d[0] : Polygons3d.from3dPolygons(polys3d));
   }
@@ -740,24 +820,24 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
    * Iterate over the polygon's edges in order.
    * @param {object} [options]
    * @param {boolean} [close]   If true, return last point --> first point as edge.
-   * @returns { Segment } for each edge
+   * @yields {Segment}
    * Edges link, such that edge0.b === edge.1.a.
    */
   *iterateEdges({close = true} = {}) {
     const n = this.points.length;
     if ( n < 2 ) return;
 
-    const firstA = this.points[0];
+    const firstA = this.points[0].clone();
     let a = firstA;
     for ( let i = 1; i < n; i += 1 ) {
-      const b = this.points[i];
-      yield { a, b };
+      const b = this.points[i].clone();
+      yield new Segment(a, b);
       a = b;
     }
 
     if ( close ) {
       const b = firstA;
-      yield { a, b };
+      yield new Segment(a, b);
     }
   }
 
@@ -765,24 +845,24 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
    * Iterate over the polygon's edges in reverse order.
    * @param {object} [options]
    * @param {boolean} [close]   If true, return last point --> first point as edge.
-   * @returns { A: Point3d, B: Point3d } for each edge
+   * @yields {Segment}
    * Edges link, such that edge0.b === edge.1.a.
    */
   *reverseIterateEdges({close = true} = {}) {
     const n = this.points.length;
     if ( n < 2 ) return;
 
-    const firstA = this.points.at(-1);
+    const firstA = this.points.at(-1).clone();
     let a = firstA;
     for ( let i = n - 2; i > -1; i -= 1 ) {
-      const b = this.points[i];
-      yield { a, b };
+      const b = this.points[i].clone();
+      yield new Segment(a, b);
       a = b;
     }
 
     if ( close ) {
       const b = firstA;
-      yield { a, b };
+      yield new Segment(a, b);
     }
   }
 
@@ -821,15 +901,15 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
     };
   }
 
-//   forEach(callback) {
-//     for ( let i = 0, iMax = this.points.length; i < iMax; i += 1 ) callback(this.points[i], i, this);
-//   }
-
   // ----- NOTE: Property tests ----- //
 
 
   /** @type {boolean} */
-  isHole = false;
+  #isHole = false;
+
+  get isHole() { return this.#isHole; }
+
+  set isHole(value) { this.#isHole = Boolean(value); }
 
   /**
    * Does this polygon face a given point?
@@ -867,32 +947,33 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
 
   // ----- NOTE: Transformations ----- //
 
-  // Valid if it forms a polygon, not a line or a point (or null).
-  isValid() {
-    this.clean();
-    return this.points.length > 2;
-  }
-
   /**
    * Transform the points using a transformation matrix.
    * Passing an out variable is not allowed here; use clone instead.
    * Some transforms, like circles, can result in new shapes (e.g., ellipse).
    * @param {Matrix} M
    * @param {Matrix} [invTransposeM]          The inverse transpose of M, when doing repeated calculations.
+   * @param {boolean} [mirrors]               Does this transform flip handedness?
    * @returns {Polygon3d} A new object with the modified polygon.
    */
-  transform(M, invTransposeM) {
+  transform(M, invTransposeM, mirrors) {
     const out = this.clone();
     out.points.forEach(pt => M.multiplyPoint3d(pt, pt));
 
     // Use the inverse transpose to calculate the normal
     invTransposeM ??= M.invert().transpose();
+    mirrors ??= this.constructor.isMirroringTransform(M);
 
     // Transform the normal vector as a direction (w = 0).
     const txN = out.plane.normal;
     invTransposeM.multiplyPoint3d(this.plane.normal, txN, 0); // Set w = 0 to treat as vector.
     txN.normalize(txN);
     out.plane.point.copyFrom(out.points[0]);
+    out.plane.clearCache();
+
+    // A mirror reverses the port winding. (natural: normal = det(M) * M^-T * N).
+    // Reverses the points so winding matches the plane again: solids CCW, holes CW.
+    if ( mirrors ) out.points.reverse();
 
     // The AABB and centroid must be recalculated. (Could use the model matrix, but safer to recalculate)
     out.dirtyAABB = true;
@@ -903,6 +984,7 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
   multiplyScalar(multiplier, poly3d) {
     poly3d = this.clone(poly3d);
     poly3d.points.forEach(pt => pt.multiplyScalar(multiplier, pt));
+    if ( multiplier < 0 ) poly3d.points.reverse(); // (-k)^3 < 0: Mirror; restore winding.
     poly3d.clearCache();
     return poly3d;
   }
@@ -919,6 +1001,7 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
     poly3d = this.clone(poly3d);
     using scalePt = Point3d.tmp.set(x, y, z);
     poly3d.points.forEach(pt => pt.multiply(scalePt, pt));
+    if ( (x * y * z) < 0 ) poly3d.points.reverse(); // Mirror: restore winding.
     poly3d.clearCache();
     return poly3d;
   }
@@ -935,7 +1018,33 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
     return poly3d;
   }
 
+  /**
+   * Does the linear part of M mirror (flip handedness)? True when det(M) < 0.
+   * @param {Matrix<4x4>} M
+   * @returns {boolean}
+   */
+  static isMirroringTransform(M) {
+    using ex = Point3d.tmp.set(1, 0, 0);
+    using ey = Point3d.tmp.set(0, 1, 0);
+    using ez = Point3d.tmp.set(0, 0, 1);
+    using cross = Point3d.tmp;
+    M.multiplyPoint3d(ex, ex, 0); // w = 0: direction, ignores translation.
+    M.multiplyPoint3d(ey, ey, 0);
+    M.multiplyPoint3d(ez, ez, 0);
+    return ex.dot(ey.cross(ez, cross)) < 0;
+  }
+
   // ----- NOTE: Intersection ----- //
+
+  /**
+   * Test if an XY point is contained within the projected polygon.
+   * @param {PIXI.Point} canvasLoc
+   * @returns {boolean} True if contained.
+   */
+  containsProjectedXY(canvasLoc) {
+    const poly = this.toPolygon2d();
+    return poly.contains(canvasLoc.x, canvasLoc.y);
+  }
 
   /**
    * Test if a ray is within the polygon bounds and intersects the polygon's plane.
@@ -1096,7 +1205,7 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
 
       // Check if the line crosses the edge.
       if ( distA * distB <= 0 ) {
-        if ( distA.almostLessThan(0, EPSILON) && distB.almostLessThan(0, EPSILON) ) {
+        if ( distA.almostEqual(0, EPSILON) && distB.almostEqual(0, EPSILON) ) {
           // Edge is perfectly collinear with intersection line.
           tValues.push(vA.dot(direction));
           tValues.push(vB.dot(direction));
@@ -1153,7 +1262,7 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
   /**
    * Intersect this Polygon3d against a plane.
    * @param {Plane} plane
-   * @returns {Segment3d[]|null} Empty if no intersections or parallel. If coincident, returns null.
+   * @returns {Segment|null} Empty if no intersections or parallel. If coincident, returns null.
    */
   intersectPlane(plane) {
     if ( this.points.length < 3 ) return [];
@@ -1161,7 +1270,7 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
     if ( this.plane.isParallelToPlane(plane) ) {
       // If polygon lies flat on the cutting plane, handle explicitly.
       // Return the polygon's own edges as segments.
-      if ( this.plane.isCoincidentWithPlane(plane, { testParallel: false }) ) return [...this.iterateEdges()];
+      if ( this.plane.isCoincidentWithPlane(plane, { testParallel: false }) ) return null;
       return []; // No intersection.
     }
 
@@ -1195,7 +1304,7 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
    * Assumes the line is on this plane.
    * @param {Point3d} origin
    * @param {Point3d} direction
-   * @returns {number[]} T-values along the line.
+   * @returns {boolean} T-values along the line.
    */
   _hasPlanarLineIntersections(origin, direction) {
     // First half from planarLineIntersections
@@ -1217,7 +1326,7 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
 
       // Check if the line crosses the edge.
       if ( distA * distB <= 0 ) {
-        if ( distA.almostLessThan(0, EPSILON) && distB.almostLessThan(0, EPSILON) ) return true;
+        if ( distA.almostEqual(0, EPSILON) && distB.almostEqual(0, EPSILON) ) return true;
         else if ( Math.abs(distA - distB) > EPSILON) return true;
       }
 
@@ -1259,7 +1368,7 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
    * Coplanar objects can be transformed to 2d and intersected or tested for overlap.
    */
   intersectPolygon3d(other) {
-    if ( this.points.length < 3 || other.points.length < 3 ) return [];
+    if ( !(this.isValid() && other.isValid()) ) return [];
     if ( this.plane.isParallelToPlane(other.plane) ) {
       if ( this.plane.isCoincidentWithPlane(other.plane, { testParallel: false }) ) return null;
       return []; // No intersection; parallel but not touching.
@@ -1301,7 +1410,7 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
    * @returns {boolean}
    */
   intersectsPolygon3d(other) {
-    if ( this.points.length < 3 || other.points.length < 3 ) return false;
+    if ( !(this.isValid() || other.isValid()) ) return false;
     if ( this.plane.isParallelToPlane(other.plane) ) {
       return this.plane.isCoincidentWithPlane(other.plane, { testParallel: false });
     }
@@ -1322,6 +1431,21 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
   draw2d({ draw, omitAxis = "z", ...opts } = {}) {
     draw ??= new Draw();
     draw.shape(this.toPolygon2d({ omitAxis }), opts);
+  }
+
+  drawNormal({ multiplier = 10, draw, omitAxis = "z", ...opts } = {}) {
+    draw ??= new Draw();
+    const a3d = this.centroid;
+    using b3d = Point3d.tmp;
+    a3d.add(this.plane.normal.multiplyScalar(multiplier, b3d), b3d);
+    using a = Point3d.tmp;
+    using b = Point3d.tmp;
+    switch ( omitAxis ) {
+      case "x": a3d.to2d({ x: "y", y: "z" }, a); b3d.to2d({ x: "y", y: "z" }, b); break;
+      case "y": a3d.to2d({ x: "x", y: "z" }, a); b3d.to2d({ x: "x", y: "z" }, b); break;
+      default: a.copyFrom(a3d); b.copyFrom(b3d);
+    }
+    draw.segment({ a, b }, opts);
   }
 }
 
@@ -1348,11 +1472,13 @@ export class Ellipse3d extends Polygon3d {
   set density(value) { this.#density = value; }
 
   /** @type {Point3d} */
-  get center() { return this.points[0]; }
+  get center() { return this.points[0].clone(); }
 
   set center(value) {
     this.points[0].copyFrom(value);
-    this.plane.point.copyFrom(value);
+    this.plane.point = value;
+    this.dirtyAABB = true;
+    this.dirtyCentroid = true;
   }
 
   // For numerical consistency, store the radius squared to use when possible.
@@ -1363,6 +1489,7 @@ export class Ellipse3d extends Polygon3d {
     this.#radius.copyFrom(value);
     using value2 = value.multiply(value);
     this.#radiusSquared.copyFrom(value2);
+    this.dirtyAABB = true;
   }
 
   /** @type {PIXI.Point} */
@@ -1372,6 +1499,7 @@ export class Ellipse3d extends Polygon3d {
     this.#radiusSquared.copyFrom(value);
     using valueSqrt = value.sqrt();
     this.#radius.copyFrom(valueSqrt);
+    this.dirtyAABB = true;
   }
 
   /** @type {number} */
@@ -1379,6 +1507,7 @@ export class Ellipse3d extends Polygon3d {
   set radiusX(value) {
     using tmp = PIXI.Point.tmp.set(value, this.radiusY);
     this.radius = tmp;
+    this.dirtyAABB = true;
   }
 
   /** @type {number} */
@@ -1386,6 +1515,7 @@ export class Ellipse3d extends Polygon3d {
   set radiusY(value) {
     using tmp = PIXI.Point.tmp.set(this.radiusX, value);
     this.radius = tmp;
+    this.dirtyAABB = true;
   }
 
   /**
@@ -1398,7 +1528,7 @@ export class Ellipse3d extends Polygon3d {
     // Find numerically stable axes.
     const { u, v } = this.plane._calculateAxisVectors();
     const cTheta = Math.cos(this.angle);
-    const sTheta = Math.sin(this.angle);
+    const sTheta = -Math.sin(this.angle);
     using tmp1 = Point3d.tmp;
     using tmp2 = Point3d.tmp;
     const vx = Point3d.tmp;
@@ -1411,23 +1541,27 @@ export class Ellipse3d extends Polygon3d {
   /** @type {Point3d} */
   get majorRadiusAxis() {
     const { vx, vy } = this.radiusVectors();
-    return vx.magnitudeSquared() > vy.magnitudeSquared ? vx : vy;
+    return (vx.magnitudeSquared() > vy.magnitudeSquared()) ? vx : vy;
   }
 
   /** @type {Point3d} */
   get minorRadiusAxis() {
     const { vx, vy } = this.radiusVectors();
-    return vx.magnitudeSquared() < vy.magnitudeSquared ? vx : vy;
+    return (vx.magnitudeSquared() < vy.magnitudeSquared()) ? vx : vy;
   }
 
   get majorAxisEndpoints() {
     const v = this.majorRadiusAxis;
-    return [this.center.add(v), this.center.subtract(v)];
+    const out = [this.center.add(v), this.center.subtract(v)];
+    v.release();
+    return out;
   }
 
   get minorAxisEndpoints() {
     const v = this.minorRadiusAxis;
-    return [this.center.add(v), this.center.subtract(v)];
+    const out = [this.center.add(v), this.center.subtract(v)];
+    v.release();
+    return out;
   }
 
 
@@ -1453,7 +1587,17 @@ export class Ellipse3d extends Polygon3d {
   // ----- NOTE: Synonyms/Aliases -----
 
   /** @type {Point3d} */
-  get centroid() { return this.center; }
+  _calculateAreaWeightedCentroid(out) {
+    out ??= Point3d.tmp;
+    return this.center.clone(out);
+  }
+
+  get centroid() { return super.centroid; }
+
+  set centroid(value) {
+    super.centroid = value;
+    this.points[0].copyFrom(value);
+  }
 
   /** @type {number} */
   get halfWidth() { return this.radiusX }
@@ -1473,23 +1617,13 @@ export class Ellipse3d extends Polygon3d {
    * For Ellipse, the plane normal typically must be set, not calculated.
    * By default, the ellipse will face straight up, with normal {0, 0, 1}.
    */
-  _calculatePlane(plane) {
-    // Default to straight up if not already defined.
-    plane.normal.set(0, 0, 1);
-    // plane.point.copyFrom(this.points[0]); // Unneeded b/c get plane does this.
+  _calculatePlane(_plane) {
+    // Don't reset the plane, which would lose custom planes and hole inversion.
+    // new Plane() returns {0, 0, 1} by default, which is correct default for Ellipse3d and Circle3d as well.
+    return;
   }
 
-  /**
-   * Reverse the orientation of this polygon. Done in place.
-   */
-  reverseOrientation() {
-    // Unlike the polygon, the ellipse's orientation is entirely dependent on its plane.
-    // With only 1 point, no reason to reverse the points array.
-    this.plane.normal.multiplyScalar(-1, this.plane.normal);
-    return this;
-  }
-
-  _setDimensions({ center, radius, radiusSquared, radiusX, radiusY, angle } = {}) {
+  _setDimensions({ center, radius, radiusSquared, radiusX, radiusY, angle = 0, density = 0, isHole = null } = {}) {
     if ( center ) this.center = center;
     if ( radius ) this.radius = radius;
     else if ( radiusSquared ) this.radiusSquared = radiusSquared;
@@ -1498,27 +1632,42 @@ export class Ellipse3d extends Polygon3d {
       if ( radiusY ) this.radiusY = radiusY;
     }
 
-    if ( Number.isNumeric(angle) ) this.angle = angle;
+    this.density = density;
+    this.angle = angle;
     this.clearCache();
+    this.isHole = isHole || false;
+    if ( this.isHole ) this.reverseOrientation(); // Plane noraml becomes -z.
     return this;
   }
 
   clean() { return; }
 
+  /**
+   * Reverse the orientation of this ellipse. Done in place.
+   */
+  reverseOrientation() {
+    // Force the plane update before flipping.
+    const _plane = this.plane;
+    return super.reverseOrientation();
+  }
+
   // ----- NOTE: Plane ----- //
 
-  get ellipse() { return new Ellipse(this.center.x, this.center.y, this.radiusX, this.radiusY, { rotation: Math.toDegrees(this.angle) }); }
+  get ellipse() {
+    const angle = this.plane.normal.z < 0 ? -this.angle : this.angle; // For -z planes, the 3d axis angle is mirrored.
+    return new Ellipse(this.center.x, this.center.y, this.radiusX, this.radiusY, { rotation: Math.toDegrees(angle) });
+  }
 
   // ----- NOTE: Factory methods ----- //
 
-  static fromPIXIEllipse(ellipse, elevationZ = 0, angle, out) {
+  static fromPIXIEllipse(ellipse, { elevationZ, ...opts } = {}) {
     using centerPt = Point3d.tmp.set(ellipse.x, ellipse.y, elevationZ)
-    return this.fromCenterPoint(centerPt, { radiusX: ellipse.width, radiusY: ellipse.height, angle, out });
+    return this.fromCenterPoint(centerPt, { radiusX: ellipse.width, radiusY: ellipse.height, ...opts });
   }
 
-  static fromEllipse2d(ellipse, elevationZ, out) {
+  static fromEllipse2d(ellipse, { elevationZ, ...opts } = {}) {
     using centerPt = Point3d.tmp.set(ellipse.x, ellipse.y, elevationZ)
-    return this.fromCenterPoint(centerPt, { radiusX: ellipse.width, radiusY: ellipse.height, angle: Math.toRadians(ellipse.rotation || 0), out });
+    return this.fromCenterPoint(centerPt, { radiusX: ellipse.width, radiusY: ellipse.height, angle: Math.toRadians(ellipse.rotation || 0), ...opts });
   }
 
   static fromCenterPoint(center, { out, ...opts } = {}) {
@@ -1527,7 +1676,7 @@ export class Ellipse3d extends Polygon3d {
     return out._setDimensions(opts);
   }
 
-  static calculateDimensionsFromPoints(pts, { center, radius, radiusSquared, angle } = {}) {
+  static calculateDimensionsFromPoints(pts, { center, radius, radiusSquared, angle, ...opts } = {}) {
     if ( radius && !radiusSquared ) radiusSquared = radius.multiply(radius);
 
     if ( !center ) {
@@ -1572,32 +1721,33 @@ export class Ellipse3d extends Polygon3d {
       // Determine the angle using the vector from the center to the major axis point.
       if ( angle === undefined ) angle = Math.atan2(majorAxisPt.y - center.y, majorAxisPt.x - center.x);
     }
-    return { center, radiusSquared, radius, angle };
+    return { center, radiusSquared, radius, angle, ...opts };
   }
 
   /**
    * Construct from a set of points that are on the ellipse edge.
    */
-  static from2dPoints(pts, elevation = 0, opts, out) {
-    const res = this.calculateDimensionsFromPoints(pts, opts);
-    res.out = out;
-    using centerPt = Point3d.tmp.set(res.center.x, res.center.y, elevation)
-    return this.fromCenterPoint(centerPt, res);
+  static from2dPoints(pts, { elevationZ = 0, ...opts } = {}) {
+    opts = this.calculateDimensionsFromPoints(pts, opts);
+    using centerPt = Point3d.tmp.set(opts.center.x, opts.center.y, elevationZ)
+    return this.fromCenterPoint(centerPt, opts);
   }
 
-  static from3dPoints(pts, opts, out) {
+  static from3dPoints(pts, { out, ...opts } = {}) {
     out ??= new this();
-    const res = this.calculateDimensionsFromPoints(pts, opts);
-    Plane.fromMultiplePoints([res.center, ...pts], out.plane);
-    out._setDimensions(res);
+    opts = this.calculateDimensionsFromPoints(pts, opts);
+    out._setDimensions(opts);
+    out.clearCache();
+    Plane.fromMultiplePoints([opts.center, ...pts], out.plane);
     return out;
   }
 
-  static fromPlanarPolygon(poly2d, plane, opts, out) {
+  static fromPlanarPolygon(poly2d, plane, { out, ...opts } = {}) {
     out ??= new this();
-    out.plane.copyFrom(plane);
-    const res = this.calculateDimensionsFromPoints(poly2d.iteratePoints(), opts);
-    out._setDimensions(res);
+    opts = this.calculateDimensionsFromPoints([...poly2d.iteratePoints()], opts);
+    out._setDimensions(opts);
+    out.plane = plane;
+    if ( out.isHole ) out.reverseOrientation();
     return out;
   }
 
@@ -1605,19 +1755,18 @@ export class Ellipse3d extends Polygon3d {
 
   static fromClipperPaths(...args) { return Polygon3d.fromClipperPaths(...args);  }
 
-  static fromVertices(...args) { return Polygon3d.fromVertices(...args); }
+  static fromVertices(...args) { return Triangle3d.fromVertices(...args); }
 
-  static fromPlanarEllipse(ellipse2d, plane, out) {
+  static fromPlanarEllipse(ellipse2d, plane, { out, ...opts } = {}) {
     using center = Point3d.tmp;
     const invM2d = plane.conversion2dMatrixInverse;
     invM2d.multiplyPoint3d(Point3d.tmp.set(ellipse2d.center.x, ellipse2d.center.y, 0), center);
-
     using radius = PIXI.Point.tmp.set(ellipse2d.width, ellipse2d.height);
-    const opts = { center, radius, angle: ellipse2d.radians || 0 };
 
     out ??= new this();
-    out.plane.copyFrom(plane);
-    out._setDimensions(opts);
+    out._setDimensions({ center, radius, angle: ellipse2d.radians || 0, ...opts });
+    out.plane = plane;
+    if ( out.isHole ) out.reverseOrientation()
     return out;
   }
 
@@ -1626,6 +1775,7 @@ export class Ellipse3d extends Polygon3d {
     out.radiusX = this.radiusX;
     out.radiusY = this.radiusY;
     out.angle = this.angle;
+    out.density = this.#density;
     return out;
   }
 
@@ -1634,6 +1784,7 @@ export class Ellipse3d extends Polygon3d {
     out.radiusX = this.radiusX;
     out.radiusY = this.radiusY;
     out.angle = this.angle;
+    out.density = this.#density;
     return out;
   }
 
@@ -1647,7 +1798,18 @@ export class Ellipse3d extends Polygon3d {
       const to2dM = this.plane.conversion2dMatrix;
       to2dM.multiplyPoint3d(centroid, center);
     }
-    return new Ellipse(center.x, center.y, this.radiusX, this.radiusY, { rotation: Math.toDegrees(this.angle) });
+    const angle = this.plane.normal.z < 0 ? -this.angle : this.angle; // For -z planes, the 3d axis angle is mirrored.
+    return new Ellipse(center.x, center.y, this.radiusX, this.radiusY, { rotation: Math.toDegrees(angle) });
+  }
+
+  /**
+   * Convert to 2d ellipse, dropping z.
+   * @return {Ellipse}
+   */
+  toEllipse2d() {
+    const center = this.centroid;
+    const angle = this.plane.normal.z < 0 ? -this.angle : this.angle; // For -z planes, the 3d axis angle is mirrored.
+    return new Ellipse(center.x, center.y, this.radiusX, this.radiusY, { rotation: Math.toDegrees(angle) });
   }
 
   /**
@@ -1656,9 +1818,35 @@ export class Ellipse3d extends Polygon3d {
    */
   toPolygon2d() {  return this.toPolygon3d().toPolygon2d(); }
 
+  /**
+   * Construct a 3d polygon that approximates the ellipse with a polygon.
+   * @returns {Polygon3d}
+   */
   toPolygon3d() {
-    const poly2d = this.toPlanarPolygon();
-    return Polygon3d.fromPlanarPolygon(poly2d, this.plane);
+    const { vx, vy } = this.radiusVectors();
+    const center = this.center;
+    const density = this.density;
+    const points = Point3d.createN(density);
+    const step = (2 * Math.PI) / density;
+
+    using tmpPt = Point3d.tmp;
+    for ( let i = 0; i < density; i += 1 ) {
+      const t = i * step;
+      const cTheta = Math.cos(t);
+      const sTheta = Math.sin(t);
+
+      const pt = points[i];
+      center
+        .add(vx.multiplyScalar(cTheta, tmpPt), pt)
+        .add(vy.multiplyScalar(sTheta, tmpPt), pt);
+    }
+    vx.release();
+    vy.release();
+    const out = new Polygon3d();
+    out.points = points;
+    out.isHole = this.isHole;
+    out.plane = this.plane;
+    return out;
   }
 
   /**
@@ -1717,6 +1905,16 @@ export class Ellipse3d extends Polygon3d {
   // ----- NOTE: Intersection ----- //
 
   /**
+   * Test if an XY point is contained within the projected polygon.
+   * @param {PIXI.Point} canvasLoc
+   * @returns {boolean} True if contained.
+   */
+  containsProjectedXY(canvasLoc) {
+    const ellipse = this.toEllipse2d();
+    return ellipse.contains(canvasLoc.x, canvasLoc.y);
+  }
+
+  /**
    * Is a 3d point that is on the plane within the polygon?
    * Does not check bounding box or if it is in fact on the plane.
    * @param {Point3d} pt
@@ -1747,23 +1945,23 @@ export class Ellipse3d extends Polygon3d {
    */
   _planarLineIntersections(origin, direction) {
     const r2 = this.radiusSquared;
-    const { vx: uAxis, vy: vAxis } = this.radiusVectors();
+    const { vx, vy } = this.radiusVectors();
 
     // Project 3d origin relative to center onto local 2d axes.
     using delta = origin.subtract(this.center);
-    const ox = delta.dot(uAxis);
-    const oy = delta.dot(vAxis);
+    const ox = delta.dot(vx) / r2.x;
+    const oy = delta.dot(vy) / r2.y;
 
     // Project 3d direction onto local 2d axes.
-    const dx = direction.dot(uAxis);
-    const dy = direction.dot(vAxis);
+    const dx = direction.dot(vx) / r2.x;
+    const dy = direction.dot(vy) / r2.y;
+    vx.release();
+    vy.release();
 
     // Quadratic coefficients.
-    const a2 = r2.x;
-    const b2 = r2.y;
-    const A = ((dx ** 2) / a2) + ((dy ** 2) / b2);
-    const B = 2 * ((ox * dx) / a2) + ((oy * dy) / b2);
-    const C = ((ox ** 2) / a2) + ((oy ** 2) / b2) - 1;
+    const A = (dx * dx) + (dy * dy);
+    const B = 2 * ((ox * dx) + (oy * dy));
+    const C = (ox * ox) + (oy * oy) - 1;
     const discriminant = (B ** 2) - (4 * A * C);
 
     // If the discriminant is zero or negative, the line misses or just grazes the edge.
@@ -1778,6 +1976,76 @@ export class Ellipse3d extends Polygon3d {
     return [[t1, t2]];
   }
 
+  /**
+   * Does a line (ray) intersect this polygon?
+   * Assumes the line is on this plane.
+   * @param {Point3d} origin
+   * @param {Point3d} direction
+   * @returns {number[]} T-values along the line.
+   */
+  _hasPlanarLineIntersections(origin, direction) {
+    // Reuse the relatively cheap exact quadratic calculation here.
+    return this._planarLineIntersections(origin, direction).length > 0;
+  }
+
+  /**
+   * Intersect this Polygon3d against a plane.
+   * @param {Plane} plane
+   * @returns {Segment[]|null} Empty if no intersections or parallel. If coincident, returns null.
+   */
+  intersectPlane(plane) {
+    if ( !this.isValid() ) return [];
+
+    if ( this.plane.isParallelToPlane(plane) ) {
+      // Ellipse lies flat in the cutting plane: no well-defined intersection line.
+      if ( this.plane.isCoincidentWithPlane(plane, { testParallel: false }) ) return null;
+      return []; // Parallel but not touching.
+    }
+
+    // Origin and normalized direction of the intersection line of the two planes.
+    const res = this.plane.intersectPlane(plane);
+    using origin = res.point;
+    using direction = res.direction;
+    direction.normalize(direction);
+
+    // Ellipse-specific: where does that line cross the ellipse boundary?
+    const intervals = this._planarLineIntersections(origin, direction);
+
+    // Convert the interval(s) back to 3d segments (an ellipse yields at most one chord).
+    const EPSILON = this.constructor.EPSILON;
+    const resultSegments = [];
+    for ( const [start, end] of intervals ) {
+      if ( (end - start) > EPSILON ) {
+        const pStart = Point3d.tmp;
+        const pEnd = Point3d.tmp;
+        origin.add(direction.multiplyScalar(start, pStart), pStart);
+        origin.add(direction.multiplyScalar(end, pEnd), pEnd);
+        resultSegments.push(new Segment(pStart, pEnd));
+      }
+    }
+    return resultSegments;
+  }
+
+  /**
+   * Does this 3d polygon intersect a plane?
+   * @param {Plane} plane
+   * @returns {boolean}
+   */
+  intersectsPlane(plane) {
+    if ( !this.isValid() ) return false;
+
+    if ( this.plane.isParallelToPlane(plane) ) {
+      return this.plane.isCoincidentWithPlane(plane, { testParallel: false });
+    }
+
+    // Just use `intersectPlane` here because it is a cheap quadratic calculation.
+    const res = this.plane.intersectPlane(plane);
+    using origin = res.point;
+    using direction = res.direction;
+    direction.normalize(direction);
+
+    return this._planarLineIntersections(origin, direction).length > 0;
+  }
 
   // ----- NOTE: Transformations ----- //
   isValid() {
@@ -1791,8 +2059,8 @@ export class Ellipse3d extends Polygon3d {
    * @param {Matrix} [invTransposeM]          The inverse transpose of M, when doing repeated calculations.
    * @returns {Ellipse3d|Circle3d} The modified ellipse or circle if the radii are equal.
    */
-  transform(M, invTransposeM) {
-    const out = super.transform(M, invTransposeM);
+  transform(M, invTransposeM, mirrors) {
+    let out = super.transform(M, invTransposeM, mirrors);
 
     // Calculate the ellipse-specific parameters.
     const { angle, radiusX, radiusY } = this;
@@ -1848,7 +2116,21 @@ export class Ellipse3d extends Polygon3d {
     out.radiusY = minorAxis.magnitude();
 
     // If the radii are equal, return a circle. (Angle doesn't matter here.)
-    if ( out.radiusX.almostEqual(out.radiusY) ) return Circle3d.fromEllipse3d(out);
+    if ( out.radiusX.almostEqual(out.radiusY) ) {
+      if ( !(out instanceof Circle3d) ) {
+        const circle = Circle3d.fromEllipse3d(out);
+        out.release();
+        out = circle;
+      }
+      return out;
+    }
+
+    // Unequal radii; convert to an ellipse.
+    if ( out instanceof Circle3d ) {
+      const ellipse = out.clone(new Ellipse3d());
+      out.release();
+      out = ellipse;
+    }
 
     // Calculate the new angle in the new plane's 2d coordinate system.
     const newTo2dM = out.plane.conversion2dMatrix;
@@ -1910,56 +2192,79 @@ export class Circle3d extends Ellipse3d {
 
   static _geoLibType = "Circle3d";
 
-  // For numerical consistency, store the radius squared to use when possible.
-  get radius() { return this.radiusX; }
+  get radiusX() { return super.radiusX; }
 
-  get radiusSquared() { return this.radius * this.radius; }
+  set radiusX(value) { this.radius = value; }
+
+  get radiusY() { return super.radiusY; }
+
+  set radiusY(value) { this.radius = value; }
+
+  get radius() { return super.radius; }
 
   set radius(value) {
-    if ( Number.isNumeric(value) ) {
-      using v = PIXI.Point.tmp.set(value, value);
-      super.radius = v;
-    } else super.radius = value;
+    using v = PIXI.Point.tmp;
+    if ( Number.isNumeric(value) ) v.set(value, value);
+    else if ( !value.x.almostEqual(value.y) ) {
+      if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.debug ) console.warn("Cannot set unequal radii on Circle3d.");
+      const max = Math.max(value.x, value.y);
+      v.set(max, max);
+    } else v.copyFrom(value);
+    super.radius = v;
   }
 
+  get radiusSquared() { return super.radiusSquared; }
+
   set radiusSquared(value) {
-    if ( Number.isNumeric(value) ) {
-      using v = PIXI.Point.tmp.set(value, value);
-      super.radiusSquared = v;
-    } else super.radiusSquared = value;
+    using v = PIXI.Point.tmp;
+    if ( Number.isNumeric(value) ) v.set(value, value);
+    else if ( !value.x.almostEqual(value.y) ) {
+      if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.debug ) console.warn("Cannot set unequal radii on Circle3d.");
+      const max = Math.max(value.x, value.y);
+      v.set(max, max);
+    } else v.copyFrom(value);
+    super.radiusSquared = v;
   }
 
   _setDimensions(opts = {}) {
-    if ( Number.isNumeric(opts.radius) ) opts.radius = PIXI.Point.tmp.set(opts.radius, opts.radius);
-    if ( Number.isNumeric(opts.radiusSquared) ) opts.radiusSquared = PIXI.Point.tmp.set(opts.radiusSquared, opts.radiusSquared);
+    using tmpPt = PIXI.Point.tmp;
+    if ( Number.isNumeric(opts.radius) ) opts.radius = tmpPt.set(opts.radius, opts.radius);
+    if ( Number.isNumeric(opts.radiusSquared) ) opts.radiusSquared = tmpPt.set(opts.radiusSquared, opts.radiusSquared);
+
+    const r = opts.radius ?? (opts.radiusSquared && opts.radiusSquared.sqrt());
+    const rx = r?.x ?? opts.radiusX;
+    const ry = r?.y ?? opts.radiusY;
+    if ( rx !== undefined && ry !== undefined && !rx.almostEqual(ry) ) return Ellipse3d.fromCenterPoint(opts.center, { ...opts });
     return super._setDimensions(opts);
   }
 
   // ----- NOTE: Plane ----- //
 
-  get circle() { return new PIXI.Circle(this.center.x, this.center.y, this.radius); }
+  get circle() { return new PIXI.Circle(this.center.x, this.center.y, this.radius.x); }
 
   // ----- NOTE: Factory methods ----- //
 
-  static fromCircle(cir, elevationZ = 0, out) {
+  static fromCircle(cir, { elevationZ = 0, ...opts } = {}) {
     using centerPt = Point3d.tmp.set(cir.x, cir.y, elevationZ);
-    return this.fromCenterPoint(centerPt, cir.radius, out);
+    opts.radius ??= cir.radius;
+    return this.fromCenterPoint(centerPt, opts);
   }
 
-  static fromCenterPoint(center, radius, out) {
+  static fromCenterPoint(center, { out, ...opts } = {}) {
     out ??= new this();
-    out._setDimensions({ center, radius });
-    return out;
+    opts.center = center;
+    return out._setDimensions(opts);
   }
 
-  static fromPlanarCircle(circle2d, plane, out) {
+  static fromPlanarCircle(circle2d, plane, { out, ...opts } = {}) {
     using center = Point3d.tmp;
     const invM2d = plane.conversion2dMatrixInverse;
     invM2d.multiplyPoint3d(Point3d.tmp.set(circle2d.center.x, circle2d.center.y, 0), center);
 
     out ??= new this();
+    out._setDimensions({ center, radius: circle2d.radius, ...opts });
     out.plane = plane;
-    out._setDimensions({ center, radius: circle2d.radius });
+    if ( out.isHole ) out.reverseOrientation()
     return out;
   }
 
@@ -1984,7 +2289,16 @@ export class Circle3d extends Ellipse3d {
       const to2dM = this.plane.conversion2dMatrix;
       to2dM.multiplyPoint3d(centroid, center);
     }
-    return new PIXI.Circle(center.x, center.y, this.radius);
+    return new PIXI.Circle(center.x, center.y, this.radius.x);
+  }
+
+  /**
+   * Convert to 2d circle, dropping z.
+   * @return {PIXI.Circle}
+   */
+  toCircle2d() {
+    const center = this.centroid;
+    return new PIXI.Circle(center.x, center.y, this.radius.x);
   }
 
   toPlanarPolygon() {
@@ -2017,6 +2331,17 @@ export class Circle3d extends Ellipse3d {
   // ----- NOTE: Intersection ----- //
 
   /**
+   * Test if an XY point is contained within the projected polygon.
+   * @param {PIXI.Point} canvasLoc
+   * @returns {boolean} True if contained.
+   */
+  containsProjectedXY(canvasLoc) {
+    const circle = this.toCircle2d();
+    return circle.contains(canvasLoc.x, canvasLoc.y);
+  }
+
+
+  /**
    * Is a 3d point that is on the plane within the polygon?
    * Does not check bounding box or if it is in fact on the plane.
    * @param {Point3d} pt
@@ -2038,6 +2363,26 @@ export class Circle3d extends Ellipse3d {
     return contained;
   }
 
+  /**
+   * Find the intervals of a line (ray) that intersects this polygon.
+   * Assumes the line is on this plane.
+   * @param {Point3d} origin
+   * @param {Point3d} direction
+   * @returns {number[]} T-values along the line.
+   */
+  _planarLineIntersections(origin, direction) {
+    using d = origin.subtract(this.center);
+    const B = 2 * d.dot(direction);
+    const C = d.dot(d) - this.radiusSquared.x;
+    const discriminant = (B ** 2) - (4 * C);
+    if ( discriminant.almostLessThan(0) ) return [];
+
+    const sqrtD = Math.sqrt(discriminant);
+    return [[(-B - sqrtD) / 2, (-B + sqrtD) / 2]];
+  }
+
+
+
   // ----- NOTE: Transformations ----- //
   isValid() {
     this.clean();
@@ -2047,13 +2392,8 @@ export class Circle3d extends Ellipse3d {
   multiplyScalar(multiplier, circle3d) {
     circle3d ??= this._cloneEmpty();
     this.clone(circle3d);
-    circle3d.radius *= multiplier;
+    circle3d.radius = this.radius.x * multiplier;
     return circle3d;
-  }
-
-  scale(axes, circle3d) {
-    circle3d ??= this._cloneEmpty();
-    return super.scale(axes, circle3d);
   }
 }
 
@@ -2087,19 +2427,23 @@ export class Triangle3d extends Polygon3d {
 
   // ----- NOTE: Factory methods ----- //
 
-  static from3Points(a, b, c, out) {
+  static from3Points(a, b, c, { isHole = null, out } = {}) {
     out ??= new this();
     out.a.copyFrom(a);
     out.b.copyFrom(b);
     out.c.copyFrom(c);
+    out.isHole = isHole || false;
+    out.clearCache();
     return out;
   }
 
-  static fromPartial3Points(a, b, c, out) {
+  static fromPartial3Points(a, b, c, { isHole = null, out } = {}) {
     out ??= new this();
     out.a.copyPartial(a);
     out.b.copyPartial(b);
     out.c.copyPartial(c);
+    out.isHole = isHole || false;
+    out.clearCache();
     return out;
   }
 
@@ -2109,7 +2453,7 @@ export class Triangle3d extends Polygon3d {
    * @param {Number[]} [indices]    Indices to determine order in which triangles are created from vertices
    * @returns {Triangle[]}
    */
-  static fromVertices(vertices, indices, { positionOffset = 0, stride = 3 } = {}) {
+  static fromVertices(vertices, indices, { positionOffset = 0, stride = 3, isHole = null } = {}) {
     if ( vertices.length % stride !== 0 ) console.error(`${this.name}.fromVertices|Length of vertices is not divisible by stride ${stride}: ${vertices.length}`);
     indices ??= Array.fromRange(Math.floor(vertices.length / stride));
     if ( indices.length % 3 !== 0 ) console.error(`${this.name}.fromVertices|Length of indices is not divisible by 3: ${indices.length}`);
@@ -2121,7 +2465,7 @@ export class Triangle3d extends Polygon3d {
       pointFromVertices(i++, vertices, indices, stride, positionOffset, a);
       pointFromVertices(i++, vertices, indices, stride, positionOffset, b);
       pointFromVertices(i++, vertices, indices, stride, positionOffset, c);
-      tris[j++] = this.from3Points(a, b, c);
+      tris[j++] = this.from3Points(a, b, c, { isHole });
     }
     return tris;
   }
@@ -2132,7 +2476,7 @@ export class Triangle3d extends Polygon3d {
    * @param {Number[]} points       Point3ds
    * @param {Number[]} [indices]    Indices to determine order in which triangles are created from vertices
    */
-  static fromPoints3dArray(points, indices) {
+  static fromPoints3dArray(points, indices, opts = {}) {
     const vertices = new Array(points.length * 3);
     for ( let i = 0, j = 0, iMax = points.length; i < iMax; i += 1 ) {
       const pt = points[i];
@@ -2140,7 +2484,7 @@ export class Triangle3d extends Polygon3d {
       vertices[j++] = pt.y;
       vertices[j++] = pt.z;
     }
-    return this.fromVertices(vertices, indices);
+    return this.fromVertices(vertices, indices, opts);
   }
 
   // ----- NOTE: Conversions to ----- //
@@ -2178,8 +2522,6 @@ export class Triangle3d extends Polygon3d {
     const { NUM_POSITION_COORDS, NUM_NORMAL_COORDS, NUM_POINTS } = this.constructor;
     const stride = NUM_POSITION_COORDS + (addNormals * NUM_NORMAL_COORDS);
     outArr ??= new Float32Array(stride * NUM_POINTS);
-    // TODO: How can we be sure the normal points the correct way?
-    // Should be set when constructing the triangle to point up when triangle is CCW.
     if ( addNormals ) {
       const normal = [...this.plane.normal];
       outArr.set([...this.a, ...normal, ...this.b, ...normal, ...this.c, ...normal], outIdx);
@@ -2188,7 +2530,7 @@ export class Triangle3d extends Polygon3d {
   }
 
   // Trivially, a Triangle3d is already triangulated.
-  triangulate() { return this; }
+  triangulate() { return [this]; }
 
   static NUM_POSITION_COORDS = 3;
 
@@ -2209,10 +2551,11 @@ export class Triangle3d extends Polygon3d {
    * the function returns null.
    * @param {Point3d} rayOrigin
    * @param {Point3d} rayDirection
+   * @param {boolean} [signed=false]      Get any t, not just t greater than 0
    * @returns {number} Distance from ray origin to the point of intersection.
    *
    */
-  rayIntersectionMT(rayOrigin, rayDirection) {
+  rayIntersectionMT(rayOrigin, rayDirection, { signed = false } = {}) {
     const [v0, v1, v2] = this.points;
     const EPSILON = this.constructor.EPSILON;
 
@@ -2240,7 +2583,7 @@ export class Triangle3d extends Polygon3d {
 
     // Calculate the distance to the intersection point
     const t = invDet * edge2.dot(qvec);
-    return t.strictlyGreaterThan(0, EPSILON) ? t : null;
+    return (signed || t.strictlyGreaterThan(0, EPSILON)) ? t : null;
   }
 
   /**
@@ -2250,8 +2593,8 @@ export class Triangle3d extends Polygon3d {
    * @param {Point3d} rayDirection
    * @returns {t|null} Returns null if not within the triangle
    */
-  intersectionT(rayOrigin, rayDirection) {
-    return this.rayIntersectionMT(rayOrigin, rayDirection);
+  intersectionT(rayOrigin, rayDirection, opts) {
+    return this.rayIntersectionMT(rayOrigin, rayDirection, opts);
   }
 
   /**
@@ -2314,30 +2657,43 @@ export class Quad3d extends Polygon3d {
 
 // ----- NOTE: Factory methods ----- //
 
-  static from4Points(a, b, c, d, out) {
+  static from4Points(a, b, c, d, { isHole = null, out } = {}) {
     out ??= new this();
     out.a.copyFrom(a);
     out.b.copyFrom(b);
     out.c.copyFrom(c);
     out.d.copyFrom(d);
+    out.isHole = isHole || false;
+    out.clearCache();
     return out;
   }
 
-  static fromPartial4Points(a, b, c, d, out) {
+  static fromPartial4Points(a, b, c, d, { isHole = null, out } = {}) {
     out ??= new this();
     out.a.copyPartial(a);
     out.b.copyPartial(b);
     out.c.copyPartial(c);
     out.d.copyPartial(d);
+    out.isHole = isHole || false;
+    out.clearCache();
     return out;
   }
 
-  static fromRectangle(rect, elevZ = 0, out) {
+  static fromRectangle(rect, { elevationZ = 0, isHole = null, out } = {}) {
     out ??= new this();
-    out.points[0].set(rect.left, rect.top, elevZ);
-    out.points[1].set(rect.right, rect.top, elevZ);
-    out.points[2].set(rect.right, rect.bottom, elevZ);
-    out.points[3].set(rect.left, rect.bottom, elevZ);
+    const { left, right, top, bottom } = rect;
+    out.points[0].set(left, top, elevationZ);
+    if ( isHole ) { // CW from above
+      out.points[1].set(right, top, elevationZ);
+      out.points[2].set(right, bottom, elevationZ);
+      out.points[3].set(left, bottom, elevationZ);
+    } else { // CCW from above
+      out.points[1].set(left, bottom, elevationZ);
+      out.points[2].set(right, bottom, elevationZ);
+      out.points[3].set(right, top, elevationZ);
+    }
+    out.isHole = isHole || false;
+    out.clearCache();
     return out;
   }
 
@@ -2382,7 +2738,7 @@ export class Quad3d extends Polygon3d {
     if ( t0 ) return t0;
 
     // Second triangle.
-    using tri1 = Triangle3d.from3Points(v1, v2, v3);
+    using tri1 = Triangle3d.from3Points(v0, v2, v3);
     return tri1.rayIntersectionMT(rayOrigin, rayDirection);
   }
 
@@ -2663,34 +3019,31 @@ export class Quad3d extends Polygon3d {
  * Represent 1+ polygons that represent a shape.
  * Each can be a Polygon3d that is either a hole or outer (not hole). See Clipper Paths.
  * An outer polygon may be contained within a hole. Parent-child structure not maintained.
+ *
+ * Polygon3d does not generally need to know the order of holes with regard to solids.
+ * As with ClipperJs, there is no explicit metadata stating "this hole belongs to this solid."
+ * You must infer ownership by analyzing which CW hole sits inside which CCW solid.
  */
 export class Polygons3d extends Polygon3d {
 
   static _geoLibType = "Polygons3d";
 
-  /** @type {boolean|null} */
-  get isHole() {
-    let hasHoles = false;
-    let hasSolids = false;
-    for ( const poly of this.polygons ) {
-      hasHoles ||= poly.isHole;
-      hasSolids ||= !poly.isHole;
-    }
-    if ( hasHoles && hasSolids ) {
-      console.debug(`${this.constructor.name}|isHole called on object with holes and solids.`, this);
-      return null;
-    }
-    return hasHoles;
-  }
-
   /** @type {Polygon3d[]} */
   polygons = [];
 
-  // TODO: Determine the convex hull of the polygons to determine the points of this polygon?
   constructor(n = 0) {
     super(0);
     this.polygons.length = n;
   }
+
+  get isHole() { return this.polygons[0]?.isHole ?? false; }
+
+  set isHole(_value) {
+    // Derived; the rings own their own roles.
+    if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.debug ) console.warn("Polygons3d#isHole is derived from its first ring. Use invertRole().");
+  }
+
+  _cloneEmpty() { return new this.constructor(0); } // Do not copy isHole; clipZ fills in the rings.
 
   release() {
     this.#applyMethodToAll("release");
@@ -2710,6 +3063,7 @@ export class Polygons3d extends Polygon3d {
     out ??= new this(1);
     out.polygons.length = 1;
     out.polygons[0] = Polygon3d[method](...args);
+    out.dirtyAABB = true;
     return out;
   }
 
@@ -2719,8 +3073,6 @@ export class Polygons3d extends Polygon3d {
    * @returns {Point3d}
    */
   interiorPoint() {
-    if ( this.polygons.every(poly => poly.isHole) ) throw Error("Polygons3d#interiorPoint|All polygons are holes!");
-
     // Use the same conversion matrix for all the polygons, based on the shared plane.
     const from2dM = this.plane.conversion2dMatrixInverse;
     const poly2ds = this.toPlanarPolygon();
@@ -2784,8 +3136,11 @@ export class Polygons3d extends Polygon3d {
   }
 
   clean() {
+    const outerRole = this.isHole;
     this.#applyMethodToAll("clean");
     this.polygons = this.polygons.filter(poly => poly.isValid()); // Trim polygons that may have just been collinear lines.
+    const i = this.polygons.findIndex(poly => poly.isHole === outerRole);
+    if ( i > 0 ) this.polygons.unshift(...this.polygons.splice(i, 1)); // Move the outer-role ring back to the front.
   }
 
   setZ(z) {
@@ -2796,21 +3151,33 @@ export class Polygons3d extends Polygon3d {
 
   reverseOrientation() { this.#applyMethodToAll("reverseOrientation"); return this; }
 
+  /**
+   * Switch from solid to hole, or vice-versa.
+   * Reverses winding, normal, and toggles `isHole`.
+   * Does not modify the relationship between winding/hole/normal—call `reverseOrientation` for that.
+   * @returns {this}
+   */
+  invertRole() { this.#applyMethodToAll("invertRole"); return this; }
+
   // ----- NOTE: Bounds ----- //
 
   /** @type {object<minMax>} */
-  _calculateAABB(aabb) {
-    const combinedBounds = AABB3d.union(this.polygons.map(poly3d => poly3d.aabb));
-    aabb.min.copyFrom(combinedBounds.min);
-    aabb.max.copyFrom(combinedBounds.max);
-  }
+  _calculateAABB(aabb) { AABB3d.union(this.polygons.map(poly3d => poly3d.aabb), aabb); }
 
   // ----- NOTE: Plane ----- //
 
   /** @type {Plane} */
-  get plane() { return this.polygons[0].plane; }
+  get plane() {
+    // Reference ring defines the plane.
+    return this.polygons[0].plane;
+  }
 
-  set plane(value) { this.polygons.forEach(poly => poly.plane = value); }
+  set plane(value) {
+    for ( const poly of this.polygons ) {
+      poly.plane = value;
+      if ( poly.isHole ) poly.plane.reverse(); // Holes use the inverted normal.
+    }
+  }
 
   // ----- NOTE: Centroid ----- //
 
@@ -2839,41 +3206,72 @@ export class Polygons3d extends Polygon3d {
 
   static from3dPolygons(polys, out) {
     const n = polys.length;
-    out ??= new this(n);
+    if ( out ) {
+      for ( let i = n, numPolys = out.polygons.length; i < numPolys; i += 1 ) out.polygons[i].release();
+      out.polygons.length = n;
+    } else out = new this(n);
 
-    // Copy over the plane, which must be shared among the polygons.
-    // Polygons3d defaults to making the first polygon the plane.
-    out.polygons[0] = polys[0];
-    for ( let i = 1; i < n; i += 1 ) {
-      if ( !polys[i].plane.almostEqual(out.plane) ) console.warn("Polygon3d.from3dPolygons|Planes are not equivalent.", polys);
-      out.polygons[i] = polys[i];
+    for ( let i = 0; i < n; i += 1 ) out.polygons[i] = polys[i];
+    out.dirtyAABB = true;
+
+    // Confirm the planes are oriented as expected.
+    if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.debug ) {
+      const first = polys[0];
+      using flipped = first.plane.clone().reverse();
+      for ( const poly of polys ) {
+        const expected = first.isHole === first.isHole ? first.plane : flipped;
+        if ( !poly.plane.almostEqual(expected) ) console.warn("Polygons3d#from3dPolygons|Ring plane mismatch", poly);
+      }
     }
     return out;
   }
 
-  static from2dPoints(pts, elevation, out) { return this.#createSingleUsingMethod("from2dPoints", out, pts, elevation); }
+  static from2dPoints(pts, opts, out) { return this.#createSingleUsingMethod("from2dPoints", out, pts, opts); }
 
-  static from3dPoints(pts, out) { return this.#createSingleUsingMethod("from3dPoints", out, pts); }
+  static from3dPoints(pts, opts, out) { return this.#createSingleUsingMethod("from3dPoints", out, pts, opts); }
 
-  static fromPolygon(poly, elevation, out) { return this.#createSingleUsingMethod("fromPolygon", out, poly, elevation); }
+  static fromPolygon(poly, opts, out) { return this.#createSingleUsingMethod("fromPolygon", out, poly, opts); }
 
-  static fromPolygons(polys, elevation, out) {
+  static fromPolygons(polys, opts, out) {
     out ??= new this();
-    out.polygons = polys.map(poly => Polygon3d.fromPolygon(poly, elevation));
+    out.polygons = polys.map(poly => Polygon3d.fromPolygon(poly, opts));
     return out;
   }
 
-  static fromClipperPaths(cpObj, elevation, out) {
+  /**
+   * @param {(PIXI.Polygon|PIXI.Ellipse|PIXI.Rectangle|PIXI.Circle|PIXI.RoundedRectangle)[]} polys
+   * @param {object} [opts]
+   * @param {(number|null)[]} holeIndices     For each polygon, is it a hole?
+   * @param {Polygon3d} [out]
+   * @returns {Polygon3d}
+   */
+  static fromPIXIShapes(polys, { holeIndices, ...opts } = {}, out) {
     out ??= new this();
-    out.polygons = Polygon3d.fromClipperPaths(cpObj, elevation);
+    holeIndices ??= Array.fromRange(polys.length).fill(null);
+    for ( let i = 0, n = polys.length; i < n; i += 1 ) {
+      const poly = polys[i];
+      opts.isHole = holeIndices[i]
+      out.polygons.push(Polygon3d.fromPIXIShape(poly, opts));
+    }
+    out.polygons.sort((a, b) => a.isHole - b.isHole);
+    out.dirtyAABB = true;
     return out;
   }
 
-  static fromVertices(vertices, indices, out) { return this.#createSingleUsingMethod("fromVertices", out, vertices, indices); }
-
-  static fromPlanarPolygons(polys, plane, out) {
+  static fromClipperPaths(cpObj, opts, out) {
     out ??= new this();
-    out.polygons = polys.map(poly => Polygon3d.fromPlanarPolygon(poly, plane));
+    out.polygons = Polygon3d.fromClipperPaths(cpObj, opts);
+    out.polygons.sort((a, b) => a.isHole - b.isHole);
+    out.dirtyAABB = true;
+    return out;
+  }
+
+  static fromVertices(vertices, indices, opts, out) { return this.#createSingleUsingMethod("fromVertices", out, vertices, indices, opts); }
+
+  static fromPlanarPolygons(polys, plane, opts, out) {
+    out ??= new this();
+    out.polygons = polys.map(poly => Polygon3d.fromPlanarPolygon(poly, plane, opts));
+    out.dirtyAABB = true;
     return out;
   }
 
@@ -2894,6 +3292,9 @@ export class Polygons3d extends Polygon3d {
         && thisPoly instanceof outPoly.constructor ) thisPoly.clone(outPoly);
       else outPolys[i] = thisPoly.clone();
     }
+
+    out.dirtyAABB = true;
+
     return out;
   }
 
@@ -2922,7 +3323,7 @@ export class Polygons3d extends Polygon3d {
     }
     const polys2d = polys3d.map(poly3d => {
       const poly = new PIXI.Polygon(poly3d.points.map(pt => pt.to2d(axes)));
-      if ( !poly3d.isHole ^ poly.isPositive ) poly.reverseOrientation();
+      if ( (poly3d.isHole === this.isHole) ^ poly.isPositive ) poly.reverseOrientation();
       poly.clean();
       return poly;
     });
@@ -2949,7 +3350,7 @@ export class Polygons3d extends Polygon3d {
       const pt2ds = [];
       for ( const pt of poly3d.iteratePoints() ) pt2ds.push(to2dM.multiplyPoint3d(pt, tmpPt).to2d());
       const poly = new PIXI.Polygon(...pt2ds);
-      if ( !poly3d.isHole ^ poly.isPositive ) poly.reverseOrientation();
+      if ( (poly3d.isHole === this.isHole) ^ poly.isPositive ) poly.reverseOrientation();
       return poly;
     };
     return this.polygons.map(poly3d => toPlanar(poly3d, to2dM));
@@ -2973,14 +3374,13 @@ export class Polygons3d extends Polygon3d {
   triangulate(opts) {
     const solids = [];
     const holes = [];
-    for ( const poly of this.polygons ) {
-      const arr = poly.isHole ? holes : solids;
-      arr.push(poly);
-    }
+    const outerRole = this.isHole;
+    for ( const poly of this.polygons ) (poly.isHole === outerRole ? solids : holes).push(poly)
     if ( !solids.length ) return new this.constructor();
     if ( solids.length > 1 && !holes.length ) {
       const out = new this.constructor();
       this.polygons.forEach(poly => out.polygons.push(...poly.triangulate(opts)));
+      out.dirtyAABB = true;
       return out;
     } else if ( solids.length > 1 ) console.warn("Polygons3d#triangulate|Expects one solid per instance if holes are present.");
 
@@ -3008,9 +3408,21 @@ export class Polygons3d extends Polygon3d {
     // One triangulation pass, holes subtracted.
     const triIndices = PIXI.utils.earcut(vertsFlat, holeIndices, 2);
 
+    using ab = Point3d.tmp;
+    using ac = Point3d.tmp;
+    using abcCross = Point3d.tmp;
+    const orientTriangleToward = (tri, normal) => {
+      const [a, b, c] = tri.points;
+      b.subtract(a, ab);
+      c.subtract(a, ac);
+      ab.cross(ac, abcCross).multiplyScalar(-1, abcCross);
+      if ( abcCross.dot(normal).strictlyLessThan(0) ) tri.reverseOrientation();
+    }
+
     // Build the triangles.
     const n = Math.floor(triIndices.length / 3);
     const out = new this.constructor(n);
+    const outerNormal = outer.plane.normal;
     for ( let i = 0, j = 0; j < n; ) {
       const tri = Triangle3d.from3Points(
         allPts3d[triIndices[i++]],
@@ -3018,9 +3430,12 @@ export class Polygons3d extends Polygon3d {
         allPts3d[triIndices[i++]],
       );
       out.polygons[j++] = tri;
+      orientTriangleToward(tri, outerNormal);
     }
     return out;
   }
+
+
 
   buildTopSides(bottomZ, epsilon) {
     const sides = [];
@@ -3054,27 +3469,23 @@ export class Polygons3d extends Polygon3d {
   // ----- NOTE: Property tests ----- //
 
   isFacing(p) {
-    // All polygons should face the same way for purposes of Polygons3d.
-    // But to be sure, find a solid, not a hole.
-    for ( const poly of this.polygons ) {
-      if ( poly.isHole ) continue;
-      return poly.isFacing(p);
-    }
-    return null;
+    return this.polygons[0]?.isFacing(p) ?? null;
   }
 
   // Valid if it forms at least one polygon.
   isValid() {
     return this.polygons.length
       && this.polygons.every(poly => poly.isValid())
-      && this.polygons.some(poly => !poly.isHole);
   }
 
   // ----- NOTE: Transformations ----- //
 
-  transform(M, invTransposeM) {
+  transform(M, invTransposeM, mirrors) {
+    invTransposeM ??= M.invert().transpose();
+    mirrors ??= Polygon3d.isMirroringTransform(M);
     const out = new this.constructor();
-    this.polygons.forEach(poly => out.polygons.push(poly.transform(M, invTransposeM)));
+    this.polygons.forEach(poly => out.polygons.push(poly.transform(M, invTransposeM, mirrors)));
+    out.dirtyAABB = true;
     return out;
   }
 
@@ -3087,6 +3498,7 @@ export class Polygons3d extends Polygon3d {
   scale(pt) {
     const out = new this.constructor();
     this.polygons.forEach(poly => out.polygons.push(poly.scale(pt)));
+    out.dirtyAABB = true;
     return out;
   }
 
@@ -3097,6 +3509,20 @@ export class Polygons3d extends Polygon3d {
   }
 
   // ----- NOTE: Intersection ----- //
+
+  /**
+   * Test if an XY point is contained within the projected polygon.
+   * @param {PIXI.Point} canvasLoc
+   * @returns {boolean} True if contained.
+   */
+  containsProjectedXY(canvasLoc) {
+    let count = 0;
+    for ( const poly of this.polygons ) {
+      count += poly.containsProjectedXY(canvasLoc) * (poly.isHole === this.isHole ? -1 : 1);
+    }
+    return count > 0;
+  }
+
 
   /**
    * Test if a ray is within the polygon bounds and intersects the polygon's plane.
@@ -3142,7 +3568,7 @@ export class Polygons3d extends Polygon3d {
       if ( !polyIx ) continue;
       ix ??= polyIx;
       if ( opts.holesBlock ) return ix;
-      holeCount += poly.isHole ? -1 : 1;
+      holeCount += (poly.isHole === this.isHole ? -1 : 1);
     }
     return holeCount > 0 ? ix : null;
   }
@@ -3164,7 +3590,7 @@ export class Polygons3d extends Polygon3d {
       const hasIx = poly._isIntersectionWithinPolygon(ix);
       if ( !hasIx ) continue;
       if ( holesBlock ) return true;
-      holeCount += poly.isHole ? -1 : 1;
+      holeCount += (poly.isHole === this.isHole ? -1 : 1);
     }
     return holeCount > 0;
   }
@@ -3216,6 +3642,111 @@ export class Polygons3d extends Polygon3d {
     return out;
   }
 
+  /**
+   * Find the intervals of a line (ray) that intersects this polygon.
+   * Assumes the line is on this plane.
+   * @param {Point3d} origin
+   * @param {Point3d} direction
+   * @returns {number[]} T-values along the line.
+   */
+  _planarLineIntersections(origin, direction) {
+    // Intersect both solids and holes.
+    const out = [];
+    for ( const poly of this.polygons ) out.push(...poly._planarLineIntersections(origin, direction));
+    return out;
+  }
+
+  /**
+   * Does a line (ray) intersect this polygon?
+   * Assumes the line is on this plane.
+   * @param {Point3d} origin
+   * @param {Point3d} direction
+   * @returns {boolean} T-values along the line.
+   */
+  _hasPlanarLineIntersections(origin, direction) {
+    for ( const poly of this.polygons ) {
+      if ( poly._hasPlanarLineIntersections(origin, direction) ) return true;
+    }
+    return false;
+  }
+
+  /* ----- NOTE: Holes ----- */
+
+  /**
+   * Construct a recursive tree of solid + holes
+   * A root solid pairs with its direct hole children only.
+   * Each of those holes' direct solid children become new island roots one level down.
+   * @param {(PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse)[]} polygons         Solid and hole shapes
+   * @param {Set<number>} holeIndices                                               Indices of the polygons array indicating holes
+   * @returns {object[]}
+   * - @prop {number} solidIndex
+   * - @prop {number[]} holeIndices
+   */
+  static buildIslands(polygons, holeIndices = NULL_SET) {
+    // Group rings by their immediate parent shape.
+    const parent = this._buildRingParents(polygons);
+    const children = Array.from({ length: polygons.length }, () => []); // Create new array for each.
+    parent.forEach((p, i) => {
+      if ( p !== null ) children[p].push(i);
+    });
+
+    const islands = []; // { solid: PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse, holes: PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse[] }
+    function processSolid(solidIndex) {
+      const holeIdxs = children[solidIndex].filter(c => holeIndices.has(c));
+      islands.push({ solidIndex, holeIndices: holeIdxs });
+
+      // Recurse: Any solid ring nested inside one of these holes starts a new island.
+      for ( const holeIdx of holeIdxs ) children[holeIdx]
+        .filter(c => !holeIndices.has(c))
+        .forEach(processSolid);
+    }
+
+    polygons.forEach((_solidOrHole, i) => {
+      if (parent[i] === null && !holeIndices.has(i) ) processSolid(i);
+    });
+
+    return islands;
+  }
+
+  /**
+   * Find each ring's immediate parent: the smallest other ring (solid or hole)
+   * that contains it. Assumes clean, non-self-intersecting rings that are either
+   * disjoint or fully nested (true for Clipper-cleaned region shapes).
+   * @param {(PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse)[]} planarRings
+   * @returns {number[]} Index of parent polygon for each ring
+   */
+  static _buildRingParents(planarRings) {
+    const areas = planarRings.map(r => r.area); // Note: Must be positive area, not signed.
+
+    // Ensure the test point is strictly inside the polygon, not on an edge.
+    // which could cause the `contains` method to fail for tightly nested shapes.
+    const testPoints = planarRings.map(r => {
+      if ( typeof r.interiorPoint === "function" ) {
+        const pt = r.interiorPoint();
+        if ( pt ) return pt;
+      }
+      // Fallback on centroid or manual bounding box center if interiorPoint fails.
+      return r.center || PIXI.Point.tmp.set(r.x, r.y);
+    });
+
+    // Construct the parent-child relationship based on area comparison. Parent area > child area.
+    return planarRings.map((ring, i) => {
+      let parent = null;
+      let parentArea = Number.POSITIVE_INFINITY;
+      for ( let j = 0, n = planarRings.length; j < n; j += 1 ) {
+        if ( i === j ) continue; // Skip self-test.
+        if ( areas[j] <= areas[i] ) continue; // A parent must be strictly larger than the ring it contains.
+        if ( areas[j] >= parentArea ) continue; // Already have a tighter-fitting candidate.
+        if ( planarRings[j].contains(testPoints[i].x, testPoints[i].y) ) {
+          parent = j;
+          parentArea = areas[j];
+        }
+      }
+      return parent;
+    });
+  }
+
+
   /* ----- NOTE: Debug ----- */
 
   draw2d(opts = {}) {
@@ -3224,9 +3755,9 @@ export class Polygons3d extends Polygon3d {
     const draw = opts.draw?.g || canvas.controls.debug;
 
     // Sort so holes are last.
-    this.polygons.sort((a, b) => a.isHole - b.isHole);
-    for ( const poly of this.polygons ) {
-      if ( poly.isHole ) {
+    const rings = [...this.polygons].sort((a, b) => (a.isHole !== this.isHole) - (b.isHole !== this.isHole));
+    for ( const poly of rings ) {
+      if ( poly.isHole !== this.isHole ) {
         if ( !opts.holeColor ) draw.beginHole(); // If holeColor, don't treat as hole
         opts.color = opts.holeColor || opts.color;
         opts.fill = opts.holeFill || opts.fill;
@@ -3301,114 +3832,6 @@ function convexHull(points) {
   return upperHull.concat(lowerHull);
 }
 
-
-
-GEOMETRY_CONFIG.threeD.Polygon3d = Polygon3d;
-GEOMETRY_CONFIG.threeD.Ellipse3d = Ellipse3d;
-GEOMETRY_CONFIG.threeD.Circle3d = Circle3d;
-GEOMETRY_CONFIG.threeD.Triangle3d = Triangle3d;
-GEOMETRY_CONFIG.threeD.Quad3d = Quad3d;
-GEOMETRY_CONFIG.threeD.Polygons3d = Polygons3d;
-
 // Synonym for Circle3d.
 export const Cylinder = GEOMETRY_CONFIG.threeD.Circle3d;
-GEOMETRY_CONFIG.threeD.Cylinder = Circle3d;
 
-
-/* Testing
-Draw = CONFIG.GeometryLib.Draw
-Polygon3d = game.modules.get("tokenvisibility").api.triangles.Polygon3d
-Point3d = CONFIG.GeometryLib.threeD.Point3d
-
-poly = new PIXI.Polygon(
-  100, 100,
-  100, 500,
-  500, 500,
-)
-
-poly3d = Polygon3d.fromPolygon(poly, 20)
-poly3d.forEach((pt, idx) => console.log(`${idx} ${pt}`))
-
-Polygon3d.convexHull(poly3d.points)
-Polygon3d.convexHull2(poly3d.points)
-
-rayOrigin = new Point3d(200, 300, 50)
-rayDirection = new Point3d(0, 0, -1)
-ix = poly3d.intersection(rayOrigin, rayDirection)
-
-rayDirection = new Point3d(0, 0, 1)
-poly3d.intersection(rayOrigin, rayDirection)
-
-poly3d = Polygon3d.from3dPoints([
-  new Point3d(0, 100, -100),
-  new Point3d(0, 100, 500),
-  new Point3d(0, 500, 500)
-])
-
-clipped = poly3d.clipZ()
-clipped2 = poly3d.clipZ({ keepLessThan: false })
-
-poly3d.draw2d({ omitAxis: "x" })
-clipped.draw2d({ omitAxis: "x", color: Draw.COLORS.red })
-clipped2.draw2d({ omitAxis: "x", color: Draw.COLORS.blue })
-
-
-Polygons3d = game.modules.get("tokenvisibility").api.triangles.Polygons3d
-
-poly = new PIXI.Polygon(
-  100, 100,
-  100, 500,
-  500, 500,
-)
-
-hole = new PIXI.Polygon(
-  150, 200,
-  200, 400,
-  300, 400,
-)
-hole.isHole = true;
-
-polys3d = Polygons3d.fromPolygons([poly, hole])
-polys3d.draw2d({ color: Draw.COLORS.blue, holeColor: Draw.COLORS.red })
-polys3d.draw2d({ color: Draw.COLORS.blue, fill: Draw.COLORS.blue, fillAlpha: 0.5 })
-
-rayOrigin = new Point3d(200, 300, 50)
-rayDirection = new Point3d(0, 0, -1)
-ix = polys3d.intersection(rayOrigin, rayDirection)
-
-rayOrigin = new Point3d(150, 450, 50)
-rayDirection = new Point3d(0, 0, -1)
-ix = polys3d.intersection(rayOrigin, rayDirection)
-
-
-points = [
-  new Point3d(0, 0, 0),
-  new Point3d(100, 0, 100),
-  new Point3d(0, 100, 0),
-  new Point3d(50, 50, 50),
-  new Point3d(200, 20, 200),
-  new Point3d(300, 50, 300),
-  new Point3d(300, 300, 300),
-  new Point3d(250, 75, 250),
-  new Point3d(0, 75, 0),
-  new Point3d(50, 250, 50),
-  new Point3d(25, 210, 25),
-  new Point3d(150, 150, 150),
-  new Point3d(150, 200, 150),
-]
-points.forEach(pt => Draw.point(pt))
-
-ptsC = Polygon3d.convexHull(points)
-ptsC2 = Polygon3d.convexHull2(points)
-
-polyC = Polygon3d.from3dPoints(ptsC)
-polyC2 = Polygon3d.from3dPoints(ptsC2)
-polyC.draw2d({ color: Draw.COLORS.blue })
-polyC2.draw2d({ color: Draw.COLORS.green })
-
-b = polyC2.bounds
-boundsRect = new PIXI.Rectangle(b.x.min, b.y.min, b.x.max - b.x.min, b.y.max - b.y.min)
-
-
-
-*/

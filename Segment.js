@@ -32,6 +32,24 @@ export class Segment {
     this.b = null;
   }
 
+  release() {
+    this.a.release;
+    this.b.release;
+    this.a = null;
+    this.b = null;
+  }
+
+  /**
+   * Flip a and b points, in place.
+   * @returns {this}
+   */
+  reverse() {
+    const oldB = this.b;
+    this.b = this.a;
+    this.a = oldB;
+    return this;
+  }
+
   /**
    * Difference between the two points.
    * @type {PIXI.Point|Point3d}
@@ -72,5 +90,34 @@ export class Segment {
   get angleXY() {
     using d = this.delta;
     return Math.atan2(d.y, d.x);
+  }
+
+  /**
+   * Copy this segment to a new segment.
+   * Clones the points.
+   * @param {Segment} [out]
+   * @returns {Segment}
+   */
+  clone(out) {
+    if ( out ) {
+      out.a.release();
+      out.b.release();
+    }
+    out ??= new this();
+    out.a = this.a.clone();
+    out.b = this.b.clone();
+    return out;
+  }
+
+  /**
+   * Copy another segment to this one.
+   * Copies the points.
+   * @param {Segment} s
+   * @returns {this}
+   */
+  copyFrom(s) {
+    this.a.copyFrom(s.a);
+    this.b.copyFrom(s.b);
+    return this;
   }
 }

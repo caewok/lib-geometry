@@ -46,7 +46,17 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
   toJSON() { return { ...this }; }
 
   static [Symbol.hasInstance](instance) {
-    return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
+    if ( !instance || typeof instance !== "object" ) return false;
+
+    // Walk up the inheritance chain..
+    let currentConstructor = instance.constructor;
+    while ( currentConstructor ) {
+      if ( currentConstructor._geoLibType === this._geoLibType ) return true;
+
+      // Move to the parent class.
+      currentConstructor = Object.getPrototypeOf(currentConstructor);
+    }
+    return false;
   }
 
   static _geoLibType = "Point3d";
@@ -310,7 +320,7 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
   static key(pt) {
     const key2d = PIXI.Point.key(pt);
     const z = Math.round(pt.z || 0);
-    return ((BigInt(key2d) << 32n) ^ BigInt(Math.abs(z))) * (z < 0 ? -1 : 1);
+    return ((BigInt(key2d) << 32n) ^ BigInt(Math.abs(z))) * (z < 0 ? BigInt(-1) : BigInt(1))
   }
 
   /**
@@ -332,6 +342,26 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
 
     // Use existing 2d logic.
     return super.invertKey(k2d, outPoint);
+  }
+
+  /**
+   * String key, rounding to a given number of decimals.
+   * @param {number} [places=8]   Number of decimals
+   */
+  stringKey(places=8) {
+    return `${this.x.toFixed(places)},${this.y.toFixed(places)}`;
+  }
+
+  /**
+   * Invert a string key.
+   * @param {string}
+   * @returns {Point3d}
+   */
+  static invertStringKey(str, out) {
+    // To avoid calling str.split repeatedly, do not call super; handle here.
+    out ??= this.tmp;
+    const [xStr, yStr, zStr] = str.split(",");
+    return out.set(Number(xStr) || 0, Number(yStr) || 0, Number(zStr) || 0);
   }
 
   /**

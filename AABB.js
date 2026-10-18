@@ -385,9 +385,9 @@ export class AABB2d {
    * @param {number} [epsilon=1e-06]        How close to min/max for the point to count as contained
    * @returns {AABB2d}
    */
-  almostContainsPoint(p, epsilon = 1e-06) {
+  almostContainsPoint(p, axes = this.constructor.axes, epsilon = 1e-06) {
     const { min, max } = this;
-    for ( const axis of this.constructor.axes ) {
+    for ( const axis of axes ) {
       if ( !p[axis].almostBetween(min[axis], max[axis], epsilon) ) return false
     }
     return true;
@@ -439,10 +439,11 @@ export class AABB2d {
    * @param {AABB2d} other
    * @returns {boolean}
    */
-  overlapsAABB(other) {
+  overlapsAABB(other, axes) {
     // Separating Axis Theorem: Must overlap on every axis.
     // A.minX <= B.maxX && A.maxX >= B.minX && ...same for y, z
-    for ( const axis of this.constructor.axes ) {
+    axes ??= this.constructor.axes;
+    for ( const axis of axes ) {
       // If not overlapping on an axis, return false.
       if ( this.max[axis] < other.min[axis] || other.max[axis] < this.min[axis] ) return false;
     }
@@ -467,9 +468,9 @@ export class AABB2d {
    * @param {Wall|Edge} edge
    * @returns {boolean}
    */
-  overlapsEdge(edge) {
+  overlapsEdge(edge, axes) {
     if ( edge instanceof foundry.canvas.placeables.Wall ) edge = edge.edge;
-    return this.overlapsSegment(edge.a, edge.b);
+    return this.overlapsSegment(edge.a, edge.b, axes);
   }
 
   /**
@@ -497,23 +498,23 @@ export class AABB2d {
         // Segment is parallel to the slab for this axis.
         // If segment origin is outside the slab, it can never intersect.
         if ( p0 < min || p0 > max ) return false;
-        // Otherwise, the infinite line is always within this slab. Proceed to next axis.
+      } else {
+
+        // Segment is not parallel.
+        const invD = 1.0 / rayDirection[axis];
+        let t1 = (min - p0) * invD;
+        let t2 = (max - p0) * invD;
+
+        // Ensure t1 is the intersection with the "near" plane and t2 with the "far" plane.
+        if ( t1 > t2 ) [t1, t2] = [t2, t1]; // Swap.
+
+        // Update the overall intersection interval [tmin, tmax].
+        tmin = Math.max(tmin, t1);
+        tmax = Math.min(tmax, t2);
+
+        // If the intersection interval becomes invalid, the line misses the box.
+        if ( tmin > tmax ) return false;
       }
-
-      // Segment is not parallel.
-      const invD = 1.0 / rayDirection[axis];
-      let t1 = (min - p0) * invD;
-      let t2 = (max - p0) * invD;
-
-      // Ensure t1 is the intersection with the "near" plane and t2 with the "far" plane.
-      if ( t1 > t2 ) [t1, t2] = [t2, t1]; // Swap.
-
-      // Update the overall intersection interval [tmin, tmax].
-      tmin = Math.max(tmin, t1);
-      tmax = Math.min(tmax, t2);
-
-      // If the intersection interval becomes invalid, the line misses the box.
-      if ( tmin > tmax ) return false;
     }
 
     // After checking all axes, [tmin, tmax] is the interval where the infinite

@@ -334,11 +334,11 @@ function intersectPolygon(polygon, { density, clipType, weilerAtherton=true, ...
 
 /**
  * Return a quadrangle cutaway for this ellipse
- * @param {Point3d} a       Starting endpoint for the segment
- * @param {Point3d} b       Ending endpoint for the segment
+ * @param {PIXI.Point} a       Starting endpoint for the segment
+ * @param {PIXI.Point} b       Ending endpoint for the segment
  * @param {object} [opts]
- * @param {Point3d} [opts.start]              Starting endpoint for the segment
- * @param {Point3d} [opts.end]                Ending endpoint for the segment
+ * @param {PIXI.Point} [opts.start]              Starting endpoint for the segment
+ * @param {PIXI.Point} [opts.end]                Ending endpoint for the segment
  * @param {function} [opts.topElevationFn]    Function to calculate the top elevation for a position
  * @param {function} [opts.bottomElevationFn] Function to calculate the bottom elevation for a position
  * @param {function} [opts.cutPointsFn]       Function that returns the steps along the a|b segment top

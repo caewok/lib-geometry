@@ -8,19 +8,26 @@ PIXI,
 import { GEOMETRY_LIB_ID } from "../const.js";
 import { VertexObject } from "../placeable_vertices/VertexObject.js";
 import { AABB3d } from "../3d/AABB3d.js";
-import { cutaway, roundDecimals, isOdd } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
 import { combineTypedArrays } from "../util.js";
 import { ModelMatrixAnchor } from "../ModelMatrix.js";
 import { MatrixFloat32 } from "../Matrix.js";
-import { Segment } from "../Segment.js";
 import { CutawayPolygon } from "../CutawayPolygon.js";
-import { Draw } from "../Draw.js";
+import { Plane } from "../3d/Plane.js";
+import { Segment } from "../Segment.js";
+import { Polygon3d } from "../3d/Polygon3d.js";
 
 
 /** @type {Matrix<4,4>} */
 const IDENTITY_MATRIX = MatrixFloat32.identity(4, 4);
 Object.freeze(IDENTITY_MATRIX);
+
+/**
+ * Global monotonic counter used to stamp transform changes.
+ * Stamps are never reused, so a primitive that is re-parented always looks "changed" to cached values.
+ */
+let VERSION_COUNTER = 0;
+
 
 /* Geometric Primitives
 
@@ -111,6 +118,37 @@ export class GeometricPrimitive {
   /** @type {string} */
   id;
 
+  /** @type {GeometricPrimitive} */
+  parent = null; // Parent container, if any. Change to model are flagged here.
+
+  /** @type {boolean} */
+  isHole = false;
+
+  /** @type {boolean} */
+  #reversed = false;
+
+  get reversed() { return this.#reversed; }
+
+  /**
+   * Toggle hole status of this shape, and mark the children as changed.
+   */
+  reverseOrientation() {
+    this.#reversed = !this.#reversed;
+    this.isHole = !this.isHole;
+    this._markOrientationChanged();
+    return this;
+  }
+
+  /**
+   * Mark as dirty based on an orientation change.
+   */
+  _markOrientationChanged() {
+    const D = this.constructor.DIRTY;
+    this.dirty = D.FACES | D.MODEL_VERTICES | D.INSTANCE_VERTICES | D.DERIVED;
+    this.contentVersion = this.constructor._nextVersion(); // Track change for any renderer.
+    this.parent?.childChanged(this);
+  }
+
   /**
    * @param {string} id       Unique string per instance; used for debugging and for child classes
    *                          to track model and vertices arrays.
@@ -119,16 +157,10 @@ export class GeometricPrimitive {
     this.id = id;
   }
 
-  initialize() {
-    this.dirty = this.constructor.DIRTY.ALL;
-    this.#calculatePrototypeAABB();
-  }
-
-  static create(...args) {
-    const out = new this(...args);
-    out.initialize();
-    return out;
-  }
+  /**
+   * @returns {number} A new, never-before-used version stamp.
+   */
+  static _nextVersion() { return ++VERSION_COUNTER; }
 
   #center = new Point3d();
 
@@ -178,8 +210,13 @@ export class GeometricPrimitive {
     AABB:             1 << 1, // 2
     FACE_POINTS:      1 << 2, // 4
     INTERNAL_POINTS:  1 << 3, // 8
-    MODEL_VERTICES:   1 << 5, // 32
-    INSTANCE_VERTICES: 1 << 6, // 64
+    MODEL_VERTICES:   1 << 4, // 16
+    INSTANCE_VERTICES: 1 << 5, // 32
+    DERIVED:          1 << 6, // 64. Geometry derived from other primitives (e.g. caps of a holed solid)
+
+    // Everything that depends on the world transform.
+    // Excludes INSTANCE_VERTICES, which depend only on the prototype faces and so survive any matrix change.
+    TRANSFORM:         (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 6),
     ALL:              ~0,     // All bits set
   };
 
@@ -194,6 +231,65 @@ export class GeometricPrimitive {
 
   _clearDirty(flag) { this.#dirtyFlags &= ~flag; }
 
+
+  // ----- NOTE: Update tracking ----- //
+
+  /**
+   * Stamp of this primitive's own transform.
+   * @type {number}
+   */
+  transformVersion = this.constructor._nextVersion();
+
+  /**
+   * Stamp bumped when something below this primitive changes (children added, removed, or changed).
+   * Stays 0 for leaves.
+   * @type {number}
+   */
+  contentVersion = 0;
+
+  /**
+   * Changes whenever this primitive's world transform chages: its own or any ancestor's.
+   * @type {number}
+   */
+  get worldVersion() { return Math.max(this.transformVersion, this.parent?.worldVersion ?? 0); }
+
+  /**
+   * One number a renderer can poll per root. Changes if anything in or above this subtree changed.
+   * @type {number}
+   */
+  get changeStamp() { return Math.max(this.worldVersion, this.contentVersion); }
+
+  /** @type {number} */
+  #syncedWorldVersion = -1;
+
+  /**
+   * If an ancestor's transform changed since this primitive last looked, flag the
+   * transform-dependent caches as dirty.
+   * Called at the top of every cached getter.
+   */
+  _syncWorld() {
+    const version = this.worldVersion;
+    if ( version === this.#syncedWorldVersion ) return;
+    this.#syncedWorldVersion = version;
+    this.dirty = this.constructor.DIRTY.TRANSFORM;
+  }
+
+  /**
+   * Call after any change to this primitive's own model matrix.
+   * Does not touch the instance vertices, which depend only on the prototype.
+   */
+  _markTransformChanged() {
+    this.transformVersion = this.constructor._nextVersion();
+    this.dirty = this.constructor.DIRTY.TRANSFORM;
+    this.parent?.childChanged(this);
+  }
+
+  /**
+   * Called by a child when its transform or content changed. Containers override.
+   * @param {GeometricPrimitive} _child
+   */
+  childChanged(_child) { }
+
   // ----- NOTE: Model Matrix ----- //
 
   // Every object has a model matrix, although some might be identity matrices.
@@ -203,48 +299,117 @@ export class GeometricPrimitive {
   /** @type {ModelMatrix} */
   modelMatrix = ModelMatrixAnchor.create();
 
+  /** {type} {Matrix<4x4>} */
+  #worldMatrix;
+
+  /** @type {number} */
+  #worldMatrixVersion = -1;
+
   /**
-   * @type {Point3d|object} center
+   * Local-to-canvas matrix: The parent's world matrix times this primitive's model matrix.
+   * Identical to the model matrix for a root primitive.
+   * @type {Matrix<4x4>}
+   */
+  get worldMatrix() {
+    const version = this.worldVersion;
+    if ( version !== this.#worldMatrixVersion ) {
+      const local = this.modelMatrix.model;
+      this.#worldMatrix = this.parent ? this.parent.worldMatrix.multiply4x4(local) : local;
+      this.#worldMatrixVersion = version;
+    }
+    return this.#worldMatrix;
+  }
+
+  /**
+   * @param {Point3d|object} center
+   * @returns {boolean} True if change was made. Triggers parent update, if any.
    */
   setPosition(center) {
-    if ( this.modelMatrix.translation.almostEqual(center) ) return;
+    if ( this.modelMatrix.translation.almostEqual(center) ) return false;
     this.modelMatrix.translation = center;
-    this.dirty = this.constructor.DIRTY.ALL;
+    this._markTransformChanged();
+    return true;
   }
 
   /**
-   * @type {Point3d|object} angles
+   * @param {Point3d|object} angles
+   * @returns {boolean} True if change was made. Triggers parent update, if any.
    */
   setRotation(angles) {
-    if ( this.modelMatrix.rotation.almostEqual(angles) ) return;
+    if ( this.modelMatrix.rotation.almostEqual(angles) ) return false;
     this.modelMatrix.rotation = angles;
-    this.dirty = this.constructor.DIRTY.ALL;
+    this._markTransformChanged();
+    return true;
   }
 
   /**
-   * @type {Point3d|object} dims
+   * @param {Point3d|object} dims
+   * @returns {boolean} True if change was made. Triggers parent update, if any.
    */
   setScale(dims) {
-    if ( this.modelMatrix.scale.almostEqual(dims) ) return;
+    if ( this.modelMatrix.scale.almostEqual(dims) ) return false;
     this.modelMatrix.scale = dims;
-    this.dirty = this.constructor.DIRTY.ALL;
+    this._markTransformChanged();
+    return true;
   }
 
+  /**
+   * @param {Point3d|object} anchors
+   * @returns {boolean} True if change was made. Triggers parent update, if any.
+   */
   setAnchor(anchors) {
-    if ( this.modelMatrix.anchor.almostEqual(anchors) ) return;
+    if ( this.modelMatrix.anchor.almostEqual(anchors) ) return false;
     this.modelMatrix.anchor = anchors;
-    this.dirty = this.constructor.DIRTY.ALL;
+    this._markTransformChanged();
+    return true;
   }
 
   // ----- NOTE: AABB ----- //
 
   /** @type {AABB3d} */
+  prototypeAABB = new AABB3d(); // Must be calculated by child class along with prototype faces.
+
+  /** @type {AABB3d} */
   #aabb = new AABB3d();
 
-  #prototypeAABB = new AABB3d();
 
   get aabb() {
+    this._syncWorld();
     if ( this.isDirty(this.constructor.DIRTY.AABB) ) this.updateAABB();
+
+    if ( this.faces.length && CONFIG[GEOMETRY_LIB_ID].CONFIG.debug ) {
+      if ( Number.isNaN(this.prototypeAABB.min.x)
+        || Number.isNaN(this.prototypeAABB.min.y)
+        || Number.isNaN(this.prototypeAABB.min.z)
+        || Number.isNaN(this.prototypeAABB.max.x)
+        || Number.isNaN(this.prototypeAABB.max.y)
+        || Number.isNaN(this.prototypeAABB.max.z) ) console.error(`${this.constructor.name}|Prototype AABB is NaN.`);
+
+      if ( Number.isNaN(this.#aabb.min.x)
+        || Number.isNaN(this.#aabb.min.y)
+        || Number.isNaN(this.#aabb.min.z)
+        || Number.isNaN(this.#aabb.max.x)
+        || Number.isNaN(this.#aabb.max.y)
+        || Number.isNaN(this.#aabb.max.z)
+
+       ) console.error(`${this.constructor.name}|AABB is NaN.`);
+
+      if ( !(Number.isFinite(this.prototypeAABB.min.x)
+          && Number.isFinite(this.prototypeAABB.min.y)
+          && Number.isFinite(this.prototypeAABB.min.z)
+          && Number.isFinite(this.prototypeAABB.max.x)
+          && Number.isFinite(this.prototypeAABB.max.y)
+          && Number.isFinite(this.prototypeAABB.max.z)) ) console.warn(`${this.constructor.name}|Prototype AABB is not finite.`);
+
+      if ( !(Number.isFinite(this.#aabb.min.x)
+          && Number.isFinite(this.#aabb.min.y)
+          && Number.isFinite(this.#aabb.min.z)
+          && Number.isFinite(this.#aabb.max.x)
+          && Number.isFinite(this.#aabb.max.y)
+          && Number.isFinite(this.#aabb.max.z)) ) console.warn(`${this.constructor.name}|AABB is not finite.`);
+    }
+
+
     return this.#aabb;
   }
 
@@ -256,31 +421,32 @@ export class GeometricPrimitive {
     this._clearDirty(this.constructor.DIRTY.AABB);
   }
 
-  /**
-   * Define the prototype aabb based on prototype.
-   * @param {AABB3d} aabb       The prototype AABB object to modify
-   */
-  #calculatePrototypeAABB() {
-    const aabb = this.#prototypeAABB;
-    AABB3d.union(this.prototypeFaces.map(face => face.aabb), aabb);
+  _calculateAABB(aabb) {
+    this.prototypeAABB.transform(this.worldMatrix, aabb);
   }
 
-  _calculateAABB(aabb) {
-    this.#prototypeAABB.transform(this.modelMatrix.model, aabb);
-  }
+  /**
+   * Does this shape's XY dimensions potentially contain this canvas location?
+   * Meant to be a relatively quick test. Should only reject if it is certain not to contain it.
+   * @param {PIXI.Point} canvasLoc
+   * @returns {boolean}
+   */
+  containsProjectedXY(canvasLoc) { return this.aabb.almostContainsPoint(canvasLoc, ["x", "y"]); }
 
   // ----- NOTE: Faces ----- //
 
   // Prototype faces should be set at initialization and not otherwise be dirty.
 
   /** @type {Polygon3d[]} */
-  get prototypeFaces() { return []; }
+  prototypeFaces = [];
 
   #faces = [];
 
   /** @type {Polygon3d[]} */
   get faces() {
-    if ( this.isDirty(this.constructor.DIRTY.FACES) ) this.updateFaces();
+    this._syncWorld();
+    if ( this.isDirty(this.constructor.DIRTY.FACES)
+      || (!this.#faces.length && this.prototypeFaces.length) ) this.updateFaces();
     return this.#faces;
   }
 
@@ -299,7 +465,7 @@ export class GeometricPrimitive {
 
   /**
    * Update the faces for this primitive.
-   * Default is to use the model matrix.
+   * Default is to use the world matrix.
    */
   _generateFaces(faces) {
     // Release old face points before destroying them.
@@ -307,35 +473,111 @@ export class GeometricPrimitive {
     const protoFaces = this.prototypeFaces;
     const numSides = faces.length = protoFaces.length;
 
-    // Transform the prototype faces by the model matrix.
+    // Guard: If prototype faces not yet ready, do not clear the dirty flag.
+    if ( !numSides ) return;
+
+    // Transform the prototype faces by the world matrix.
     // Pre-calculate the inverse transpose to use with transforming the normal.
-    const M = this.modelMatrix.model;
+    const M = this.worldMatrix;
     const invTransposeM = M.invert().transpose();
-    for ( let i = 0; i < numSides; i += 1 ) faces[i] = protoFaces[i].transform(M, invTransposeM);
+    const mirrors = Polygon3d.isMirroringTransform(M);
+    for ( let i = 0; i < numSides; i += 1 ) {
+      const face = protoFaces[i].transform(M, invTransposeM, mirrors);
+      faces[i] = this.reversed ? face.invertRole() : face;
+    }
     this._clearDirty(this.constructor.DIRTY.FACES);
   }
 
   // ----- NOTE: Intersection testing ----- //
 
   /**
-   * Determine where a ray hits this object in 3d.
-   * Stops at the first hit for a triangle facing the correct direction.
+   * @typedef {Object} CrossingData
+   * @prop {number} t       Where along the ray the crossing occurs
+   * @prop {-1|1} s         Direction of the crossing: +1 enters (see faceCrossings)
+   * @prop {-1|1|0} ds      Combined direction (see clusterCrossings)
+   */
+
+  /**
+   * Count the number of faces crossed by a given ray for a given polygon or polygons.
+   * @param {Polygon3d} face
+   * @param {Point3d} rayOrigin
+   * @param {Point3d} rayDirection
+   * @param {CrossingData[]} [out=[]]     Where to store the crossing data
+   */
+  static faceCrossings(face, rayOrigin, rayDirection, out = []) {
+    for ( const poly of face.polygons ?? [face] ) {
+      // Treat hole rings as real surfaces here, to facilitate the shoelace counting.
+      const t = poly.intersectionT(rayOrigin, rayDirection, { holesBlock: true, signed: true });
+      if ( t === null ) continue;
+      out.push({ t, s: poly.plane.normal.dot(rayDirection) < 0 ? 1 : -1, ds: null }); // +1 enters material.
+    }
+    return out;
+  }
+
+  /**
+   * Organize crossing data by distance along the ray.
+   * @param {CrossingData[]} crossings
+   * @param {number} [epsilon=1e-06]
+   * @returns {CrossingData[]}
+   */
+  static clusterCrossings(crossings, epsilon = 1e-06) {
+    crossings.sort((a, b) => a.t - b.t); // Sort by distance along the ray.
+    const out = [];
+    for ( let i = 0, n = crossings.length; i < n; ) {
+      const first = crossings[i];
+      let pos = false;
+      let neg = false;
+      while ( i < n && (crossings[i].t - first.t <= epsilon) ) {
+        if ( crossings[i].s > 0 ) pos = true;
+        else neg = true;
+        i += 1;
+      }
+      first.ds = pos - neg;
+      out.push(first); // { t: first.t, s: first.s, ds: pos - neg }
+    }
+    return out;
+  }
+
+  /**
+   * Locate the position along the ray when the first crossing occurs.
+   * @param {CrossingData[]} crossings    Output from clusterCrossings
+   * @param {object} [opts]
+   * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
+   * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
+   * @param {number} [opts.direction=this.CULL_FACES.BACK]    Orientation of a blocking face
+   * @returns {number|null} The direction along the ray if it is blocked
+   */
+  static firstBlockedT(crossings, { minT = 0, maxT = 1, direction = this.CULL_FACES.BACK }) {
+    let depth = 0; // Crossings behind the origin still count, so a ray that starts inside material is handled.
+    for ( const { t, ds } of crossings ) {
+      const before = depth;
+      depth += ds;
+      if ( t < minT || t > maxT ) continue;
+      const entered = before <= 0 && depth > 0;
+      const exited = before > 0 && depth <= 0;
+      if ( (direction >= 0 && entered)
+        || (direction <= 0 && exited) ) return t;
+    }
+    return null;
+  }
+
+  /**
+   * Determine where a ray first hits this object in 3d.
    * Ignores intersections behind the ray.
    * @param {Point3d} rayOrigin
    * @param {Point3d} rayDirection
    * @param {object} [opts]
+   * @param {boolean} [opts.sidesOnly=false]
    * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
    * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
    * @returns {number|null} The distance along the ray, as a multiple of rayDirection
    */
-  rayIntersection(rayOrigin, rayDirection, { minT = 0, maxT = 1, direction = this.constructor.CULL_FACES.BACK } = {}) {
-    for ( const face of this.faces ) {
-      if ( (direction * face.plane.whichSide(rayOrigin)) >= 0 ) {
-         const t = face.intersectionT(rayOrigin, rayDirection);
-         if ( t !== null && t >= minT && t <= maxT ) return t;
-      }
-    }
-    return null;
+  rayIntersection(rayOrigin, rayDirection, { sidesOnly = false, ...opts } = {}) {
+    const crossings = [];
+    const faces = sidesOnly ? this.sideFaces : this.faces;
+    for ( const face of faces ) this.constructor.faceCrossings(face, rayOrigin, rayDirection, crossings);
+    const clustered = this.constructor.clusterCrossings(crossings);
+    return this.constructor.firstBlockedT(clustered, { ...opts, direction: this.direction });
   }
 
   // ----- NOTE: Debug ----- //
@@ -347,64 +589,51 @@ export class GeometricPrimitive {
     for ( const face of this.faces ) face.draw2d(opts);
   }
 
-  drawTransformed(M, opts, invTransposeM) {
+  drawTransformed(M, opts, invTransposeM, mirrors) {
     invTransposeM ??= M.invert().transpose();
+    mirrors ??= Polygon3d.isMirroringTransform(M);
     for ( const face of this.faces ) {
-      face.transform(M, undefined, invTransposeM).draw2d(opts);
+      face.transform(M, invTransposeM, mirrors).draw2d(opts);
     }
   }
 
   /**
    * Draw normals for the faces, extending out from the centroid of each.
    */
-  drawNormals({ multiplier = 10, draw, omitAxis = "z", ...opts } = {}) {
-    draw ??= new Draw();
-    using b = Point3d.tmp;
-    for ( const face of this.faces ) {
-      const a = face.centroid;
-      a.add(face.plane.normal.multiplyScalar(multiplier, b), b);
-
-      // Just dropping z axis.
-      switch ( omitAxis ) {
-        case "z": draw.segment({ a, b }, opts); break;
-        case "x": draw.segment({ a: a.to2d({ x: "y", y: "z"}), b: b.to2d({ x: "y", y: "z"}) }, opts); break;
-        case "y": draw.segment({ a: a.to2d({ x: "x", y: "z"}), b: b.to2d({ x: "x", y: "z"}) }, opts); break;
-      }
-    }
+  drawNormals(opts) {
+    for ( const face of this.faces ) face.drawNormal(opts);
   }
 
   /**
    * Validate aspects of this shape, to be defined by child class.
-   * At a minimum, calls validateFacesOutward
+   * The parent tests faces for consistent
    * @returns {boolean} True if valid (tests pass).
    */
   validate() {
-    return this.prototypeFacesOutward() && this.facesOutward();
+    // Outward for solids, inward for holes.
+    const worldDir = this.isHole ? -1 : 1;
+    const protoDir = (this.isHole !== this.reversed) ? -1 : 1;
+    return this._hasConsistentFaceDirection(this.prototypeFaces) === protoDir
+      && this._hasConsistentFaceDirection(this.faces) === worldDir;
   }
 
   /**
-   * Test whether all faces of this shape's prototype face outward as expected.
+   * Test whether all provided faces face a consistent direction: all inward or all outward.
    * Outward means from an outside viewer, the face is counter-clockwise.
-   * @returns {boolean} True if all faces point outward.
+   * @returns {1|-1|0} 1 if all face outward; -1 if all face inward; 0 if mixed.
    */
-  prototypeFacesOutward() { return this._testFacesOutward(this.prototypeFaces); }
+  _hasConsistentFaceDirection(faces) {
+    if ( !faces || faces.length < 3 ) return 0;
 
-  /**
-   * Test whether all faces of this shape face outward as expected.
-   * Outward means from an outside viewer, the face is counter-clockwise.
-   * @returns {boolean} True if all faces point outward.
-   */
-  facesOutward() { return this._testFacesOutward(this.faces); }
-
-  _testFacesOutward(faces) {
-    if ( !faces || faces.length < 3 ) return false;
-
-    // Test each face against the centroid.
+    // Default to simple version: Test each face against the centroid.
     const centroid = this.constructor.calculateCentroid(faces);
-    for ( const face of faces ) {
-      if ( face.isFacing(centroid) ) return false;
+    const iter = faces.values();
+    const firstFace = iter.next().value;
+    const dir = -Math.sign(firstFace.plane.whichSide(centroid));
+    for ( const face of iter ) {
+      if ( -Math.sign(face.plane.whichSide(centroid)) !== dir ) return 0;
     }
-    return true;
+    return dir;
   }
 
   /**
@@ -418,6 +647,7 @@ export class GeometricPrimitive {
   static testFaceOrientation(face, faces) {
     const rayOrigin = face.interiorPoint();
     const otherFaces = faces.filter(f => f !== face);
+    const MAX_ATTEMPTS = 10;
 
     /*
     Start with the face's own -normal (guarantees the ray starts by heading into
@@ -433,31 +663,22 @@ export class GeometricPrimitive {
     Detect that degeneracy and nudge the ray direction until no other face's
     plane is (nearly) parallel to it.
     */
-    using baseDirection = face.plane.normal.multiplyScalar(-1);
-    using rayDirection = baseDirection.clone();
 
-    let attempts = 0;
-    const MAX_ATTEMPTS = 10;
-    for (; attempts < MAX_ATTEMPTS; attempts += 1 ) {
-      if ( !rayIsDegenerate(rayDirection, otherFaces) ) break;
-      using newDirection = perturbDirection(baseDirection);
-      rayDirection.copyFrom(newDirection);
-    }
+    const netAlong = baseDirection => {
+       using rayDirection = baseDirection.clone();
+       for ( let attempts = 0; attempts < MAX_ATTEMPTS && rayIsDegenerate(rayDirection, otherFaces); attempts += 1 ) {
+         using nudged = perturbDirection(baseDirection);
+         rayDirection.copyFrom(nudged);
+       }
+       const crossings = [];
+       for ( const other of otherFaces ) this.faceCrossings(other, rayOrigin, rayDirection, crossings);
+       return this.clusterCrossings(crossings.filter(c => c.t > 1e-06)).reduce((sum, c) => sum + c.ds, 0);
+    };
 
-    if ( attempts >= MAX_ATTEMPTS ) {
-      console.warn(`GeometricPrimitive.testFaceOrientation|No non-degenerate ray direction found after ${MAX_ATTEMPTS} attempts; `
-        + "proceeding with a possibly-degenerate ray.", { face, faces });
-    }
-
-    const tIntersections = new Set();
-    for ( const otherFace of otherFaces ) {
-      // Round so we can ignore multiple intersections at a single point, like with edge endpoints.
-      // Note that for prototype faces, t might be quite small.
-      const t = roundDecimals(otherFace.intersectionT(rayOrigin, rayDirection, { holesBlock: false }) || 0, 8);
-      if ( t <= 0 ) continue;
-      tIntersections.add(t);
-    }
-    return isOdd(tIntersections.size);
+    using into = face.plane.normal.multiplyScalar(-1);
+    if ( netAlong(into) === -1 ) return 1;                // Heads into material, leaves once.
+    if ( netAlong(face.plane.normal) === 1 ) return -1;   // Heads into a void, leaves once.
+    return 0;
   }
 
   // ----- NOTE: Vertices ----- //
@@ -486,7 +707,10 @@ export class GeometricPrimitive {
    * Default approach uses the prototype faces.
    */
   _generateInstanceVertices(vo) {
-    return this.constructor.generateVerticesForFaces(this.prototypeFaces, vo);
+    const reversed = this.reversed !== Polygon3d.isMirroringTransform(this.worldMatrix);
+    const protoFaces = reversed
+      ? this.prototypeFaces.map(face => face.clone().reverseOrientation()) : this.prototypeFaces;
+    return this.constructor.generateVerticesForFaces(protoFaces, vo);
   }
 
   /** @type {VertexObject} */
@@ -494,6 +718,7 @@ export class GeometricPrimitive {
 
   /** @type {VertexObject} */
   get modelVO() {
+    this._syncWorld();
     if ( this.isDirty(this.constructor.DIRTY.MODEL_VERTICES) ) this.updateModelVertices();
     return this.#modelVO;
   }
@@ -530,7 +755,7 @@ export class GeometricPrimitive {
    * @returns {VertexObject}
    */
   static generateVerticesForFaces(faces, vo) {
-    vo ??= new VertexObject();
+    vo ||= new VertexObject();
     // Add vertices from faces.
     vo.vertices = this.verticesFromFaces(faces, true);
     vo.indices = null;
@@ -552,12 +777,41 @@ export class GeometricPrimitive {
     return combineTypedArrays(vertices);
   }
 
+  // ----- NOTE: Drawables ----- //
+
+  /**
+   * @typedef {Object} GeometricDrawableData
+   *
+   * @prop {GeometricPrimitive} primitive
+   * @prop {VertexObject} vo
+   * @prop {Matrix<4x4>} matrix
+   * @prop {number} direction
+   * @prop {number} version
+   */
+
+  /**
+   * Yield what a renderer needs to draw this primitive: prototype VO and the matrix to apply it.
+   * Leaves yield themselves; containers yield their descendant's drawables.
+   * @param {object} [opts]
+   * @yields {GeometricDrawableData}
+   */
+  *drawables(_opts) {
+    yield {
+      primitive: this,
+      vo: this.instanceVO,
+      matrix: this.worldMatrix,
+      direction: this.direction,
+      version: this.version,
+    };
+  }
+
   // ----- NOTE: Face points ----- //
 
   /** @typedef {Point3d[][]} */
   #facePoints = [];
 
   get facePoints() {
+    this._syncWorld();
     if ( this.isDirty(this.constructor.DIRTY.FACE_POINTS) ) this.updateFacePoints();
     return this.#facePoints;
   }
@@ -646,7 +900,8 @@ export class GeometricPrimitive {
   #internalPoints = {};
 
   get internalPoints() {
-    if ( this.isDirty(this.constructor.INTERNAL_POINTS) ) this.updateInternalPoints();
+    this._syncWorld();
+    if ( this.isDirty(this.constructor.DIRTY.INTERNAL_POINTS) ) this.updateInternalPoints();
     return this.#internalPoints;
   }
 
@@ -727,6 +982,7 @@ export class GeometricPrimitive {
     for ( let i = 0; i < numPts; i += 1 ) {
       const b = cornerPoints[i];
       midPts[i] = Point3d.midPoint(a, b);
+      a = b;
     }
     return midPts;
   }
@@ -798,94 +1054,99 @@ export class GeometricPrimitive {
   // ----- NOTE: Vertical Cutaway -----
 
   /**
-   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
-   * @param {PIXI.Point} start     Starting point of the slice on the XY plane
-   * @param {PIXI.Point} end        Ending point of the slice on the XY plane
-   * @returns {CutawayPolygon[]}
+   * Slice this 3d shape with a vertical plane, returning 2d cross-section(s) as CutawayPolygons.
+   * Correctly handles shapes with holes (internal cavities, Polygons3d hole faces, etc.).
+   * @param {PIXI.Point|Point3d} start     Starting point of the slice on the XY plane
+   * @param {PIXI.Point|Point3d} end       Ending point of the slice on the XY plane
+   * @returns {CutawayPolygon[]} Array of CutawayPolygon cross-sections (solids and holes)
    */
   verticalSlice(start, end) {
-    using dirXY = Point3d.tmp;
-    end.subtract(start, dirXY).normalize(dirXY);
+    if ( start.almostEqual(end) ) return [];
+    if ( !this.aabb.overlapsSegment(start, end, ["x", "y"]) ) return [];
 
-    // Define the normal of the vertical slicing plane. Perpendicular to dirXY.
-    using sliceNormal = Point3d.tmp.set(-dirXY.y, dirXY.x, 0);
+    // Build the vertical plane for the start|end line.
+    if ( !Object.hasOwn(start, "z") ) start = Point3d.tmp.set(start.x, start.y, 0);
+    if ( !Object.hasOwn(end, "z") ) end = Point3d.tmp.set(end.x, end.y, 0);
+    using c = start.clone();
+    c.z += 50; // To construct the normal plane.
+    const plane = Plane.fromPoints(start, end, c);
 
-    // Iterate through each polygon to find intersection segments.
-    using dirA = PIXI.Point.tmp;
-    using dirB = PIXI.Point.tmp;
-    const segments2d = [];
+    // 4. Intersect each face with the vertical plane
+    const dirSegments2d = [];
+    using a2d = PIXI.Point.tmp;
+    using b2d = PIXI.Point.tmp;
     for ( const face of this.faces ) {
-      const interPoints3d = [];
-      for ( const edge of face.iterateEdges() ) {
-        const { a, b } = edge;
+      const segments = face.intersectPlane(plane);
+      if ( !segments.length ) continue;
 
-        // Distance from plane = (point - origin) • normal.
-        a.to2d(dirA).subtract(start, dirA);
-        b.to2d(dirB).subtract(start, dirB);
-        const distA = dirA.dot(sliceNormal);
-        const distB = dirB.dot(sliceNormal);
+      // Map 3D endpoints to 2D Cutaway coordinates (u = distance along slice, v = z elevation)
+      segments.forEach(segment => {
+        CutawayPolygon.to2d(segment.a, start, end, a2d);
+        CutawayPolygon.to2d(segment.b, start, end, b2d);
 
-        // Check if endpoints are on opposite sides of the slicing plane.
-        if ( distA * distB < 0 ) {
-          // Linear interpolation to find the exact intersection point.
-          const t = distA / (distA - distB);
-          const pInter = Point3d.tmp;
-          b.subtract(a, pInter).multiplyScalar(t, pInter).add(a, pInter); // a + (t * (b - a))
-          interPoints3d.push(pInter);
-        } else if ( distA.almostEqual(0) ) interPoints3d.push(a);
+        if ( PIXI.Point.distanceSquaredBetween(a2d, b2d) < 1e-06 ) return;
+        dirSegments2d.push(new Segment(a2d.clone(), b2d.clone()));
+      });
+      segments.forEach(s => s.release());
 
-        // A convex/planar polygon sliced by a plane should yield exactly 2 unique points.
-        const uniquePts = getUniquePoints(interPoints3d);
-        if ( uniquePts.length === 2 ) {
-          // Map the 3d points to the 2d coordinate system.
-          const pt0 = cutaway.to2d(uniquePts[0], start, end);
-          const pt1 = cutaway.to2d(uniquePts[1], start, end);
-          segments2d.push(new Segment(pt0, pt1));
-
-        } else console.warn(`GeometricPrimitive|verticalSlice found ${uniquePts.length} unique points`, uniquePts);
-      }
     }
-    return this.#assembleCutawayPolygons(segments2d, start, end);
+
+    // 5. Assemble directed 2D segments into closed loops
+    const polyPointsArr = this.#assemblePolygons(dirSegments2d);
+    const out = polyPointsArr.map(polyPoints => CutawayPolygon.fromCutawayPoints(polyPoints, start, end));
+    dirSegments2d.forEach(s => s.release());
+
+    // Reverse orientation if the shape is a hole. Cutaway holes are isPositive === true.
+    const isHole = this.isHole;
+    out.forEach(poly => {
+      if ( poly.isPositive ^ isHole ) poly.reverseOrientation();
+    });
+    return out;
   }
 
   /**
-   * Stitch a list of disconnected 2d segments into an ordered array of 2d polygons (islands).
-   * @param {Segment[]} segments      Array of 2d line segments
-   * @returns {PIXI.Polygon[]} Array of 2d polygons
+   * Stitch directed 2D segments into ordered, closed polygon loops.
+   * Maintains loop direction so outer boundaries and holes are properly oriented.
+   * @param {Segment<PIXI.Point>[]} segments   Directed 2D line segments
+   * @returns {PIXI.Point[][]} Array of polygon points, grouped by polygon
    */
-  #assembleCutawayPolygons(segments, start, end) {
-    if ( segments.length === 0 ) return [];
+  #assemblePolygons(segments) {
+    if ( !segments.length ) return [];
 
-    // Continue building new islands as long as there are unassigned segments.
     const polygons = [];
     const unvisited = [...segments];
+
     while ( unvisited.length > 0 ) {
-      const polyPoints = [];
+      const startSeg = unvisited.shift();
+      const polyPoints = [startSeg.a];
 
-      // Start a new loop with the first available unvisited segment.
-      const startSegment = unvisited.shift();
-      let targetPoint = startSegment.b;
-      polyPoints.push(startSegment.a);
+      let targetPoint = startSeg.b;
+      const loopStart = startSeg.a;
 
-      // Trace the current loop until it closes or hits a dead end.
-      while ( true ) {
-        // Check if the loop closed back on itself.
-        if ( targetPoint.almostEqual(startSegment.a) ) break;
-
+      while ( unvisited.length > 0 ) {
         polyPoints.push(targetPoint);
 
-        // Find the next segment connecting our current target point.
-        const nextIndex = unvisited.findIndex(seg =>
-          seg.a.almostEqual(targetPoint) || seg.b.almostEqual(targetPoint));
-        if ( nextIndex === -1 ) break; // Open loop discontinuity. Save as-is.
+        // Determine the closest a point to this b point.
+        // Assume no open loops.
+        let minDist = PIXI.Point.distanceSquaredBetween(loopStart, targetPoint)
+        let nextIdx = -1;
+        for ( let i = 0, n = unvisited.length; i < n; i++ ) {
+          const s = unvisited[i];
+          const dist = PIXI.Point.distanceSquaredBetween(s.a, targetPoint);
+          if ( dist < minDist ) {
+            minDist = dist;
+            nextIdx = i;
+          }
+        }
+        if ( !~nextIdx ) break; // Reached the beginning.
 
-        // Set the new target point to the other end of the found segment.
-        const nextSegment = unvisited.splice(nextIndex, 1)[0];
-        targetPoint = nextSegment.a.almostEqual(targetPoint) ? nextSegment.b : nextSegment.a;
+        const nextSeg = unvisited.splice(nextIdx, 1)[0];
+        targetPoint = nextSeg.b;
       }
-      const cutaway = CutawayPolygon.fromCutawayPoints(polyPoints, start, end);
-      polygons.push(cutaway);
+
+      if ( polyPoints.length >= 3 ) polygons.push(polyPoints);
     }
+
     return polygons;
   }
 }
@@ -893,23 +1154,6 @@ export class GeometricPrimitive {
 
 
 // ----- NOTE: Helper functions -----
-
-/**
- * Filters out duplicate intersection points. (Fixes issues with shared vertices.)
- * @param {Point3d[]} points
- * @returns {Point3d[]} The unique points
- */
-function getUniquePoints(points) {
-  const unique = [];
-  using zero = Point3d.tmp.set(0, 0, 0);
-  using tmp = Point3d.tmp;
-  for ( const p of points ) {
-    const isDuplicate = unique.some(u =>  u.subtract(p, tmp).almostEqual(zero))
-    if ( !isDuplicate ) unique.push(p);
-  }
-  return unique;
-}
-
 
 /**
  * True if `direction` is (nearly) parallel to any of the given faces' planes --
