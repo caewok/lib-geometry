@@ -439,10 +439,11 @@ export class AABB2d {
    * @param {AABB2d} other
    * @returns {boolean}
    */
-  overlapsAABB(other) {
+  overlapsAABB(other, axes) {
     // Separating Axis Theorem: Must overlap on every axis.
     // A.minX <= B.maxX && A.maxX >= B.minX && ...same for y, z
-    for ( const axis of this.constructor.axes ) {
+    axes ??= this.constructor.axes;
+    for ( const axis of axes ) {
       // If not overlapping on an axis, return false.
       if ( this.max[axis] < other.min[axis] || other.max[axis] < this.min[axis] ) return false;
     }
@@ -467,9 +468,9 @@ export class AABB2d {
    * @param {Wall|Edge} edge
    * @returns {boolean}
    */
-  overlapsEdge(edge) {
+  overlapsEdge(edge, axes) {
     if ( edge instanceof foundry.canvas.placeables.Wall ) edge = edge.edge;
-    return this.overlapsSegment(edge.a, edge.b);
+    return this.overlapsSegment(edge.a, edge.b, axes);
   }
 
   /**
