@@ -99,7 +99,7 @@ export class ClipperPaths {
 
     const solidPaths = this.fromPolygons(solids, opts).union();
     const holePaths = this.fromPolygons(holes, opts).union();
-    return solidPaths.diffPaths(holePaths)
+    return holePaths.diffPaths(solidPaths)
       .clean()
       .toPolygons();
   }
