@@ -142,13 +142,19 @@ export class PlanarPolygonPrimitive extends ModelGeometricPrimitive {
     const topZ = polys[0].points[0].z;
     const bottomZ = topZ - thickness;
     const opts = { topElevationFn: () => topZ, bottomElevationFn: () => bottomZ };
-    const cutaways = polys.map(poly => poly.toPolygon2d().cutaway(start, end, opts));
-    if ( cutaways.length < 2 ) return cutaways;
-    return CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths.fromPolygons(cutaways)
+    let cutaways = polys.map(poly => poly.toPolygon2d().cutaway(start, end, opts));
+    if ( cutaways.length > 2 ) cutaways = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths.fromPolygons(cutaways)
       .union()
       .clean()
       .toPolygons()
       .map(p => CutawayPolygon.fromPolygon(p, start, end));
+
+    // Reverse orientation if the shape is a hole. Cutaway holes are isPositive === true.
+    const isHole = this.isHole;
+    cutaways.forEach(poly => {
+      if ( poly.isPositive ^ isHole ) poly.reverseOrientation();
+    });
+    return cutaways;
   }
 
 
@@ -349,7 +355,14 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
       topElevationFn: () => topZ,
       bottomElevationFn: () => bottomZ,
     };
-    return poly.cutaway(start, end, opts);
+    const cutaways = poly.cutaway(start, end, opts);
+
+    // Reverse orientation if the shape is a hole. Cutaway holes are isPositive === true.
+    const isHole = this.isHole;
+    cutaways.forEach(poly => {
+      if ( poly.isPositive ^ isHole ) poly.reverseOrientation();
+    });
+    return cutaways;
   }
 
 
@@ -439,7 +452,7 @@ export class ExtrudedPolygonPrimitiveWithHoles extends ExtrudedPolygonPrimitive 
     };
 
     // Because the bottom face is parallel to XY plane, we can just drop the Z axis.
-    const cutaways = [];
+    let cutaways = [];
     for ( const poly of this.bottomFace.polygons ) {
       const poly2d = poly.toPolygon2d().cutaway(start, end, opts);
       if ( poly2d ) cutaways.push(...poly2d);
@@ -456,7 +469,14 @@ export class ExtrudedPolygonPrimitiveWithHoles extends ExtrudedPolygonPrimitive 
       .clean()
       .toPolygons();
 
-    return out.map(poly => CutawayPolygon.fromPolygon(poly, start, end));
+    cutaways = out.map(poly => CutawayPolygon.fromPolygon(poly, start, end));
+
+    // Reverse orientation if the shape is a hole. Cutaway holes are isPositive === true.
+    const isHole = this.isHole;
+    cutaways.forEach(poly => {
+      if ( poly.isPositive ^ isHole ) poly.reverseOrientation();
+    });
+    return cutaways;
   }
 
 

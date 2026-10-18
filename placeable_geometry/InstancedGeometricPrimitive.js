@@ -147,7 +147,14 @@ export class QuadPrimitive extends InstancedGeometricPrimitive {
       topElevationFn: () => topZ,
       bottomElevationFn: () => bottomZ,
     };
-    return poly.cutaway(start, end, opts);
+    const cutaways = poly.cutaway(start, end, opts);
+
+    // Reverse orientation if the shape is a hole. Cutaway holes are isPositive === true.
+    const isHole = this.isHole;
+    cutaways.forEach(poly => {
+      if ( poly.isPositive ^ isHole ) poly.reverseOrientation();
+    });
+    return cutaways
   }
 
   prototypeFacesOutward() {
@@ -222,7 +229,14 @@ export class VerticalQuadPrimitive extends QuadPrimitive {
       topElevationFn: () => topZ,
       bottomElevationFn: () => bottomZ,
     };
-    return poly.cutaway(start, end, opts);
+    const cutaways = poly.cutaway(start, end, opts);
+
+    // Reverse orientation if the shape is a hole. Cutaway holes are isPositive === true.
+    const isHole = this.isHole;
+    cutaways.forEach(poly => {
+      if ( poly.isPositive ^ isHole ) poly.reverseOrientation();
+    });
+    return cutaways
   }
 
   /**
@@ -337,7 +351,14 @@ class ExtrudedInstancePrimitive extends InstancedGeometricPrimitive {
       topElevationFn: () => topZ,
       bottomElevationFn: () => bottomZ,
     };
-    return poly.cutaway(start, end, opts);
+    const cutaways = poly.cutaway(start, end, opts);
+
+    // Reverse orientation if the shape is a hole. Cutaway holes are isPositive === true.
+    const isHole = this.isHole;
+    cutaways.forEach(poly => {
+      if ( poly.isPositive ^ isHole ) poly.reverseOrientation();
+    });
+    return cutaways
   }
 
   // ----- NOTE: Drawables ----- //
@@ -694,7 +715,11 @@ export class SpherePrimitive extends InstancedGeometricPrimitive {
     // Convert to cutaway.
     // TODO: Add CutawayCircle and CutawayEllipse classes
     const circle = new PIXI.Circle(circleCenter.x, circleCenter.y, circleRadius);
-    return [CutawayPolygon.fromCutawayPoints(circle.toPolygon().points, start, end)];
+
+    const cutaway = CutawayPolygon.fromCutawayPoints(circle.toPolygon().points, start, end);
+    // Reverse orientation if the shape is a hole.
+    if ( cutaway.isPositive ^ !this.isHole ) cutaway.reverseOrientation();
+    return [cutaway];
   }
 
   // ----- NOTE: Debug ----- //

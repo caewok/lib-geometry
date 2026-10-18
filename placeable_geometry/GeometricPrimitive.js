@@ -1095,6 +1095,12 @@ export class GeometricPrimitive {
     const polyPointsArr = this.#assemblePolygons(dirSegments2d);
     const out = polyPointsArr.map(polyPoints => CutawayPolygon.fromCutawayPoints(polyPoints, start, end));
     dirSegments2d.forEach(s => s.release());
+
+    // Reverse orientation if the shape is a hole. Cutaway holes are isPositive === true.
+    const isHole = this.isHole;
+    out.forEach(poly => {
+      if ( poly.isPositive ^ isHole ) poly.reverseOrientation();
+    });
     return out;
   }
 

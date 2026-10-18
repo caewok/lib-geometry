@@ -84,7 +84,7 @@ export class HoledPrimitive extends CombinedGeometricPrimitive {
   removeChild(child) {
     if ( !super.removeChild(child) ) return false;
     if ( child.isHole ) {
-      const i = this.holes.indexOf(hole);
+      const i = this.holes.indexOf(child);
       if ( ~i ) this.holes.splice(i, 1);
     } else this.solid = null;
     return true;
