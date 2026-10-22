@@ -172,7 +172,24 @@ const TokenDocumentCalculationsMixin = superclass => class extends superclass {
     return !token.constrainedTokenBorder.equals(token.brightLitTokenBorder);
   }
 
-  // ----- NOTE: Transparency and Levels ----- //
+  // ----- NOTE: Opacity and Levels ----- //
+
+  /**
+   * How opaque is this geometry?
+   * @param {CONST.WALL_RESTRICTION_TYPES} type
+   * @param {object} ctx
+   * @returns {number} Value between 1 (opaque) and 0 (transparent)
+   */
+  opacity(type = "sight", ctx) {
+    return CONFIG[GEOMETRY_LIB_ID].CONFIG.opacity.get(type, this.placeableDocument, ctx);
+  }
+
+  /**
+   * Does this geometry currently block a given sense type?
+   * @param {CONST.WALL_RESTRICTION_TYPES} [senseType="sight"]
+   * @returns {boolean}
+   */
+  blocksSense(senseType = "sight") { return this.opacity(senseType) > 0; }
 
   /**
    * Does this placeable exist on this level?
@@ -197,7 +214,7 @@ const TokenDocumentCalculationsMixin = superclass => class extends superclass {
    */
   couldBlock({ senseType = "move", levelId, subjectTokenD, ...blockingCfg } = {} ) {
     if ( !this.isPresentAtLevel(levelId) || !this.blocksSense(senseType) ) return false;
-    return this.tokenBlocks(this.placeableDocument, subjectTokenD, blockingCfg);
+    return this.constructor.tokenBlocks(this.placeableDocument, subjectTokenD, blockingCfg);
   }
 
   // ----- NOTE: AABB ----- //

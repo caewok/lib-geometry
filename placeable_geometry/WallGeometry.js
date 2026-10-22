@@ -142,18 +142,18 @@ export class WallGeometry extends PlaceableGeometry {
     this._updateShapeDirection();
   }
 
-  // ----- NOTE: Transparency and Levels ----- //
+  // ----- NOTE: Opacity and Levels ----- //
 
   /**
-   * How transparent is this geometry?
+   * How opaque is this geometry?
    * @param {CONST.WALL_RESTRICTION_TYPES} type
    * @param {object} ctx
-   * @returns {number} Value between 0 (opaque) and 1 (transparent)
+   * @returns {number} Value between 1 (opaque) and 0 (transparent)
    */
-  transparency(senseType = "sight", ctx) {
+  opacity(senseType = "sight", ctx) {
     const placeableD = this.placeableDocument;
-    if ( !(placeableD[senseType] || placeableD.threshold[senseType]) || placeableD.isOpen ) return 1;
-    return super.transparency(senseType, ctx);
+    if ( !(placeableD[senseType] || placeableD.threshold[senseType]) || placeableD.isOpen ) return 0;
+    return super.opacity(senseType, ctx);
   }
 
   // ----- NOTE: Wall characteristics ----- //

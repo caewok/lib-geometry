@@ -84,18 +84,18 @@ const TileDocumentCalculationsMixin = superclass => class extends superclass {
   // AABB required for Quadtree.
   aabb = new AABB3d();
 
-  // ----- NOTE: Transparency and Levels ----- //
+  // ----- NOTE: Opacity and Levels ----- //
 
   /**
-   * How transparent is this geometry?
+   * How opaque is this geometry?
    * @param {CONST.WALL_RESTRICTION_TYPES} type
    * @param {object} ctx
-   * @returns {number} Value between 0 (opaque) and 1 (transparent)
+   * @returns {number} Value between 1 (opaque) and 0 (transparent)
    */
-  transparency(type = "sight", ctx) {
+  opacity(type = "sight", ctx) {
     const placeableD = this.placeableDocument;
-    if ( type === "light" && !placeableD.restrictions.light ) return 1;
-    return super.transparency(type, ctx);
+    if ( type === "light" && !placeableD.restrictions.light ) return 0;
+    return super.opacity(type, ctx);
   }
 
   /**

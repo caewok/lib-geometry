@@ -68,7 +68,7 @@ Hooks.on("init", function() {
   IS_CONTROLLING_MODULE = controllingModule === MODULE_ID
   if ( IS_CONTROLLING_MODULE ) {
     registerGeometryLibClasses();
-    CONFIG[GEOMETRY_LIB_ID].CONFIG.transparency = TransparencyRegistry;
+    CONFIG[GEOMETRY_LIB_ID].CONFIG.opacity = OpacityRegistry;
   }
 });
 
@@ -314,15 +314,16 @@ function lowercaseFirstLetter(str) {
 
 /**
  * Allow modules to define how a given placeable blocks a given wall restriction (light, sight, etc.).
- * Transparency goes from 0 (opaque) to 1 (fully transparent).
+ * Opacity goes from 0 (fully transparent) to 1 (fully opaque).
+ * Default is fully opaque.
  *
  * Modules should call this in setup, e.g.:
- * CONFIG[GEOMETRY_LIB_ID].CONFIG.transparency.register("sight", {
+ * CONFIG[GEOMETRY_LIB_ID].CONFIG.opacity.register("sight", {
  *    Token: placeableD => // e.g. prone/ally/status-based rules,
  *    Region: placeableD => // region behavior setting,
  *  });
  */
-export class TransparencyRegistry {
+export class OpacityRegistry {
 
   /**
    * @typedef {object} TransparentSettings
@@ -354,18 +355,17 @@ export class TransparencyRegistry {
   }
 
   /**
-   * Get transparency value for a given type and placeable.
+   * Get opacity value for a given type and placeable.
    * @param {CONST.WALL_RESTRICTION_TYPES} type
    * @param {PlaceableDocument} placeableD
    * @param {object} ctx
+   * @returns {number} Value between 0 (fully transparent) and 1 (fully opaque). Default: 1.
    */
   static get(type, placeableD, ctx) {
-    const entry = this.#types.get(type);
-    if ( !entry ) return 0; // Any unknown types treated as solid.
-    const fn = entry.get(placeableD.documentName);
-    if ( !fn ) return 0;
-    const t = fn(placeableD, ctx);
-    return Math.clamp(t || 0, 0, 1);
+    const fn = this.#types.get(type)?.get(placeableD.documentName);
+    if ( !fn ) return 1; // Treat unknowns as fully opaque.
+    const o = Number(fn(placeableD, ctx) ?? 1;
+    return Number.isFinite(o) ? Math.clamp(o, 0, 1) : 1;
   }
 
   static has(type, placeableName) {

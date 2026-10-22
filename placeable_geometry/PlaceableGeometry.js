@@ -187,16 +187,16 @@ export class PlaceableGeometry {
   }
 
 
-  // ----- NOTE: Transparency and Levels ----- //
+  // ----- NOTE: Opacity and Levels ----- //
 
   /**
-   * How transparent is this geometry?
+   * How opaque is this geometry?
    * @param {CONST.WALL_RESTRICTION_TYPES} type
    * @param {object} ctx
-   * @returns {number} Value between 0 (opaque) and 1 (transparent)
+   * @returns {number} Value between 1 (opaque) and 0 (transparent)
    */
-  transparency(type = "sight", ctx) {
-    return CONFIG[GEOMETRY_LIB_ID].CONFIG.transparency.get(type, this.placeableDocument, ctx);
+  opacity(type = "sight", ctx) {
+    return CONFIG[GEOMETRY_LIB_ID].CONFIG.opacity.get(type, this.placeableDocument, ctx);
   }
 
   /**
@@ -204,7 +204,7 @@ export class PlaceableGeometry {
    * @param {CONST.WALL_RESTRICTION_TYPES} [senseType="sight"]
    * @returns {boolean}
    */
-  blocksSense(senseType = "sight") { return this.transparency(senseType) < 1; }
+  blocksSense(senseType = "sight") { return this.opacity(senseType) > 0; }
 
   /**
    * Does this placeable geometry exist on this level?
