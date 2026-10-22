@@ -1,4 +1,5 @@
 /* globals
+canvas,
 CONFIG,
 foundry,
 Hooks,
@@ -364,7 +365,7 @@ export class OpacityRegistry {
   static get(type, placeableD, ctx) {
     const fn = this.#types.get(type)?.get(placeableD.documentName);
     if ( !fn ) return 1; // Treat unknowns as fully opaque.
-    const o = Number(fn(placeableD, ctx) ?? 1;
+    const o = Number(fn(placeableD, ctx) ?? 1);
     return Number.isFinite(o) ? Math.clamp(o, 0, 1) : 1;
   }
 
