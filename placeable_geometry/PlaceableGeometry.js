@@ -1,5 +1,6 @@
 /* globals
 canvas,
+CONFIG,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
@@ -9,7 +10,8 @@ import { GeometricPrimitive } from "./GeometricPrimitive.js";
 
 // LibGeometry
 import { AABB3d } from "../3d/AABB3d.js";
-import { MatrixFloat32 } from "../Matrix.js";
+import { GEOMETRY_LIB_ID } from "../const.js";
+import { CutawayPolygon } from "../CutawayPolygon.js";
 
 
 /* Store key geometry information for each placeable, in 3d.
@@ -131,6 +133,7 @@ export class PlaceableGeometry {
     this.shapes.length = 0;
   }
 
+
   // ----- NOTE: Updating ----- //
 
   /**
@@ -184,23 +187,33 @@ export class PlaceableGeometry {
   }
 
 
-  // ----- NOTE: Levels ----- //
+  // ----- NOTE: Transparency and Levels ----- //
+
+  /**
+   * How transparent is this geometry?
+   * @param {CONST.WALL_RESTRICTION_TYPES} type
+   * @param {object} ctx
+   * @returns {number} Value between 0 (opaque) and 1 (transparent)
+   */
+  transparency(type = "sight", ctx) {
+    return CONFIG[GEOMETRY_LIB_ID].CONFIG.transparency.get(type, this.placeableDocument, ctx);
+  }
 
   /**
    * Does this geometry currently block a given sense type?
    * @param {CONST.WALL_RESTRICTION_TYPES} [senseType="sight"]
    * @returns {boolean}
    */
-  static blocksSense(placeableDocument, _senseType = "sight") { return true; }
+  blocksSense(senseType = "sight") { return this.transparency(senseType) < 1; }
 
   /**
-   * Does this placeable exist on this level?
+   * Does this placeable geometry exist on this level?
    * @param {string} levelId
    * @returns {boolean} True if seen from this level or the levelId is null or "".
    */
-  static isPresentAtLevel(placeableDocument, levelId) {
+  isPresentAtLevel(levelId) {
     if ( !canvas.scene.levels.has(levelId) ) return !levelId;
-    return placeableDocument.levels.has(levelId);
+    return this.placeableDocument.levels.has(levelId);
   }
 
   /**
@@ -211,8 +224,8 @@ export class PlaceableGeometry {
    * @prop {...}                      Other options used by subclasses
    * @returns {boolean}
    */
-  static couldBlock(placeableDocument, { levelId, senseType } = {}) {
-    return this.blocksSense(placeableDocument, senseType) && this.isPresentAtLevel(placeableDocument, levelId);
+  couldBlock({ levelId, senseType } = {}) {
+    return this.blocksSense(senseType) && this.isPresentAtLevel(levelId);
   }
 
   // ----- NOTE: AABB ----- //

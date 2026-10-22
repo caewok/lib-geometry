@@ -84,37 +84,18 @@ const TileDocumentCalculationsMixin = superclass => class extends superclass {
   // AABB required for Quadtree.
   aabb = new AABB3d();
 
-  // ----- NOTE: Levels ----- //
+  // ----- NOTE: Transparency and Levels ----- //
 
   /**
-   * Does this geometry currently block a given sense type?
-   * @param {CONST.WALL_RESTRICTION_TYPES} [senseType="sight"]
-   * @returns {boolean}
+   * How transparent is this geometry?
+   * @param {CONST.WALL_RESTRICTION_TYPES} type
+   * @param {object} ctx
+   * @returns {number} Value between 0 (opaque) and 1 (transparent)
    */
-  static blocksSense(placeableDocument, senseType = "sight") {
-    if ( senseType === "light" ) return placeableDocument.restrictions.light;
-    return true;
-  }
-
-  /**
-   * Does this placeable exist on this level?
-   * @param {string} levelId
-   * @returns {boolean} True if seen from this level or the levelId is null or "".
-   */
-  static isPresentAtLevel(placeableDocument, levelId) {
-    return PlaceableGeometry.isPresentAtLevel(placeableDocument, levelId);
-  }
-
-  /**
-   * Combines sense test with level test with any other tests specific to the placeable document.
-   * @param {object} [opts]
-   * @prop {CONST.WALL_RESTRICTION_TYPES} [opts.senseType = "sight"]
-   * @prop {string} [opts.levelId]
-   * @prop {...}                      Other options used by subclasses
-   * @returns {boolean}
-   */
-  static couldBlock(placeableDocument, opts) {
-    return PlaceableGeometry.couldBlock(placeableDocument, opts);
+  transparency(type = "sight", ctx) {
+    const placeableD = this.placeableDocument;
+    if ( type === "light" && !placeableD.restrictions.light ) return 1;
+    return super.transparency(type, ctx);
   }
 
   /**

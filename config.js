@@ -14,6 +14,7 @@ import { getObjectProperty } from "./util.js";
 import { ClipperPaths } from "./ClipperPaths.js";
 import { Clipper2Paths } from "./Clipper2Paths.js";
 
+
 const ELEVATION_CONFIG = {
   /**
    * What status id indicates a prone token.

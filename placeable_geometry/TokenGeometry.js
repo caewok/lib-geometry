@@ -16,7 +16,6 @@ import {
   HexagonCylinderPrimitive
   } from "./InstancedGeometricPrimitive.js";
 import { ExtrudedPolygonPrimitive } from "./ModelGeometricPrimitive.js";
-import { TokenProperties } from "../placeable_properties/TokenProperties.js";
 
 // LibGeometry
 import { GEOMETRY_LIB_ID } from "../const.js";
@@ -173,30 +172,20 @@ const TokenDocumentCalculationsMixin = superclass => class extends superclass {
     return !token.constrainedTokenBorder.equals(token.brightLitTokenBorder);
   }
 
-  // ----- NOTE: Levels ----- //
-
-  /**
-   * Does this geometry currently block a given sense type?
-   * @param {CONST.WALL_RESTRICTION_TYPES} [senseType="sight"]
-   * @returns {boolean}
-   */
-  static blocksSense(_placeableDocument, _senseType) {
-    // Tokens block all sense types equally.
-    return true;
-  }
+  // ----- NOTE: Transparency and Levels ----- //
 
   /**
    * Does this placeable exist on this level?
    * @param {string} levelId
    * @returns {boolean}
    */
-  static isPresentAtLevel(placeableDocument, levelId) {
+  isPresentAtLevel(levelId) {
     const lvl = canvas.scene.levels.get(levelId);
     if ( !lvl ) return !levelId;
 
     // For tokens, if they either are at the level or at a level viewable by this level, then
     // they would be present.
-    const docLevel = placeableDocument.level;
+    const docLevel = this.placeableDocument.level;
     return docLevel === levelId || lvl.visibility.levels.has(docLevel);
   }
 
@@ -206,9 +195,9 @@ const TokenDocumentCalculationsMixin = superclass => class extends superclass {
    * @param {TokenBlockingConfig} [blockingCfg]
    * @returns {boolean}
    */
-  static couldBlock(placeableDocument, { subjectTokenD, levelId, ...blockingCfg } = {} ) {
-    if ( !this.isPresentAtLevel(placeableDocument, levelId) ) return false;
-    return this.tokenBlocks(placeableDocument, subjectTokenD, blockingCfg);
+  couldBlock({ senseType = "move", levelId, subjectTokenD, ...blockingCfg } = {} ) {
+    if ( !this.isPresentAtLevel(levelId) || !this.blocksSense(senseType) ) return false;
+    return this.tokenBlocks(this.placeableDocument, subjectTokenD, blockingCfg);
   }
 
   // ----- NOTE: AABB ----- //

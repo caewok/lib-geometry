@@ -112,34 +112,15 @@ const LevelCalculationsMixin = superclass => class extends superclass {
   aabb = new AABB3d();
 
   /**
-   * Does this geometry currently block a given sense type?
-   * @param {CONST.WALL_RESTRICTION_TYPES} [senseType="sight"]
-   * @returns {boolean}
-   */
-  static blocksSense(_placeableDocument, _senseType = "sight") { return true; }
-
-  /**
    * Does this placeable exist on this level?
    * @param {string} levelId
    * @returns {boolean} True if seen from this level or the levelId is null or "".
    */
-  static isPresentAtLevel(placeableDocument, levelId) {
+  isPresentAtLevel(levelId) {
+    const placeableD = this.placeableDocument;
     if ( !canvas.scene.levels.has(levelId) ) return !levelId;
-    if ( placeableDocument.id === levelId ) return true;
-    return !placeableDocument.visibility.levels.has(levelId);
-  }
-
-  /**
-   * Combines sense test with level test with any other tests specific to the placeable document.
-   * @param {object} [opts]
-   * @prop {CONST.WALL_RESTRICTION_TYPES} [opts.senseType = "sight"]
-   * @prop {string} [opts.levelId]
-   * @prop {...}                      Other options used by subclasses
-   * @returns {boolean}
-   */
-  static couldBlock(placeableDocument, opts = {}) {
-    return this.blocksSense(placeableDocument, opts.senseType)
-        && this.isPresentAtLevel(placeableDocument, opts.levelId);
+    if ( placeableD.id === levelId ) return true;
+    return !placeableD.visibility.levels.has(levelId);
   }
 
   // ----- NOTE: Scene texture characteristics ----- //

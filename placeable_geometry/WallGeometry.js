@@ -142,30 +142,18 @@ export class WallGeometry extends PlaceableGeometry {
     this._updateShapeDirection();
   }
 
-  // ----- NOTE: Levels ----- //
+  // ----- NOTE: Transparency and Levels ----- //
 
   /**
-   * Does this geometry currently block a given sense type?
-   * @param {CONST.WALL_RESTRICTION_TYPES} [senseType="sight"]
-   * @returns {boolean}
+   * How transparent is this geometry?
+   * @param {CONST.WALL_RESTRICTION_TYPES} type
+   * @param {object} ctx
+   * @returns {number} Value between 0 (opaque) and 1 (transparent)
    */
-  blocksSense(senseType = "sight") {
-    return this.placeableDocument[senseType] || this.placeableDocument.threshold[senseType];
-  }
-
-  // isPresentAtLevel // Handled by parent class.
-
-  /**
-   * Combines sense test with level test with any other tests specific to the placeable document.
-   * @param {object} [opts]
-   * @prop {CONST.WALL_RESTRICTION_TYPES} [opts.senseType = "sight"]
-   * @prop {string} [opts.levelId]
-   * @prop {...}                      Other options used by subclasses
-   * @returns {boolean}
-   */
-  static couldBlock(placeableDocument, opts) {
-    if ( placeableDocument.isOpen ) return false;
-    return super.couldBlock(placeableDocument, opts);
+  transparency(senseType = "sight", ctx) {
+    const placeableD = this.placeableDocument;
+    if ( !(placeableD[senseType] || placeableD.threshold[senseType]) || placeableD.isOpen ) return 1;
+    return super.transparency(senseType, ctx);
   }
 
   // ----- NOTE: Wall characteristics ----- //

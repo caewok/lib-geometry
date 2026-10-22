@@ -66,7 +66,10 @@ Hooks.on("init", function() {
 
   const controllingModule = CONFIG[GEOMETRY_LIB_ID].CONFIG.registeredVersions.get(maxVersion);
   IS_CONTROLLING_MODULE = controllingModule === MODULE_ID
-  if ( IS_CONTROLLING_MODULE ) registerGeometryLibClasses();
+  if ( IS_CONTROLLING_MODULE ) {
+    registerGeometryLibClasses();
+    CONFIG[GEOMETRY_LIB_ID].CONFIG.transparency = TransparencyRegistry;
+  }
 });
 
 Hooks.on("setup", function() {
@@ -83,6 +86,7 @@ Hooks.on("setup", function() {
     CONFIG[GEOMETRY_LIB_ID].levelBackgroundPixelCache.registerHooks();
     CONFIG[GEOMETRY_LIB_ID].levelForegroundPixelCache.registerHooks();
   }
+
 
   // Register the geometries.
   // Change the geometry classes to match CONFIG.
@@ -306,4 +310,68 @@ function pluralize(str) {
 function lowercaseFirstLetter(str) {
   if (!str) return str; // Handle empty strings safely
   return str.charAt(0).toLowerCase() + str.slice(1);
+}
+
+/**
+ * Allow modules to define how a given placeable blocks a given wall restriction (light, sight, etc.).
+ * Transparency goes from 0 (opaque) to 1 (fully transparent).
+ *
+ * Modules should call this in setup, e.g.:
+ * CONFIG[GEOMETRY_LIB_ID].CONFIG.transparency.register("sight", {
+ *    Token: placeableD => // e.g. prone/ally/status-based rules,
+ *    Region: placeableD => // region behavior setting,
+ *  });
+ */
+export class TransparencyRegistry {
+
+  /**
+   * @typedef {object} TransparentSettings
+   * @prop {function} Token
+   * @prop {function} Wall
+   * @prop {function} Region
+   */
+
+  /** @type {Map<string, TransparentSettings} */
+  static #types = new Map();
+
+  /**
+   * Register a transparency type.'
+   * @param {CONST.WALL_RESTRICTION_TYPES} type
+   * @param {TransparentSettings} byPlaceable
+   */
+  static register(type, byPlaceable) {
+    this.#types.set(type, new Map(Object.entries(byPlaceable)));
+  }
+
+  /**
+   * Override one placeable type for an already-registered transparency type.
+   * @param {CONST.WALL_RESTRICTION_TYPES} type
+   * @param {"Token"|"Region"|"Wall"} placeableName
+   * @param {function} fn
+   */
+  static setProvider(type, placeableName, fn) {
+    this.#types.get(type).set(placeableName, fn);
+  }
+
+  /**
+   * Get transparency value for a given type and placeable.
+   * @param {CONST.WALL_RESTRICTION_TYPES} type
+   * @param {PlaceableDocument} placeableD
+   * @param {object} ctx
+   */
+  static get(type, placeableD, ctx) {
+    const entry = this.#types.get(type);
+    if ( !entry ) return 0; // Any unknown types treated as solid.
+    const fn = entry.get(placeableD.documentName);
+    if ( !fn ) return 0;
+    const t = fn(placeableD, ctx);
+    return Math.clamp(t || 0, 0, 1);
+  }
+
+  static has(type, placeableName) {
+    const entry = this.#types.get(type);
+    if ( !entry ) return false;
+    if ( !placeableName ) return true;
+    return entry.has(placeableName);
+  }
 }
