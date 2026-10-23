@@ -28,6 +28,9 @@ import { PATCHES as PATCHES_Edge } from "./Edge.js";
 import { PATCHES as PATCHES_AmbientLight } from "./AmbientLight.js";
 import { PATCHES as PATCHES_AmbientSound } from "./AmbientSound.js";
 
+// Configs
+import { PATCHES as PATCHES_WallConfig } from "./WallConfig.js";
+
 const PATCHES = {
   // Don't need CanvasEdges b/c quadtree already in v13.
   // Do need
@@ -62,6 +65,9 @@ const PATCHES = {
   "ConstrainedTokenBorder": PATCHES_ConstrainedTokenBorder,
   "foundry.documents.BaseAmbientLight": PATCHES_AmbientLight,
   "foundry.documents.BaseAmbientSound": PATCHES_AmbientSound,
+
+  // Configs
+  "foundry.applications.sheets.WallConfig": PATCHES_WallConfig,
 }
 
 export function registerGeometryLibPatches() {
@@ -69,13 +75,19 @@ export function registerGeometryLibPatches() {
   if ( CONFIG[GEOMETRY_LIB_ID].PATCHER ) deRegister();
 
   // Create a new Patcher object and register the patches.
-  const patcher = CONFIG[GEOMETRY_LIB_ID].PATCHER = new Patcher();
+  const patcher = CONFIG[GEOMETRY_LIB_ID].PATCHER ??= new Patcher();
   patcher.addPatchesFromRegistrationObject(PATCHES);
   patcher.registerGroup("PIXI");
   patcher.registerGroup("CONSTRAINED_TOKEN_BORDER");
   patcher.registerGroup("PIXEL_CACHE");
   patcher.registerGroup("ELEVATION");
   patcher.registerGroup("CANVAS_EDGES");
+}
+
+export function registerWallHeight() {
+  const patcher = CONFIG[GEOMETRY_LIB_ID].PATCHER ??= new Patcher();
+  patcher.deregisterGroup("WALL_HEIGHT");
+  patcher.registerGroup("WALL_HEIGHT");
 }
 
 export function deRegister() {

@@ -1443,6 +1443,21 @@ export function isAxisAlignedRectangle(p1, p2, p3, p4, places = 6) {
   return xCoords.size === 2 && yCoords.size === 2;
 }
 
+/**
+ * Synchronous version of renderTemplate.
+ * Requires the template to be already loaded.
+ * @param {string} path             The file path to the target HTML template
+ * @param {Object} data             A data object against which to compile the template
+ * @returns {string|undefined}      Returns the compiled and rendered template as a string
+ */
+export function renderTemplateSync(path, data) {
+  if ( !Object.hasOwn(Handlebars.partials, path) ) return;
+  const template = Handlebars.partials[path];
+  return template(data || {}, {
+    allowProtoMethodsByDefault: true,
+    allowProtoPropertiesByDefault: true
+  });
+}
 
 // Define properties on the Number environment
 if ( !Object.hasOwn(Number.prototype, "almostLessThan") ) {

@@ -2,15 +2,16 @@
 canvas,
 CONFIG,
 foundry,
+game,
 Hooks,
 */
 "use strict";
 
 import * as lib from "./_module.mjs";
-import { MODULE_ID, GEOMETRY_LIB_OPTS } from "../const.js";
-import { GEOMETRY_LIB_ID, VERSION } from "./const.js";
+import { MODULE_ID, GEOMETRY_LIB_OPTS,  } from "../const.js";
+import { GEOMETRY_LIB_ID, VERSION, OTHER_MODULES } from "./const.js";
 import { mergeConfigs } from "./config.js";
-import { registerGeometryLibPatches } from "./patching.js";
+import { registerGeometryLibPatches, registerWallHeight } from "./patching.js";
 
 import {
   TilePixelCacheManager,
@@ -40,6 +41,10 @@ import {
   const geometries = GEOMETRY_LIB_OPTS.placeableGeometries;
   if ( geometries ) geometries.forEach(name => CONFIG[GEOMETRY_LIB_ID].CONFIG.placeableGeometries.add(name));
 
+  // Track whether the Wall Height module (or replacement) is requested.
+  CONFIG[GEOMETRY_LIB_ID].CONFIG.wallHeightRequired ??= false;
+  CONFIG[GEOMETRY_LIB_ID].CONFIG.wallHeightRequired ||= GEOMETRY_LIB_OPTS.wallHeightRequired;
+
   // Track geometry manager classes, so modules like Terrain Mapper can sub in their own.
   CONFIG[GEOMETRY_LIB_ID].CONFIG.managerClasses = {
     walls: WallGeometryManager,
@@ -68,6 +73,7 @@ Hooks.on("init", function() {
   const controllingModule = CONFIG[GEOMETRY_LIB_ID].CONFIG.registeredVersions.get(maxVersion);
   IS_CONTROLLING_MODULE = controllingModule === MODULE_ID
   if ( IS_CONTROLLING_MODULE ) {
+    CONFIG[GEOMETRY_LIB_ID].CONFIG.controllingModule = controllingModule;
     registerGeometryLibClasses();
     CONFIG[GEOMETRY_LIB_ID].CONFIG.opacity = OpacityRegistry;
   }
@@ -75,6 +81,13 @@ Hooks.on("init", function() {
 
 Hooks.on("setup", function() {
   if ( !IS_CONTROLLING_MODULE ) return;
+
+  // Register wall height configs if needed.
+  // (Done at setup b/c modules are checked on init.)
+  if ( !game.modules.get(OTHER_MODULES.WALL_HEIGHT.KEY)?.active && CONFIG[GEOMETRY_LIB_ID].CONFIG.wallHeightRequired ) {
+    CONFIG[GEOMETRY_LIB_ID].wallHeightManager = WallHeightManager;
+    CONFIG[GEOMETRY_LIB_ID].wallHeightManager.initialize();
+  }
 
   // Add Pixel cache manager for tiles and levels
   if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.placeableGeometries.has("Tile") ) {
@@ -375,4 +388,21 @@ export class OpacityRegistry {
     if ( !placeableName ) return true;
     return entry.has(placeableName);
   }
+}
+
+/**
+ * Handle wall elevation, configuration, and use.
+ * Replacement for deprecated Wall Height module.
+ */
+export class WallHeightManager {
+
+  static get TEMPLATES() {
+    return { WALL_CONFIG: `modules/${CONFIG[GEOMETRY_LIB_ID].CONFIG.controllingModule}/scripts/geometry/templates/wall-config.html`, };
+  }
+
+  static initialize() {
+    foundry.applications.handlebars.loadTemplates(Object.values(this.TEMPLATES)).then(_value => console.debug("Templates loaded."));
+    registerWallHeight();
+  }
+
 }

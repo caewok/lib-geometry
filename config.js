@@ -34,6 +34,7 @@ const ELEVATION_CONFIG = {
    * @type {number}
    */
   visionHeightMultiplier: 1,
+
 };
 
 const TILECACHE_CONFIG = {
