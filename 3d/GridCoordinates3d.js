@@ -39,6 +39,8 @@ import { GridCoordinates } from "../GridCoordinates.js";
  */
 export class GridCoordinates3d extends ElevatedPoint {
 
+  static _geoLibType = "GridCoordinates3d";
+
   /**
    * Factory function that converts a GridOffset to GridCoordinates.
    * @param {GridOffset|GridOffset3d} offset

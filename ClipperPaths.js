@@ -26,7 +26,7 @@ export class ClipperPaths {
     return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
   }
 
-  static get _geoLibType() { return this.name; }
+  static _geoLibType = "ClipperPaths";
 
 
   /** @type {number} */
@@ -51,6 +51,57 @@ export class ClipperPaths {
       }
     }
     this.#scalingFactor = value;
+  }
+
+  // ----- NOTE: Static polygon helpers ----- //
+
+  /**
+   * Use Clipper to join an array of polygons.
+   * @param {PIXI.Polygon[]} polys
+   * @param {object} [opts]
+   * @param {number} [opts.scalingFactor=100]
+   * @returns {PIXI.Polygon[]}
+   */
+  static unionPolygons(polys, opts) {
+    if ( polys.length < 2 ) return polys;
+    return this.fromPolygons(polys, opts)
+      .union()
+      .clean()
+      .toPolygons();
+  }
+
+  /**
+   * Use Clipper to join an array of polygons, using positive fill.
+   * @param {PIXI.Polygon[]} polys
+   * @param {object} [opts]
+   * @param {number} [opts.scalingFactor=100]
+   * @returns {PIXI.Polygon[]}
+   */
+  static combinePolygons(polys, opts) {
+    if ( polys.length < 2 ) return polys;
+    return this.fromPolygons(polys, opts)
+      .combine()
+      .clean()
+      .toPolygons();
+  }
+
+  /**
+   * Use Clipper to subtract an array of polygon holes from the polygons.
+   * @param {PIXI.Polygon[]} solids
+   * @param {PIXI.Polygon[]} holes
+   * @param {object} [opts]
+   * @param {number} [opts.scalingFactor=100]
+   * @returns {PIXI.Polygon[]}
+   */
+  static diffPolygons(solids, holes, opts) {
+    if ( !holes.length ) return solids;
+    if ( !solids.length ) return [];
+
+    const solidPaths = this.fromPolygons(solids, opts).union();
+    const holePaths = this.fromPolygons(holes, opts).union();
+    return holePaths.diffPaths(solidPaths)
+      .clean()
+      .toPolygons();
   }
 
   // ----- NOTE: Static conversion helpers ----- //
@@ -215,13 +266,15 @@ export class ClipperPaths {
    * @param {Matrix} M        3x3 transform matrix
    * @returns {ClipperPaths} New paths
    */
-  transform(M) {
-    const out = new this.constructor([], { scalingFactor: this.scalingFactor });
+  transform(M, out) {
+    out ??= new this.constructor([], { scalingFactor: this.scalingFactor });
+    const paths = [];
     this.paths.forEach(path => {
       const pts = this.constructor.pathToPoints(path, this.scalingFactor);
       pts.forEach(pt => M.multiplyPoint2d(pt, pt));
-      out.addPathPoints(pts);
+      paths.push(this.constructor.pointsToPath(pts, this.scalingFactor))
     });
+    out.paths = paths;
     return out;
   }
 
@@ -293,15 +346,38 @@ export class ClipperPaths {
     });
   }
 
+  simplifyPolygons(type = ClipperLib.PolyFillType.pftNonZero) {
+    this.paths = ClipperLib.Clipper.SimplifyPolygons(this.paths, type);
+    return this;
+  }
+
   /**
    * Run CleanPolygons on the paths
-   * @param {number} cleanDelta   Value, multiplied by scalingFactor, passed to CleanPolygons.
+   * @param {number} cleanDelta   Distance under which to trim adjacent vertices.
+   *   Defaults in ClipperJS to 1.415.
    * @returns {ClipperPaths}  A new object.
    */
-  clean(cleanDelta = 0.1) {
+  clean(cleanDelta) {
+    // Ensure no near-infinities
+    // Can do this in place b/c near-infinite coordinates will throw errors in Clipper.
+    const MAX_SAFE = 1e50;
+    for ( const path of this.paths ) {
+      path.forEach(pt => {
+        if ( pt.X > MAX_SAFE ) pt.X = MAX_SAFE;
+        else if ( pt.X < -MAX_SAFE ) pt.X = -MAX_SAFE;
+
+        if ( pt.Y > MAX_SAFE ) pt.Y = MAX_SAFE;
+        else if ( pt.Y < -MAX_SAFE ) pt.Y = -MAX_SAFE;
+      });
+    }
+
     const scalingFactor = this.scalingFactor;
-    const cleanedPaths = ClipperLib.Clipper.CleanPolygons(this.paths, scalingFactor * cleanDelta);
-    return new this.constructor(cleanedPaths, { scalingFactor });
+    const cleanedPaths = ClipperLib.Clipper.CleanPolygons(this.paths, cleanDelta);
+    const out = new this.constructor(cleanedPaths, { scalingFactor });
+
+    // Trim any empty paths or broken polygon paths.
+    out.paths = out.paths.filter(path => path.length > 2);
+    return out;
   }
 
 
@@ -328,6 +404,19 @@ export class ClipperPaths {
 
     return solution;
   }
+
+  /**
+   * Execute a specific Clipper.clipType combination using this path as the subject
+   * @param {ClipperPaths} clip             What to clip
+   * @param {ClipperLib.ClipType} clipType  ctIntersection: 0, ctUnion: 1, ctDifference: 2, ctXor: 3
+   * @param {object} [options]              Options passed to ClipperLib.Clipper().Execute
+   * @param {number} [subjFillType]         Fill type for the subject. Defaults to pftEvenOdd.
+   * @param {number} [clipFillType]         Fill type for the clip. Defaults to pftEvenOdd.
+   * @returns {ClipperPaths} New ClipperPaths object
+   */
+  clip(subject, clipType, opts = {}) { return this.constructor.clip(this, subject, { clipType, ...opts}); }
+
+
 
   /**
    * Intersect this set of paths with a polygon as subject.
@@ -482,7 +571,7 @@ export class ClipperPaths {
    * @param {ClipperPaths} clip             What to clip
    * @param {ClipperLib.ClipType} clipType  ctIntersection: 0, ctUnion: 1, ctDifference: 2, ctXor: 3
    * @param {object} [options]              Options passed to ClipperLib.Clipper().Execute
-   * @param {number} [subjFillType]         Fill type for the subject. Defaults to pftEvenOdd.
+   * @param {number} [subjFillType]         Fill type for the subject. Defaults to pftEvenOdd: 0. Also pftNonZero: 1, pftPositive: 2, pftNegative: 3
    * @param {number} [clipFillType]         Fill type for the clip. Defaults to pftEvenOdd.
    * @returns {ClipperPaths} New ClipperPaths object
    */

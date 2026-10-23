@@ -4,7 +4,7 @@ CONFIG,
 */
 "use strict";
 
-import { GEOMETRY_LIB_ID, GEOMETRY_ID } from "./const.js";
+import { GEOMETRY_LIB_ID } from "./const.js";
 import { Draw } from "./Draw.js";
 import { Point3d } from "./3d/Point3d.js";
 import { Triangle3d } from "./3d/Polygon3d.js";
@@ -16,26 +16,112 @@ import { ElevatedPoint } from "./3d/ElevatedPoint.js";
 Draw = CONFIG.GeometryLib.lib.Draw
 Draw.clearDrawings()
 canvasTests = CONFIG.GeometryLib.lib.canvasTests
-Triangle3d = CONFIG.GeometryLib.lib.threeD.Triangle3d
 Point3d = CONFIG.GeometryLib.lib.threeD.Point3d
-let {
-  BasicVertices,
-  HorizontalQuadVertices,
-  VerticalQuadVertices,
-  Rectangle3dVertices,
-  Polygon3dVertices,
-  Ellipse3dVertices,
-  Circle3dVertices } = CONFIG.GeometryLib.lib.placeableVertices.vertices
+
+level = canvas.level
+geom = CONFIG.GeometryLib.geometryManager.geomForDocument(level, "background")
+cache = geom.pixelCache
+
+
+bb = cache.getThresholdCanvasBoundingBox(-1)
+bbThreshold = cache.getThresholdCanvasBoundingBox(0.75)
+bbPoly = cache.getThresholdCanvasBoundingPolygon(0.75)
+
+Draw.shape(bb, { color: Draw.COLORS.blue })
+Draw.shape(bbThreshold, { color: Draw.COLORS.orange })
+Draw.shape(bbPoly, { color: Draw.COLORS.red })
+
+region = canvas.regions.placeables[0]
+geom = CONFIG.GeometryLib.geometryManager.geomForPlaceable(region)
+geom.shapes[0].draw2d({ color: Draw.COLORS.red })
+
+
+
+
+
+Triangle3d = CONFIG.GeometryLib.lib.threeD.Triangle3d
+Matrix = CONFIG.GeometryLib.lib.Matrix
+
+scaleMat = Matrix.scale({ x: 100, y: 100, z: 1 })
+faces = cyl.constructor.prototypeFaces.map(face => face.transform(scaleMat))
 
 canvasTests.drawTokenBorder()
 canvasTests.drawConstrainedTokenBorder()
 canvasTests.drawWallGeometries()
-canvasTests.drawTokenGeometries()
+
+canvasTests.drawTokenGeometries({ geomType: "full" })
+canvasTests.drawTokenGeometries({ geomType: "constrained" })
+canvasTests.drawTokenGeometries({ geomType: "lit" })
+canvasTests.drawTokenGeometries({ geomType: "bright" })
+
+canvasTests.drawTokenGeometries({ geomType: "full", aabb: true, faceTypes: "none" })
+canvasTests.drawTokenGeometries({ geomType: "constrained", aabb: true, faceTypes: "none" })
+canvas.tokens.placeables.forEach(token => {
+  const geom = CONFIG.GeometryLib.geometryManager.tokens.geomForPlaceable(token);
+  canvasTests.drawGeometry(geom, "red", { aabb: true, faceTypes: "none" });
+});
+
 canvasTests.drawTileGeometries()
+canvasTests.drawTileGeometries({ geomType: "full" })
+canvasTests.drawTileGeometries({ geomType: "boundingRect" })
+canvasTests.drawTileGeometries({ geomType: "boundingPolygon" })
+canvasTests.drawTileGeometries({ geomType: "polygons" })
+canvasTests.drawTileGeometries({ geomType: "triangles" })
+
+canvasTests.drawTileGeometries({ geomType: "full", aabb: true, faceTypes: "none" })
+canvasTests.drawTileGeometries({ geomType: "boundingRect", aabb: true, faceTypes: "none" })
+canvas.tiles.placeables.forEach(tile => {
+  const geom = CONFIG.GeometryLib.geometryManager.tiles.geomForPlaceable(tile);
+  canvasTests.drawGeometry(geom, "red", { aabb: true, faceTypes: "none" });
+});
+
+canvasTests.drawRegionGeometries({ faceType: "top" })
+canvasTests.drawRegionGeometries({ faceType: "bottom" })
+canvasTests.drawRegionGeometries({ faceType: "sides" })
+
+canvasTests.drawLevelBackgroundGeometries()
+
+
+Original canvas: 1500 x 1500
+
+ground:
+anchor: 0.5, 0.5
+offset: -675, 150
+scale: 0.5, 0.5
+rotation: 0
+fit: contain
+
+basement:
+anchor: 0.5, 0.5
+offset: -400, 320
+scale: 0.5, 0.5
+rotation: 90
+fit: contain
+
+level = canvas.scene.levels.get("defaultLevel0000")
+geom = CONFIG.GeometryLib.geometryManager.backgroundLevels.geomForDocument(level)
+cache = geom.pixelCache
+
+cache._toCanvasCoordinates(0, 0)
+cache._toCanvasCoordinates(750, 750)
+cache._toCanvasCoordinates(1500, 1500)
+
+
 canvasTests.drawRegionGeometries()
 
-incorrectProtoTokens = canvasTests.testTokenPrototypeGeometryContainment()
-incorrectTokens = canvasTests.testTokenGeometryContainment();
+incorrectProtoTokens = canvasTests.testTokenPrototypeGeometryContainment("full")
+incorrectTokens = canvasTests.testTokenGeometryContainment("full");
+
+incorrectProtoTokens = canvasTests.testTokenPrototypeGeometryContainment("constrained")
+incorrectTokens = canvasTests.testTokenGeometryContainment("constrained");
+
+incorrectProtoTokens = canvasTests.testTokenPrototypeGeometryContainment("constrained")
+incorrectTokens = canvasTests.testTokenGeometryContainment("constrained");
+
+incorrectProtoTokens = canvasTests.testTokenPrototypeGeometryContainment("constrained")
+incorrectTokens = canvasTests.testTokenGeometryContainment("constrained");
+
+
 incorrectWalls = canvasTests.testWallGeometryContainment();
 incorrectTiles = canvasTests.testTileGeometryContainment();
 incorrectRegions = canvasTests.testRegionGeometryContainment();
@@ -49,6 +135,10 @@ canvasTests.drawRegionVertices()
 
 canvasTests.testTokenVertices()
 canvasTests.testRegionVertices()
+
+calc = _token.tokenvisibility.visibility.losViewer.calculator
+ot = calc.occlusionTester
+
 
 
 */
@@ -121,26 +211,20 @@ export function drawTokenSoundBorder({ tokens, ...drawingOpts } = {}) {
 
 // ----- NOTE: Placeable Geometry ----- //
 
-/**
- * Draw 2d shapes based on placeable geometry face.
- * @param {PlaceableObject} placeable
- * @param {object} [opts]
- * @param {"top"|"bottom"} [opts.face="top"]    Draw top or bottom face
- * @param {boolean} [opts.aabb=false]           If true, draw the bounding box
- * @param {*} [opts]                            Other opts passed to drawing
- */
-function drawPlaceableGeometry(placeable, placeableColor, { face = "top", aabb = false, ...drawingOpts } = {}) {
-  const geom = placeable[GEOMETRY_LIB_ID][GEOMETRY_ID];
-  if ( !geom ) {
-    console.error(`${placeable.constructor.name} ${placeable.id} has no geometry.`);
-    return;
-  }
-
+export function drawGeometry(geom,  placeableColor, { aabb = false, faceTypes = "all", ...drawingOpts } = {}) {
   let color = Draw.COLORS[placeableColor];
-  geom.faces[face].draw2d({ color, ...drawingOpts });
   if ( aabb ) {
     let color = Draw.COLORS[`light${placeableColor}`];
     Draw.shape(geom.aabb.toRectangle(), { color, ...drawingOpts });
+    return;
+  }
+
+  switch ( faceTypes ) {
+    case "all": for ( const face of geom.iterateFaces() ) face.draw2d({ color, ...drawingOpts }); break;
+    case "top": for ( const face of geom.iterateFaces() ) face.shapes[0].draw2d({ color, ...drawingOpts }); break;
+    case "bottom": for ( const face of geom.iterateFaces() ) face.shapes[1].draw2d({ color, ...drawingOpts }); break;
+    case "sides": for ( const face of geom.iterateFaces() ) face.shapes.slice(2).draw2d({ color, ...drawingOpts }); break;
+    case "firstShape": geom.shapes[0].faces[0].draw2d({ color, ...drawingOpts }); break;
   }
 }
 
@@ -155,14 +239,10 @@ function drawPlaceableGeometry(placeable, placeableColor, { face = "top", aabb =
 export function drawWallGeometries({ walls, ...drawingOpts } = {}) {
   walls ??= canvas.walls.placeables;
   for ( const wall of walls ) {
+    const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.walls.geomForPlaceable(wall);
     let color = "blue";
-    let face = "top"
-    if ( wall.edge.direction ) {
-      const geom = wall[GEOMETRY_LIB_ID][GEOMETRY_ID];
-      face = geom.faces.top ? "top" : "bottom";
-      color = geom.faces.top ? "green": "red";
-    }
-    drawPlaceableGeometry(wall, color, { face, ...drawingOpts });
+    if ( geom.constructor.isDirectional(wall) ) color = wall.dir == 1 ? "green": "red";
+    drawGeometry(geom, color, drawingOpts);
   }
 }
 
@@ -174,9 +254,12 @@ export function drawWallGeometries({ walls, ...drawingOpts } = {}) {
  * @param {boolean} [opts.aabb=false]           If true, draw the bounding box
  * @param {*} [opts]                            Other opts passed to drawing
  */
-export function drawTokenGeometries({ tokens, ...drawingOpts } = {}) {
+export function drawTokenGeometries({ tokens, geomType = "full", ...drawingOpts } = {}) {
   tokens ??= canvas.tokens.placeables;
-  for ( const token of tokens ) drawPlaceableGeometry(token, "orange", drawingOpts);
+  for ( const token of tokens ) {
+    const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.tokens.geomForPlaceable(token)[geomType];
+    drawGeometry(geom, "orange", drawingOpts);
+  }
 }
 
 /**
@@ -187,9 +270,12 @@ export function drawTokenGeometries({ tokens, ...drawingOpts } = {}) {
  * @param {boolean} [opts.aabb=false]           If true, draw the bounding box
  * @param {*} [opts]                            Other opts passed to drawing
  */
-export function drawTileGeometries({ tiles, ...drawingOpts } = {}) {
+export function drawTileGeometries({ tiles, geomType = "full", ...drawingOpts } = {}) {
   tiles ??= canvas.tiles.placeables;
-  for ( const tile of tiles ) drawPlaceableGeometry(tile, "yellow", drawingOpts);
+  for ( const tile of tiles ) {
+    const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.tiles.geomForPlaceable(tile)[geomType];
+    drawGeometry(geom, "yellow", drawingOpts);
+  }
 }
 
 /**
@@ -202,36 +288,61 @@ export function drawTileGeometries({ tiles, ...drawingOpts } = {}) {
  */
 export function drawRegionGeometries({ regions, ...drawingOpts } = {}) {
   regions ??= canvas.regions.placeables;
-  for ( const region of regions ) drawPlaceableGeometry(region, "green", drawingOpts);
+  for ( const region of regions ) {
+    const geom = CONFIG[GEOMETRY_LIB_ID].geometryManager.regions.geomForPlaceable(region);
+    drawGeometry(geom, "green", drawingOpts);
+  }
 }
+
+export function drawLevelBackgroundGeometries({ levels, ...drawingOpts } = {}) {
+  levels ??= canvas.scene.levels;
+  const mgr = CONFIG[GEOMETRY_LIB_ID].geometryManager.levels.background;
+
+  for ( const level of levels ) {
+    const geom = mgr.geomForDocument(level);
+    drawGeometry(geom, "green", drawingOpts);
+  }
+}
+
+export function drawLevelForegroundGeometries({ levels, ...drawingOpts } = {}) {
+  levels ??= canvas.scene.levels;
+  const mgr = CONFIG[GEOMETRY_LIB_ID].geometryManager.levels.foreground;
+
+  for ( const level of levels ) {
+    const geom = mgr.geomForDocument(level);
+    drawGeometry(geom, "blue", drawingOpts);
+  }
+}
+
 
 /**
  * Test tokens for containment.
  */
-export function testTokenGeometryContainment() {
+export function testTokenGeometryContainment(geomType = "full") {
   let incorrectTokens = new Set();
+  const mgr = CONFIG.GeometryLib.geometryManager;
   for ( const token of canvas.tokens.placeables ) {
-    const geom = token.GeometryLib.geometry;
-    using ctr = Point3d.fromTokenCenter(token);
-    for ( const face of geom.iterateFaces() ) {
-      if ( face.isFacing(ctr) ) incorrectTokens.add(token);
-    }
+    const geom = mgr.geomForPlaceable(token)[geomType];
+    const valid = geom.shapes.every(shape => shape.validate());
+    const color = valid ? "green" : "red";
+    drawGeometry(geom, color);
+    if ( !valid ) incorrectTokens.add(token);
   }
   console.log(`${incorrectTokens.size} incorrect tokens out of ${canvas.tokens.placeables.length}.`, incorrectTokens);
   return incorrectTokens;
 }
 
-export function testTokenPrototypeGeometryContainment() {
+export function testTokenPrototypeGeometryContainment(geomType = "full") {
   let incorrectTokens = new Set();
+  const mgr = CONFIG.GeometryLib.geometryManager;
   for ( const token of canvas.tokens.placeables ) {
-    const geom = token.GeometryLib.geometry;
+    const geom = mgr.geomForPlaceable(token)[geomType];
     using ctr = Point3d.tmp.set(0, 0, 0);
-    const pf = geom._prototypeFaces;
-
-    if ( pf.top.isFacing(ctr) ) incorrectTokens.add(token);
-    if ( pf.bottom.isFacing(ctr) ) incorrectTokens.add(token);
-    for ( const side of pf.sides ) {
-      if ( side.isFacing(ctr) ) incorrectTokens.add(token);
+    for ( const face of geom.shapes[0].prototypeFaces ) {
+      if ( face.isFacing(ctr) ) {
+        incorrectTokens.add(token);
+        break;
+      }
     }
   }
   console.log(`${incorrectTokens.size} incorrect tokens out of ${canvas.tokens.placeables.length}.`, incorrectTokens);
@@ -240,8 +351,9 @@ export function testTokenPrototypeGeometryContainment() {
 
 export function testWallGeometryContainment() {
   let incorrectWalls = new Set();
+  const mgr = CONFIG.GeometryLib.geometryManager;
   for ( const wall of canvas.walls.placeables ) {
-    const geom = wall.GeometryLib.geometry;
+    const geom = mgr.geomForPlaceable(wall);
     using ctr = Point3d.midPoint(wall.edge.a, wall.edge.b);
     using delta2d = wall.edge.b.subtract(wall.edge.a);
     using dirLeft = Point3d.tmp.set(delta2d.y, -delta2d.x, 0);
@@ -261,10 +373,11 @@ export function testWallGeometryContainment() {
   return incorrectWalls;
 }
 
-export function testTileGeometryContainment() {
+export function testTileGeometryContainment(geomType = "full") {
   let incorrectTiles = new Set();
+  const mgr = CONFIG.GeometryLib.geometryManager;
   for ( const tile of canvas.tiles.placeables ) {
-    const geom = tile.GeometryLib.geometry;
+    const geom = mgr.geomForPlaceable(tile)[geomType];
     const ctr2d = tile.center;
     using ptTop = Point3d.tmp.set(ctr2d.x, ctr2d.y, tile.elevationZ + 50);
     using ptBottom = Point3d.tmp.set(ctr2d.x, ctr2d.y, tile.elevationZ - 50);
@@ -277,59 +390,19 @@ export function testTileGeometryContainment() {
 
 export function testRegionGeometryContainment() {
   let incorrectRegions = new Set();
+  const mgr = CONFIG.GeometryLib.geometryManager;
   for ( const region of canvas.regions.placeables ) {
-    const geom = region.GeometryLib.geometry;
-    if ( !geom.faces.top ) continue;
+    const geom = mgr.geomForPlaceable(region);
 
-    // Plain circles, ellipses, and rectangles are instanced.
-    if ( geom._prototypeFaces.top ) {
-      using ctr = Point3d.tmp.set(0, 0, 0);
-      if ( geom._prototypeFaces.top.isFacing(ctr) ) console.error(`region ${region.id} prototype top is wrong.`);
-      if ( geom._prototypeFaces.bottom.isFacing(ctr) ) console.error(`region ${region.id} prototype top is wrong.`);
-      for ( const side of geom._prototypeFaces.sides ) {
-        if ( side.isFacing(ctr) ) console.error(`region ${region.id} prototype side is wrong.`);
-      }
+    let allValid = true;
+    for ( const shape of geom.shapes ) {
+      const valid = shape.validate();
+      allValid &&= valid;
+      const color = valid ? "green" : "red";
+      shape.draw2d({ color })
+      // drawGeometry(geom, color);
     }
-
-    const bottomZ = isFinite(region.bottomZ) ? region.bottomZ : -1e06;
-    const topZ = isFinite(region.topZ) ? region.topZ : 1e06;
-    const midZ = bottomZ + ((topZ - bottomZ) * 0.5);
-    for ( let i = 0; i < region.document.polygons.length; i += 1 ) {
-      const polygon = region.document.polygons[i]
-      const isHole = !polygon.isPositive;
-      const ctr2d = polygon.center;
-      const isContained = polygon.contains(ctr2d.x, ctr2d.y);
-      using ctr = Point3d.tmp.set(ctr2d.x, ctr2d.y, midZ);
-
-      // _polygonFaces should match polygons.
-      const polyTop = geom._polygonFaces.top[i];
-      if ( polyTop.isHole ^ isHole ) console.error(`region ${region.id} poly top holes are wrong at ${i}.`);
-      if ( polyTop.isFacing(ctr) == isContained ) incorrectRegions.add(region);
-
-      const polyBottom = geom._polygonFaces.bottom[i];
-      if ( polyBottom.isHole ^ isHole ) console.error(`region ${region.id} poly bottom holes are wrong at ${i}.`);
-      if ( polyBottom.isFacing(ctr) == isContained ) incorrectRegions.add(region);
-
-      /*
-      contained | facing
-      x           √         contained !== facing
-      √           x
-      */
-
-      for ( const polySide of geom._polygonFaces.sides[i] ) {
-        // Sides should not be holes.
-        if ( polySide.isHole ) console.error(`region ${region.id} poly sides has holes ${i}.`);
-        if ( polySide.isFacing(ctr) == (isHole ^ isContained) ) incorrectRegions.add(region);
-      }
-    }
-
-    // Test the full polygon top/bottom.
-    // Sides are more difficult, as no guarantee that the sides correspond to a given top portion.
-    const ctr = geom.faces.top.centroid;
-    ctr.z = midZ;
-    if ( geom.faces.top.isFacing(ctr) ) incorrectRegions.add(region);
-    if ( geom.faces.bottom.isFacing(ctr) ) incorrectRegions.add(region);
-
+    if ( !allValid ) incorrectRegions.add(region);
   }
   console.log(`${incorrectRegions.size} incorrect regions out of ${canvas.regions.placeables.length}.`);
   return incorrectRegions;
@@ -407,54 +480,16 @@ export function drawTokenVertices({ tokens, type = "all", ...drawingOpts } = {})
  * @param {object} [opts]
  * @param {Token[]} [opts.tokens]                 Walls to draw; otherwise test entire canvas
  */
-export function testTokenVertices({ tokens, type = "all" } = {}) {
-  const TokenInstancedVertices = CONFIG.GeometryLib.lib.placeableVertices.TokenInstancedVertices;
-  const ConstrainedTokenModelVertices = CONFIG.GeometryLib.lib.placeableVertices.ConstrainedTokenModelVertices;
-  const LitTokenModelVertices = CONFIG.GeometryLib.lib.placeableVertices.LitTokenModelVertices;
-  const BrightLitTokenModelVertices = CONFIG.GeometryLib.lib.placeableVertices.BrightLitTokenModelVertices;
-
-  tokens ??= canvas.tokens.placeables;
-  using ctr = Point3d.tmp;
-  for ( const token of tokens ) {
-    Point3d.fromTokenCenter(token, ctr);
-    Draw.star(ctr);
-
-    if ( type === "all" || type === "bright" ) {
-        const vToken = new BrightLitTokenModelVertices(token);
-        const vo = vToken.calculateModel();
-        const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
-        for ( const tri of tris ) {
-          if ( tri.orient3d(ctr) > 0 ) console.error(`Token ${token.name} (${token.id}) bright triangle facing wrong direction`);
-        }
-    }
-
-    if ( type === "all" || type === "lit" ) {
-      const vToken = new LitTokenModelVertices(token);
-      const vo = vToken.calculateModel();
-      const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
-      for ( const tri of tris ) {
-        if ( tri.orient3d(ctr) > 0  ) console.error(`Token ${token.name} (${token.id}) lit triangle facing wrong direction`);
-      }
-    }
-
-    if ( type === "all" || type === "constrained" ) {
-      const vToken = new ConstrainedTokenModelVertices(token);
-      const vo = vToken.calculateModel();
-      const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
-      for ( const tri of tris ) {
-        if ( tri.orient3d(ctr) > 0  ) console.error(`Token ${token.name} (${token.id}) constrained triangle facing wrong direction`);
-      }
-    }
-
-    if ( type === "all" || type === "normal" ) {
-      const vo = TokenInstancedVertices.calculateModelForPlaceable(token);
-      const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
-      for ( const tri of tris ) {
-        if ( tri.orient3d(ctr) > 0  ) console.error(`Token ${token.name} (${token.id}) normal triangle facing wrong direction`);
-      }
-    }
+/*
+export function testTokenVertices({ tokens } = {}) {
+  const vo = TokenSquareGeometry.instanceVO;
+  const tris = Triangle3d.fromVertices(vo.vertices, vo.indices, { stride: vo.stride });
+  const ctr = Point3d.tmp.set(0, 0, 0);
+  for ( const tri of tris ) {
+    if ( tri.orient3d(ctr) > 0 ) console.error(`Token ${token.name} (${token.id}) instance triangle facing wrong direction`);
   }
 }
+*/
 
 /**
  * Draw 2d tiles based on top geometry face.

@@ -17,6 +17,11 @@ const Poolable = mix(PIXI.Point).with(PoolableMixin);
 function onRelease(obj) {
   obj.x = 0;
   obj.y = 0;
+
+  if( !obj.constructor._geoLibType && Object.hasOwn(obj, "z") ) {
+    console.warn("PIXI.Point pool object has z property.");
+    delete obj.z;
+  }
 }
 
 /**
@@ -146,6 +151,26 @@ function invertKey(key, outPoint) {
   // const x = Math.floor(key * MAX_TEXTURE_SIZE_INV);
   outPoint.y = key - (MAX_TEXTURE_SIZE * outPoint.x);
   return outPoint;
+}
+
+/**
+ * String key, rounding to a given number of decimals. Useful for sets when the integer key is too imprecise.
+ * @param {number} [places=6]   Number of decimals
+ */
+function stringKey(places=6) {
+  return `${this.x.toFixed(places)},${this.y.toFixed(places)}`;
+}
+
+/**
+ * Invert a string key.
+ * @param {string}
+ * @param {PIXI.Point} out    The new point to copy to.
+ * @returns {PIXI.Point}
+ */
+function invertStringKey(str, out) {
+  out ??= this.tmp;
+  const [xStr, yStr] = str.split(",");
+  return out.set(Number(xStr) || 0, Number(yStr) || 0);
 }
 
 
@@ -371,6 +396,19 @@ function ceil(outPoint) {
 }
 
 /**
+ * Take the square root of each coordinate.
+ * @param {PIXI.Point} [outPoint]    A point-like object in which to store the value.
+ *   (Will create new point if none provided.)
+ * @returns {PIXI.Point}
+ */
+function sqrt(outPoint) {
+  outPoint ??= this.constructor.tmp;
+  outPoint.x = Math.sqrt(this.x);
+  outPoint.y = Math.sqrt(this.y);
+  return outPoint;
+}
+
+/**
  * Make all coordinates finite.
  * @param {PIXI.Point} [outPoint]    A point-like object in which to store the value.
  *   (Will create new point if none provided.)
@@ -561,6 +599,7 @@ PATCHES.PIXI.GETTERS = {
 PATCHES.PIXI.STATIC_GETTERS = {
   pool: function() { return Pool.getPool(this); },
   tmp: function() { return this.pool.acquire(); },
+  createN: function(n) { return this.pool.acquireMultiple(n); }
 }
 
 PATCHES.PIXI.STATIC_METHODS = {
@@ -574,6 +613,7 @@ PATCHES.PIXI.STATIC_METHODS = {
   invertKey,
   key: staticKey,
   rotate,
+  invertStringKey,
 
   // Pool
   onRelease,
@@ -614,6 +654,7 @@ PATCHES.PIXI.METHODS = {
   fromAngle,
   to2d,
   toString: function() { return `{x: ${this.x}, y: ${this.y}}`},
+  stringKey,
 
   // Pool
   release: function() { this.constructor.release(this); },

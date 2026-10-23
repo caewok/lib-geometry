@@ -114,116 +114,12 @@ export function unitElevation(elevation) { return Math.round(elevation / canvas.
 export function elevationForUnit(k) { return roundNearWhole(k * canvas.scene.dimensions.distance); }
 
 /**
- * @typedef {PIXI.Point} CutawayPoint
- * A point in cutaway space.
- * @param {number} x      Distance-squared from start point
- * @param {number} y      Elevation in pixel units
- */
-
-/**
- * Convert a point on a line to a coordinate representing the line direction in the x direction
- * and the elevation in the y direction.
- *
- * @param {ElevatedPoint} currPt      A point on the line start|end
- * @param {ElevatedPoint} start       Beginning endpoint of the line segment
- * @param {ElevatedPoint} [end]       End of the line segment; required only if the current point is before start
- * @param {PIXI.Point} [outPoint]
- * @returns {CutawayPoint} X value is 0 at start, negative if further from end than start.
- *  - x: Distance-squared from start, in direction of end.
- *  - y: Elevation in pixel units
- */
-function to2dCutaway(currPt, start, end, outPoint) {
-  outPoint ??= PIXI.Point.tmp;
-  const distCS = PIXI.Point.distanceSquaredBetween(currPt, start);
-
-  const pt = outPoint.set(distCS, currPt.z);
-  if ( end ) {
-    const distCE = PIXI.Point.distanceSquaredBetween(currPt, end);
-    const distSE = PIXI.Point.distanceSquaredBetween(start, end);
-    if ( distCS < distCE && distCE > distSE ) pt.x *= -1;
-  }
-  return pt;
-}
-
-/* Identifying locations on the 1d line.
-currPt ---> start ---> end
-dist(currPt, start) < dist(currPt, end) && dist(currPt, end) > dist(start, end)
-
-start ---> currPt ---> end
-dist(start, end) > dist(start, currPt) && dist(start, end) > dist(end, currPt)
-
-start ---> end ---> currPt
-dist(end, currPt) < dist(start, currPt) && dist(currPt, start) > dist(start, end)
-*/
-
-/**
- * Convert a cutaway point to its respective position on the line start|end.
- * @param {CutawayPoint} cutawayPt      2d cutaway point created from _to2dCutaway
- * @param {ElevatedPoint} start             Beginning endpoint of the line segment
- * @param {ElevatedPoint} end               End of the line segment
- * @param {ElevatedPoint} [outPoint]
- * @returns {ElevatedPoint}
- */
-function from2dCutaway(cutawayPt, start, end, outPoint) {
-  outPoint ??= CONFIG[GEOMETRY_LIB_ID].lib.threeD.ElevatedPoint.tmp;
-  // b/c outPoint is 3d, makes sure to temporarily store the 2d values.
-  using start2d = start.to2d();
-  using end2d = end.to2d();
-  start2d.towardsPointSquared(end2d, cutawayPt.x, outPoint);
-  outPoint.z = cutawayPt.y;
-  return outPoint;
-}
-
-/**
- * Convert a cutaway point to use distance instead of distance squared.
- * @param {CutawayPoint} cutawayPt
- * @returns {PIXI.Point} The same point, modified in place.
- */
-function convertToDistanceCutaway(cutawayPt) {
-  const sign = Math.sign(cutawayPt.x);
-  cutawayPt.x =  sign * Math.sqrt(Math.abs(cutawayPt.x));
-  return cutawayPt;
-}
-
-/**
- * Convert a cutaway point to use grid elevation instead of pixel units for y.
- * @param {CutawayPoint} cutawayPt
- * @returns {PIXI.Point} The same point, modified in place.
- */
-function convertToElevationCutaway(cutawayPt) {
-  cutawayPt.y = pixelsToGridUnits(cutawayPt.y);
-  return cutawayPt;
-}
-
-/**
- * Convert a cutaway point to use distance-squared instead of distance.
- * @param {CutawayPoint} cutawayPt
- * @returns {PIXI.Point} The same point, modified in place.
- */
-function convertFromDistanceCutaway(cutawayPt) {
-  const sign = Math.sign(cutawayPt.x);
-  cutawayPt.x = sign * Math.pow(cutawayPt.x, 2);
-  return cutawayPt;
-}
-
-/**
- * Convert a cutaway point to use pixel units instead of grid units for y.
- * @param {CutawayPoint} cutawayPt
- * @returns {PIXI.Point} The same point, modified in place.
- */
-function convertFromElevationCutaway(cutawayPt) {
-  cutawayPt.y = gridUnitsToPixels(cutawayPt.y);
-  return cutawayPt;
-}
-
-/**
  * Formerly Math.roundDecimals before Foundry v12.
  * @param {number} number     The number to round
  * @param {number} places     Number of places past the decimal point to round
  * @returns {number}
  */
 export function roundDecimals(number, places) { return Number(number.toFixed(places)); }
-
 
 /**
  * This method is only guaranteed to work for convex polygons
@@ -1177,14 +1073,15 @@ export function doSegmentsOverlap(a, b, c, d) {
 }
 
 export function pointsAreCollinear(a, b, c, epsilon = 1e-06) {
-  if ( Object.hasOwn(a, "z") ) return foundry.utils.orient2dFast(a, b, c).almostEqual(epsilon);
+  if ( !Object.hasOwn(a, "z") ) return foundry.utils.orient2dFast(a, b, c).almostEqual(0, epsilon);
 
   // Collinear 3d points form a degenerate triangle with zero area.
   // Test the cross products.
   using ab = b.subtract(a);
-  using bc = c.subtract(b);
-  using cross = ab.cross(bc);
-  return cross.almostEqual(0, epsilon);
+  using ac = c.subtract(a);
+  using cross = ab.cross(ac);
+  using zero = Point3d.tmp.set(0, 0, 0);
+  return cross.almostEqual(zero, epsilon);
 }
 
 /**
@@ -1225,6 +1122,49 @@ export function findOverlappingPoints(a, b, c, d) {
   || (p0.x < p1.x && p0.y < p1.y)) return [p0, p1];
 
   return [];
+}
+
+/**
+ * Remove repeated and collinear points from an array of 2d or 3d points.
+ * @param {PIXI.Point[]|Point3d[]} points
+ * @returns {PIXI.Point[]|Point3d[]}
+ */
+export function cleanPolygonPoints(points, epsilon = 1e-06) {
+  if ( points.length < 2 ) return points;
+
+  points = points.values();
+  const result = [points.next().value];
+  for ( const curr of points ) {
+    if ( result.at(-1).almostEqual(curr, epsilon) ) continue;
+    while ( result.length >= 2
+      && pointsAreCollinear(result.at(-2), result.at(-1), curr, epsilon) ) result.pop();
+    result.push(curr);
+  }
+
+  // Clean up where end meets beginning.
+  // Loop b/c removing a point at a seam may expose a new collinearity.
+  while ( result.length >= 3 ) {
+    // Is the last point a duplicate of the first?
+    if ( result[0].almostEqual(result.at(-1), epsilon) ) {
+      result.pop();
+      continue;
+    }
+
+    // Is the last point redundant? (2nd-to-last -> last -> first)
+    if ( pointsAreCollinear(result.at(-2), result.at(-1), result[0], epsilon) ) {
+      result.pop();
+      continue;
+    }
+
+    // Is the first point redundant? (Last -> first -> second)
+    if ( pointsAreCollinear(result.at(-1), result.at(0), result[1], epsilon) ) {
+      result.shift(); // Remove the first point.
+      continue;
+    }
+    break;
+  }
+
+  return result;
 }
 
 /** @type {enum} */
@@ -1356,22 +1296,90 @@ export function segmentOverlap(a, b, c, d) {
   return res;
 }
 
-export function almostLessThan(a, b, epsilon = 1e-06) { return a < b || a.almostEqual(b, epsilon); }
-
-export function almostGreaterThan(a, b, epsilon = 1e-06) { return a > b || a.almostEqual(b, epsilon); }
-
-export function almostBetween(value, min, max, epsilon = 1e-06) {
-  return almostLessThan(value, max, epsilon) && almostGreaterThan(value, min, epsilon);
+/**
+ * Filters out duplicate intersection points. (Fixes issues with shared vertices.)
+ * Only use when points within 1 pixel can be combined.
+ * @param {Point3d[]|PIXI.Point[]} points
+ * @param {number} [epsilon]
+ * @returns {Point3d[]|PIXI.Point[]} The unique points
+ */
+export function getUniqueIntegerPoints(points) {
+  if ( !points.length ) return [];
+  const iter = points.values();
+  const first = iter.next().value;
+  const unique = new Set([first.key]);
+  const out = [first];
+  for ( const pt of iter ) {
+    const key = unique.key;
+    if ( unique.has(key) ) continue;
+    unique.add(key);
+    out.push(pt);
+  }
+  return out;
 }
 
-export const cutaway = {
-  to2d: to2dCutaway,
-  from2d: from2dCutaway,
-  convertToDistance: convertToDistanceCutaway,
-  convertToElevation: convertToElevationCutaway,
-  convertFromDistance: convertFromDistanceCutaway,
-  convertFromElevation: convertFromElevationCutaway
-};
+/**
+ * Filters out duplicate intersection points. (Fixes issues with shared vertices.)
+ * @param {Point3d[]|PIXI.Point[]} points
+ * @param {number} [decimals=8]
+ * @returns {Point3d[]|PIXI.Point[]} The unique points
+ */
+export function getUniquePoints(points, decimals) {
+  if ( !points.length ) return [];
+  const iter = points.values();
+  const first = iter.next().value;
+  const unique = new Set([first.stringKey(decimals)]);
+  const out = [first];
+  for ( const pt of iter ) {
+    const key = unique.stringKey(decimals);
+    if ( unique.has(key) ) continue;
+    unique.add(key);
+    out.push(pt);
+  }
+  return out;
+}
+
+/**
+ * Determine the interior points that fit between min and max.
+ * Each point, including min and max, must be at least spacer away.
+ * Each point is equidistant.
+ * @param {number} min
+ * @param {number} max
+ * @param {number} spacer
+ * @returns {number[]}
+ */
+export function calculateEvenlySpacedValues(min, max, spacer) {
+  if ( min >= max || spacer <= 0 ) return [];
+
+  const range = max - min;
+
+  // We need at least 2 * spacer distance between min and max to fit a single point.
+  // (min + spacer <= point <= max - spacer)
+  // Formula for max possible points: N * spacer <= range - spacer >= (N + 1) * spacer <= range
+  const count = Math.floor(range / spacer) - 1;
+  if ( count <= 0 ) return []; // No points can fit within the required spacing.
+
+  // To distribute evenly, total range is divided into `count+1` equal steps.
+  // This step size is guaranteed to be >= spacer.
+  const step = range / (count + 1);
+  const result = new Array(count);
+  for ( let i = 1; i <= count; i += 1 ) result[i - 1] = min + i * step;
+  return result;
+}
+
+function _almostLessThan(b, epsilon = 1e-06) { return this < (b + epsilon); }
+
+function _almostGreaterThan(b, epsilon = 1e-06) { return this > (b - epsilon); }
+
+function _almostBetween(min, max, epsilon = 1e-06) {
+  return this.almostLessThan(max, epsilon) && this.almostGreaterThan(min, epsilon);
+}
+
+function _strictlyLessThan(b, epsilon = 1e-06) { return this < (b - epsilon); }
+
+function _strictlyGreaterThan(b, epsilon = 1e-06) { return this > (b + epsilon); }
+
+
 
 /**
  * Retrieve an embedded property from an object using a string.
@@ -1411,3 +1419,48 @@ export function histogram(arr) {
   for ( const n of arr ) m.set(n, m.get(n) + 1);
   return m;
 }
+
+/**
+ * Check if four points form an axis aligned rectangle.
+ * @param {PIXI.Point} p1
+ * @param {PIXI.Point} p2
+ * @param {PIXI.Point} p3
+ * @param {PIXI.Point} p4
+ * @returns {boolean}
+ */
+export function isAxisAlignedRectangle(p1, p2, p3, p4, places = 6) {
+  const points = [p1, p2, p3, p4];
+
+  // Ensure all points are distinct
+  const uniquePoints = new Set(points.map(p => p.stringKey(places)));
+  if (uniquePoints.size !== 4) return false;
+
+  // Extract unique X and Y coordinates
+  const xCoords = new Set(points.map(p => p.x.toFixed(places)));
+  const yCoords = new Set(points.map(p => p.y.toFixed(places)));
+
+  // An axis-aligned rectangle has exactly 2 unique X and 2 unique Y values
+  return xCoords.size === 2 && yCoords.size === 2;
+}
+
+
+// Define properties on the Number environment
+if ( !Object.hasOwn(Number.prototype, "almostLessThan") ) {
+  Object.defineProperties(Number.prototype, {
+    almostLessThan: { value: _almostLessThan },
+    almostGreaterThan: { value: _almostGreaterThan },
+    almostBetween: { value: _almostBetween },
+    strictlyLessThan: { value: _strictlyLessThan },
+    strictlyGreaterThan: { value: _strictlyGreaterThan },
+  });
+}
+
+
+
+// For temporary backward compatibility
+
+export function almostLessThan(a, b, epsilon) { return a.almostLessThan(b, epsilon); }
+
+export function almostGreaterThan(a, b, epsilon) { return a.almostGreaterThan(b, epsilon); }
+
+export function almostBetween(a, b, epsilon) { return a.almostBetween(b, epsilon); }

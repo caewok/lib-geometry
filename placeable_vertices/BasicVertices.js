@@ -12,7 +12,7 @@ import { GEOMETRY_LIB_ID } from "../const.js";
 import { combineTypedArrays } from "../util.js";
 import { Point3d } from "../3d/Point3d.js";
 import { Sphere } from "../3d/Sphere.js";
-import { MatrixFloat32, ModelMatrix } from "../Matrix.js";
+import { ModelMatrix } from "../ModelMatrix.js";
 import { Triangle3d } from "../3d/Polygon3d.js";
 import { ClipperPaths } from "../ClipperPaths.js";
 import { Clipper2Paths } from "../Clipper2Paths.js";
@@ -116,20 +116,23 @@ export class BasicVertices {
    * It is assumed that the vertex position is first in the array: x, y, z, ...
    * @param {Float32Array} vertices
    * @param {MatrixFloat32} M
-   * @param {number} [stride=8]       The number of elements representing each vertex
-   * @param {}
-   * @returns {Float32Array} The vertices, modified in place
+   * @param {object} [opts]
+   * @param {number} [opts.stride=8]            The number of elements representing each vertex
+   * @param {number} [opts.positionOffset=0]    Where to start copying the vertices
+   * @param {Float32Array} [opts.outVertices]   Where to save the points
+   * @returns {Float32Array} The vertices
    */
-  static transformVertexPositions(vertices, M, { stride = this.NUM_VERTEX_ELEMENTS, positionOffset = 0 } = {}) {
+  static transformVertexPositions(vertices, M, { stride = this.NUM_VERTEX_ELEMENTS, positionOffset = 0, outVertices } = {}) {
+    outVertices ??= vertices.slice();
     using pt = Point3d.tmp;
     for ( let i = positionOffset, iMax = vertices.length; i < iMax; i += stride ) {
       pt.set(vertices[i], vertices[i+1], vertices[i+2]);
       M.multiplyPoint3d(pt, pt);
-      vertices[i] = pt.x;
-      vertices[i+1] = pt.y;
-      vertices[i+2] = pt.z;
+      outVertices[i] = pt.x;
+      outVertices[i+1] = pt.y;
+      outVertices[i+2] = pt.z;
     }
-    return vertices;
+    return outVertices;
   }
 
   /**
@@ -157,7 +160,7 @@ export class BasicVertices {
     // Convert unit edge to match this edge.
     const modelMatrix = this.modelMatrixFromShape(shape, opts);
     const vertices = new Float32Array(this.getUnitVertices(opts.type)); // Clone vertices before transform.
-    return this.transformVertexPositions(vertices, modelMatrix.model, { stride: 8 });
+    return this.transformVertexPositions(vertices, modelMatrix.model, { stride: 8, outVertices: vertices });
   }
 
   /**
@@ -637,7 +640,7 @@ export class HorizontalQuadVertices extends BasicVertices {
   }
 
   static modelMatrixFromShape(rect, { elevationZ = 0, rotateZ = 0, modelMatrix } = {}) {
-    modelMatrix ??= new ModelMatrix();
+    modelMatrix ??= ModelMatrix.create();
 
     // Scale by absolute z-length (vertical height).
     // If the topZ and bottomZ are unbalanced, translate in the z direction to reset topZ to correct elevation.
@@ -647,10 +650,9 @@ export class HorizontalQuadVertices extends BasicVertices {
     const center = rect.center;
 
     // Build transform matrix.
-    MatrixFloat32.scale(rect.width, rect.height, 0, modelMatrix.scale);
-    MatrixFloat32.translation(center.x, center.y, elevationZ, modelMatrix.translation);
-    MatrixFloat32.rotationZ(radians, true, modelMatrix.rotation);
-    modelMatrix.needsUpdate = true;
+    modelMatrix.scale = { x: rect.width, y: rect.height, z: 0 };
+    modelMatrix.translation = { x: center.x, y: center.y, z: elevationZ };
+    modelMatrix.rotation = { x: 0, y: 0, z: radians };
     return modelMatrix;
   }
 }
@@ -717,7 +719,7 @@ export class VerticalQuadVertices extends BasicVertices {
 
   static modelMatrixFromShape(segment, { topZ = T, bottomZ = B, rotateZ = 0, modelMatrix } = {}) {
     const { a, b } = segment;
-    modelMatrix ??= new ModelMatrix();
+    modelMatrix ??= ModelMatrix.create();
 
     // Scale by absolute z-length (vertical height).
     // If the topZ and bottomZ are unbalanced, translate in the z direction to reset topZ to correct elevation.
@@ -733,9 +735,9 @@ export class VerticalQuadVertices extends BasicVertices {
     const length = PIXI.Point.distanceBetween(a, b);
 
     // Build transform matrix.
-    MatrixFloat32.scale(length, 1, zHeight, modelMatrix.scale);
-    MatrixFloat32.translation(center.x, center.y, z, modelMatrix.translation);
-    MatrixFloat32.rotationZ(radians, true, modelMatrix.rotation);
+    modelMatrix.scale = { x: length, y: 1, z: zHeight };
+    modelMatrix.translation = { x: center.x, y: center.y, z };
+    modelMatrix.rotation = { x: 0, y: 0, z: radians };
     return modelMatrix;
   }
 }
@@ -858,16 +860,16 @@ export class Rectangle3dVertices extends BasicVertices {
   }
 
   static modelMatrixFromShape(rect, { topZ = T, bottomZ = B, rotateZ = 0, modelMatrix } = {}) {
-    modelMatrix ??= new ModelMatrix();
+    modelMatrix ??= ModelMatrix.create();
 
     const zHeight = topZ - bottomZ;
     const z = bottomZ + (zHeight * 0.5);
     const center = rect.center;
     const radians = toRadians(rotateZ);
 
-    MatrixFloat32.scale(rect.width, rect.height, zHeight, modelMatrix.scale);
-    MatrixFloat32.translation(center.x, center.y, z, modelMatrix.translation);
-    MatrixFloat32.rotationZ(radians, true, modelMatrix.rotation);
+    modelMatrix.scale = { x: rect.width, y: rect.height, z: zHeight };
+    modelMatrix.translation = { x: center.x, y: center.y, z };
+    modelMatrix.rotation = { x: 0, y: 0, z: radians };
     return modelMatrix;
   }
 }
@@ -1336,7 +1338,7 @@ export class Ellipse3dVertices extends Polygon3dVertices {
   static _getUnitVertices(density = this.defaultDensity) { return this.calculateVertices(undefined, { density }); }
 
   static modelMatrixFromShape(ellipse, { topZ = T, bottomZ = B, rotateZ = 0, modelMatrix } = {}) {
-    modelMatrix ??= new ModelMatrix();
+    modelMatrix ??= ModelMatrix.create();
 
     const zHeight = topZ - bottomZ;
     const z = bottomZ + (zHeight * 0.5);
@@ -1345,10 +1347,9 @@ export class Ellipse3dVertices extends Polygon3dVertices {
     const center = ellipse.center;
 
     // Build transform matrix.
-    MatrixFloat32.scale(width, height, zHeight, modelMatrix.scale);
-    MatrixFloat32.translation(center.x, center.y, z, modelMatrix.translation);
-    MatrixFloat32.rotationZ(radians, true, modelMatrix.rotation);
-    modelMatrix.needsUpdate = true;
+    modelMatrix.scale = { x: width, y: height, z: zHeight };
+    modelMatrix.translation = { x: center.x, y: center.y, z };
+    modelMatrix.rotation = { x: 0, y: 0, z: radians };
     return modelMatrix;
   }
 }
@@ -1377,17 +1378,15 @@ export class Circle3dVertices extends Ellipse3dVertices {
   static _getUnitVertices(density = this.defaultDensity) { return this.calculateVertices(undefined, { density }); }
 
   static modelMatrixFromShape(circle, { topZ = T, bottomZ = B, modelMatrix } = {}) {
-    modelMatrix ??= new ModelMatrix();
+    modelMatrix ??= ModelMatrix.create();
 
     const zHeight = topZ - bottomZ;
     const z = bottomZ + (zHeight * 0.5);
     const { center, radius } = circle;
 
     // Build transform matrix.
-    MatrixFloat32.scale(radius, radius, zHeight, modelMatrix.scale);
-    MatrixFloat32.translation(center.x, center.y, z, modelMatrix.translation);
-    MatrixFloat32.identity(4, 4, modelMatrix.rotation);
-    modelMatrix.needsUpdate = true;
+    modelMatrix.scale = { x: radius, y: radius, z: zHeight };
+    modelMatrix.translation = { x: center.x, y: center.y, z };
     return modelMatrix;
   }
 }
@@ -1474,24 +1473,20 @@ export class SphereVertices extends BasicVertices {
 
   static modelMatrixFromShape(circle, { elevationZ = 0, modelMatrix } = {}) {
     if ( circle instanceof Sphere ) return this._modelMatrixFromSphere(circle, { modelMatrix });
-    modelMatrix ??= new ModelMatrix();
+    modelMatrix ??= ModelMatrix.create();
 
     // Build transform matrix.
-    MatrixFloat32.scale(circle.radius, circle.radius, circle.radius, modelMatrix.scale);
-    MatrixFloat32.translation(circle.x, circle.y, elevationZ, modelMatrix.translation);
-    MatrixFloat32.identity(4, 4, modelMatrix.rotation);
-    modelMatrix.needsUpdate = true;
+    modelMatrix.scale = { x: circle.radiuas, y: circle.radius, z: circle.radius };
+    modelMatrix.translation = { x: circle.x, y: circle.y, elevationZ };
     return modelMatrix;
   }
 
   static _modelMatrixFromSphere(sphere, { modelMatrix } = {}) {
-    modelMatrix ??= new ModelMatrix();
+    modelMatrix ??= ModelMatrix.create();
 
     // Build transform matrix.
-    MatrixFloat32.scale(sphere.radius, sphere.radius, sphere.radius, modelMatrix.scale);
-    MatrixFloat32.translation(sphere.x, sphere.y, sphere.z, modelMatrix.translation);
-    MatrixFloat32.identity(4, 4, modelMatrix.rotation);
-    modelMatrix.needsUpdate = true;
+    modelMatrix.scale = { x: sphere.radius, y: sphere.radius, z: sphere.radius };
+    modelMatrix.translation = sphere;
     return modelMatrix;
   }
 
@@ -1525,7 +1520,7 @@ const hexagonalShapes = new Map();
  * @returns {DeepReadonly<TokenHexagonalShapeData>|null}    The hexagonal shape or null if there is no shape
  *                                                          for the given combination of arguments
  */
-function getHexagonalShape(width, height, shape, columns) {
+export function getHexagonalShape(width, height, shape, columns) {
   if ( !Number.isInteger(width * 2) || !Number.isInteger(height * 2) ) return null;
 
   const TOKEN_SHAPES = CONST.TOKEN_SHAPES;

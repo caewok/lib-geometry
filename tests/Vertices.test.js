@@ -221,27 +221,27 @@ describe("BasicVertices.transformVertexPositions", () => {
     ]);
 
     // Create a translation matrix: +5 on X, -5 on Y, +10 on Z
-    const M = MatrixFloat32.translation(5, -5, 10);
+    const M = MatrixFloat32.translation({ x: 5, y: -5, z: 10 });
 
-    BasicVertices.transformVertexPositions(vertices, M, { stride: 3 });
+    const txVertices = BasicVertices.transformVertexPositions(vertices, M, { stride: 3 });
 
     const expected = new Float32Array([
       6, -3, 13,  // (1+5, 2-5, 3+10)
       15, 15, 40  // (10+5, 20-5, 30+10)
     ]);
 
-    assert.deepEqual(Array.from(vertices), Array.from(expected), "Translation was not applied correctly.");
+    assert.deepEqual(Array.from(txVertices), Array.from(expected), "Translation was not applied correctly.");
   });
 
   it("should apply a scaling transformation correctly", () => {
     const vertices = new Float32Array([1, 1, 1]);
-    const M = MatrixFloat32.scale(2, 3, 4);
+    const M = MatrixFloat32.scale({ x: 2, y: 3, z: 4 });
 
-    BasicVertices.transformVertexPositions(vertices, M, { stride: 3 });
+    const txVertices = BasicVertices.transformVertexPositions(vertices, M, { stride: 3 });
 
-    assert.equal(vertices[0], 2, "X should be scaled by 2");
-    assert.equal(vertices[1], 3, "Y should be scaled by 3");
-    assert.equal(vertices[2], 4, "Z should be scaled by 4");
+    assert.equal(txVertices[0], 2, "X should be scaled by 2");
+    assert.equal(txVertices[1], 3, "Y should be scaled by 3");
+    assert.equal(txVertices[2], 4, "Z should be scaled by 4");
   });
 
   it("should respect custom stride and positionOffset", () => {
@@ -251,19 +251,19 @@ describe("BasicVertices.transformVertexPositions", () => {
       99, 2, 2, 2, 99
     ]);
 
-    const M = MatrixFloat32.translation(10, 10, 10);
+    const M = MatrixFloat32.translation({ x: 10, y: 10, z: 10 });
 
-    BasicVertices.transformVertexPositions(vertices, M, { stride: 5, positionOffset: 1 });
+    const txVertices = BasicVertices.transformVertexPositions(vertices, M, { stride: 5, positionOffset: 1 });
 
     // Check first vertex
-    assert.equal(vertices[0], 99, "Pre-position junk data should be untouched");
-    assert.equal(vertices[1], 11, "X position should be transformed");
-    assert.equal(vertices[2], 11, "Y position should be transformed");
-    assert.equal(vertices[3], 11, "Z position should be transformed");
-    assert.equal(vertices[4], 99, "Post-position junk data should be untouched");
+    assert.equal(txVertices[0], 99, "Pre-position junk data should be untouched");
+    assert.equal(txVertices[1], 11, "X position should be transformed");
+    assert.equal(txVertices[2], 11, "Y position should be transformed");
+    assert.equal(txVertices[3], 11, "Z position should be transformed");
+    assert.equal(txVertices[4], 99, "Post-position junk data should be untouched");
 
     // Check second vertex
-    assert.equal(vertices[6], 12, "Second vertex X should be transformed");
+    assert.equal(txVertices[6], 12, "Second vertex X should be transformed");
   });
 
   it("should leave vertices unchanged with an identity matrix", () => {
@@ -271,9 +271,9 @@ describe("BasicVertices.transformVertexPositions", () => {
     const M = MatrixFloat32.identity(4);
 
     const original = new Float32Array(vertices);
-    BasicVertices.transformVertexPositions(vertices, M, { stride: 3 });
+    const txVertices = BasicVertices.transformVertexPositions(vertices, M, { stride: 3 });
 
-    assert.deepEqual(Array.from(vertices), Array.from(original), "Identity matrix should not modify vertices.");
+    assert.deepEqual(Array.from(txVertices), Array.from(original), "Identity matrix should not modify vertices.");
   });
 
   it("should correctly handle rotation around the Z axis", () => {
@@ -284,12 +284,12 @@ describe("BasicVertices.transformVertexPositions", () => {
     // (1, 0, 0) rotated 90 deg CCW should become (0, 1, 0)
     const M = MatrixFloat32.rotationZ(Math.PI / 2);
 
-    BasicVertices.transformVertexPositions(vertices, M, { stride: 3 });
+    const txVertices = BasicVertices.transformVertexPositions(vertices, M, { stride: 3 });
 
     // Use closeTo for floating point math
-    assert.closeTo(vertices[0], 0, 0.00001, "X should be ~0 after 90deg rotation");
-    assert.closeTo(vertices[1], 1, 0.00001, "Y should be ~1 after 90deg rotation");
-    assert.equal(vertices[2], 0, "Z should remain 0");
+    assert.closeTo(txVertices[0], 0, 0.00001, "X should be ~0 after 90deg rotation");
+    assert.closeTo(txVertices[1], 1, 0.00001, "Y should be ~1 after 90deg rotation");
+    assert.equal(txVertices[2], 0, "Z should remain 0");
   });
 });
 

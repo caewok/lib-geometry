@@ -5,6 +5,7 @@ PIXI,
 
 import { Matrix } from "../Matrix.js";
 import { CutawayPolygon } from "../CutawayPolygon.js";
+import { Segment } from "../Segment.js";
 
 export const PATCHES = {};
 PATCHES.PIXI = {};
@@ -67,14 +68,14 @@ function* iteratePoints() {
 function* iterateEdges({close = true} = {}) {
   const a = PIXI.Point.tmp.set(this.x, this.y);
   const b = PIXI.Point.tmp.set(this.x + this.width, this.y);
-  yield { a, b };
+  yield new Segment(a, b);
 
   const c = PIXI.Point.tmp.set(this.x + this.width, this.y + this.height);
-  yield { a: b, b: c };
+  yield new Segment(b, c);
 
   const d = PIXI.Point.tmp.set(this.x, this.y + this.height);
   yield { a: c, b: d };
-  if ( close ) yield { a: d, b: a };
+  if ( close ) new Segment(d, a);
 }
 
 /**
@@ -412,11 +413,11 @@ function gridRectangles(rect1, rect2) {
 
 /**
  * Cutaway a line segment start|end that moves through this rectangle.
- * @param {Point3d} a       Starting endpoint for the segment
- * @param {Point3d} b       Ending endpoint for the segment
+ * @param {PIXI.Point} a       Starting endpoint for the segment
+ * @param {PIXI.Point} b       Ending endpoint for the segment
  * @param {object} [opts]
- * @param {Point3d} [opts.start]              Starting endpoint for the segment
- * @param {Point3d} [opts.end]                Ending endpoint for the segment
+ * @param {PIXI.Point} [opts.start]              Starting endpoint for the segment
+ * @param {PIXI.Point} [opts.end]                Ending endpoint for the segment
  * @param {function} [opts.topElevationFn]    Function to calculate the top elevation for a position
  * @param {function} [opts.bottomElevationFn] Function to calculate the bottom elevation for a position
  * @param {number} [opts.isHole=false]        Treat this shape as a hole; reverse the points of the returned polygon
@@ -442,8 +443,9 @@ function rotateAroundCenter(rotation = 0) {
   }
 
   // For all other rotations, translate center to 0,0, rotate, and then invert the translation.
-  const tMat = Matrix.translation(-center.x, -center.y);
-  const rMat = Matrix.rotationZ(Math.toRadians(rotation));
+  using invCenter = center.multiplyScalar(-1);
+  const tMat = Matrix.translation(invCenter, { d3: false });
+  const rMat = Matrix.rotationZ(Math.toRadians(rotation), { d3: false });
   const M = tMat.multiply3x3(rMat).multiply3x3(tMat.invert);
   const pts = [...this.iteratePoints()];
   const tPts = pts.map(pt => M.multiplyPoint2d(pt, pt));
@@ -466,19 +468,45 @@ function normalizeDegrees(degrees) {
 /**
  * Create a grid of points within this rectangle.
  * @param {object} [opts]
- * @param {number} [opts.spacing = 1]              How many pixels between each point?
+ * @param {number} [opts.spacing = 1]              Minimum spacing, in pixels, between each point.
  * @param {boolean} [opts.startAtEdge = false]     Are points allowed within spacing of the edges? If false, will be at least spacing away.
  * @returns {PIXI.Point[]} Points in order from left to right, top to bottom.
  */
 function pointsLattice({ spacing = 1, startAtEdge = false } = {}) {
-  const { left, right, top, bottom } = this;
-  const pts = [];
-  const startX = startAtEdge ? left : left + spacing;
-  const startY = startAtEdge ? top : top + spacing;
-  const endX = startAtEdge ? right : right - spacing;
-  const endY = startAtEdge ? bottom : bottom - spacing;
-  for ( let x = startX; x <= endX; x += spacing ) {
-    for ( let y = startY; y <= endY; y += spacing ) pts.push(PIXI.Point.tmp.set(x, y))
+  const { left, top, width, height } = this;
+
+  // Determine available span based on edge constraints.
+  const availableWidth = startAtEdge ? width : width - (2 * spacing);
+  const availableHeight = startAtEdge ? height : height - (2 * spacing);
+
+  // Return a single point if we cannot meet the constraints.
+  if ( availableWidth < 0 || availableHeight < 0 ) return [this.center];
+
+  // Calculate the maximum number of spaces/intervals that can fit.
+  const columns = Math.floor(availableWidth / spacing);
+  const rows = Math.floor(availableHeight / spacing);
+
+  // Determine the actual dynamic spacing to center the grid perfectly.
+  // If only 1 point fits, actual spacing defaults to 0 to avoid division by 0.
+  const actualSpacingX = columns > 0 ? availableWidth / columns : 0;
+  const actualSpacingY = rows > 0 ? availableHeight / rows : 0;
+
+  // Calculate starting offsets to establish centering.
+  const startX = startAtEdge ? left
+    : left + spacing + (availableWidth - (columns * actualSpacingX)) * 0.5;
+  const startY = startAtEdge ? top
+    : top + spacing + (availableHeight - (rows * actualSpacingY)) * 0.5;
+
+  // Generate the lattice.
+  // Loop using integers to avoid accumulated floating-point precision drift.
+  const pts = new Array((columns + 1) * (rows + 1));
+  let idx = 0;
+  for ( let i = 0; i <= columns; i += 1 ) {
+    const x = startX + (i * actualSpacingX);
+    for ( let j = 0; j <= rows; j += 1 ) {
+      const y = startY + (j * actualSpacingY);
+      pts[idx++] = PIXI.Point.tmp.set(x, y);
+    }
   }
   return pts;
 }

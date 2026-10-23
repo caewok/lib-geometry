@@ -12,7 +12,8 @@ import { GEOMETRY_LIB_ID } from "./const.js";
 import { extractPixels } from "./extract-pixels.js";
 import { roundFastPositive, bresenhamLine, bresenhamLineIterator, trimLineSegmentToPixelRectangle, clamp } from "./util.js";
 import { Draw } from "./Draw.js";
-import { MatrixFloat32, ModelMatrix2dCenterInverse } from "./Matrix.js";
+import { MatrixFloat32 } from "./Matrix.js";
+import { ModelMatrix2dAnchorInverse } from "./ModelMatrix.js";
 import { AABB2d } from "./AABB.js";
 import * as MarchingSquares from "./marchingsquares-esm.js";
 
@@ -25,7 +26,9 @@ import * as MarchingSquares from "./marchingsquares-esm.js";
   TrimmedPixelCache: 1:1 relationship between the local rectangle and represented shape, except that
     the pixels stored do not include edge pixels with 0 value.
 
-  TilePixelCache: Local rectangle tied to some canvas object (tile) shape. Translations performed
+  TexturePixelCache: Local rectangle tied to some texture.
+
+  TextureDocumentPixelCache: Local rectangle tied to some canvas object (tile) shape. Translations performed
     to move to/from the canvas coordinates and the local.
 
   Methods to store and retrieve the border for a given alpha threshold.
@@ -38,6 +41,7 @@ import * as MarchingSquares from "./marchingsquares-esm.js";
  * The underlying rectangle is in local coordinates, where 0, 0 is the top left.
  * The rectangle represents pixel positions and contains transforms and methods to
  * move from the local pixels to canvas pixels.
+ * Transforms apply from the cache center by default.
  */
 
 export class LocalCoordinateCache extends AABB2d {
@@ -61,11 +65,7 @@ export class LocalCoordinateCache extends AABB2d {
     this.min.y = 0;
     this.max.x = localWidth - 1; // AABB is inclusive. [min, max]
     this.max.y = localHeight - 1;
-
-    // Center the model before applying rotation and scale.
-    this.modelMatrix.modelCenter = { x: localWidth * 0.5, y: localHeight * 0.5 };
-    if ( resolution !== 1 ) this.scale = { x: 1, y: 1 }; // Updates when it scales.
-    else this.modelMatrix.update(); // To apply the model center change.
+    this.updateTransforms();
   }
 
   // ----- NOTE: Getters / setters ----- //
@@ -131,41 +131,49 @@ export class LocalCoordinateCache extends AABB2d {
   // ----- NOTE: Model Matrix ----- //
 
   /** @type {ModelMatrix2d} */
-  modelMatrix = new ModelMatrix2dCenterInverse();
+  modelMatrix = ModelMatrix2dAnchorInverse.create();
+
+  /**
+   * Center the local rectangle before applying rotation and scale.
+   * This is a local coordinate center.
+   * @param {number} anchorX        Percentage anchor along the x-axis
+   * @param {number} anchorY        Percentage anchor along the y-axis
+   */
+  setModelAnchor(anchorX = 0.5, anchorY = 0.5) {
+    this.modelMatrix.anchor = { x: -this.width * anchorX, y: -this.height * anchorY };
+  }
 
   /**
    * Offset the canvas object in relation to the 0,0 top left of the local rectangle.
-   * @prop {number} [x=0]       Amount to move the canvas object along x axis in pixels
-   * @prop {number} [y=0]       Amount to move the canvas object along y axis in pixels
+   * @prop {PIXI.Point|object} vector       Amount to move in the x and y directions.
    */
-  set translation({ x = 0, y = 0 } = {}) {``
-    MatrixFloat32.translation(x, y, undefined, this.modelMatrix.translation);
-    this.modelMatrix.update(); // Run here so the toCanvasTransform/toLocalTransform can skip update test.
+  setTranslation(vector) {
+    this.modelMatrix.translation = vector || { x: 0, y: 0 };
   }
 
   /**
    * Scale the canvas object in relation to size of the local rectangle.
-   * @prop {number} [x=1]       Amount to scale the canvas object in the x direction
-   * @prop {number} [y=1]       Amount to scale the canvas object in the y direction
+   * @prop {PIXI.Point|object} dims       Amount to scale the object in the x and y dimensions.
    */
-  set scale({x = 1, y = 1} = {}) {
+  setScale(dims) {
     // Combine scale with resolution.
     // E.g.
     // resolution = 0.25. Local width is 1/4 the size of canvas width.
+    dims ??= { x: 1, y: 1 };
     const invRes = 1 / this.resolution;
-    x *= invRes;
-    y *= invRes;
-    MatrixFloat32.scale(x, y, undefined, this.modelMatrix.scale);
-    this.modelMatrix.update();
+    using d = PIXI.Point.fromObject(dims);
+    d.multiplyScalar(invRes, d);
+    this.modelMatrix.scale = d;
   }
 
   /**
    * Rotate the canvas object around the z axis.
    * @type {number} Angle in radians
    */
-  set rotationZ(angle) {
-    MatrixFloat32.rotationZ(angle, false, this.modelMatrix.rotation);
-    this.modelMatrix.update();
+  setRotationZ(angle) {
+    angle ||= 0;
+    MatrixFloat32.rotationZ(angle, { d3: false, outMatrix: this.modelMatrix._rotation });
+    this.modelMatrix.dirty = true;
   }
 
   // ----- NOTE: Modified PIXI methods ----- //
@@ -180,17 +188,21 @@ export class LocalCoordinateCache extends AABB2d {
   // ----- NOTE: Transforms ----- //
 
   /** @type {MatrixFloat32} */
-  get toLocalTransform() { return this.modelMatrix._modelInverse; }
+  get toLocalTransform() { return this.modelMatrix.modelInverse; }
 
   /** @type {MatrixFloat32} */
-  get toCanvasTransform() { return this.modelMatrix._model; }
+  get toCanvasTransform() { return this.modelMatrix.model; }
 
   /**
    * Update the transforms.
    * Done manually to avoid repeated update checks.
    */
   updateTransforms() {
-     if ( this.modelMatrix.updated ) this.modelMatrix.update();
+    this.setModelAnchor();
+    this.setTranslation();
+    this.setScale();
+    this.setRotationZ();
+    this.modelMatrix.update();
   }
 
   // ----- NOTE: Bounding box ----- //
@@ -200,11 +212,13 @@ export class LocalCoordinateCache extends AABB2d {
     let i = 0;
     if ( this.modelMatrix.updated ) this.modelMatrix.update(); // Avoid checking update in the loop.
     for ( const pt of this.iterateVertices() ) {
-      this.modelMatrix._model.multiplyPoint2d(pt, pt);
-      pts[i] = pt;
+      this.modelMatrix.model.multiplyPoint2d(pt, pt);
+      pts[i++] = pt;
     }
-    const poly = new PIXI.Polygon(...pts);
-    return poly.getBounds();
+
+    // Can the box be represented with a rectangle? Points must be horizontal and vertical.
+    // Could also be rotated 90º
+    return pointsToPolygonOrRectangle(pts);
   }
 
   // ----- NOTE: Indexing ----- //
@@ -1170,7 +1184,10 @@ export class PixelCache extends LocalCoordinateCache {
    */
   updateTransforms() {
     super.updateTransforms();
-    this._clearCanvasThresholdBoundingBoxes();
+
+    // Catch the type error if clearing from the constructor.
+    try { this._clearCanvasThresholdBoundingBoxes(); }
+    catch ( _err ) { /* eslint-disable-line no-unused-vars */ }
   }
 
   /**
@@ -1246,15 +1263,7 @@ export class PixelCache extends LocalCoordinateCache {
 
     // Can the box be represented with a rectangle? Points must be horizontal and vertical.
     // Could also be rotated 90º
-    if ( (TL.x.almostEqual(BL.x) && TL.y.almostEqual(TR.y))
-      || (TL.x.almostEqual(TR.x) && TL.y.almostEqual(BL.y)) ) {
-      const xMinMax = Math.minMax(TL.x, TR.x, BL.x, BR.x);
-      const yMinMax = Math.minMax(TL.y, TR.y, BL.y, BR.y);
-      return new PIXI.Rectangle(xMinMax.min, yMinMax.min, xMinMax.max - xMinMax.min, yMinMax.max - yMinMax.min);
-    }
-
-    // Alternatively, represent as polygon, which allows for a tighter contains test.
-    return new PIXI.Polygon(TL, TR, BR, BL);
+    return pointsToPolygonOrRectangle([TL, TR, BR, BL]);
   }
 
 
@@ -1493,8 +1502,8 @@ console.table(pts)
     const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
 
     // Convert pixels to isobands.
-    const width = this.bufferWidth;
-    const height = this.bufferHeight;
+    const width = this.bufferWidth || this.width; // Need the actual pixel width and height, which depends on the class.
+    const height = this.bufferHeight || this.height;
     const rowViews = new Array(height);
     for ( let r = 0, start = 0, rMax = height; r < rMax; r += 1, start += width ) {
       // TODO: Use single Typed view instead of slicing?
@@ -1539,7 +1548,7 @@ console.table(pts)
     // Translate by the minimum alpha bounds.
     const aabb = this.getThresholdLocalAABB(alphaThreshold);
     if ( aabb.min.x || aabb.min.y ) {
-      const M = MatrixFloat32.translation(aabb.min.x, aabb.min.y);
+      using M = MatrixFloat32.translation(aabb.min, { d3: false });
       return paths.transform(M);
     } else return paths;
   }
@@ -2862,60 +2871,122 @@ export class TrimmedPixelCache extends PixelCache {
   }
 }
 
-
 /**
- * Pixel cache specific to a tile texture.
- * Adds additional handling for tile rotation, scaling, converting from a tile cache.
+ * Pixel cache specific to a texture.
  */
-export class TilePixelCache extends TrimmedPixelCache {
-  /** @type {Tile} */
-  tile;
+export class TexturePixelCache extends TrimmedPixelCache {
+
+  /** @type {PIXI.Texture} */
+  texture;
 
   /**
-   * @param {Tile} [options.tile]   Tile for which this cache applies
-                                    If provided, scale will be updated
+   * @param {PIXI.Texture} [options.texture]   Texture that corresponds to this cache
+   *   Currently used for tracking only
    * @inherits
    */
-  constructor(fullWidth, fullHeight, { tile, ...opts } = {}) {
+  constructor(fullWidth, fullHeight, { texture, ...opts } = {}) {
     super(fullWidth, fullHeight, opts);
-    this.tile = tile;
-    this.updateTransforms();
+    this.texture = texture;
+  }
+
+  /**
+   * Convert a textures alpha channel to a pixel cache.
+   * @param {object} [opts]
+   * @param {PIXI.Texture} [opts.texture]   Texture to use
+   * @param {number} [opts.channel=3]       Channel to use for the texture
+   * @returns {TexturePixelCache}
+   */
+  static fromTextureChannel({ texture, channel = 3, ...opts } = {}) {
+    const res = this.extractPixelsFromTexture(texture);
+    opts.pixelsOrClass = this.extractPixelChannel(res.pixels, channel, 4);
+    opts.texture = texture;
+    return new this(res.width, res.height, opts);
+  }
+
+  /**
+   * Convert a texture's alpha channel to a pixel cache.
+   * @param {object} [opts]
+   * @param {PIXI.Texture} [opts.texture]  Texture to use
+   * @returns {LevelBackgroundPixelCache}
+   */
+  static fromTextureAlpha({ texture, ...opts } = {}) {
+    // See TextureLoader.getTextureAlphaData.
+    // Returns non-inclusive pixels. E.g., [minX, maxX)
+    opts.resolution ||= 1;
+    const texData = foundry.canvas.TextureLoader.getTextureAlphaData(texture, opts.resolution);
+    if ( !texData ) throw Error(`PixelCache|Texture is invalid.`);
+
+    // Define bounds of actual data within the full texture frame.
+    opts.bufferBounds = new AABB2d();
+    opts.bufferBounds.min.set(texData.minX, texData.minY);
+    opts.bufferBounds.max.set(texData.maxX - 1, texData.maxY - 1); // Make inclusive: [minX, maxX].
+    opts.pixelsOrClass = texData.data;
+    opts.texture = texture;
+    return new this(texData.width, texData.height, opts);
+  }
+}
+
+
+/**
+ * Pixel cache specific to a texture document.
+ * Adds additional handling for rotation, scaling, converting from a cache.
+ */
+export class TextureDocumentPixelCache extends TexturePixelCache {
+
+  /** @type {PlaceableDocument} */
+  textureDocument;
+
+  get texture() { return this.constructor.getTextureSync(this.textureDocument); }
+
+  /**
+   * @param {TileDocument|Level} [options.textureDocument]   Texture document for which this cache applies
+   * @inherits
+   */
+  constructor(fullWidth, fullHeight, { textureDocument, ...opts } = {}) {
+    super(fullWidth, fullHeight, opts);
+    this.textureDocument = textureDocument;
+    delete this.texture; // Fix the getter.
+    this.updateTransforms(); // Use the provided document for the transforms.
   }
 
   // ----- NOTE: Tile data getters ----- //
 
-  /** @type {number} */
-  get alphaThreshold() { return this.tile.document.texture.alphaThreshold || 0; }
-
-  get tileRotation() { return Math.toRadians(this.tile.document.rotation); }
-
-  get tileTranslation() {
-    const tileD = this.tile.document;
-    const anchor = this.tileAnchorTranslation;
-    return { x: tileD.x - anchor.x, y: tileD.y - anchor.y };
-  }
-
-  get tileScale() {
-    // Scale, accounting for document width/height and tile texture width/height.
-    const tileD = this.tile.document;
-    const tex = tileD.object.texture;
-    const { scaleX, scaleY } = tileD.texture;
-    const proportionalWidth = tileD.width / tex.width;
-    const proportionalHeight = tileD.height / tex.height;
-    return {
-      x: proportionalWidth * scaleX,
-      y: proportionalHeight * scaleY,
+  /** @type {object} */
+  get textureSpecs() {
+    return this.textureDocument?.texture || {
+      scaleX: 1,
+      scaleY: 1,
+      anchorX: 0.5,
+      anchorY: 0.5,
+      fit: "fill",
     };
   }
 
-  get tileAnchorTranslation() {
-    const tileD = this.tile.document;
-    const { anchorX, anchorY } = tileD.texture;
-    return {
-      x: anchorX * tileD.width,
-      y: anchorY * tileD.height,
-    }
+  get textureSource() { return this.textureDocument.texture.src; }
+
+  static textureSource(doc) { return doc.texture.src; }
+
+  /**
+   * Match the level to its associated texture.
+   * @param {TileDocument|Level} doc         Document to match
+   * @returns {PIXI.Texture|null}
+   */
+  static getTextureSync(doc) {
+    const src = this.textureSource(doc);
+    if ( !src ) return null;
+    return PIXI.Assets.get(src);
   }
+
+  static async getTexture(doc) {
+    const src = this.textureSource(doc);
+    if ( !src ) return null;
+    return PIXI.Assets.load(src);
+  }
+
+  /** @type {number} */
+  get alphaThreshold() { return this.textureDocument.alphaThreshold || 0.75; }
+
+  get rotationRadians() { return Math.toRadians(this.textureDocument?.rotation || 0); }
 
   /**
    * For backwards compatibility only.
@@ -2927,57 +2998,31 @@ export class TilePixelCache extends TrimmedPixelCache {
    */
   clearTransforms() { this.updateTransforms(); }
 
-  /**
-   * Transform canvas coordinates into the local pixel rectangle coordinates.
-   * @inherits
-   */
-  updateTransforms() {
-    // Set translation, rotation, and scale from the tile document.
-    this.modelMatrix.modelCenter = this.tileAnchorTranslation;
-    this.translation = this.tileTranslation;
-    this.rotationZ = this.tileRotation;
-    this.scale = this.tileScale;
-    super.updateTransforms();
+  get translationDims() {
+    const doc = this.textureDocument;
+    const x = doc?.x || 0;
+    const y = doc?.y || 0;
+    return { x, y };
   }
 
-  /**
-   * Convert a tile's alpha channel to a pixel cache.
-   * At the moment mostly for debugging, b/c overhead tiles have an existing array that
-   * can be used.
-   * @param {Tile} tile     Tile to pull a texture from
-   * @param {object} opts   Options passed to `scalePixels` method
-   * @returns {TilePixelCache}
-   */
-  static fromTileChannel(tile, channel = 3, opts = {}) {
-    const res = this.extractPixelsFromTexture(tile.texture);
-    opts.pixelsOrClass = this.extractPixelChannel(res.pixels, channel, 4);
-    opts.tile = tile;
-    return new this(res.width, res.height, opts);
+  get scaleDims() {
+    const { scaleX: x, scaleY: y } = this.textureSpecs;
+    return { x, y };
   }
 
-  /**
-   * Convert an overhead tile's alpha channel to a pixel cache.
-   * Relies on already-cached overhead tile pixel data.
-   * @param {Tile} tile     Tile to pull a texture from
-   * @param {object} opts   Options passed to `fromTexture` method
-   * @returns {TilePixelCache}
-   */
-  static fromOverheadTileAlpha(tile, opts = {}) {
-    if ( Number.isNumeric(opts) ) opts = { resolution: opts }; // Backwards compatibility.
-
-    // See TextureLoader.getTextureAlphaData.
-    // Returns non-inclusive pixels. E.g., [minX, maxX)
-    opts.resolution ||= 1;
-    const texData = foundry.canvas.TextureLoader.getTextureAlphaData(tile.texture, opts.resolution);
-
-    // Define bounds of actual data within the full texture frame.
-    opts.bufferBounds = new AABB2d();
-    opts.bufferBounds.min.set(texData.minX, texData.minY);
-    opts.bufferBounds.max.set(texData.maxX - 1, texData.maxY - 1); // Make inclusive: [minX, maxX].
-    opts.pixelsOrClass = texData.data;
-    opts.tile = tile;
-    return new this(texData.width, texData.height, opts);
+  setModelAnchor() {
+    // Center on the texture anchor.
+    // Anchor is in local coordinates.
+    // Because anchor is a percentage, it can be determined from local height and width alone.
+    const { anchorX = 0.5, anchorY = 0.5 } = this.textureSpecs;
+    super.setModelAnchor(anchorX, anchorY);
   }
+
+  setTranslation() { super.setTranslation(this.translationDims); }
+
+  setScale() { super.setScale(this.scaleDims); }
+
+  setRotationZ() { super.setRotationZ(this.rotationRadians); }
 
   // ----- NOTE: Methods that rely on alphaThreshold ---- //
   /**
@@ -2999,7 +3044,121 @@ export class TilePixelCache extends TrimmedPixelCache {
    */
   _trimLocalRayToLocalBounds(a, b, alphaThreshold) { return super._trimLocalRayToLocalBounds(a, b, alphaThreshold ?? this.alphaThreshold); }
 
+  static fromTextureChannel({ textureDocument, texture, ...opts} = {}) {
+    texture ??= this.getTextureSync(textureDocument);
+    opts.textureDocument = textureDocument;
+    opts.texture = texture;
+    return super.fromTextureChannel(opts);
+  }
+
+  static fromTextureAlpha({ textureDocument, texture, ...opts} = {}) {
+    texture ??= this.getTextureSync(textureDocument);
+    opts.textureDocument = textureDocument;
+    opts.texture = texture;
+    return super.fromTextureAlpha(opts);
+  }
+
 }
+
+export class LevelBackgroundPixelCache extends TextureDocumentPixelCache {
+
+  /** @type {string} */
+  static GROUND_TYPE = "background";
+
+  // ----- NOTE: Level data getters ----- //
+
+  /** @type {object} */
+  get textureSpecs() {
+    // Note "textures" is plural, unlike with tiles.
+    return this.textureDocument?.textures || {
+      scaleX: 1,
+      scaleY: 1,
+      anchorX: 0.5,
+      anchorY: 0.5,
+      fit: "fill",
+      offsetX: 0,
+      offsetY: 0,
+      rotation: 0,
+    };
+  }
+
+  get textureSource() { return this.textureDocument[this.constructor.GROUND_TYPE].src; }
+
+  static textureSource(doc) { return doc[this.GROUND_TYPE].src; }
+
+  /** @type {number} */
+  get alphaThreshold() {
+    return this.textureDocument[this.constructor.GROUND_TYPE].alphaThreshold || 0.75;
+  }
+
+  get rotationRadians() { return Math.toRadians(this.textureSpecs?.rotation || 0); }
+
+  get translationDims() {
+    const sceneCenter = canvas.scene.dimensions.sceneRect.center;
+    const { offsetX, offsetY } = this.textureSpecs;
+    return {
+      x: sceneCenter.x + offsetX,
+      y: sceneCenter.y + offsetY
+    };
+  }
+
+  get scaleDims() {
+    const { scaleX, scaleY } = this.textureSpecs;
+    const fitScale = this._fitScale;
+    return {
+      x: scaleX * fitScale.x,
+      y: scaleY * fitScale.y,
+    };
+  }
+
+  /**
+   * Helper to calculate the scale adjustment dictated by the fit mode.
+   * @returns {object}
+   * - @prop {number} x
+   * - @prop {number} y
+   */
+  get _fitScale() {
+    // Full uncached pixel sizes of the source texture.
+    const { width, height, resolution } = this;
+    const texWidth = width / resolution;
+    const texHeight = height / resolution;
+
+    // Target canvas viewport dimensions.
+    const targetWidth = canvas.dimensions.sceneWidth;
+    const targetHeight = canvas.dimensions.sceneHeight;
+    const ratioX = targetWidth / texWidth;
+    const ratioY = targetHeight / texHeight;
+
+    switch ( this.textureSpecs.fit ) {
+      case "fill": return { x: ratioX, y: ratioY };
+      case "contain": {
+        const s = Math.min(ratioX, ratioY);
+        return { x: s, y: s };
+      }
+      case "cover": {
+        const s = Math.max(ratioX, ratioY);
+        return { x: s, y: s };
+      }
+      case "width": return { x: ratioX, y: ratioX };
+      case "height": return { x: ratioY, y: ratioY };
+      default: return { x: 1, y: 1 };
+    }
+  }
+}
+
+export class LevelForegroundPixelCache extends LevelBackgroundPixelCache {
+
+  /** @type {string} */
+  static GROUND_TYPE = "foreground";
+
+}
+
+export class TileDocumentPixelCache extends TextureDocumentPixelCache {
+
+  get tile() { return this.textureDocument.object; }
+
+}
+
 
 /**
  * Store a point, a t value, and the underlying coordinate system
@@ -3124,4 +3283,32 @@ function addPoint(poly, pt) {
   }
   poly.points.push(pt.x, pt.y);
   return poly;
+}
+
+/**
+ * Convert array of points to either a rectangle or a polygon.
+ * @param {PIXI.Point[]} pts
+ * @returns {PIXI.Polygon|PIXI.Rectangle} Returns rectangle if the points are axis-aligned.
+ */
+function pointsToPolygonOrRectangle(pts) {
+  if ( pts.length !== 4 ) return new PIXI.Polygon(pts);
+
+  // Round to ensure equality tests work as expected.
+  pts.map(pt => pt.roundDecimals(8));
+
+  // All points must be distinct. Don't use key because it rounds to nearest pixel.
+  const uniquePoints = new Set(pts.map(pt => `${pt}`));
+  if ( uniquePoints.size !== 4 ) return PIXI.Polygon(pts);
+
+  // Requires exactly two unique x and two unique y points.
+  const xCoords = new Set(pts.map(p => p.x));
+  const yCoords = new Set(pts.map(p => p.y));
+
+  // An axis-aligned rectangle has exactly 2 unique x and 2 unique y.
+  if ( !(xCoords.size === 2 && yCoords.size === 2) ) return PIXI.Polygon(pts);
+
+  // Build the rectangle.
+  const xMinMax = Math.minMax(...pts.map(pt => pt.x));
+  const yMinMax = Math.minMax(...pts.map(pt => pt.y));
+  return new PIXI.Rectangle(xMinMax.min, yMinMax.min, xMinMax.max - xMinMax.min, yMinMax.max - yMinMax.min);
 }
