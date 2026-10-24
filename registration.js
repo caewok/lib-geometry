@@ -43,8 +43,10 @@ import { WallHeightManager } from "./WallHeightManager.js";
   if ( geometries ) geometries.forEach(name => CONFIG[GEOMETRY_LIB_ID].CONFIG.placeableGeometries.add(name));
 
   // Track whether the Wall Height module (or replacement) is requested.
-  CONFIG[GEOMETRY_LIB_ID].CONFIG.wallHeightRequired ??= false;
-  CONFIG[GEOMETRY_LIB_ID].CONFIG.wallHeightRequired ||= GEOMETRY_LIB_OPTS.wallHeightRequired;
+  CONFIG[GEOMETRY_LIB_ID].CONFIG.wallHeightModules ??= new Set();
+  CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenHeightModules ??= new Set();
+  if ( GEOMETRY_LIB_OPTS.wallHeightRequired ) CONFIG[GEOMETRY_LIB_ID].CONFIG.wallHeightModules.add(MODULE_ID);
+  if ( GEOMETRY_LIB_OPTS.tokenHeightRequired ) CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenHeightModules.add(MODULE_ID);
 
   // Track geometry manager classes, so modules like Terrain Mapper can sub in their own.
   CONFIG[GEOMETRY_LIB_ID].CONFIG.managerClasses = {
@@ -85,9 +87,13 @@ Hooks.on("setup", function() {
 
   // Register wall height configs if needed.
   // (Done at setup b/c modules are checked on init.)
-  if ( !game.modules.get(OTHER_MODULES.WALL_HEIGHT.KEY)?.active && CONFIG[GEOMETRY_LIB_ID].CONFIG.wallHeightRequired ) {
-    CONFIG[GEOMETRY_LIB_ID].wallHeightManager = WallHeightManager;
-    CONFIG[GEOMETRY_LIB_ID].wallHeightManager.initialize();
+  if ( !game.modules.get(OTHER_MODULES.WALL_HEIGHT.ID)?.active ) {
+    const wm = CONFIG[GEOMETRY_LIB_ID].wallHeightManager = WallHeightManager;
+    const opts = {
+      wallElevations: Boolean(CONFIG[GEOMETRY_LIB_ID].CONFIG.wallHeightModules.size),
+      tokenVerticalHeights: Boolean(CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenHeightModules.size),
+    };
+    wm.initialize(opts);
   }
 
   // Add Pixel cache manager for tiles and levels

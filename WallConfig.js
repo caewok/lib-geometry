@@ -18,11 +18,13 @@ function renderWallConfig(app, html, data) {
   const doc = app.document ?? app.wall.document;
   const elev = doc.flags?.[WH.ID] ?? { top: null, bottom: null }; // Null is default ∞/-∞
 
-  const wm = CONFIG[GEOMETRY_LIB_ID].wallHeightManager;
+  // Identify the modules that requested token height configuration.'
+  const moduleNames = [...CONFIG[GEOMETRY_LIB_ID].CONFIG.wallHeightModules.values()].map(id => game.i18n.localize(`${id}.nameAbbr`));
 
+  const wm = CONFIG[GEOMETRY_LIB_ID].wallHeightManager;
   const myHTML = renderTemplateSync(wm.TEMPLATES.WALL_CONFIG, {
     ...data,
-    [WH.ID]: { top: elev.top, bottom: elev.bottom },
+    [GEOMETRY_LIB_ID]: { top: elev.top, bottom: elev.bottom, moduleName: `${moduleNames.join("/")}: Elevation` },
   });
   if ( !myHTML ) return;
 

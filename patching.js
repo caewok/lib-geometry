@@ -31,6 +31,7 @@ import { PATCHES as PATCHES_AmbientSound } from "./AmbientSound.js";
 // Configs
 import { PATCHES as PATCHES_WallConfig } from "./WallConfig.js";
 import { PATCHES as PATCHES_WallHeight } from "./WallHeightManager.js";
+import { PATCHES as PATCHES_TokenConfig } from "./TokenConfig.js";
 
 const PATCHES = {
   // Don't need CanvasEdges b/c quadtree already in v13.
@@ -69,7 +70,7 @@ const PATCHES = {
 
   // Configs
   "foundry.applications.sheets.WallConfig": PATCHES_WallConfig,
-
+  "foundry.applications.sheets.TokenConfig": PATCHES_TokenConfig,
   "wallHeight": PATCHES_WallHeight, // Hooks only.
 }
 
@@ -91,6 +92,12 @@ export function registerWallHeight() {
   const patcher = CONFIG[GEOMETRY_LIB_ID].PATCHER ??= new Patcher();
   patcher.deregisterGroup("WALL_HEIGHT");
   patcher.registerGroup("WALL_HEIGHT");
+}
+
+export function registerTokenHeight() {
+  const patcher = CONFIG[GEOMETRY_LIB_ID].PATCHER ??= new Patcher();
+  patcher.deregisterGroup("TOKEN_HEIGHT");
+  patcher.registerGroup("TOKEN_HEIGHT");
 }
 
 export function deRegister() {

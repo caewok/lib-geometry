@@ -8,7 +8,7 @@ PIXI,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 
 import { GEOMETRY_LIB_ID } from "./const.js";
-import { registerWallHeight } from "./patching.js";
+import { registerWallHeight, registerTokenHeight } from "./patching.js";
 
 // Patches required.
 export const PATCHES = {};
@@ -131,17 +131,22 @@ class LabelTextures {
 
 /**
  * Handle wall elevation, configuration, and use.
+ * Also handles related token vertical heights.
  * Replacement for deprecated Wall Height module.
  */
 export class WallHeightManager {
 
   static get TEMPLATES() {
-    return { WALL_CONFIG: `modules/${CONFIG[GEOMETRY_LIB_ID].CONFIG.controllingModule}/scripts/geometry/templates/wall-config.html`, };
+    return {
+      WALL_CONFIG: `modules/${CONFIG[GEOMETRY_LIB_ID].CONFIG.controllingModule}/scripts/geometry/templates/wall-config.html`,
+      TOKEN_CONFIG: `modules/${CONFIG[GEOMETRY_LIB_ID].CONFIG.controllingModule}/scripts/geometry/templates/token-config.html`,
+    };
   }
 
-  static initialize() {
+  static initialize({ wallElevations = true, tokenVerticalHeights = true } = {}) {
     foundry.applications.handlebars.loadTemplates(Object.values(this.TEMPLATES)).then(_value => console.debug("Templates loaded."));
-    registerWallHeight();
+    if ( wallElevations ) registerWallHeight();
+    if ( tokenVerticalHeights ) registerTokenHeight();
   }
 
   // ----- NOTE: Wall label manager ----- //

@@ -33,7 +33,7 @@ const ELEVATION_CONFIG = {
    * How high is the token's vision/eye(s), as a percentage of total height?
    * @type {number}
    */
-  visionHeightMultiplier: 1,
+  visionHeightMultiplier: 0.9,
 
 };
 

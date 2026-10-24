@@ -1,17 +1,17 @@
 <fieldset>
-  <legend>{{ localize "Wall Height" }} </legend>
+  <legend>{{ GeometryLib.moduleName }} </legend>
 
     <div class="form-group">
-      <label for="libGeometry.top">{{ localize "Top Elevation" }}</label>
+      <label for="GeometryLib.top">{{ localize "Top" }}</label>
       <div class="form-fields">
-        <input type="number" id="libGeometry.top" name="flags.wall-height.top" value="{{[wall-height].top}}" step="1" placeholder="&infin;" >
+        <input type="number" id="GeometryLib.top" name="flags.wall-height.top" value="{{GeometryLib.top}}" step="1" placeholder="&infin;" >
       </div>
     </div>
 
     <div class="form-group">
-      <label for="libGeometry.bottom">{{ localize "Bottom Elevation" }}</label>
+      <label for="GeometryLib.bottom">{{ localize "Bottom" }}</label>
       <div class="form-fields">
-        <input type="number" id="libGeometry.bottom" name="flags.wall-height.bottom" value="{{[wall-height].bottom}}" step="1" placeholder="-&infin;" >
+        <input type="number" id="GeometryLib.bottom" name="flags.wall-height.bottom" value="{{GeometryLib.bottom}}" step="1" placeholder="-&infin;" >
       </div>
     </div>
 
