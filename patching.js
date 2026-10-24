@@ -30,6 +30,7 @@ import { PATCHES as PATCHES_AmbientSound } from "./AmbientSound.js";
 
 // Configs
 import { PATCHES as PATCHES_WallConfig } from "./WallConfig.js";
+import { PATCHES as PATCHES_WallHeight } from "./WallHeightManager.js";
 
 const PATCHES = {
   // Don't need CanvasEdges b/c quadtree already in v13.
@@ -68,6 +69,8 @@ const PATCHES = {
 
   // Configs
   "foundry.applications.sheets.WallConfig": PATCHES_WallConfig,
+
+  "wallHeight": PATCHES_WallHeight, // Hooks only.
 }
 
 export function registerGeometryLibPatches() {

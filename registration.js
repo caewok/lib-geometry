@@ -11,7 +11,7 @@ import * as lib from "./_module.mjs";
 import { MODULE_ID, GEOMETRY_LIB_OPTS,  } from "../const.js";
 import { GEOMETRY_LIB_ID, VERSION, OTHER_MODULES } from "./const.js";
 import { mergeConfigs } from "./config.js";
-import { registerGeometryLibPatches, registerWallHeight } from "./patching.js";
+import { registerGeometryLibPatches } from "./patching.js";
 
 import {
   TilePixelCacheManager,
@@ -26,6 +26,7 @@ import {
   LevelBackgroundGeometryManager,
   LevelForegroundGeometryManager } from "./placeable_tracking/CanvasGeometryManager.js";
 
+import { WallHeightManager } from "./WallHeightManager.js";
 
 // Execute immediately on load to identify modules using lib geometry.
 (() => {
@@ -390,19 +391,4 @@ export class OpacityRegistry {
   }
 }
 
-/**
- * Handle wall elevation, configuration, and use.
- * Replacement for deprecated Wall Height module.
- */
-export class WallHeightManager {
 
-  static get TEMPLATES() {
-    return { WALL_CONFIG: `modules/${CONFIG[GEOMETRY_LIB_ID].CONFIG.controllingModule}/scripts/geometry/templates/wall-config.html`, };
-  }
-
-  static initialize() {
-    foundry.applications.handlebars.loadTemplates(Object.values(this.TEMPLATES)).then(_value => console.debug("Templates loaded."));
-    registerWallHeight();
-  }
-
-}

@@ -11,7 +11,6 @@ import { renderTemplateSync } from "./util.js";
 
 // Patches for the Wall Config
 export const PATCHES = {};
-
 PATCHES.WALL_HEIGHT = {};
 
 function renderWallConfig(app, html, data) {
