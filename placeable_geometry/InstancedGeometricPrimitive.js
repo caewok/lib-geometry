@@ -118,6 +118,9 @@ export class InstancedGeometricPrimitive extends GeometricPrimitive {
  */
 export class QuadPrimitive extends InstancedGeometricPrimitive {
 
+  /** @type {boolean} */
+  static IS_CLOSED = false;
+
   /** @type {Polygon3d} */
   static prototypeFaces = [QUADS.up.clone()];
 

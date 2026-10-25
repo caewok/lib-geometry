@@ -112,6 +112,9 @@ export class GeometricPrimitive {
     RIGHT: 1
   };
 
+  /** @type {boolean} False for open surfaces (walls, tiles, planes) whose faces do not enclose a volume. */
+  static IS_CLOSED = true;
+
   /** @type {enum} */
   direction = this.constructor.CULL_FACES.BACK;
 
@@ -498,6 +501,23 @@ export class GeometricPrimitive {
    */
 
   /**
+   * First blocking crossing of an open surface.
+   * s = +1: ray hits the face from its normal side (blocks when direction is BACK or NONE).
+   * s = -1: ray hits it from behind (blocks when direction is FRONT or NONE).
+   * @param {CrossingData[]} crossings    Raw (unclustered) output from faceCrossings
+   * @returns {number|null}
+   */
+  static firstSurfaceT(crossings, { minT = 0, maxT = 1, direction = this.CULL_FACES.BACK } = {}) {
+    let best = null;
+    for ( const { t, s } of crossings ) {
+      if ( t < minT || t > maxT ) continue;
+      if ( direction !== 0 && s !== direction ) continue;
+      if ( best === null || t < best ) best = t;
+    }
+    return best;
+  }
+
+  /**
    * Count the number of faces crossed by a given ray for a given polygon or polygons.
    * @param {Polygon3d} face
    * @param {Point3d} rayOrigin
@@ -573,11 +593,13 @@ export class GeometricPrimitive {
    * @returns {number|null} The distance along the ray, as a multiple of rayDirection
    */
   rayIntersection(rayOrigin, rayDirection, { sidesOnly = false, ...opts } = {}) {
+    const C = this.constructor;
     const crossings = [];
     const faces = sidesOnly ? this.sideFaces : this.faces;
-    for ( const face of faces ) this.constructor.faceCrossings(face, rayOrigin, rayDirection, crossings);
-    const clustered = this.constructor.clusterCrossings(crossings);
-    return this.constructor.firstBlockedT(clustered, { ...opts, direction: this.direction });
+    for ( const face of faces ) C.faceCrossings(face, rayOrigin, rayDirection, crossings);
+    return C.IS_CLOSED
+      ? C.firstBlockedT(C.clusterCrossings(crossings), { ...opts, direction: this.direction })
+      :  C.firstSurfaceT(crossings, { ...opts, direction: this.direction });
   }
 
   // ----- NOTE: Debug ----- //

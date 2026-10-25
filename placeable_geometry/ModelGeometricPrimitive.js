@@ -86,6 +86,9 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
  */
 export class PlanarPolygonPrimitive extends ModelGeometricPrimitive {
 
+  /** @type {boolean} */
+  static IS_CLOSED = false;
+
   /**
    * Force the face to face outward from a given point.
    * @param {Polygon3d[]} faces
