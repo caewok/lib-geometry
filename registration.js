@@ -385,7 +385,9 @@ export class OpacityRegistry {
   static get(type, placeableD, ctx) {
     const fn = this.#types.get(type)?.get(placeableD.documentName);
     if ( !fn ) return 1; // Treat unknowns as fully opaque.
-    const o = Number(fn(placeableD, ctx) ?? 1);
+    const raw = fn(placeableD, ctx);
+    if ( raw !== null && typeof raw !== "number") console.warn(`OpacityRegistry|${type} provider for ${placeableD.documentName} returned`, raw);
+    const o = Number(raw ?? 1);
     return Number.isFinite(o) ? Math.clamp(o, 0, 1) : 1;
   }
 
