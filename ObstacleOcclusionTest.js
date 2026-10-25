@@ -77,10 +77,12 @@ export class ObstacleOcclusionTest {
    * @param {string} [opts.levelId]                           If provided, will return early if geometry does not affect this level.
    * @yields {PlaceableGeometry}
    */
-  *iterateObstacleGeoms({ includeObstacles = this.constructor.OBSTACLE_KEYS } = {}) {
+  *iterateObstacleGeoms({ includeObstacles = this.constructor.OBSTACLE_KEYS, excluded = NULL_SET } = {}) {
     for ( const key of includeObstacles ) {
       const geoms = this.obstacleGeometries[key] || [];
-      yield* geoms;
+      for ( const geom of geoms ) {
+        if ( !excluded.has(geom) ) yield geom;
+      }
     }
   }
 
