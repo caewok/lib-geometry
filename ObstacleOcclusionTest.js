@@ -308,10 +308,10 @@ export class ObstacleOcclusionTest {
     const customFilters = this.config.filters?.[obstacleKey] || [];
     const collisionTest = customFilters.length
       ? o => {
-        if ( !o.t.couldBlock(o.t.placeableDocument, collisionOpts) ) return false;
+        if ( !o.t.couldBlock(collisionOpts) ) return false;
         return customFilters.every(fn => fn(o.t.placeableDocument));
       }
-      : o => o.t.couldBlock(o.t.placeableDocument, collisionOpts);
+      : o => o.t.couldBlock(collisionOpts);
 
     // Get the geometries from the quadtree.
     const geoms = mgr.quadtree.getObjects(this.aabb, { collisionTest });
@@ -481,7 +481,7 @@ export class ObstacleOcclusionTest {
   terrainWallsOcclude(rayOrigin, rayDirection) {
     let limitedOcclusion = 0;
     const rayEnd = rayOrigin.add(rayDirection, tmpPt1);
-    const geoms = geoms.filter(geom => this.#geomWithinRayBounds(geom, rayOrigin, rayEnd));
+    const geoms = this.obstacleGeometries.terrainWalls.filter(geom => this.#geomWithinRayBounds(geom, rayOrigin, rayEnd));
     for ( const geom of geoms ) {
       if ( !geom.rayIntersection(rayOrigin, rayDirection) ) continue;
       if ( limitedOcclusion++ ) return true;
