@@ -32,7 +32,7 @@ export class Frustum {
   aabb = new AABB3d();
 
   clone() {
-    const out = new this();
+    const out = new this.constructor();
     out.top.copyFrom(this.top);
     out.bottom.copyFrom(this.bottom);
     out.right.copyFrom(this.right);
