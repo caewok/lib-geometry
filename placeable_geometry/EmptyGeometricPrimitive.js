@@ -12,6 +12,12 @@ import { AABB3d } from "../3d/AABB3d.js";
  */
 export class EmptyGeometricPrimitive extends GeometricPrimitive {
 
+  /** @type {string} */
+  static TYPE = "EmptyGeometricPrimitive";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
+
   destroy() { }
 
   get dirty() { return this.constructor.DIRTY.NONE; }

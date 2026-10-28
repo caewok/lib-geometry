@@ -93,6 +93,22 @@ Instanced Registry: 1 per geometric primitive, storing model
 
 export class GeometricPrimitive {
 
+  /* Replacement for "instanceof" that works across modules. */
+
+  /** @type {string} */
+  static TYPE = "GeometricPrimitive";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE];
+
+  /**
+   * Check if this instance matches a given type name,
+   * supporting inheritance from parent classes.
+   * @param {string} typeName
+   * @returns {boolean}
+   */
+  is(typeName) { return this.constructor.TYPE_HIERARCHY.includes(typeName); }
+
   /**
    * Treat this shape as being:
    * • double-blocking (double-walled) (NONE)
@@ -117,6 +133,9 @@ export class GeometricPrimitive {
 
   /** @type {enum} */
   direction = this.constructor.CULL_FACES.BACK;
+
+  /** @type {number} */
+  opacity = 1; // Used by WebGL2 renderer; should equal the PlaceableGeometry opacity.
 
   /** @type {string} */
   id;
@@ -710,6 +729,9 @@ export class GeometricPrimitive {
   /** @type {VertexObject} */
   #instanceVO = new VertexObject();
 
+  /** @type {number} */
+  instanceVOVersion = 0;
+
   /** @type {VertexObject} */
   get instanceVO() {
     if ( this.isDirty(this.constructor.DIRTY.INSTANCE_VERTICES) ) this.updateInstanceVertices();
@@ -722,6 +744,7 @@ export class GeometricPrimitive {
   updateInstanceVertices() {
     this._generateInstanceVertices(this.#instanceVO);
     this._clearDirty(this.constructor.DIRTY.INSTANCE_VERTICES);
+    this.instanceVOVersion += 1;
   }
 
   /**
@@ -729,9 +752,9 @@ export class GeometricPrimitive {
    * Default approach uses the prototype faces.
    */
   _generateInstanceVertices(vo) {
-    const reversed = this.reversed !== Polygon3d.isMirroringTransform(this.worldMatrix);
+    const reversed = this.reversed;
     const protoFaces = reversed
-      ? this.prototypeFaces.map(face => face.clone().reverseOrientation()) : this.prototypeFaces;
+      ? this.prototypeFaces.map(face => face.clone().invertRole()) : this.prototypeFaces;
     return this.constructor.generateVerticesForFaces(protoFaces, vo);
   }
 
@@ -804,10 +827,14 @@ export class GeometricPrimitive {
   /**
    * @typedef {Object} GeometricDrawableData
    *
+   * @prop {string} id
    * @prop {GeometricPrimitive} primitive
    * @prop {VertexObject} vo
+   * @prop {number} voVersion
    * @prop {Matrix<4x4>} matrix
    * @prop {number} direction
+   * @prop {boolean} mirrored
+   * @prop {number} opacity
    * @prop {number} version
    */
 
@@ -819,11 +846,15 @@ export class GeometricPrimitive {
    */
   *drawables(_opts) {
     yield {
+      id: this.id,
       primitive: this,
       vo: this.instanceVO,
+      voVersion: this.instanceVOVersion,
       matrix: this.worldMatrix,
       direction: this.direction,
-      version: this.version,
+      mirrored: Polygon3d.isMirroringTransform(this.worldMatrix),
+      opacity: this.opacity,
+      version: this.changeStamp,
     };
   }
 

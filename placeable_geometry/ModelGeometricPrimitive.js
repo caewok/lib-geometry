@@ -20,6 +20,12 @@ import { AABB3d } from "../3d/AABB3d.js";
  */
 export class ModelGeometricPrimitive extends GeometricPrimitive {
 
+  /** @type {string} */
+  static TYPE = "ModelGeometricPrimitive";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
+
   constructor(id, prototypeFaces) {
     super(id);
     this.prototypeFaces = prototypeFaces;
@@ -86,6 +92,12 @@ export class ModelGeometricPrimitive extends GeometricPrimitive {
  */
 export class PlanarPolygonPrimitive extends ModelGeometricPrimitive {
 
+  /** @type {string} */
+  static TYPE = "PlanarPolygonPrimitive";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
+
   /** @type {boolean} */
   static IS_CLOSED = false;
 
@@ -145,7 +157,7 @@ export class PlanarPolygonPrimitive extends ModelGeometricPrimitive {
     const topZ = polys[0].points[0].z;
     const bottomZ = topZ - thickness;
     const opts = { topElevationFn: () => topZ, bottomElevationFn: () => bottomZ };
-    let cutaways = polys.map(poly => poly.toPolygon2d().cutaway(start, end, opts));
+    let cutaways = polys.flatMap(poly => poly.toPolygon2d().cutaway(start, end, opts));
     if ( cutaways.length > 2 ) cutaways = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths.fromPolygons(cutaways)
       .union()
       .clean()
@@ -169,6 +181,12 @@ export class PlanarPolygonPrimitive extends ModelGeometricPrimitive {
  * Typical for regions.
  */
 export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
+
+  /** @type {string} */
+  static TYPE = "ExtrudedPolygonPrimitive";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
 
   // Align with properties/methods of ExtrudedInstancePrimitive.
 
@@ -209,6 +227,20 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
 
   // ----- NOTE: Drawables ----- //
 
+  /**
+   * Yield what a renderer needs to draw this primitive: prototype VO and the matrix to apply it.
+   * Leaves yield themselves; containers yield their descendant's drawables.
+   * @param {object} [opts]
+   * @param {boolean} [opts.sidesOnly=false]    Only the side walls (used for holed solids).
+   * @yields {GeometricDrawableData}
+   */
+  *drawables({ sidesOnly = false} = {}) {
+    for ( const drawable of super.drawables() ) {
+      if ( sidesOnly ) drawable.vo = this.sidesVO;
+      yield drawable;
+    }
+  }
+
   /** @type {VertexObject} */
 
   _sidesVO;
@@ -220,7 +252,13 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    * @type {VertexObject}
    */
   get sidesVO() {
-    return (this._sidesVO ??= this.constructor.generateVerticesForFaces(this.prototypeFaces.slice(2)));
+    if ( !this._sidesVO ) {
+      const faces = this.prototypeFaces.slice(2);
+      const use = this.reversed ? faces.map(f => f.clone().invertRole()) : faces;
+      this._sidesVO = this.constructor.generateVerticesForFaces(use);
+      if ( this.reversed ) use.forEach(f => f.release());
+    }
+    return this._sidesVO;
   }
 
   _generateInstanceVertices(vo) {
@@ -229,29 +267,6 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
     if ( this.reversed ) faces.forEach(f => f.release());
     return vo;
   }
-
-  /**
-   * @typedef {Object} GeometricDrawableData
-   *
-   * @prop {GeometricPrimitive} primitive
-   * @prop {VertexObject} vo
-   * @prop {Matrix<4x4>} matrix
-   * @prop {number} direction
-   * @prop {number} version
-   */
-
-  /**
-   * Yield what a renderer needs to draw this primitive: prototype VO and the matrix to apply it.
-   * Leaves yield themselves; containers yield their descendant's drawables.
-   * @param {object} [opts]
-   * @param {boolean} [opts.sidesOnly=false]    Only the side walls (used for holed solids).
-   * @yields {GeometricDrawableData}
-   */
-  *drawables({ _sidesOnly = false} = {}) {
-    yield { primitive: this, vo: this.instanceVO, matrix: this.worldMatrix, direction: this.direction,
-      mirrored: Polygon3d.isMirroringTransform(this.worldMatrix), version: this.changeStamp };
-  }
-
 
   // ----- NOTE: Factory functions ----- //
 
@@ -333,7 +348,7 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    * @returns {object}
    */
   getInternalPoints() {
-    return this.constructor.calculatePolygonCylinderInternalPoints(this.topFace, this.bottomFace);
+    return this.constructor.calculatePolygonCylinderInternalPoints(this.topFaces[0], this.bottomFaces[0]);
   }
 
   /**
@@ -396,6 +411,12 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
 
 export class ExtrudedPolygonPrimitiveWithHoles extends ExtrudedPolygonPrimitive {
 
+  /** @type {string} */
+  static TYPE = "ExtrudedPolygonPrimitiveWithHoles";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
+
   /**
    * Extrudes polygons for a single island (one solid + its holes).
    * @param {string} id                 Identifier for this shape.
@@ -421,13 +442,13 @@ export class ExtrudedPolygonPrimitiveWithHoles extends ExtrudedPolygonPrimitive 
    * @param {number} [opts.bottomZ]     Bottom elevation
    * @returns {ExtrudedPolygonPrimitive}
    */
-  static fromPolygon(id, solid, holes = [], opts) {
+  static fromPolygon(id, solid, holes = [], opts = {}) {
     if ( !holes.length ) return super.fromPolygon(id, solid, opts);
     this._makeElevationFinite(opts);
 
     const top = new Polygons3d();
-    top.polygons.push(Polygon3d.fromPIXIShape(solid, { elevationZ: opts.topZ, isHole: false }));
-    top.polygons.push(...holes.map(hole => Polygon3d.fromPIXIShape(hole, { elevationZ: opts.topZ, isHole: true })));
+    top.polygons.push(Polygon3d.fromPIXIShape(solid, { elevationZ: opts.topZ || 0, isHole: false }));
+    top.polygons.push(...holes.map(hole => Polygon3d.fromPIXIShape(hole, { elevationZ: opts.topZ || 0, isHole: true })));
     const faces = this._facesFromPolygon3d(top, opts);
     const allProtoFaces = this.canvasToPrototypeFaces(faces, opts);
     return new this(id, allProtoFaces);

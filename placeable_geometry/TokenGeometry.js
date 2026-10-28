@@ -446,7 +446,7 @@ export class TokenSubGeometry extends mix(PlaceableGeometry).with(TokenDocumentC
 
   shapeUpdated() {
     const primitiveCl = this.constructor.primitiveClassForToken(this.placeableDocument);
-    if ( this.shape instanceof primitiveCl ) return;
+    if ( this.shape.is(primitiveCl.TYPE) ) return;
     this.initialize();
   }
 }

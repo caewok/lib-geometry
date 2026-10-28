@@ -14,6 +14,12 @@ import { CircularCylinderPrimitive } from "./InstancedGeometricPrimitive.js";
  */
 export class RingPrimitive extends HoledPrimitive {
 
+  /** @type {string} */
+  static TYPE = "RingPrimitive";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
+
   // ----- NOTE: Static factory methods ----- //
 
   /**

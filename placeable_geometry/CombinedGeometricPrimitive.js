@@ -23,8 +23,21 @@ import { GEOMETRY_LIB_ID } from "../const.js";
  */
 export class CombinedGeometricPrimitive extends GeometricPrimitive {
 
+  /** @type {string} */
+  static TYPE = "CombinedGeometricPrimitive";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
+
   /** @type {GeometricPrimitive[]} */
   children = [];
+
+  constructor(id) {
+    super(id);
+
+    delete this.prototypeFaces;
+    delete this.prototypeAABB;
+  }
 
   // ----- NOTE: Static factory methods ----- //
 
@@ -135,7 +148,12 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
    * @yields {object}
    */
   *drawables(opts) {
-    for ( const child of this.children ) yield *child.drawables(opts);
+    for ( const child of this.children ) {
+      for ( const drawable of child.drawables(opts) ) {
+        drawable.opacity *= this.opacity;
+        yield drawable;
+      }
+    }
   }
 
   // ----- NOTE: Faces ----- //

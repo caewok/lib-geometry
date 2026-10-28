@@ -233,7 +233,7 @@ export class RegionGeometry extends PlaceableGeometry {
     // Clear the old shapes, keeping HolePrimitives. Don't destroy shapes b/c either a reused base shape or a HolePrimitive.
     const oldShapes = new Set();
     for ( const shape of shapes ) {
-      if ( shape instanceof HoledPrimitive ) oldShapes.add(shape);
+      if ( shape.is("HoledPrimitive") ) oldShapes.add(shape);
     }
     shapes.length = 0;
 

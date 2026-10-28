@@ -28,6 +28,12 @@ import { Polygons3d } from "../3d/Polygon3d.js";
  */
 export class HoledPrimitive extends CombinedGeometricPrimitive {
 
+  /** @type {string} */
+  static TYPE = "HoledPrimitive";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
+
   /**
    * @typedef {ExtrudedInstancePrimitive|ExtrudedPolygonPrimitive} HolePrimitive
    */
@@ -224,9 +230,22 @@ export class HoledPrimitive extends CombinedGeometricPrimitive {
    * @yields {GeometricDrawableData}
    */
   *drawables(_opts) {
-    yield* this.solid.drawables({ sidesOnly: true });
-    for ( const hole of this.holes ) yield* hole.drawables({ sidesOnly: true });
-    yield* this.caps.drawables();
+    for ( const drawable of this.solid.drawables({ sidesOnly: true }) ) {
+      drawable.opacity *= this.opacity;
+      yield drawable;
+    }
+
+    for ( const hole of this.holes ) {
+      for ( const drawable of hole.drawables({ sidesOnly: true }) ) {
+        drawable.opacity *= this.opacity;
+        yield drawable;
+      }
+    }
+
+    for ( const drawable of this.caps.drawables() ) {
+      drawable.opacity *= this.opacity;
+      yield drawable;
+    }
   }
 
   /**

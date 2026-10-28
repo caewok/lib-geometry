@@ -19,6 +19,12 @@ import { GEOMETRY_LIB_ID } from "../const.js";
  */
 export class ConePrimitive extends ExtrudedPolygonPrimitive {
 
+  /** @type {string} */
+  static TYPE = "ConePrimitive";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
+
   /** @type {"flat"|"round"|"semicircle"} */
   curvature = "flat";
 

@@ -65,6 +65,12 @@ const QUADS = {
 
 export class InstancedGeometricPrimitive extends GeometricPrimitive {
 
+  /** @type {string} */
+  static TYPE = "InstancedGeometricPrimitive";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
+
   constructor(id) {
     super(id);
     delete this.prototypeFaces;
@@ -106,7 +112,7 @@ export class InstancedGeometricPrimitive extends GeometricPrimitive {
 
   static get reversedInstanceVO() {
     if ( !(Object.hasOwn(this, "_reversedInstanceVO")
-      && this._reversedInstanceVO) ) this._reversedInstancedVO = this._generateReversedVO(this.prototypeFaces);
+      && this._reversedInstanceVO) ) this._reversedInstanceVO = this._generateReversedVO(this.prototypeFaces);
     return this._reversedInstanceVO;
   }
 
@@ -117,6 +123,12 @@ export class InstancedGeometricPrimitive extends GeometricPrimitive {
  * The prototype faces directly up and is centered at the XY origin.
  */
 export class QuadPrimitive extends InstancedGeometricPrimitive {
+
+  /** @type {string} */
+  static TYPE = "QuadPrimitive";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
 
   /** @type {boolean} */
   static IS_CLOSED = false;
@@ -178,6 +190,12 @@ export class QuadPrimitive extends InstancedGeometricPrimitive {
  * Helper class to deal with vertical walls.
  */
 export class VerticalQuadPrimitive extends QuadPrimitive {
+
+  /** @type {string} */
+  static TYPE = "VerticalQuadPrimitive";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
 
   // Does not define the modelMatrixTracker so will share parent's.
 
@@ -272,6 +290,12 @@ export class VerticalQuadPrimitive extends QuadPrimitive {
  */
 export class TexturedQuadPrimitive extends QuadPrimitive {
 
+  /** @type {string} */
+  static TYPE = "TexturedQuadPrimitive";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
+
   static TEXTURED = true;
 
   textureURL = "";
@@ -301,6 +325,12 @@ export class TexturedQuadPrimitive extends QuadPrimitive {
  * Top and bottom faces are arrays for consistency with more complex objects, like hills or steps.
  */
 class ExtrudedInstancePrimitive extends InstancedGeometricPrimitive {
+
+  /** @type {string} */
+  static TYPE = "ExtrudedInstancePrimitive";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
 
   /** @type {Polygon3d[]} */
   get bottomFaces() { return this.faces.slice(0,1); }
@@ -402,7 +432,7 @@ class ExtrudedInstancePrimitive extends InstancedGeometricPrimitive {
    * @type {VertexObject}
    */
   get sidesVO() {
-    return (this._sidesVO ??= this.constructor.generateVerticesForFaces(this.prototypeFaces.slice(2)));
+     return this.reversed ? this.constructor.reversedSidesVO : this.constructor.sidesVO;
   }
 
   /**
@@ -435,6 +465,12 @@ class ExtrudedInstancePrimitive extends InstancedGeometricPrimitive {
  * Cube, e.g. for a square token.
  */
 export class CubePrimitive extends ExtrudedInstancePrimitive {
+
+  /** @type {string} */
+  static TYPE = "CubePrimitive";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
 
   /**
    * Create the instance face shapes for a unit cube.
@@ -496,6 +532,12 @@ export class CubePrimitive extends ExtrudedInstancePrimitive {
  */
 export class HexagonCylinderPrimitive extends ExtrudedInstancePrimitive {
 
+  /** @type {string} */
+  static TYPE = "HexagonCylinderPrimitive";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
+
   /**
    * Create the face shapes for a unit hexagon.
    * @returns {Quad3d|Polygon3d[]}
@@ -540,6 +582,12 @@ export class HexagonCylinderPrimitive extends ExtrudedInstancePrimitive {
  */
 export class CylinderPrimitive extends ExtrudedInstancePrimitive {
 
+  /** @type {string} */
+  static TYPE = "CylinderPrimitive";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
+
   /**
    * Assumed number of sides for the polygon approximation of the cylinder.
    * Used to construct the sides.
@@ -573,7 +621,7 @@ export class CylinderPrimitive extends ExtrudedInstancePrimitive {
 
   static get prototypeAABB() {
      if ( !(Object.hasOwn(this, "_prototypeAABB")
-       && this._prototypeAABB) ) this._prototypeAABB ??= AABB3d.union(this._prototypeFaces.map(face => face.aabb));
+       && this._prototypeAABB) ) this._prototypeAABB ??= AABB3d.union(this.prototypeFaces.map(face => face.aabb));
     return this._prototypeAABB;
   }
 
@@ -602,6 +650,12 @@ export class CylinderPrimitive extends ExtrudedInstancePrimitive {
  * Extruded (along z-axis) but always a circular top and bottom.
  */
 export class CircularCylinderPrimitive extends CylinderPrimitive {
+
+  /** @type {string} */
+  static TYPE = "CircularCylinderPrimitive";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
 
   static _instanceVO;
 
@@ -632,6 +686,12 @@ export class CircularCylinderPrimitive extends CylinderPrimitive {
  * Sphere.
  */
 export class SpherePrimitive extends InstancedGeometricPrimitive {
+
+  /** @type {string} */
+  static TYPE = "SpherePrimitive";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
 
   static prototypeFaces = [new Sphere({ x: 0, y: 0 }, 0.5)];
 
