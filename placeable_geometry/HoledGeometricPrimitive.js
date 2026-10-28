@@ -258,7 +258,16 @@ export class HoledPrimitive extends CombinedGeometricPrimitive {
       for ( const face of hole.sideFaces ) out.push(face);
     }
     for ( const face of this.caps.faces ) out.push(face);
+  }
 
+  /**
+   * Update the faces for this primitive.
+   * @param {Polygon3d[]} faces
+   */
+  _generateFaces(faces) {
+    faces.length = 0;
+    this._collectFaces(faces);
+    this._clearDirty(this.constructor.DIRTY.FACES);
   }
 
   // ----- NOTE: AABB ---- //

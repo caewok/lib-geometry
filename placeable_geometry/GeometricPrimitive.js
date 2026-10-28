@@ -654,6 +654,7 @@ export class GeometricPrimitive {
     // Outward for solids, inward for holes.
     const worldDir = this.isHole ? -1 : 1;
     const protoDir = (this.isHole !== this.reversed) ? -1 : 1;
+    if ( this.prototype.faces.some(face => face.points.length === 0) ) return false;
     return this._hasConsistentFaceDirection(this.prototypeFaces) === protoDir
       && this._hasConsistentFaceDirection(this.faces) === worldDir;
   }
@@ -755,6 +756,8 @@ export class GeometricPrimitive {
     const reversed = this.reversed;
     const protoFaces = reversed
       ? this.prototypeFaces.map(face => face.clone().invertRole()) : this.prototypeFaces;
+
+    if ( )
     return this.constructor.generateVerticesForFaces(protoFaces, vo);
   }
 
@@ -815,6 +818,10 @@ export class GeometricPrimitive {
     const vertices = [];
     for ( const face of faces ) {
       if ( !face ) continue;
+      if ( !face.points.length ) {
+        console.warn(`${this.constructor.name}.verticesFromFaces|Face has zero points.`, { face });
+        continue;
+      }
       vertices.push(face.toVertices({ addNormals }));
     }
 
