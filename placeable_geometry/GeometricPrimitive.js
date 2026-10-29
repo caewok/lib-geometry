@@ -93,6 +93,22 @@ Instanced Registry: 1 per geometric primitive, storing model
 
 export class GeometricPrimitive {
 
+  /* Replacement for "instanceof" that works across modules. */
+
+  /** @type {string} */
+  static TYPE = "GeometricPrimitive";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE];
+
+  /**
+   * Check if this instance matches a given type name,
+   * supporting inheritance from parent classes.
+   * @param {string} typeName
+   * @returns {boolean}
+   */
+  is(typeName) { return this.constructor.TYPE_HIERARCHY.includes(typeName); }
+
   /**
    * Treat this shape as being:
    * • double-blocking (double-walled) (NONE)
@@ -112,8 +128,14 @@ export class GeometricPrimitive {
     RIGHT: 1
   };
 
+  /** @type {boolean} False for open surfaces (walls, tiles, planes) whose faces do not enclose a volume. */
+  static IS_CLOSED = true;
+
   /** @type {enum} */
   direction = this.constructor.CULL_FACES.BACK;
+
+  /** @type {number} */
+  opacity = 1; // Used by WebGL2 renderer; should equal the PlaceableGeometry opacity.
 
   /** @type {string} */
   id;
@@ -498,6 +520,23 @@ export class GeometricPrimitive {
    */
 
   /**
+   * First blocking crossing of an open surface.
+   * s = +1: ray hits the face from its normal side (blocks when direction is BACK or NONE).
+   * s = -1: ray hits it from behind (blocks when direction is FRONT or NONE).
+   * @param {CrossingData[]} crossings    Raw (unclustered) output from faceCrossings
+   * @returns {number|null}
+   */
+  static firstSurfaceT(crossings, { minT = 0, maxT = 1, direction = this.CULL_FACES.BACK } = {}) {
+    let best = null;
+    for ( const { t, s } of crossings ) {
+      if ( t < minT || t > maxT ) continue;
+      if ( direction !== 0 && s !== direction ) continue;
+      if ( best === null || t < best ) best = t;
+    }
+    return best;
+  }
+
+  /**
    * Count the number of faces crossed by a given ray for a given polygon or polygons.
    * @param {Polygon3d} face
    * @param {Point3d} rayOrigin
@@ -567,18 +606,36 @@ export class GeometricPrimitive {
    * @param {Point3d} rayOrigin
    * @param {Point3d} rayDirection
    * @param {object} [opts]
-   * @param {boolean} [opts.sidesOnly=false]
+   * @param {boolean} [opts.sidesOnly=false]          Use only the side faces
+   * @param {Polygon3d[]} [opts.faces]                Use only these faces (ignored if sidesOnly is true)
    * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
    * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
    * @returns {number|null} The distance along the ray, as a multiple of rayDirection
    */
-  rayIntersection(rayOrigin, rayDirection, { sidesOnly = false, ...opts } = {}) {
+  rayIntersection(rayOrigin, rayDirection, { sidesOnly = false, faces, ...opts } = {}) {
+    const C = this.constructor;
     const crossings = [];
-    const faces = sidesOnly ? this.sideFaces : this.faces;
-    for ( const face of faces ) this.constructor.faceCrossings(face, rayOrigin, rayDirection, crossings);
-    const clustered = this.constructor.clusterCrossings(crossings);
-    return this.constructor.firstBlockedT(clustered, { ...opts, direction: this.direction });
+    faces = sidesOnly ? this.sideFaces : (faces ?? this.faces);
+    for ( const face of faces ) C.faceCrossings(face, rayOrigin, rayDirection, crossings);
+    return C.IS_CLOSED
+      ? C.firstBlockedT(C.clusterCrossings(crossings), { ...opts, direction: this.direction })
+      :  C.firstSurfaceT(crossings, { ...opts, direction: this.direction });
   }
+
+  /**
+   * Elevation at a canvas location, based on the top of the region at that point.
+   * @param {PIXI.Point} canvasLoc          X,Y location in grid coordinates
+   * @param {object} [opts]                 Options passed to child classes
+   * @returns {number|null} Z-value in pixel units or null if not within the shape.
+   */
+  elevationAtCanvasLocation(canvasLoc, _opts) {
+    // Default approach is to shoot a ray straight down.
+    using rayOrigin = Point3d.tmp.set(canvasLoc.x, canvasLoc.y, 1e10);
+    using rayDirection = Point3d.tmp.set(0, 0, -1);
+    const ix = this.rayIntersection(rayOrigin, rayDirection);
+    return ix ? ix.z : null;
+  }
+
 
   // ----- NOTE: Debug ----- //
 
@@ -613,6 +670,7 @@ export class GeometricPrimitive {
     // Outward for solids, inward for holes.
     const worldDir = this.isHole ? -1 : 1;
     const protoDir = (this.isHole !== this.reversed) ? -1 : 1;
+    if ( this.prototypeFaces.some(face => face.points.length === 0) ) return false;
     return this._hasConsistentFaceDirection(this.prototypeFaces) === protoDir
       && this._hasConsistentFaceDirection(this.faces) === worldDir;
   }
@@ -688,6 +746,9 @@ export class GeometricPrimitive {
   /** @type {VertexObject} */
   #instanceVO = new VertexObject();
 
+  /** @type {number} */
+  instanceVOVersion = 0;
+
   /** @type {VertexObject} */
   get instanceVO() {
     if ( this.isDirty(this.constructor.DIRTY.INSTANCE_VERTICES) ) this.updateInstanceVertices();
@@ -700,6 +761,7 @@ export class GeometricPrimitive {
   updateInstanceVertices() {
     this._generateInstanceVertices(this.#instanceVO);
     this._clearDirty(this.constructor.DIRTY.INSTANCE_VERTICES);
+    this.instanceVOVersion += 1;
   }
 
   /**
@@ -707,9 +769,9 @@ export class GeometricPrimitive {
    * Default approach uses the prototype faces.
    */
   _generateInstanceVertices(vo) {
-    const reversed = this.reversed !== Polygon3d.isMirroringTransform(this.worldMatrix);
+    const reversed = this.reversed;
     const protoFaces = reversed
-      ? this.prototypeFaces.map(face => face.clone().reverseOrientation()) : this.prototypeFaces;
+      ? this.prototypeFaces.map(face => face.clone().invertRole()) : this.prototypeFaces;
     return this.constructor.generateVerticesForFaces(protoFaces, vo);
   }
 
@@ -770,6 +832,10 @@ export class GeometricPrimitive {
     const vertices = [];
     for ( const face of faces ) {
       if ( !face ) continue;
+      if ( !face.points.length ) {
+        console.warn(`${this.constructor.name}.verticesFromFaces|Face has zero points.`, { face });
+        continue;
+      }
       vertices.push(face.toVertices({ addNormals }));
     }
 
@@ -782,10 +848,14 @@ export class GeometricPrimitive {
   /**
    * @typedef {Object} GeometricDrawableData
    *
+   * @prop {string} id
    * @prop {GeometricPrimitive} primitive
    * @prop {VertexObject} vo
+   * @prop {number} voVersion
    * @prop {Matrix<4x4>} matrix
    * @prop {number} direction
+   * @prop {boolean} mirrored
+   * @prop {number} opacity
    * @prop {number} version
    */
 
@@ -797,11 +867,15 @@ export class GeometricPrimitive {
    */
   *drawables(_opts) {
     yield {
+      id: this.id,
       primitive: this,
       vo: this.instanceVO,
+      voVersion: this.instanceVOVersion,
       matrix: this.worldMatrix,
       direction: this.direction,
-      version: this.version,
+      mirrored: Polygon3d.isMirroringTransform(this.worldMatrix),
+      opacity: this.opacity,
+      version: this.changeStamp,
     };
   }
 

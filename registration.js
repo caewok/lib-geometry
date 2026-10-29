@@ -2,13 +2,14 @@
 canvas,
 CONFIG,
 foundry,
+game,
 Hooks,
 */
 "use strict";
 
 import * as lib from "./_module.mjs";
-import { MODULE_ID, GEOMETRY_LIB_OPTS } from "../const.js";
-import { GEOMETRY_LIB_ID, VERSION } from "./const.js";
+import { MODULE_ID, GEOMETRY_LIB_OPTS,  } from "../const.js";
+import { GEOMETRY_LIB_ID, VERSION, OTHER_MODULES } from "./const.js";
 import { mergeConfigs } from "./config.js";
 import { registerGeometryLibPatches } from "./patching.js";
 
@@ -25,6 +26,7 @@ import {
   LevelBackgroundGeometryManager,
   LevelForegroundGeometryManager } from "./placeable_tracking/CanvasGeometryManager.js";
 
+import { WallHeightManager } from "./WallHeightManager.js";
 
 // Execute immediately on load to identify modules using lib geometry.
 (() => {
@@ -39,6 +41,12 @@ import {
   CONFIG[GEOMETRY_LIB_ID].CONFIG.placeableGeometries ??= new Set();
   const geometries = GEOMETRY_LIB_OPTS.placeableGeometries;
   if ( geometries ) geometries.forEach(name => CONFIG[GEOMETRY_LIB_ID].CONFIG.placeableGeometries.add(name));
+
+  // Track whether the Wall Height module (or replacement) is requested.
+  CONFIG[GEOMETRY_LIB_ID].CONFIG.wallHeightModules ??= new Set();
+  CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenHeightModules ??= new Set();
+  if ( GEOMETRY_LIB_OPTS.wallHeightRequired ) CONFIG[GEOMETRY_LIB_ID].CONFIG.wallHeightModules.add(MODULE_ID);
+  if ( GEOMETRY_LIB_OPTS.tokenHeightRequired ) CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenHeightModules.add(MODULE_ID);
 
   // Track geometry manager classes, so modules like Terrain Mapper can sub in their own.
   CONFIG[GEOMETRY_LIB_ID].CONFIG.managerClasses = {
@@ -68,6 +76,7 @@ Hooks.on("init", function() {
   const controllingModule = CONFIG[GEOMETRY_LIB_ID].CONFIG.registeredVersions.get(maxVersion);
   IS_CONTROLLING_MODULE = controllingModule === MODULE_ID
   if ( IS_CONTROLLING_MODULE ) {
+    CONFIG[GEOMETRY_LIB_ID].CONFIG.controllingModule = controllingModule;
     registerGeometryLibClasses();
     CONFIG[GEOMETRY_LIB_ID].CONFIG.opacity = OpacityRegistry;
   }
@@ -75,6 +84,17 @@ Hooks.on("init", function() {
 
 Hooks.on("setup", function() {
   if ( !IS_CONTROLLING_MODULE ) return;
+
+  // Register wall height configs if needed.
+  // (Done at setup b/c modules are checked on init.)
+  if ( !game.modules.get(OTHER_MODULES.WALL_HEIGHT.ID)?.active ) {
+    const wm = CONFIG[GEOMETRY_LIB_ID].wallHeightManager = WallHeightManager;
+    const opts = {
+      wallElevations: Boolean(CONFIG[GEOMETRY_LIB_ID].CONFIG.wallHeightModules.size),
+      tokenVerticalHeights: Boolean(CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenHeightModules.size),
+    };
+    wm.initialize(opts);
+  }
 
   // Add Pixel cache manager for tiles and levels
   if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.placeableGeometries.has("Tile") ) {
@@ -365,7 +385,9 @@ export class OpacityRegistry {
   static get(type, placeableD, ctx) {
     const fn = this.#types.get(type)?.get(placeableD.documentName);
     if ( !fn ) return 1; // Treat unknowns as fully opaque.
-    const o = Number(fn(placeableD, ctx) ?? 1);
+    const raw = fn(placeableD, ctx);
+    if ( raw !== null && typeof raw !== "number") console.warn(`OpacityRegistry|${type} provider for ${placeableD.documentName} returned`, raw);
+    const o = Number(raw ?? 1);
     return Number.isFinite(o) ? Math.clamp(o, 0, 1) : 1;
   }
 
@@ -376,3 +398,5 @@ export class OpacityRegistry {
     return entry.has(placeableName);
   }
 }
+
+

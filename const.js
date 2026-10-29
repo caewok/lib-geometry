@@ -67,6 +67,7 @@ export const OTHER_MODULES = {
 // Hook init b/c game.modules is not initialized at start.
 Hooks.once("init", function() {
   for ( const [key, obj] of Object.entries(OTHER_MODULES) ) {
+    if ( key === "WALL_HEIGHT" ) continue; // Recreate Wall Height module if not present.
     if ( !game.modules.get(obj.KEY)?.active ) delete OTHER_MODULES[key];
   }
 });

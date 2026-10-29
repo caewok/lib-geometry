@@ -77,10 +77,12 @@ export class ObstacleOcclusionTest {
    * @param {string} [opts.levelId]                           If provided, will return early if geometry does not affect this level.
    * @yields {PlaceableGeometry}
    */
-  *iterateObstacleGeoms({ includeObstacles = this.constructor.OBSTACLE_KEYS } = {}) {
+  *iterateObstacleGeoms({ includeObstacles = this.constructor.OBSTACLE_KEYS, excluded = NULL_SET } = {}) {
     for ( const key of includeObstacles ) {
       const geoms = this.obstacleGeometries[key] || [];
-      yield* geoms;
+      for ( const geom of geoms ) {
+        if ( !excluded.has(geom) ) yield geom;
+      }
     }
   }
 
@@ -308,10 +310,10 @@ export class ObstacleOcclusionTest {
     const customFilters = this.config.filters?.[obstacleKey] || [];
     const collisionTest = customFilters.length
       ? o => {
-        if ( !o.t.couldBlock(o.t.placeableDocument, collisionOpts) ) return false;
+        if ( !o.t.couldBlock(collisionOpts) ) return false;
         return customFilters.every(fn => fn(o.t.placeableDocument));
       }
-      : o => o.t.couldBlock(o.t.placeableDocument, collisionOpts);
+      : o => o.t.couldBlock(collisionOpts);
 
     // Get the geometries from the quadtree.
     const geoms = mgr.quadtree.getObjects(this.aabb, { collisionTest });
@@ -481,7 +483,7 @@ export class ObstacleOcclusionTest {
   terrainWallsOcclude(rayOrigin, rayDirection) {
     let limitedOcclusion = 0;
     const rayEnd = rayOrigin.add(rayDirection, tmpPt1);
-    const geoms = geoms.filter(geom => this.#geomWithinRayBounds(geom, rayOrigin, rayEnd));
+    const geoms = this.obstacleGeometries.terrainWalls.filter(geom => this.#geomWithinRayBounds(geom, rayOrigin, rayEnd));
     for ( const geom of geoms ) {
       if ( !geom.rayIntersection(rayOrigin, rayDirection) ) continue;
       if ( limitedOcclusion++ ) return true;

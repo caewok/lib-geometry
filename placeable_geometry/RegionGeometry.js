@@ -233,7 +233,7 @@ export class RegionGeometry extends PlaceableGeometry {
     // Clear the old shapes, keeping HolePrimitives. Don't destroy shapes b/c either a reused base shape or a HolePrimitive.
     const oldShapes = new Set();
     for ( const shape of shapes ) {
-      if ( shape instanceof HoledPrimitive ) oldShapes.add(shape);
+      if ( shape.is("HoledPrimitive") ) oldShapes.add(shape);
     }
     shapes.length = 0;
 
@@ -293,7 +293,7 @@ export class RegionGeometry extends PlaceableGeometry {
     const baseShapes = this.baseShapes;
     const numBaseShapes = this.baseShapes.length;
     const pixiShapes = baseShapes.map(shape => shape.toPIXIShape());
-    const overlappingHoleIndices = Array.from({ length: 5 }, () => []);
+    const overlappingHoleIndices = Array.from({ length: numBaseShapes }, () => []);
     for ( let i = 0; i < numBaseShapes; i += 1 ) {
       if ( baseShapes[i].isHole ) continue;
       const solid = pixiShapes[i];

@@ -23,8 +23,21 @@ import { GEOMETRY_LIB_ID } from "../const.js";
  */
 export class CombinedGeometricPrimitive extends GeometricPrimitive {
 
+  /** @type {string} */
+  static TYPE = "CombinedGeometricPrimitive";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
+
   /** @type {GeometricPrimitive[]} */
   children = [];
+
+  constructor(id) {
+    super(id);
+
+    delete this.prototypeFaces;
+    delete this.prototypeAABB;
+  }
 
   // ----- NOTE: Static factory methods ----- //
 
@@ -135,7 +148,12 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
    * @yields {object}
    */
   *drawables(opts) {
-    for ( const child of this.children ) yield *child.drawables(opts);
+    for ( const child of this.children ) {
+      for ( const drawable of child.drawables(opts) ) {
+        drawable.opacity *= this.opacity;
+        yield drawable;
+      }
+    }
   }
 
   // ----- NOTE: Faces ----- //
@@ -169,6 +187,21 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
    */
   containsProjectedXY(canvasLoc) {
     return this.children.some(child => child.containsProjectedXY(canvasLoc));
+  }
+
+  /**
+   * Elevation at a canvas location, based on the top of the region at that point.
+   * @param {PIXI.Point} canvasLoc          X,Y location in grid coordinates
+   * @param {object} [opts]                 Options passed to child classes
+   * @returns {number|null} Z-value in pixel units or null if not within the shape.
+   */
+  elevationAtCanvasLocation(canvasLoc, opts) {
+    let maxZ = Number.NEGATIVE_INFINITY;
+    for ( const shape of this.shapes ) {
+      const z = shape.elevationAtCanvasLocation(canvasLoc, opts);
+      if ( z !== null ) maxZ = Math.max(z, maxZ);
+    }
+    return Number.isFinite(maxZ) ? maxZ : null;
   }
 
   /**

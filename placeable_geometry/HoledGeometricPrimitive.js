@@ -8,7 +8,8 @@ import { GEOMETRY_LIB_ID } from "../const.js";
 import { CombinedGeometricPrimitive } from "./CombinedGeometricPrimitive.js";
 import { ExtrudedPolygonPrimitiveWithHoles } from "./ModelGeometricPrimitive.js";
 import { CutawayPolygon } from "../CutawayPolygon.js";
-import { Polygons3d } from "../3d/Polygon3d.js";
+import { Polygon3d, Polygons3d } from "../3d/Polygon3d.js";
+import { Point3d } from "../3d/Point3d.js";
 
 /**
  * One solid with 0 or more vertical holes through it. Typical of a Foundry region island.
@@ -27,6 +28,12 @@ import { Polygons3d } from "../3d/Polygon3d.js";
  * - Tops and bottoms are fixed. Do not rotate the solid or holes about the x or y axes.
  */
 export class HoledPrimitive extends CombinedGeometricPrimitive {
+
+  /** @type {string} */
+  static TYPE = "HoledPrimitive";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
 
   /**
    * @typedef {ExtrudedInstancePrimitive|ExtrudedPolygonPrimitive} HolePrimitive
@@ -203,19 +210,77 @@ export class HoledPrimitive extends CombinedGeometricPrimitive {
    * Build the top faces.
    * @returns {Polygon3d[]}
    */
-  _buildTopFaces() {
-    const polys = [...this.solid.topFaces, ...this.holes.flatMap(h => h.topFaces)];
-    return [Polygons3d.from3dPolygons(polys)];
-  }
+  _buildTopFaces() { return this._subtractHolesFromTopFaces(); }
 
   /**
    * Build the bottom faces.
    * @returns {Polygon3d[]}
    */
   _buildBottomFaces() {
+    if ( !this.holes.length && this.solid.bottomFaces.length === 1 ) return [Polygon3d.from3dPolygon(this.solid.bottomFaces)];
     const polys = [...this.solid.bottomFaces, ...this.holes.flatMap(h => h.bottomFaces)];
     return [Polygons3d.from3dPolygons(polys)];
   }
+
+  /**
+   * Subtract holes from the top faces.
+   * Rebuild the top polygons by lifting the 2d shapes.
+   * @returns {(Polygon3d|Polygons3d)[]}
+   */
+  _subtractHolesFromTopFaces() {
+    if ( !this.holes.length ) return this.solid.topFaces;
+
+    // Get 2d versions of all top faces and holes, by simply dropping the "z" axis.
+    const solids = this.solid.topFaces.map(face => face.toPolygon2d());
+    const holes = this.holes.flatMap(h => h.topFaces.map(face => face.toPolygon2d()));
+
+    // Check for solids that do not overlap any holes, and set aside.
+    const shapes = [];
+    const filteredSolids = [];
+    for ( let i = 0, n = solids.length; i < n; i += 1 ) {
+      const solid = solids[i];
+      if ( !holes.some(h => solid.overlaps(h)) ) shapes.push(this.solid.topFaces[i]);
+      else filteredSolids.push(solid);
+    }
+
+    // For each solid with overlapping holes, apply the holes.
+    // Don't apply Clipper to all at once to avoid incorrectly combining solids that are on different planes.
+    // Clipper difference (solid minus hole). (See RegionGeometry##subtractHoles)
+    const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
+    const holePaths = ClipperPaths.fromPolygons(holes);
+    for ( const solid of filteredSolids ) {
+      const solidPaths = ClipperPaths.fromPolygons([solid]);
+      const polys = holePaths
+        .diffPaths(solidPaths)
+        .clean()
+        .toPolygons();
+      if ( !polys.length ) continue;
+
+      // Construct 3d polygons.
+      const poly3d = polys.length === 1
+        ? Polygon3d.fromPIXIShape(polys[0])
+        : Polygons3d.fromPIXIShapes(polys, { holeIndices: polys.map(poly => !poly.isPositive) })
+      shapes.push(poly3d);
+    }
+
+    return shapes;
+  }
+
+  _elevatePolygon(poly) {
+    const pts3d = poly.iteratePoints(pt => {
+      const pt3d = Point3d.tmp.set(pt.x, pt.y, this.elevationAtCanvasLocation(pt));
+      pt.release();
+      return pt3d;
+    });
+
+    const out = Polygon3d.from3dPoints(pts3d);
+    pts3d.forEach(pt => pt.release());
+    if ( poly.isPositive ^ out.isHole ) out.invertRole();
+    return out;
+  }
+
+
+
 
   // ----- NOTE: Drawables and faces ----- //
 
@@ -224,9 +289,22 @@ export class HoledPrimitive extends CombinedGeometricPrimitive {
    * @yields {GeometricDrawableData}
    */
   *drawables(_opts) {
-    yield* this.solid.drawables({ sidesOnly: true });
-    for ( const hole of this.holes ) yield* hole.drawables({ sidesOnly: true });
-    yield* this.caps.drawables();
+    for ( const drawable of this.solid.drawables({ sidesOnly: true }) ) {
+      drawable.opacity *= this.opacity;
+      yield drawable;
+    }
+
+    for ( const hole of this.holes ) {
+      for ( const drawable of hole.drawables({ sidesOnly: true }) ) {
+        drawable.opacity *= this.opacity;
+        yield drawable;
+      }
+    }
+
+    for ( const drawable of this.caps.drawables() ) {
+      drawable.opacity *= this.opacity;
+      yield drawable;
+    }
   }
 
   /**
@@ -239,7 +317,16 @@ export class HoledPrimitive extends CombinedGeometricPrimitive {
       for ( const face of hole.sideFaces ) out.push(face);
     }
     for ( const face of this.caps.faces ) out.push(face);
+  }
 
+  /**
+   * Update the faces for this primitive.
+   * @param {Polygon3d[]} faces
+   */
+  _generateFaces(faces) {
+    faces.length = 0;
+    this._collectFaces(faces);
+    this._clearDirty(this.constructor.DIRTY.FACES);
   }
 
   // ----- NOTE: AABB ---- //

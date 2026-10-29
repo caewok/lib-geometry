@@ -102,14 +102,14 @@ Token
 function wallTopZ() {
   // Previously used foundry.utils.getProperty but it is slow.
   const WH = OTHER_MODULES.WALL_HEIGHT;
-  const elev =  (WH ? this.document.flags[WH.ID]?.top : undefined)
+  const elev =  (WH ? this.flags[WH.ID]?.top : undefined)
     ?? Number.POSITIVE_INFINITY;
   return gridUnitsToPixels(elev);
 }
 
 function wallBottomZ() {
   const WH = OTHER_MODULES.WALL_HEIGHT;
-  const elev = (WH ? this.document.flags[WH.ID]?.bottom : undefined)
+  const elev = (WH ? this.flags[WH.ID]?.bottom : undefined)
     ?? Number.NEGATIVE_INFINITY;
   return gridUnitsToPixels(elev);
 }

@@ -3241,7 +3241,7 @@ export class Polygons3d extends Polygon3d {
   /**
    * @param {(PIXI.Polygon|PIXI.Ellipse|PIXI.Rectangle|PIXI.Circle|PIXI.RoundedRectangle)[]} polys
    * @param {object} [opts]
-   * @param {(number|null)[]} holeIndices     For each polygon, is it a hole?
+   * @param {(boolean|null)[]} holeIndices     For each polygon, is it a hole?
    * @param {Polygon3d} [out]
    * @returns {Polygon3d}
    */
