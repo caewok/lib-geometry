@@ -606,20 +606,36 @@ export class GeometricPrimitive {
    * @param {Point3d} rayOrigin
    * @param {Point3d} rayDirection
    * @param {object} [opts]
-   * @param {boolean} [opts.sidesOnly=false]
+   * @param {boolean} [opts.sidesOnly=false]          Use only the side faces
+   * @param {Polygon3d[]} [opts.faces]                Use only these faces (ignored if sidesOnly is true)
    * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
    * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
    * @returns {number|null} The distance along the ray, as a multiple of rayDirection
    */
-  rayIntersection(rayOrigin, rayDirection, { sidesOnly = false, ...opts } = {}) {
+  rayIntersection(rayOrigin, rayDirection, { sidesOnly = false, faces, ...opts } = {}) {
     const C = this.constructor;
     const crossings = [];
-    const faces = sidesOnly ? this.sideFaces : this.faces;
+    faces = sidesOnly ? this.sideFaces : (faces ?? this.faces);
     for ( const face of faces ) C.faceCrossings(face, rayOrigin, rayDirection, crossings);
     return C.IS_CLOSED
       ? C.firstBlockedT(C.clusterCrossings(crossings), { ...opts, direction: this.direction })
       :  C.firstSurfaceT(crossings, { ...opts, direction: this.direction });
   }
+
+  /**
+   * Elevation at a canvas location, based on the top of the region at that point.
+   * @param {PIXI.Point} canvasLoc          X,Y location in grid coordinates
+   * @param {object} [opts]                 Options passed to child classes
+   * @returns {number|null} Z-value in pixel units or null if not within the shape.
+   */
+  elevationAtCanvasLocation(canvasLoc, _opts) {
+    // Default approach is to shoot a ray straight down.
+    using rayOrigin = Point3d.tmp.set(canvasLoc.x, canvasLoc.y, 1e10);
+    using rayDirection = Point3d.tmp.set(0, 0, -1);
+    const ix = this.rayIntersection(rayOrigin, rayDirection);
+    return ix ? ix.z : null;
+  }
+
 
   // ----- NOTE: Debug ----- //
 
@@ -654,7 +670,7 @@ export class GeometricPrimitive {
     // Outward for solids, inward for holes.
     const worldDir = this.isHole ? -1 : 1;
     const protoDir = (this.isHole !== this.reversed) ? -1 : 1;
-    if ( this.prototype.faces.some(face => face.points.length === 0) ) return false;
+    if ( this.prototypeFaces.some(face => face.points.length === 0) ) return false;
     return this._hasConsistentFaceDirection(this.prototypeFaces) === protoDir
       && this._hasConsistentFaceDirection(this.faces) === worldDir;
   }
@@ -756,8 +772,6 @@ export class GeometricPrimitive {
     const reversed = this.reversed;
     const protoFaces = reversed
       ? this.prototypeFaces.map(face => face.clone().invertRole()) : this.prototypeFaces;
-
-    if ( )
     return this.constructor.generateVerticesForFaces(protoFaces, vo);
   }
 

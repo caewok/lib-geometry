@@ -190,6 +190,21 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
   }
 
   /**
+   * Elevation at a canvas location, based on the top of the region at that point.
+   * @param {PIXI.Point} canvasLoc          X,Y location in grid coordinates
+   * @param {object} [opts]                 Options passed to child classes
+   * @returns {number|null} Z-value in pixel units or null if not within the shape.
+   */
+  elevationAtCanvasLocation(canvasLoc, opts) {
+    let maxZ = Number.NEGATIVE_INFINITY;
+    for ( const shape of this.shapes ) {
+      const z = shape.elevationAtCanvasLocation(canvasLoc, opts);
+      if ( z !== null ) maxZ = Math.max(z, maxZ);
+    }
+    return Number.isFinite(maxZ) ? maxZ : null;
+  }
+
+  /**
    * Nearest hit among the children. Each child applies its own culling direction, so holes work.
    * @param {Point3d} rayOrigin
    * @param {Point3d} rayDirection

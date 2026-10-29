@@ -293,7 +293,7 @@ export class RegionGeometry extends PlaceableGeometry {
     const baseShapes = this.baseShapes;
     const numBaseShapes = this.baseShapes.length;
     const pixiShapes = baseShapes.map(shape => shape.toPIXIShape());
-    const overlappingHoleIndices = Array.from({ length: 5 }, () => []);
+    const overlappingHoleIndices = Array.from({ length: numBaseShapes }, () => []);
     for ( let i = 0; i < numBaseShapes; i += 1 ) {
       if ( baseShapes[i].isHole ) continue;
       const solid = pixiShapes[i];

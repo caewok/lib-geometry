@@ -364,6 +364,20 @@ class ExtrudedInstancePrimitive extends InstancedGeometricPrimitive {
   }
 
   /**
+   * Elevation at a canvas location, based on the top of the region at that point.
+   * @param {PIXI.Point} canvasLoc          X,Y location in grid coordinates
+   * @param {object} [opts]                 Options passed to child classes
+   * @returns {number|null} Z-value in pixel units or null if not within the shape.
+   */
+  elevationAtCanvasLocation(canvasLoc, opts) {
+    // Shoot ray straight down; test only top faces.
+    using rayOrigin = Point3d.tmp.set(canvasLoc.x, canvasLoc.y, 1e10);
+    using dir = Point3d.tmp.set(0, 0, -1);
+    const ix = this.rayIntersection(rayOrigin, rayDirection, { faces: this.topFaces });
+    return ix ? ix.z : null;
+  }
+
+  /**
    * Slice this 3d shape with a vertical plane, returning 2d cross-section(s).
    * @param {PIXI.Point} start     Starting point of the slice on the XY plane
    * @param {PIXI.Point} end        Ending point of the slice on the XY plane
