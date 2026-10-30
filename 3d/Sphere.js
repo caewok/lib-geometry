@@ -20,6 +20,20 @@ Math.GOLDEN_RATIO = (1 + Math.sqrt(5)) / 2;
 
 export class Sphere {
 
+  /** @type {string} */
+  static TYPE = "Sphere";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE];
+
+  /**
+   * Check if this instance matches a given type name,
+   * supporting inheritance from parent classes.
+   * @param {string} typeName
+   * @returns {boolean}
+   */
+  is(typeName) { return this.constructor.TYPE_HIERARCHY.includes(typeName); }
+
   /** @type {number} */
   #radius = 0;
 
@@ -125,7 +139,7 @@ export class Sphere {
    * @returns {boolean}
    */
   overlapsPolygon3d(poly3d) {
-    if ( poly3d instanceof Circle3d ) return this.overlapsCircle3d(poly3d);
+    if ( poly3d.is("Circle3d") ) return this.overlapsCircle3d(poly3d);
     for ( const pt of poly3d.iteratePoints() ) {
       const inside = this.contains(pt);
       if ( inside ) return true;
@@ -142,7 +156,7 @@ export class Sphere {
 
     const sphereCircle = this.#planarCircle(circle3d.plane);
     if ( !sphereCircle ) return false;
-    if ( sphereCircle instanceof Point3d ) return true;
+    if ( sphereCircle.is("Point3d") ) return true;
 
     // Project onto the circle plane and test for overlap.
     const circle2d = circle3d.toPlanarCircle();
@@ -275,7 +289,7 @@ export class Sphere {
    * @returns {Polygon3d|Circle3d|Point3d|null}
    */
   intersectPolygon3d(poly3d) {
-    if ( poly3d instanceof Circle3d ) return this.intersectCircle3d(poly3d);
+    if ( poly3d.is("Circle3d") ) return this.intersectCircle3d(poly3d);
     let allInside = true;
     let allOutside = true;
     for ( const pt of poly3d.iteratePoints() ) {

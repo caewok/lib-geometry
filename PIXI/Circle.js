@@ -59,10 +59,10 @@ function scaledArea({scalingFactor = 1} = {}) {
  * @returns {boolean}
  */
 function overlaps(other) {
-  if ( other instanceof PIXI.Circle ) return this._overlapsCircle(other);
-  if ( other instanceof PIXI.Polygon ) return other._overlapsCircle(this);
-  if ( other instanceof PIXI.Rectangle ) return other._overlapsCircle(this);
-  if ( other instanceof PIXI.Ellipse ) return other._overlapsCircle(this);
+  if ( other.is("PIXI.Circle") ) return this._overlapsCircle(other);
+  if ( other.is("PIXI.Polygon") ) return other._overlapsCircle(this);
+  if ( other.is("PIXI.Rectangle") ) return other._overlapsCircle(this);
+  if ( other.is("PIXI.Ellipse") ) return other._overlapsCircle(this);
   if ( other.toPolygon) return other.toPolygon()._overlapsCircle(this);
   console.warn("overlaps|shape not recognized.", other);
   return false;
@@ -75,9 +75,9 @@ function overlaps(other) {
  * @returns {boolean}
  */
 function envelops(other) {
-  if ( other instanceof PIXI.Polygon ) return this._envelopsPolygon(other);
-  if ( other instanceof PIXI.Circle ) return this._envelopsCircle(other);
-  if ( other instanceof PIXI.Rectangle ) return this._envelopsRectangle(other);
+  if ( other.is("PIXI.Polygon") ) return this._envelopsPolygon(other);
+  if ( other.is("PIXI.Circle") ) return this._envelopsCircle(other);
+  if ( other.is("PIXI.Rectangle") ) return this._envelopsRectangle(other);
   if ( other.toPolygon ) return this._envelopsPolygon(other.toPolygon());
   console.warn("envelops|shape not recognized.", other);
   return false;
@@ -193,7 +193,7 @@ function cutaway(a, b, opts) { return CutawayPolygon.cutawayBasicShape(this, a, 
  * @returns {boolean}
  */
 function equals(other) {
-  if ( !(other instanceof PIXI.Circle) ) return false;
+  if ( !(other.is("PIXI.Circle")) ) return false;
   return this.x === other.x
     && this.y === other.y
     && this.radius === other.radius;
@@ -206,7 +206,7 @@ function equals(other) {
  * @returns {boolean}
  */
 function almostEqual(other, epsilon = 1e-08) {
-  if ( !(other instanceof PIXI.Circle) ) return false;
+  if ( !(other.is("PIXI.Circle")) ) return false;
   return this.x.almostEqual(other.x, epsilon)
     && this.y.almostEqual(other.y, epsilon)
     && this.radius.almostEqual(other.radius, epsilon);
@@ -403,6 +403,20 @@ function pointsLattice({ spacing = 1, startAtEdge = false } = {}) {
   return pts.filter(pt => this.contains(pt.x, pt.y));
 }
 
+/**
+ * Check if this instance matches a given type name,
+ * supporting inheritance from parent classes.
+ * @param {string} typeName
+ * @returns {boolean}
+ */
+function is(typeName) { return this.constructor.TYPE_HIERARCHY.includes(typeName); }
+
+/** @type {string} */
+PIXI.Circle.TYPE = "PIXI.Circle";
+
+/** @type {string[]} */
+PIXI.Circle.TYPE_HIERARCHY = [PIXI.Circle.TYPE];
+
 PATCHES.PIXI.GETTERS = { area };
 
 PATCHES.PIXI.METHODS = {
@@ -428,7 +442,9 @@ PATCHES.PIXI.METHODS = {
   _envelopsRectangle,
   _envelopsPolygon,
 
-  cutaway
+  cutaway,
+
+  is,
 };
 
 

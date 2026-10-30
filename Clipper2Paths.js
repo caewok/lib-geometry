@@ -51,11 +51,22 @@ subj3.combine()
 export class Clipper2Paths {
   // ----- NOTE: Class inheritance ----- //
 
-  static [Symbol.hasInstance](instance) {
-    return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
-  }
+  /* Replacement for "instanceof" that works across modules. */
 
-  static _geoLibType = "Clipper2Paths";
+  /** @type {string} */
+  static TYPE = "Clipper2Paths";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, "ClipperPaths"];
+
+  /**
+   * Check if this instance matches a given type name,
+   * supporting inheritance from parent classes.
+   * @param {string} typeName
+   * @returns {boolean}
+   */
+  is(typeName) { return this.constructor.TYPE_HIERARCHY.includes(typeName); }
+
 
   // ----- NOTE: Object properties ----- //
 

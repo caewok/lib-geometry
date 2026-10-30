@@ -56,7 +56,11 @@ export class BaryTriangleData {
 
 export class BarycentricPoint extends Point3d {
 
-  static _geoLibType = "BarycentricPoint";
+  /** @type {string} */
+  static TYPE = "BarycentricPoint";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
 
   static BaryTriangleData;
 

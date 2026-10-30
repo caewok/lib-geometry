@@ -480,9 +480,9 @@ export class LocalCoordinateCache extends AABB2d {
    * Used to walk a line and aggregate pixels that are covered by that shape.
    */
   static pixelOffsetGrid(shape, skip = 0) {
-    if ( shape instanceof PIXI.Rectangle ) return this.rectanglePixelOffsetGrid(shape, skip);
-    if ( shape instanceof PIXI.Polygon ) return this.polygonPixelOffsetGrid(shape, skip);
-    if ( shape instanceof PIXI.Circle ) return this.shapePixelOffsetGrid(shape, skip);
+    if ( shape.is("PIXI.Rectangle") ) return this.rectanglePixelOffsetGrid(shape, skip);
+    if ( shape.is("PIXI.Polygon") ) return this.polygonPixelOffsetGrid(shape, skip);
+    if ( shape.is("PIXI.Circle") ) return this.shapePixelOffsetGrid(shape, skip);
     console.warn("PixelCache|pixelOffsetGrid|shape not recognized.", shape);
     return this.polygonPixelOffsetGrid(shape.toPolygon(), skip);
   }

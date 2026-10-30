@@ -17,11 +17,6 @@ const Poolable = mix(PIXI.Point).with(PoolableMixin);
 function onRelease(obj) {
   obj.x = 0;
   obj.y = 0;
-
-  if( !obj.constructor._geoLibType && Object.hasOwn(obj, "z") ) {
-    console.warn("PIXI.Point pool object has z property.");
-    delete obj.z;
-  }
 }
 
 /**
@@ -592,6 +587,20 @@ PIXI.Point.prototype[Symbol.iterator] = function() {
   };
 }
 
+/**
+ * Check if this instance matches a given type name,
+ * supporting inheritance from parent classes.
+ * @param {string} typeName
+ * @returns {boolean}
+ */
+function is(typeName) { return this.constructor.TYPE_HIERARCHY.includes(typeName); }
+
+/** @type {string} */
+PIXI.Point.TYPE = "Point2d";
+
+/** @type {string[]} */
+PIXI.Point.TYPE_HIERARCHY = [PIXI.Point.TYPE];
+
 PATCHES.PIXI.GETTERS = {
   key,
 };
@@ -658,6 +667,8 @@ PATCHES.PIXI.METHODS = {
 
   // Pool
   release: function() { this.constructor.release(this); },
+
+  is,
 
   // Patching cannot handle this approach because Symbol.dispose is special and will not be listed as an Object.entries().
   // [Symbol.dispose]: function() { this.constructor._release(this); },

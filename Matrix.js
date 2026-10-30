@@ -24,11 +24,22 @@ import { mix } from "./mixwith.js";
 // Keep separate for the moment until tested.
 class AbstractMatrix {
 
-  static [Symbol.hasInstance](instance) {
-    return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
-  }
+  /* Replacement for "instanceof" that works across modules. */
 
-  static _geoLibType = "AbstractMatrix";
+  /** @type {string} */
+  static TYPE = "AbstractMatrix";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE];
+
+  /**
+   * Check if this instance matches a given type name,
+   * supporting inheritance from parent classes.
+   * @param {string} typeName
+   * @returns {boolean}
+   */
+  is(typeName) { return this.constructor.TYPE_HIERARCHY.includes(typeName); }
+
 
   release() { this.arr.length = 0; }
 
@@ -1699,7 +1710,11 @@ AbstractMatrix.prototype.copyTo = AbstractMatrix.prototype.clone;
 // Pooling
 export class Matrix extends mix(AbstractMatrix).with(PoolableMixin) {
 
-  static _geoLibType = "Matrix";
+  /** @type {string} */
+  static TYPE = "Matrix";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
 
   // Pooling
 
@@ -1758,7 +1773,12 @@ arr6 = mgr.newArray(35)
 // Example typed class
 
 export class MatrixFloat32 extends mix(AbstractMatrix).with(PoolableMixin) {
-  static _geoLibType = "MatrixFloat32";
+
+  /** @type {string} */
+  static TYPE = "MatrixFloat32";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
 
   // ----- NOTE: Buffer manager ----- //
 

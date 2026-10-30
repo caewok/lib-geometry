@@ -59,7 +59,11 @@ drawing.drawShape(bounds)
  */
 export class CenteredPolygon extends CenteredPolygonBase {
 
-  static _geoLibType = "CenteredPolygon";
+  /** @type {string} */
+  static TYPE = "CenteredPolygon";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
 
   /**
    * @param {Point} origin    Center point of the polygon.

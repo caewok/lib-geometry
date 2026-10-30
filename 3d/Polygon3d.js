@@ -59,21 +59,21 @@ export class Polygon3d {
 
   static EPSILON = 1e-08;
 
-  static [Symbol.hasInstance](instance) {
-    if ( !instance || typeof instance !== "object" ) return false;
+  /* Replacement for "instanceof" that works across modules. */
 
-    // Walk up the inheritance chain..
-    let currentConstructor = instance.constructor;
-    while ( currentConstructor ) {
-      if ( currentConstructor._geoLibType === this._geoLibType ) return true;
+  /** @type {string} */
+  static TYPE = "Polygon3d";
 
-      // Move to the parent class.
-      currentConstructor = Object.getPrototypeOf(currentConstructor);
-    }
-    return false;
-  }
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE];
 
-  static _geoLibType = "Polygon3d";
+  /**
+   * Check if this instance matches a given type name,
+   * supporting inheritance from parent classes.
+   * @param {string} typeName
+   * @returns {boolean}
+   */
+  is(typeName) { return this.constructor.TYPE_HIERARCHY.includes(typeName); }
 
   /** @type {Point3d} */
   points = [];
@@ -1462,7 +1462,11 @@ function pointFromVertices(i, vertices, indices, stride = 3, offset = 0, outPoin
  */
 export class Ellipse3d extends Polygon3d {
 
-  static _geoLibType = "Ellipse3d";
+  /** @type {string} */
+  static TYPE = "Ellipse3d";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
 
   // Assumed density for transforms. If zero, will use PIXI.Circle.approximateVertexDensity based on the major radius.
   #density = 0;
@@ -2117,7 +2121,7 @@ export class Ellipse3d extends Polygon3d {
 
     // If the radii are equal, return a circle. (Angle doesn't matter here.)
     if ( out.radiusX.almostEqual(out.radiusY) ) {
-      if ( !(out instanceof Circle3d) ) {
+      if ( !(out.is("Circle3d")) ) {
         const circle = Circle3d.fromEllipse3d(out);
         out.release();
         out = circle;
@@ -2126,7 +2130,7 @@ export class Ellipse3d extends Polygon3d {
     }
 
     // Unequal radii; convert to an ellipse.
-    if ( out instanceof Circle3d ) {
+    if ( out.is("Circle3d") ) {
       const ellipse = out.clone(new Ellipse3d());
       out.release();
       out = ellipse;
@@ -2190,7 +2194,11 @@ export class Ellipse3d extends Polygon3d {
  */
 export class Circle3d extends Ellipse3d {
 
-  static _geoLibType = "Circle3d";
+  /** @type {string} */
+  static TYPE = "Circle3d";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
 
   get radiusX() { return super.radiusX; }
 
@@ -2403,7 +2411,11 @@ export class Circle3d extends Ellipse3d {
  */
 export class Triangle3d extends Polygon3d {
 
-  static _geoLibType = "Triangle3d";
+  /** @type {string} */
+  static TYPE = "Triangle3d";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
 
   constructor() {
     super(3);
@@ -2630,7 +2642,11 @@ export class Triangle3d extends Polygon3d {
  */
 export class Quad3d extends Polygon3d {
 
-  static _geoLibType = "Quad3d";
+  /** @type {string} */
+  static TYPE = "Quad3d";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
 
   constructor() {
     super(4);
@@ -3026,7 +3042,11 @@ export class Quad3d extends Polygon3d {
  */
 export class Polygons3d extends Polygon3d {
 
-  static _geoLibType = "Polygons3d";
+  /** @type {string} */
+  static TYPE = "Polygons3d";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
 
   /** @type {Polygon3d[]} */
   polygons = [];
@@ -3288,8 +3308,8 @@ export class Polygons3d extends Polygon3d {
     for ( let i = 0; i < n; i += 1 ) {
       const outPoly = outPolys[i];
       const thisPoly = thisPolys[i];
-      if ( outPoly instanceof thisPoly.constructor
-        && thisPoly instanceof outPoly.constructor ) thisPoly.clone(outPoly);
+      if ( outPoly.is(thisPoly.constructor.TYPE)
+        && thisPoly.is(outPoly.constructor.TYPE) ) thisPoly.clone(outPoly);
       else outPolys[i] = thisPoly.clone();
     }
 
@@ -3309,7 +3329,7 @@ export class Polygons3d extends Polygon3d {
   toClipperPaths({ omitAxis = "z", scalingFactor = 100 } = {}) {
     // Convert all to Polygons3d
     const polys3d = this.polygons.map(poly => {
-      if ( poly instanceof Ellipse3d ) return poly.toPolygon3d({ scalingFactor });
+      if ( poly.is("Ellipse3d") ) return poly.toPolygon3d({ scalingFactor });
       return poly;
     });
 
@@ -3620,7 +3640,7 @@ export class Polygons3d extends Polygon3d {
       return []; // No intersection; parallel but not touching.
     }
 
-    if ( other instanceof Polygons3d ) {
+    if ( other.is("Polygons3d") ) {
       console.warn("Polygons3d|Intersecting two Polygons3d may be resource intensive.");
       const out = [];
       for ( const poly1 of this.polygons ) {

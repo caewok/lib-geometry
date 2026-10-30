@@ -19,9 +19,22 @@ const tmpPt3 = new Point3d();
 // Class to represent a plane
 export class Plane {
 
-  static [Symbol.hasInstance](instance) {
-    return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
-  }
+  /* Replacement for "instanceof" that works across modules. */
+
+  /** @type {string} */
+  static TYPE = "Plane";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE];
+
+  /**
+   * Check if this instance matches a given type name,
+   * supporting inheritance from parent classes.
+   * @param {string} typeName
+   * @returns {boolean}
+   */
+  is(typeName) { return this.constructor.TYPE_HIERARCHY.includes(typeName); }
+
 
   release() {
     this.clearCache();
@@ -30,8 +43,6 @@ export class Plane {
   }
 
   [Symbol.dispose]() { this.release(); }
-
-  static _geoLibType = "Plane";
 
   /** @type {Point3d} */
   #normal = Point3d.tmp.set(0, 0, 1);

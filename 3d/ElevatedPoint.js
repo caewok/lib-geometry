@@ -24,7 +24,11 @@ import { Point3d } from "./Point3d.js";
  */
 export class ElevatedPoint extends Point3d {
 
-  static _geoLibType = "ElevatedPoint";
+  /** @type {string} */
+  static TYPE = "ElevatedPoint";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
 
   /** @type {number<grid units>} */
   get elevation() { return pixelsToGridUnits(this.z); }

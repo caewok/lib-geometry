@@ -7,7 +7,6 @@ PIXI
 "use strict";
 
 import { ClipperPaths } from "./ClipperPaths.js";
-import { Clipper2Paths } from "./Clipper2Paths.js";
 
 export const PATCHES = {};
 PATCHES.CONSTRAINED_TOKEN_BORDER = {};
@@ -276,14 +275,14 @@ export class ConstrainedTokenBorder extends foundry.canvas.geometry.ClockwiseSwe
    */
   #edgeIsCollinearToBoundary(edge) {
     const boundary = this.config.boundaryShapes[0]; // Always a single shape b/c set in initialize.
-    if ( boundary instanceof PIXI.Rectangle ) {
+    if ( boundary.is("PIXI.Rectangle") ) {
       using delta = PIXI.Point.tmp;
       edge.b.subtract(edge.a, delta);
       if ( !delta.x && (edge.a.x.almostEqual(boundary.left)
         || edge.a.x.almostEqual(boundary.right)) ) return true;
       if ( !delta.y && (edge.a.y.almostEqual(boundary.top)
         || edge.a.y.almostEqual(boundary.bottom)) ) return true;
-    } else if ( boundary instanceof PIXI.Polygon ) {
+    } else if ( boundary.is("PIXI.Polygon") ) {
       const orient2d = foundry.utils.orient2dFast;
       for ( const boundaryEdge of boundary.iterateEdges() ) {
         // Works b/c the boundary polygon is simple.
@@ -389,7 +388,7 @@ export class ConstrainedTokenBorder extends foundry.canvas.geometry.ClockwiseSwe
    * @returns {PIXI.Polygon|undefined}
    */
   static clipperShapeToPolygon(shape) {
-    if ( !(shape instanceof ClipperPaths || shape instanceof Clipper2Paths ) ) return shape;
+    if ( !(shape.is("ClipperPaths")) ) return shape;
 
     // Multiple polygons present. Ignore holes. Return remaining polygon or
     // construct one from convex hull of remaining polygons.

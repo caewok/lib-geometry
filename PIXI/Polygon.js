@@ -471,10 +471,10 @@ function pointsBetween(a, b) {
  * @returns {boolean}
  */
 function overlaps(other) {
-  if ( other instanceof PIXI.Polygon ) { return this._overlapsPolygon(other); }
-  if ( other instanceof PIXI.Circle ) { return this._overlapsCircle(other); }
-  if ( other instanceof PIXI.Rectangle ) { return other._overlapsPolygon(this); }
-  if ( other instanceof PIXI.Ellipse ) return other._overlapsPolygon(this);
+  if ( other.is("PIXI.Circle") ) { return this._overlapsCircle(other); }
+  if ( other.is("PIXI.Ellipse") ) return other._overlapsPolygon(this);
+  if ( other.is("PIXI.Rectangle") ) { return other._overlapsPolygon(this); }
+  if ( other.is("PIXI.Polygon") ) { return this._overlapsPolygon(other); }
   if ( other.toPolygon) return this._overlapsPolygon(other.toPolygon());
   console.warn("overlaps|shape not recognized.", other);
   return false;
@@ -487,10 +487,10 @@ function overlaps(other) {
  * @returns {boolean}
  */
 function envelops(shape) {
-  if ( shape instanceof PIXI.Polygon ) { return this._envelopsPolygon(shape); }
-  if ( shape instanceof PIXI.Circle ) { return this._envelopsCircle(shape); }
-  if ( shape instanceof PIXI.Rectangle ) { return this._envelopsRectangle(shape); }
-  if ( shape instanceof PIXI.Point ) { return this._envelopsPoint(shape); }
+  if ( shape.is("PIXI.Circle") ) { return this._envelopsCircle(shape); }
+  if ( shape.is("PIXI.Rectangle") ) { return this._envelopsRectangle(shape); }
+  if ( shape.is("PIXI.Polygon") ) { return this._envelopsPolygon(shape); }
+  if ( shape.is("PIXI.Point") ) { return this._envelopsPoint(shape); }
   if ( shape.toPolygon) return this._envelopsPolygon(shape.toPolygon());
   console.warn("overlaps|shape not recognized.", shape);
   return false;
@@ -1041,7 +1041,7 @@ function key() {
  * @returns {boolean}
  */
 function equals(other) {
-  if ( !(other instanceof PIXI.Polygon) ) return false;
+  if ( !(other.is("PIXI.Polygon")) ) return false;
   if ( this.points.length !== other.points.length ) return false;
   if ( this.isClockwise ^ other.isClockwise ) return false;
 
@@ -1079,7 +1079,7 @@ function equals(other) {
  * @returns {boolean}
  */
 function almostEqual(other, epsilon = 1e-08) {
-  if ( !(other instanceof PIXI.Polygon) ) return false;
+  if ( !(other.is("PIXI.Polygon")) ) return false;
   if ( this.points.length !== other.points.length ) return false;
 
   const thisPoints = this.iteratePoints();
@@ -1244,6 +1244,21 @@ function interiorPoint() {
   return PIXI.Point.tmp.set(bestMid, y);
 }
 
+/**
+ * Check if this instance matches a given type name,
+ * supporting inheritance from parent classes.
+ * @param {string} typeName
+ * @returns {boolean}
+ */
+function is(typeName) { return this.constructor.TYPE_HIERARCHY.includes(typeName); }
+
+/** @type {string} */
+PIXI.Polygon.TYPE = "PIXI.Polygon";
+
+/** @type {string[]} */
+PIXI.Polygon.TYPE_HIERARCHY = [PIXI.Polygon.TYPE];
+
+
 
 PATCHES.PIXI.GETTERS = {
   area,
@@ -1305,7 +1320,9 @@ PATCHES.PIXI.METHODS = {
   cutaway,
 
   // Helper/internal methods
-  scaledArea
+  scaledArea,
+
+  is,
 };
 
 PATCHES.PIXI.STATIC_METHODS = {

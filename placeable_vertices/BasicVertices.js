@@ -876,9 +876,7 @@ export class Rectangle3dVertices extends BasicVertices {
 
 export class Polygon3dVertices extends BasicVertices {
 
-  static isClipper(poly) {
-    return poly instanceof ClipperPaths || poly instanceof Clipper2Paths;
-  }
+  static isClipper(poly) { return poly.is("ClipperPaths"); }
 
   static NUM_TRIANGLE_ELEMENTS = 3 * this.NUM_VERTEX_ELEMENTS;
 
@@ -946,16 +944,16 @@ Ex: 6 points, 6 outer edges.
    * @returns {boolean}
    */
   static canUseFan(poly, centroid) {
-    if ( poly instanceof PIXI.Rectangle
-      || poly instanceof PIXI.Ellipse
-      || poly instanceof PIXI.Circle ) return true;
+    if ( poly.is("PIXI.Rectangle")
+      || poly.is("PIXI.Ellipse")
+      || poly.is("PIXI.Circle") ) return true;
 
     // Test Clipper shapes, as could be a regular polygon.
     if ( this.isClipper(poly) ) {
       poly = poly.simplify();
-      if ( poly instanceof PIXI.Rectangle ) return true;
+      if ( poly.is("PIXI.Rectangle") ) return true;
     }
-    if ( !(poly instanceof PIXI.Polygon) ) return false;
+    if ( !(poly.is("PIXI.Polygon")) ) return false;
 
     // Test that the segment between centroid and polygon point does not intersect another edge.
     centroid ??= poly.center;
@@ -970,9 +968,9 @@ Ex: 6 points, 6 outer edges.
     // Attempt to convert various shapes to a polygon.
     let bounds;
     if ( this.isClipper(poly) ) poly = poly.simplify();
-    if ( poly instanceof PIXI.Rectangle
-      || poly instanceof PIXI.Ellipse
-      || poly instanceof PIXI.Circle ) {
+    if ( poly.is("PIXI.Rectangle")
+      || poly.is("PIXI.Ellipse")
+      || poly.is("PIXI.Circle") ) {
       bounds = poly.getBounds();
       centroid ??= poly.center;
       poly = poly.toPolygon();
@@ -990,7 +988,7 @@ Ex: 6 points, 6 outer edges.
   static _fanTriangulatePolygon(poly, { centroid } = {}) {
     const sp = this.simplifyPoly(poly, centroid);
     poly = sp.poly;
-    if ( !(poly instanceof PIXI.Polygon) ) console.error("calculateVertices|Polygon is not a PIXI.Polygon", poly);
+    if ( !(poly.is("PIXI.Polygon")) ) console.error("calculateVertices|Polygon is not a PIXI.Polygon", poly);
     centroid = sp.centroid ?? poly.center;
 
     const numElems = Math.floor(poly.points.length * 0.5 * 6);
@@ -1030,7 +1028,7 @@ Ex: 6 points, 6 outer edges.
       vertices2d = coords.vertices;
       holes = coords.holes;
     } else {
-      if ( !(poly instanceof PIXI.Polygon) ) poly = poly.toPolygon();
+      if ( !(poly.is("PIXI.Polygon")) ) poly = poly.toPolygon();
       vertices2d = poly.points;
     }
 
@@ -1139,7 +1137,7 @@ Ex: 6 points, 6 outer edges.
     }
 
     const vertexOffset = this.NUM_VERTEX_ELEMENTS;
-    if ( !(poly instanceof PIXI.Polygon) ) poly = poly.toPolygon();
+    if ( !(poly.is("PIXI.Polygon")) ) poly = poly.toPolygon();
 
     // Some temporary points.
     using triA = Point3d.tmp;
@@ -1472,7 +1470,7 @@ export class SphereVertices extends BasicVertices {
   }
 
   static modelMatrixFromShape(circle, { elevationZ = 0, modelMatrix } = {}) {
-    if ( circle instanceof Sphere ) return this._modelMatrixFromSphere(circle, { modelMatrix });
+    if ( circle.is("Sphere") ) return this._modelMatrixFromSphere(circle, { modelMatrix });
     modelMatrix ??= ModelMatrix.create();
 
     // Build transform matrix.
