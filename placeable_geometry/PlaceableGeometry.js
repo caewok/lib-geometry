@@ -106,7 +106,7 @@ export class PlaceableGeometry {
    * Initialize geometry shapes and sync initial spatial transforms and bounds.
    */
   initialize() {
-    console.debug(`${this.constructor.name}|initialize ${this.placeableDocument.name} (${this.placeableId})`);
+    // console.debug(`${this.constructor.name}|initialize ${this.placeableDocument.name} (${this.placeableId})`);
     this.createShapes();
     this.syncTransforms();
     this.calculateAABB();

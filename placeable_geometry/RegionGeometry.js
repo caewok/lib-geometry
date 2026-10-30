@@ -175,7 +175,7 @@ export class RegionGeometry extends PlaceableGeometry {
   baseShapes = [];
 
   createShapes() {
-    console.debug(`RegionGeometry|createShapes ${this.placeableDocument.name} (${this.placeableId})`);
+    // console.debug(`RegionGeometry|createShapes ${this.placeableDocument.name} (${this.placeableId})`);
     const regionShapes = this.regionShapes;
 
     this._createBaseShapes();
@@ -459,7 +459,7 @@ export class RegionGeometry extends PlaceableGeometry {
   // ----- NOTE: Shape Updating -----
 
   _update() {
-    console.debug(`RegionGeometry|_update ${this.placeableDocument.name} (${this.placeableId})`);
+    // console.debug(`RegionGeometry|_update ${this.placeableDocument.name} (${this.placeableId})`);
 
     if ( this.activeUpdates.has("shapes")
       || this.activeUpdates.has("wallRestriction")
@@ -543,7 +543,7 @@ export class RegionGeometry extends PlaceableGeometry {
    *   Adding a "elevation" key will update the position and scale.
    */
   _updateShapeDimensions(shapeIdx) {
-    console.debug(`RegionGeometry|_updateShapeDimensions ${shapeIdx} ${this.placeableDocument.name} (${this.placeableId})`);
+    // console.debug(`RegionGeometry|_updateShapeDimensions ${shapeIdx} ${this.placeableDocument.name} (${this.placeableId})`);
     const shape = this.baseShapes[shapeIdx];
     if ( !shape ) return;
 

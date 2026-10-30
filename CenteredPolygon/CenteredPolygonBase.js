@@ -11,11 +11,11 @@ PIXI,
  */
 export class CenteredPolygonBase extends PIXI.Polygon {
 
-  static [Symbol.hasInstance](instance) {
-    return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
-  }
+  /** @type {string} */
+  static TYPE = "CenteredPolygonBase";
 
-  static _geoLibType = "CenteredPolygonBase";
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE];
 
   /** @type {PIXI.Point} */
   origin = new PIXI.Point();

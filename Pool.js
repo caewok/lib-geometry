@@ -78,7 +78,7 @@ export class Pool {
     const cl = this.cl;
 
     /* For debugging
-    if ( !(obj instanceof cl) ) {
+    if ( !(obj.is(cl.TYPE)) ) {
       console.warn("Pool object does not match other instance in the pool.", { cl, obj });
       return;
     }
@@ -90,9 +90,7 @@ export class Pool {
     obj._isInPool = true;
   }
 
-  // Use a WeakMap to store pools keyed by the Class itself.
-  // This ensures no memory leaks and separate pools for every class implementing Pool.
-  static #poolRegistry = new WeakMap();
+  static #poolRegistry = new Map();
 
   /**
    * Get the pool for a given class.
@@ -100,8 +98,10 @@ export class Pool {
    * @returns {Pool}
    */
    static getPool(cl) {
-     if ( !this.#poolRegistry.has(cl) ) this.#poolRegistry.set(cl, new this(cl));
-     return this.#poolRegistry.get(cl);
+     const reg = this.#poolRegistry;
+     const key = cl.TYPE;
+     if ( !reg.has(key) ) reg.set(key, new this(cl));
+     return reg.get(key);
    }
 }
 

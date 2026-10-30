@@ -33,11 +33,22 @@ Symbol.dispose ??= Symbol("Symbol.dispose");
 
 export class AABB2d {
 
-  static [Symbol.hasInstance](instance) {
-    return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
-  }
+  /* Replacement for "instanceof" that works across modules. */
 
-  static _geoLibType = "AABB2d";
+  /** @type {string} */
+  static TYPE = "AABB2d";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE];
+
+  /**
+   * Check if this instance matches a given type name,
+   * supporting inheritance from parent classes.
+   * @param {string} typeName
+   * @returns {boolean}
+   */
+  is(typeName) { return this.constructor.TYPE_HIERARCHY.includes(typeName); }
+
 
   static POINT_CLASS = PIXI.Point;
 
@@ -238,12 +249,12 @@ export class AABB2d {
    */
   static fromShape(shape, out) {
     out ??= new this();
-    if ( shape instanceof AABB2d ) shape.clone(out);
-    else if ( shape instanceof PIXI.Rectangle ) AABB2d.fromRectangle(shape, out);
-    else if ( shape instanceof PIXI.Polygon ) AABB2d.fromPolygon(shape, out);
-    else if ( shape instanceof PIXI.Circle ) AABB2d.fromCircle(shape, out);
-    else if ( shape instanceof PIXI.Ellipse ) AABB2d.fromEllipse(shape, out);
-    else if ( shape instanceof PIXI.RoundedRectangle ) AABB2d.fromRoundedRectangle(shape, out);
+    if ( shape.is("AABB2d") ) shape.clone(out);
+    else if ( shape.is("PIXI.Rectangle") ) AABB2d.fromRectangle(shape, out);
+    else if ( shape.is("PIXI.Polygon") ) AABB2d.fromPolygon(shape, out);
+    else if ( shape.is("PIXI.Circle") ) AABB2d.fromCircle(shape, out);
+    else if ( shape.is("PIXI.Ellipse") ) AABB2d.fromEllipse(shape, out);
+    else if ( shape.is("PIXI.RoundedRectangle") ) AABB2d.fromRoundedRectangle(shape, out);
     else if ( shape.toPolygon ) AABB2d.fromPolygon(shape.toPolygon(), out);
     else throw Error("AABB2d.fromShape|Shape not recognized", shape);
     return out;
@@ -428,8 +439,8 @@ export class AABB2d {
    * @returns {boolean}
    */
   overlaps(shape) {
-    if ( shape instanceof AABB2d ) return this.overlapsAABB(shape);
-    if ( shape instanceof PIXI.Rectangle ) return this.overlapsRectangle(shape);
+    if ( shape.is("AABB2d") ) return this.overlapsAABB(shape);
+    if ( shape.is("PIXI.Rectangle") ) return this.overlapsRectangle(shape);
     console.error("AABB2d|overlaps shape not recognized", shape);
     return false;
   }

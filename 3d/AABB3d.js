@@ -5,9 +5,9 @@ PIXI,
 "use strict";
 
 import { Point3d } from "./Point3d.js";
-import { almostLessThan, gridUnitsToPixels } from "../util.js";
+import { gridUnitsToPixels } from "../util.js";
 import { AABB2d } from "../AABB.js";
-import { Polygons3d, Quad3d, Circle3d } from "./Polygon3d.js";
+import { Quad3d } from "./Polygon3d.js";
 
 const axes = {
   x: new Point3d(1, 0, 0),
@@ -23,7 +23,11 @@ const tmpPoints = Point3d.createN(8);
 
 export class AABB3d extends AABB2d {
 
-  static _geoLibType = "AABB3d";
+  /** @type {string} */
+  static TYPE = "AABB3d";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
 
   static POINT_CLASS = Point3d;
 
@@ -141,7 +145,7 @@ export class AABB3d extends AABB2d {
    */
   static fromShape(shape, z, out) {
     out ??= new this();
-    if ( shape instanceof AABB3d ) {
+    if ( shape.is("AABB3d") ) {
       shape.clone(out);
       if ( !z ) return out;
     } else super.fromShape(shape, out);
@@ -255,7 +259,7 @@ export class AABB3d extends AABB2d {
    * @returns {AABB3d}
    */
   static fromPolygon3d(poly3d, out) {
-    if ( poly3d instanceof Circle3d ) return this.fromCircle3d(poly3d, out);
+    if ( poly3d.is("Circle3d") ) return this.fromCircle3d(poly3d, out);
     return this.fromPoints(poly3d.points, out);
   }
 
@@ -306,8 +310,8 @@ export class AABB3d extends AABB2d {
    * @returns {boolean}
    */
   overlaps(shape) {
-    if ( shape instanceof AABB2d ) return shape.overlapsAABB(this); // Ignore z axis.
-    if ( shape instanceof AABB3d ) return this.overlapsAABB(shape);
+    if ( shape.is("AABB3d") ) return this.overlapsAABB(shape);
+    if ( shape.is("AABB2d") ) return shape.overlapsAABB(this); // Ignore z axis.
     return super.overlaps(shape);
   }
 
@@ -337,8 +341,8 @@ export class AABB3d extends AABB2d {
    * @return {boolean}
    */
   overlapsConvexPolygon3d(poly3d) {
-    if ( poly3d instanceof Circle3d ) return this.overlapsCircle3d(poly3d);
-    if ( poly3d instanceof Polygons3d ) {
+    if ( poly3d.is("Circle3d") ) return this.overlapsCircle3d(poly3d);
+    if ( poly3d.is("Polygons3d") ) {
       // Early exit if polygon is empty
       if ( !poly3d.polygons.length) return false;
 

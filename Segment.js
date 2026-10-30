@@ -8,11 +8,22 @@
 // Treat just like { a, b } but can use the using keyword. E.g., using segment = new Segment(a, b)
 export class Segment {
 
-  static [Symbol.hasInstance](instance) {
-    return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
-  }
+  /* Replacement for "instanceof" that works across modules. */
 
-  static _geoLibType = "Segment";
+  /** @type {string} */
+  static TYPE = "Segment";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE];
+
+  /**
+   * Check if this instance matches a given type name,
+   * supporting inheritance from parent classes.
+   * @param {string} typeName
+   * @returns {boolean}
+   */
+  is(typeName) { return this.constructor.TYPE_HIERARCHY.includes(typeName); }
+
 
   /** @type {PIXI.Point|Point3d} */
   a = null;

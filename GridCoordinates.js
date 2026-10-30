@@ -29,7 +29,11 @@ import { mix } from "./mixwith.js";
  */
 export class GridCoordinates extends mix(PIXI.Point).with(PoolableMixin) {
 
-  static _geoLibType = "GridCoordinates";
+  /** @type {string} */
+  static TYPE = "GridCoordinates";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, "PIXI.Point" ];
 
   /**
    * Factory function that converts a GridOffset to GridCoordinates.

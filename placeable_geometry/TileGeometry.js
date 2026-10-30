@@ -309,7 +309,10 @@ export class TileBoundingRectGeometry extends TileSubGeometry {
       using dims = Point3d.tmp;
       using angles = Point3d.tmp;
 
-      if ( rectOrPoly instanceof PIXI.Polygon ) {
+      if ( rectOrPoly.is("PIXI.Rectangle") ) {
+        angles.set(0, 0, 0);
+        dims.set(rectOrPoly.width, rectOrPoly.height, 1)
+      } else {
         // Determine the rotation angle of the box.
         const iter = rectOrPoly.iteratePoints();
         const a = iter.next().value;
@@ -319,9 +322,6 @@ export class TileBoundingRectGeometry extends TileSubGeometry {
         using s1 = new Segment(b, c);
         angles.set(0, 0, s0.angleXY );
         dims.set(s0.length, s1.length, 1 );
-      } else {
-        angles.set(0, 0, 0);
-        dims.set(rectOrPoly.width, rectOrPoly.height, 1)
       }
       this.shape.setRotation(angles);
       this.shape.setScale(dims);

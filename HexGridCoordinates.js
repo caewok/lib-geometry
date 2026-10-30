@@ -27,6 +27,13 @@ import { GridCoordinates } from "./GridCoordinates.js";
  */
 export function HexCoordinateMixin(Base) {
   return class HexCoordinate extends Base {
+
+    /** @type {string} */
+    static TYPE = "HexCoordinates";
+
+    /** @type {string[]} */
+    static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
+
     /**
      * Create this point from hex coordinates plus optional elevation.
      * @param {HexagonalGridCube} hexCube
@@ -110,5 +117,4 @@ export function HexCoordinateMixin(Base) {
  */
 export class HexGridCoordinates extends HexCoordinateMixin(GridCoordinates) {
 
-  static _geoLibType = "HexGridCoordinates";
 }

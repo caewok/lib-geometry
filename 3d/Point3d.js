@@ -45,21 +45,13 @@ import { gridUnitsToPixels, roundDecimals, roundNearWhole } from "../util.js";
 export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
   toJSON() { return { ...this }; }
 
-  static [Symbol.hasInstance](instance) {
-    if ( !instance || typeof instance !== "object" ) return false;
+  /* Replacement for "instanceof" that works across modules. */
 
-    // Walk up the inheritance chain..
-    let currentConstructor = instance.constructor;
-    while ( currentConstructor ) {
-      if ( currentConstructor._geoLibType === this._geoLibType ) return true;
+  /** @type {string} */
+  static TYPE = "Point3d";
 
-      // Move to the parent class.
-      currentConstructor = Object.getPrototypeOf(currentConstructor);
-    }
-    return false;
-  }
-
-  static _geoLibType = "Point3d";
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, "PIXI.Point"];
 
   z = 0;
 

@@ -24,7 +24,7 @@ function area() {
  * @returns {boolean}
  */
 function equals(other) {
-  if ( !(other instanceof PIXI.Rectangle) ) return false;
+  if ( !(other.is("PIXI.Rectangle")) ) return false;
   return this.x === other.x
     && this.y === other.y
     && this.width === other.width
@@ -38,7 +38,7 @@ function equals(other) {
  * @returns {boolean}
  */
 function almostEqual(other, epsilon = 1e-08) {
-  if ( !(other instanceof PIXI.Rectangle) ) return false;
+  if ( !(other.is("PIXI.Rectangle")) ) return false;
   return this.x.almostEqual(other.x, epsilon)
     && this.y.almostEqual(other.y, epsilon)
     && this.width.almostEqual(other.width, epsilon)
@@ -84,10 +84,10 @@ function* iterateEdges({close = true} = {}) {
  * @returns {boolean}
  */
 function overlaps(shape) {
-  if ( shape instanceof PIXI.Rectangle ) { return this._overlapsRectangle(shape); }
-  if ( shape instanceof PIXI.Polygon ) { return this._overlapsPolygon(shape); }
-  if ( shape instanceof PIXI.Circle ) { return this._overlapsCircle(shape); }
-  if ( shape instanceof PIXI.Ellipse ) return shape._overlapsRectangle(this);
+  if ( shape.is("PIXI.Rectangle") ) { return this._overlapsRectangle(shape); }
+  if ( shape.is("PIXI.Circle") ) { return this._overlapsCircle(shape); }
+  if ( shape.is("PIXI.Ellipse") ) return shape._overlapsRectangle(this);
+  if ( shape.is("PIXI.Polygon") ) { return this._overlapsPolygon(shape); }
   if ( shape.toPolygon) return this._overlapsPolygon(shape.toPolygon());
   console.warn("overlaps|shape not recognized.", shape);
   return false;
@@ -100,9 +100,9 @@ function overlaps(shape) {
  * @returns {boolean}
  */
 function envelops(shape) {
-  if ( shape instanceof PIXI.Polygon ) { return this._envelopsPolygon(shape); }
-  if ( shape instanceof PIXI.Circle ) { return this._envelopsCircle(shape); }
-  if ( shape instanceof PIXI.Rectangle ) { return this._envelopsRectangle(shape); }
+  if ( shape.is("PIXI.Circle") ) { return this._envelopsCircle(shape); }
+  if ( shape.is("PIXI.Rectangle") ) { return this._envelopsRectangle(shape); }
+  if ( shape.is("PIXI.Polygon") ) { return this._envelopsPolygon(shape); }
   if ( shape.toPolygon) return this._envelopsPolygon(shape.toPolygon());
   console.warn("overlaps|shape not recognized.", shape);
   return false;
@@ -560,6 +560,20 @@ function centerScale(scaleX = 1, scaleY = 1, out) {
   return out;
 }
 
+/**
+ * Check if this instance matches a given type name,
+ * supporting inheritance from parent classes.
+ * @param {string} typeName
+ * @returns {boolean}
+ */
+function is(typeName) { return this.constructor.TYPE_HIERARCHY.includes(typeName); }
+
+/** @type {string} */
+PIXI.Rectangle.TYPE = "PIXI.Rectangle";
+
+/** @type {string[]} */
+PIXI.Rectangle.TYPE_HIERARCHY = [PIXI.Rectangle.TYPE];
+
 PATCHES.PIXI.STATIC_METHODS = { gridRectangles };
 
 PATCHES.PIXI.GETTERS = { area };
@@ -601,5 +615,7 @@ PATCHES.PIXI.METHODS = {
   centerScale,
 
   // Helper methods
-  scaledArea
+  scaledArea,
+
+  is,
 };

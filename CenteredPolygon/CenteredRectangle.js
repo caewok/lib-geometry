@@ -43,7 +43,11 @@ drawing.drawShape(bounds)
  */
 export class CenteredRectangle extends CenteredPolygonBase {
 
-  static _geoLibType = "CenteredRectangle";
+  /** @type {string} */
+  static TYPE = "CenteredRectangle";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE];
 
   /**
    * @param {Point} origin   Center point of the rectangle. Can be left undefined if leftCorner is provided.

@@ -79,7 +79,7 @@ export class Frustum {
     const centroid = this.centroid;
     for ( const face of this.iterateFaces(true) ) {
       if ( face.orient3d(centroid) > 0 ) {
-        if ( face instanceof Quad3d ) {
+        if ( face.is("Quad3d") ) {
           // Quad: Swap b and d to invert winding direction.
           using tmp = face.b.clone();
           face.b.copyFrom(face.d);
