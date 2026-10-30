@@ -20,6 +20,12 @@ Each can be intersected quickly using WA
 
 export class RegularPolygon extends PIXI.Polygon {
 
+  /** @type {string} */
+  static TYPE = "RegularPolygon";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE];
+
   /**
    * Vertices when the polygon is centered on 0,0.
    * @type {PIXI.Point[]}

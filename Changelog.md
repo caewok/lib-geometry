@@ -1,5 +1,47 @@
+## 0.7.0
+Refactor placeable geometry handling into GeometricPrimitives and PlaceableGeometry (which relies on those primitives).
+Use static TYPE in place of modifying instanceof, for speed.
+Better region geometry handling and identification of solid/holes islands.
+
+A substantial geometry-engine refactor relative to release/0.6.1, not just a small patch release. In short: A large 3D geometry and engine hardening update, with more robust shape math, transformation support, and visibility/intersection handling than release/0.6.1.
+
+### Major 3D geometry work
+
+- Added and expanded support for 3D AABBs, frusta, planes, rays, and polygon/ellipse/circle intersections.
+- AABB3d, Plane, Frustum, Sphere, Polygon3d, Triangle3d, Quad3d, Circle3d, and Ellipse3d all received deeper transform, overlap, and intersection logic.
+- New factory helpers and document/level-based constructors were added for tile, wall, token, level, and region geometry.
+
+### Type-system and compatibility refactor
+
+Replaced many legacy “instanceof” checks with explicit TYPE / TYPE_HIERARCHY metadata and an is(typeName) pattern. This makes geometry objects behave consistently across modules and avoids cross-file instanceof issues.
+
+### Polygon / hole / shape handling cleanup
+
+- Improved polygon winding, orientation, hole handling, and cleaning for 3D planar polygons.
+- Better support for ellipses/circles converted to 3D polygons and for combining or triangulating coplanar shapes.
+- Clipper integration was expanded and made more robust.
+
+### Matrix and point math improvements
+
+- Matrix transform APIs were expanded and tightened: rotation/translation/scale helpers now handle 2D/3D point-vs-vector semantics better.
+- Point3d gained more utilities for keys, finite checks, sqrt/ceil/floor behavior, and better 3D key handling.
+- Many calculations now avoid stale cached state and better handle transforms, mirroring, and vector use.
+
+### Frustum / visibility and region logic
+
+- Frustum construction and overlap logic were significantly redesigned for better viewpoint-based 3D visibility tests.
+- Region and geometry overlap tests now use more precise document-aware data.
+
+### Utility and API additions
+
+- Added/updated support for CutawayPolygon and Draw color groups (LIGHT/DARK).
+- Clipper path helpers were expanded for union/combine/diff operations.
+
+
 ## 0.6.1
 Add bezier curve to drawing class.
+Pass through outpoint for CutawayPolygon from2d and to2d.
+Add additional colors to Draw, split into LIGHT and DARK.
 
 ## 0.6.0
 Add SDF classes. Just for experimentation thus far.

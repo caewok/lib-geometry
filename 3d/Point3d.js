@@ -45,11 +45,13 @@ import { gridUnitsToPixels, roundDecimals, roundNearWhole } from "../util.js";
 export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
   toJSON() { return { ...this }; }
 
-  static [Symbol.hasInstance](instance) {
-    return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
-  }
+  /* Replacement for "instanceof" that works across modules. */
 
-  static get _geoLibType() { return this.name; }
+  /** @type {string} */
+  static TYPE = "Point3d";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, "PIXI.Point"];
 
   z = 0;
 
@@ -105,8 +107,6 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
    */
   static midPoint(a, b) {
     const point = super.midPoint(a, b);
-    a.z ||= 0;
-    b.z ||= 0;
     point.z = a.z + ((b.z - a.z) * 0.5);
     return point;
   }
@@ -232,11 +232,11 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
     return {
       A: {
         top: this.tmp.set(edge.a.x, edge.a.y, top),
-        bottom: this.tmp.set(edge.a.x, edge.a.y, bottom)
+        bottom: this.tmp.set(edge.a.x, edge.a.y, bottom),
       },
       B: {
-        top: this.tmp(edge.b.x, edge.b.y, top),
-        bottom: this.tmp(edge.b.x, edge.b.y, bottom)
+        top: this.tmp.set(edge.b.x, edge.b.y, top),
+        bottom: this.tmp.set(edge.b.x, edge.b.y, bottom),
       }
     };
   }
@@ -264,13 +264,14 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
 
     // Rotate points to match tile rotation.
     if ( rotation ) {
-      const rotZ = Matrix.rotationZ(Math.toRadians(rotation));
+      const rotZ = Matrix.rotationZ(Math.toRadians(rotation), { d3: true });
       pts.forEach(pt => rotZ.multiplyPoint3d(pt, pt));
     }
 
     // Translate to canvas position.
     const center = bounds.center;
-    const trM = Matrix.translation(center.x + offsetX, center.y + offsetY, elevationZ);
+    using center3d = this.tmp.set(center.x + offsetX, center.y + offsetY, elevationZ);
+    const trM = Matrix.translation(center3d, { d3: true });
     pts.forEach(pt => trM.multiplyPoint3d(pt, pt));
 
     return {
@@ -302,6 +303,7 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
 
   /**
    * Hash key for this point, with coordinates rounded to nearest integer.
+   * Requires positive x and y but handles negative z.
    * Ordered, so sortable.
    * @returns {BigInt}
    */
@@ -310,12 +312,12 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
   static key(pt) {
     const key2d = PIXI.Point.key(pt);
     const z = Math.round(pt.z || 0);
-    return (BigInt(key2d) << 32n) ^ BigInt(z);
+    return ((BigInt(key2d) << 32n) ^ BigInt(Math.abs(z))) * (z < 0 ? BigInt(-1) : BigInt(1))
   }
 
   /**
    * Convert a 3d BitInt key back to {x, y, z}
-   * Requires positive integers.
+   * Negative integers will create a negative z; x and y are always positive
    * @param {BigInt} key3d
    * @returns {Point3d}
    */
@@ -324,13 +326,34 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
 
     // Extract the lower 32 bits for Z
     // Using the & mask ensures we only get the bits shifted into the lower area.
-    outPoint.z = Number(key3d & 0xFFFFFFFFn);
+    const isNegative = key3d < 0;
+    outPoint.z = Number(Math.abs(key3d) & 0xFFFFFFFFn) * (isNegative ? -1 : 1);
 
     // Extract the upper 32 bits for the 2D key
-    const k2d = Number(key3d >> 32n);
+    const k2d = Number(Math.abs(key3d) >> 32n);
 
     // Use existing 2d logic.
     return super.invertKey(k2d, outPoint);
+  }
+
+  /**
+   * String key, rounding to a given number of decimals.
+   * @param {number} [places=8]   Number of decimals
+   */
+  stringKey(places=8) {
+    return `${this.x.toFixed(places)},${this.y.toFixed(places)}`;
+  }
+
+  /**
+   * Invert a string key.
+   * @param {string}
+   * @returns {Point3d}
+   */
+  static invertStringKey(str, out) {
+    // To avoid calling str.split repeatedly, do not call super; handle here.
+    out ??= this.tmp;
+    const [xStr, yStr, zStr] = str.split(",");
+    return out.set(Number(xStr) || 0, Number(yStr) || 0, Number(zStr) || 0);
   }
 
   /**
@@ -350,7 +373,7 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
         const coords = new Set(["x", "y", "z"]);
         coords.delete(x);
         coords.delete(y);
-        z = coords.first();
+        z = coords.first(); // FoundryVTT has Set.prototype.first.
       }
       return outPoint.set(this[x] / this[z], this[y] / this[z]);
     }
@@ -581,7 +604,7 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
    */
   floor(outPoint) {
     outPoint ??= this.constructor.tmp;
-    super.abs(outPoint);
+    super.floor(outPoint);
     outPoint.z = Math.floor(this.z);
     return outPoint;
   }
@@ -594,8 +617,21 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
    */
   ceil(outPoint) {
     outPoint ??= this.constructor.tmp;
-    super.abs(outPoint);
+    super.ceil(outPoint);
     outPoint.z = Math.ceil(this.z);
+    return outPoint;
+  }
+
+  /**
+   * Get the square root of the coordinates.
+   * @param {Point3d} [outPoint]    A point-like object in which to store the value.
+   *   (Will create new point if none provided.)
+   * @returns {Point3d}
+   */
+  sqrt(outPoint) {
+    outPoint ??= this.constructor.tmp;
+    super.sqrt(outPoint);
+    outPoint.z = Math.sqrt(this.z);
     return outPoint;
   }
 
@@ -622,7 +658,7 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
   dot(other) {
     return super.dot(other) + (this.z * (other.z || 0));
   }
-  
+
   /**
    * Dot product of this point with itself
    * @returns {number}
@@ -706,7 +742,7 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
    */
   normalize(outPoint) {
     outPoint ??= this.constructor.tmp;
-    return super.normalize(outPoint);
+    return super.normalize(outPoint); // Calls 1 / this.magnitude(), so z dealt with there.
   }
 }
 

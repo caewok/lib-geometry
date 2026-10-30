@@ -293,7 +293,7 @@ function area() {
  * @returns {boolean}
  */
 function equals(other) {
-  if ( !(other instanceof PIXI.RoundedRectangle) ) return false;
+  if ( !(other.is("PIXI.RoundedRectangle")) ) return false;
   return this.x === other.x
     && this.y === other.y
     && this.width === other.width
@@ -308,7 +308,7 @@ function equals(other) {
  * @returns {boolean}
  */
 function almostEqual(other, epsilon = 1e-08) {
-  if ( !(other instanceof PIXI.RoundedRectangle) ) return false;
+  if ( !(other.is("PIXI.RoundedRectangle")) ) return false;
   return this.x.almostEqual(other.x, epsilon)
     && this.y.almostEqual(other.y, epsilon)
     && this.width.almostEqual(other.width, epsilon)
@@ -388,6 +388,20 @@ function viewablePoints(origin, { outermostOnly = true } = {}) {
  */
 function cutaway(a, b, opts) { return CutawayPolygon.cutawayBasicShape(this, a, b, opts); }
 
+/**
+ * Check if this instance matches a given type name,
+ * supporting inheritance from parent classes.
+ * @param {string} typeName
+ * @returns {boolean}
+ */
+function is(typeName) { return this.constructor.TYPE_HIERARCHY.includes(typeName); }
+
+/** @type {string} */
+PIXI.RoundedRectangle.TYPE = "PIXI.RoundedRectangle";
+
+/** @type {string[]} */
+PIXI.RoundedRectangle.TYPE_HIERARCHY = [PIXI.RoundedRectangle.TYPE];
+
 PATCHES.PIXI.GETTERS = {
   center,
   area,
@@ -425,5 +439,7 @@ PATCHES.PIXI.METHODS = {
   cutaway,
 
   // Helper methods
-  scaledArea
+  scaledArea,
+
+  is,
 };

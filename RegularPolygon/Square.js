@@ -20,6 +20,12 @@ const diagonalRotations = new Set([0, 90, 180, 270]); // Oriented [] turned 45º
  */
 export class Square extends RegularPolygon {
 
+  /** @type {string} */
+  static TYPE = "Square";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE];
+
   constructor(origin, radius, {rotation = 0, width} = {}) {
     if ( !radius && !width ) {
       console.warn("Square should have either radius or width defined.");

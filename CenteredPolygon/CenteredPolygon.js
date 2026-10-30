@@ -59,6 +59,12 @@ drawing.drawShape(bounds)
  */
 export class CenteredPolygon extends CenteredPolygonBase {
 
+  /** @type {string} */
+  static TYPE = "CenteredPolygon";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
+
   /**
    * @param {Point} origin    Center point of the polygon.
    * @param {number[]} pts  Points of the polygon, where 0,0 is the center

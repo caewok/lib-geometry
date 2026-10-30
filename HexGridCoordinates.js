@@ -27,6 +27,13 @@ import { GridCoordinates } from "./GridCoordinates.js";
  */
 export function HexCoordinateMixin(Base) {
   return class HexCoordinate extends Base {
+
+    /** @type {string} */
+    static TYPE = "HexCoordinates";
+
+    /** @type {string[]} */
+    static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
+
     /**
      * Create this point from hex coordinates plus optional elevation.
      * @param {HexagonalGridCube} hexCube
@@ -109,6 +116,5 @@ export function HexCoordinateMixin(Base) {
  * A 2d point that can also represent a 3d hex coordinate (q, r, s).
  */
 export class HexGridCoordinates extends HexCoordinateMixin(GridCoordinates) {
-
 
 }

@@ -29,6 +29,12 @@ import { mix } from "./mixwith.js";
  */
 export class GridCoordinates extends mix(PIXI.Point).with(PoolableMixin) {
 
+  /** @type {string} */
+  static TYPE = "GridCoordinates";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, "PIXI.Point" ];
+
   /**
    * Factory function that converts a GridOffset to GridCoordinates.
    * The {x, y} coordinates are centered.

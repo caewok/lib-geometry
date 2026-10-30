@@ -1,4 +1,7 @@
 /* globals
+canvas,
+CONFIG,
+CONST,
 foundry,
 PIXI,
 */
@@ -7,6 +10,7 @@ PIXI,
 import { Point3d } from "./3d/Point3d.js";
 import { Draw } from "./Draw.js";
 import { almostLessThan, almostGreaterThan, almostBetween } from "./util.js";
+import { GEOMETRY_LIB_ID } from "./const.js";
 
 const axes = {
   x: new Point3d(1, 0, 0),
@@ -17,6 +21,8 @@ Object.freeze(axes.x);
 Object.freeze(axes.y);
 Object.freeze(axes.z);
 
+// Temporary points. Need 4 to accommodate the transform method.
+const tmpPoints = Point3d.createN(4);
 
 /**
  * Axis-aligned bounding box
@@ -27,11 +33,22 @@ Symbol.dispose ??= Symbol("Symbol.dispose");
 
 export class AABB2d {
 
-  static [Symbol.hasInstance](instance) {
-    return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
-  }
+  /* Replacement for "instanceof" that works across modules. */
 
-  static get _geoLibType() { return this.name; }
+  /** @type {string} */
+  static TYPE = "AABB2d";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE];
+
+  /**
+   * Check if this instance matches a given type name,
+   * supporting inheritance from parent classes.
+   * @param {string} typeName
+   * @returns {boolean}
+   */
+  is(typeName) { return this.constructor.TYPE_HIERARCHY.includes(typeName); }
+
 
   static POINT_CLASS = PIXI.Point;
 
@@ -63,6 +80,11 @@ export class AABB2d {
   get width() { return this.max.x - this.min.x; }
 
   get height() { return this.max.y - this.min.y; }
+
+  get center() {
+    const out = Point3d.tmp;
+    return this.min.add(this.max.subtract(this.min, out).multiplyScalar(0.5, out), out); // min + ((max - min) * 0.5)
+  }
 
   constructor() { this._clear(); }
 
@@ -135,12 +157,15 @@ export class AABB2d {
   static union(bounds, out) {
     if ( out ) out._clear();
     else out = new this();
-    const { min, max } = out;
     for ( const axis of this.axes ) {
-      const boundsMin = bounds.map(b => b.min[axis]);
-      const boundsMax = bounds.map(b => b.max[axis]);
-      min[axis] = Math.min(...boundsMin, min[axis]);
-      max[axis] = Math.max(...boundsMax, max[axis]);
+      let min = Number.POSITIVE_INFINITY;
+      let max = Number.NEGATIVE_INFINITY;
+      for ( const b of bounds ) {
+        min = Math.min(b.min[axis], min);
+        max = Math.max(b.max[axis], max);
+      }
+      out.min[axis] = min;
+      out.max[axis] = max;
     }
     return out;
   }
@@ -153,14 +178,14 @@ export class AABB2d {
    * @returns {AABB2d}
    */
   static fromPoints(pts = [], out) {
-    if ( out ) out._clear();
-    else out = new this();
-    const { min, max } = out;
-    for ( const pt of pts ) {
-      for ( const axis of this.axes ) {
-        min[axis] = Math.min(pt[axis] ?? 0, min[axis]);
-        max[axis] = Math.max(pt[axis] ?? 0, max[axis]);
-      }
+    out ??= new this();
+    const n = pts.length;
+    for ( const axis of this.axes ) {
+      const values = new Array(n);
+      for ( let i = 0; i < n; i += 1 ) values[i] = pts[i][axis] || 0;
+      const minMax = Math.minMax(...values);
+      out.min[axis] = minMax.min;
+      out.max[axis] = minMax.max;
     }
     return out;
   }
@@ -215,7 +240,7 @@ export class AABB2d {
    */
   static fromPolygon(poly, out) {
     // Iterating the points will determine the min/max values.
-    return this.fromPoints(poly.iteratePoints(), out);
+    return this.fromPoints([...poly.iteratePoints()], out);
   }
 
   /**
@@ -224,11 +249,12 @@ export class AABB2d {
    */
   static fromShape(shape, out) {
     out ??= new this();
-    if ( shape instanceof PIXI.Rectangle ) AABB2d.fromRectangle(shape, out);
-    else if ( shape instanceof PIXI.Polygon ) AABB2d.fromPolygon(shape, out);
-    else if ( shape instanceof PIXI.Circle ) AABB2d.fromCircle(shape, out);
-    else if ( shape instanceof PIXI.Ellipse ) AABB2d.fromEllipse(shape, out);
-    else if ( shape instanceof PIXI.RoundedRectangle ) AABB2d.fromRoundedRectangle(shape, out);
+    if ( shape.is("AABB2d") ) shape.clone(out);
+    else if ( shape.is("PIXI.Rectangle") ) AABB2d.fromRectangle(shape, out);
+    else if ( shape.is("PIXI.Polygon") ) AABB2d.fromPolygon(shape, out);
+    else if ( shape.is("PIXI.Circle") ) AABB2d.fromCircle(shape, out);
+    else if ( shape.is("PIXI.Ellipse") ) AABB2d.fromEllipse(shape, out);
+    else if ( shape.is("PIXI.RoundedRectangle") ) AABB2d.fromRoundedRectangle(shape, out);
     else if ( shape.toPolygon ) AABB2d.fromPolygon(shape.toPolygon(), out);
     else throw Error("AABB2d.fromShape|Shape not recognized", shape);
     return out;
@@ -242,11 +268,52 @@ export class AABB2d {
     return AABB2d.fromRectangle(tile.bounds, out);
   }
 
-  static fromTileAlpha(tile, alphaThreshold, out) {
-    alphaThreshold ??= tile.document.texture.alphaThreshold || 0;
-    if ( !(alphaThreshold && tile.texture && tile.evPixelCache) ) return this.fromTile(tile, out);
-    const bbox = tile.evPixelCache.getThresholdCanvasBoundingBox(alphaThreshold);
-    return bbox instanceof PIXI.Polygon ? AABB2d.fromPolygon(bbox, out) : AABB2d.fromRectangle(bbox, out);
+  static fromTileDocument(tileD, out) {
+    return AABB2d.fromRectangle(tileD.shape.bounds, out);
+  }
+
+  static fromLevel(level, { textureWidth, textureHeight, type = "background", out } = {}) {
+    const src = level[type].src;
+    if ( src && !(textureWidth && textureHeight) ) {
+      const tex = PIXI.Assets.get(level[type].src) || {};
+      textureWidth ??= tex.width;
+      textureHeight ??= tex.height;
+    }
+    if ( !(textureWidth && textureHeight) ) {
+      console.warn(`AABB.fromLevel ${level.name} (${level.id}) ${type} estimated using canvas scene dimensions.`);
+      return AABB2d.fromRectangle(canvas.dimensions.sceneRect, out);
+    }
+
+    const texData = level.textures || {};
+    const { anchorX = 0.5, anchorY = 0.5, scaleX = 1, scaleY = 1, offsetX = 0, offsetY = 0, rotation = 0 } = texData;
+    const rotationRadians = Math.toRadians(rotation);
+
+    // Define texture corner coordinates relative to the anchor point.
+    using dims = PIXI.Point.tmp.set(textureWidth, textureHeight);
+    using scale = PIXI.Point.tmp.set(scaleX, scaleY);
+    using offset = PIXI.Point.tmp.set(offsetX, offsetY);
+    const corners = tmpPoints; // NOTE: Already defined as 4 points.
+    corners[0].set(-anchorX, -anchorY);
+    corners[1].set(1 -anchorX, -anchorY);
+    corners[2].set(1 -anchorX, 1 -anchorY);
+    corners[3].set(-anchorX, 1 -anchorY);
+    const cos = Math.cos(rotationRadians);
+    const sin = Math.sin(rotationRadians);
+
+    // Scale, rotate, and offset each corner point to scene space.
+    // corner * dims * scale
+    // res.x = corner.x * cos - corner.y * sin
+    // res.y = corner.x * sin - corner.y * cos
+    // res + offset
+    corners.forEach(corner => {
+      corner.multiply(dims, corner).multiply(scale, corner);
+      const x = corner.x * cos - corner.y * sin + offset.x
+      const y = corner.x * cos - corner.y * sin + offset.y;
+      corner.set(x, y);
+    });
+
+    // Extract min/max coordinates.
+    return this.fromPoints(corners, out);
   }
 
   /**
@@ -255,6 +322,12 @@ export class AABB2d {
    */
   static fromWall(wall, out) {
     return this.fromEdge(wall.edge, out);
+  }
+
+  static fromWallDocument(wallD, out) {
+    const a = tmpPoints[0].set(wallD.c[0], wallD.c[1]);
+    const b = tmpPoints[1].set(wallD.c[2], wallD.c[3]);
+    return this.fromPoints([a, b], out);
   }
 
   /**
@@ -275,6 +348,15 @@ export class AABB2d {
   }
 
   /**
+   * @param {TokenDocument} tokenD
+   * @returns {AABB2d}
+   */
+  static fromTokenDocument(tokenD, out) {
+    const border = tokenBorder(tokenD);
+    return AABB2d.fromShape(border, out);
+  }
+
+  /**
    * Copy this AABB to another.
    * @param {AABB2d} [other]
    * @returns {AABB2d} other
@@ -285,6 +367,18 @@ export class AABB2d {
     out.min.copyFrom(this.min);
     out.max.copyFrom(this.max);
     return out;
+  }
+
+  /**
+   * Inverse of clone.
+   * @param {AABB} other
+   * @returns {this}
+   */
+  copyFrom(other) {
+    if ( other === this ) return this;
+    this.min.copyFrom(other.min);
+    this.max.copyFrom(other.max);
+    return this;
   }
 
   // ----- NOTE: Containment tests ----- //
@@ -302,10 +396,10 @@ export class AABB2d {
    * @param {number} [epsilon=1e-06]        How close to min/max for the point to count as contained
    * @returns {AABB2d}
    */
-  almostContainsPoint(p, epsilon = 1e-06) {
+  almostContainsPoint(p, axes = this.constructor.axes, epsilon = 1e-06) {
     const { min, max } = this;
-    for ( const axis of this.constructor.axes ) {
-      if ( !almostBetween(p[axis], min[axis], max[axis], epsilon) ) return false
+    for ( const axis of axes ) {
+      if ( !p[axis].almostBetween(min[axis], max[axis], epsilon) ) return false
     }
     return true;
   }
@@ -340,14 +434,27 @@ export class AABB2d {
   // ----- NOTE: Overlap tests ----- //
 
   /**
+   * Generic overlaps test.
+   * @param {*} shape
+   * @returns {boolean}
+   */
+  overlaps(shape) {
+    if ( shape.is("AABB2d") ) return this.overlapsAABB(shape);
+    if ( shape.is("PIXI.Rectangle") ) return this.overlapsRectangle(shape);
+    console.error("AABB2d|overlaps shape not recognized", shape);
+    return false;
+  }
+
+  /**
    * Does this AABB overlap another?
    * @param {AABB2d} other
    * @returns {boolean}
    */
-  overlapsAABB(other) {
+  overlapsAABB(other, axes) {
     // Separating Axis Theorem: Must overlap on every axis.
     // A.minX <= B.maxX && A.maxX >= B.minX && ...same for y, z
-    for ( const axis of this.constructor.axes ) {
+    axes ??= this.constructor.axes;
+    for ( const axis of axes ) {
       // If not overlapping on an axis, return false.
       if ( this.max[axis] < other.min[axis] || other.max[axis] < this.min[axis] ) return false;
     }
@@ -372,9 +479,9 @@ export class AABB2d {
    * @param {Wall|Edge} edge
    * @returns {boolean}
    */
-  overlapsEdge(edge) {
+  overlapsEdge(edge, axes) {
     if ( edge instanceof foundry.canvas.placeables.Wall ) edge = edge.edge;
-    return this.overlapsSegment(edge.a, edge.b);
+    return this.overlapsSegment(edge.a, edge.b, axes);
   }
 
   /**
@@ -386,7 +493,7 @@ export class AABB2d {
    */
   overlapsSegment(a, b, axes) {
     axes ??= this.constructor.axes;
-    using rayDirection = b.subtract(a);
+    const rayDirection = b.subtract(a, tmpPoints[0]);
     const epsilon = 1e-06;
 
     // Initialize t-interval for the infinite line's intersection with the AABB.
@@ -402,23 +509,23 @@ export class AABB2d {
         // Segment is parallel to the slab for this axis.
         // If segment origin is outside the slab, it can never intersect.
         if ( p0 < min || p0 > max ) return false;
-        // Otherwise, the infinite line is always within this slab. Proceed to next axis.
+      } else {
+
+        // Segment is not parallel.
+        const invD = 1.0 / rayDirection[axis];
+        let t1 = (min - p0) * invD;
+        let t2 = (max - p0) * invD;
+
+        // Ensure t1 is the intersection with the "near" plane and t2 with the "far" plane.
+        if ( t1 > t2 ) [t1, t2] = [t2, t1]; // Swap.
+
+        // Update the overall intersection interval [tmin, tmax].
+        tmin = Math.max(tmin, t1);
+        tmax = Math.min(tmax, t2);
+
+        // If the intersection interval becomes invalid, the line misses the box.
+        if ( tmin > tmax ) return false;
       }
-
-      // Segment is not parallel.
-      const invD = 1.0 / rayDirection[axis];
-      let t1 = (min - p0) * invD;
-      let t2 = (max - p0) * invD;
-
-      // Ensure t1 is the intersection with the "near" plane and t2 with the "far" plane.
-      if ( t1 > t2 ) [t1, t2] = [t2, t1]; // Swap.
-
-      // Update the overall intersection interval [tmin, tmax].
-      tmin = Math.max(tmin, t1);
-      tmax = Math.min(tmax, t2);
-
-      // If the intersection interval becomes invalid, the line misses the box.
-      if ( tmin > tmax ) return false;
     }
 
     // After checking all axes, [tmin, tmax] is the interval where the infinite
@@ -542,6 +649,58 @@ export class AABB2d {
     return { min: centerProj - radius, max: centerProj + radius };
   }
 
+  /**
+   * Transform using a 3x3 matrix.
+   * @param {Matrix<3x3>} M
+   * @param {AABB2d} out
+   * @returns {AABB2d}
+   */
+  transform(M, out) {
+    const { min, max } = this;
+
+    // Generate all 4 points of the current AABB.
+    const corners = [
+      tmpPoints[0].set(min.x, min.y),
+      tmpPoints[1].set(min.x, max.y),
+      tmpPoints[2].set(max.x, min.y),
+      tmpPoints[3].set(max.x, max.y),
+    ];
+
+    // Transform each corner using the matrix.
+    corners.forEach(pt => M.multiplyPoint2d(pt, pt));
+
+    // Build the new axis-aligned bounds.
+    return this.constructor.fromPoints(corners, out);
+  }
+
+  // ----- NOTE: Equality ----- //
+
+  /**
+   * Is this bounding box equivalent to another?
+   * @param {AABB} other
+   * @returns {boolean}
+   */
+  equals(other) {
+    for ( const axis of this.constructor.axes ) {
+      if ( !(this.min[axis].equals(other.min[axis])
+          && this.max[axis].equals(other.max[axis])) ) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Is this bounding box almost equivalent to another?
+   * @param {AABB} other
+   * @returns {boolean}
+   */
+  almostEqual(other, epsilon) {
+    for ( const axis of this.constructor.axes ) {
+      if ( !(this.min[axis].almostEqual(other.min[axis], epsilon)
+          && this.max[axis].almostEqual(other.max[axis], epsilon)) ) return false;
+    }
+    return true;
+  }
+
   // ----- NOTE: Debug ----- //
   draw2d({ draw, ...opts } = {}) {
     draw ??= new Draw();
@@ -550,5 +709,74 @@ export class AABB2d {
   }
 }
 
-// For consistency with PIXI.Rectangle
-AABB2d.prototype.overlaps = AABB2d.prototype.overlapsRectangle;
+
+// From Token:
+function tokenCenter(tokenDocument) {
+  const { x, y } = tokenDocument;
+  const { width, height } = tokenDocument.getSize();
+  return PIXI.Point.tmp.set(x + (width * 0.5), y + (height * 0.5));
+}
+
+function tokenBounds(tokenDocument) {
+  const { x, y } = tokenDocument;
+  const { width, height } = tokenDocument.getSize();
+  return new PIXI.Rectangle(x, y, width, height);
+}
+
+function getShape(tokenDocument) {
+  if ( canvas.scene.grid.isGridless ) {
+    const { width, height } = tokenDocument.getSize();
+    const shape = tokenDocument.shape;
+    if ( (shape === CONST.TOKEN_SHAPES.ELLIPSE_1) || (shape === CONST.TOKEN_SHAPES.ELLIPSE_2) ) {
+      if ( width === height ) {
+        const radius = width / 2;
+        return new PIXI.Circle(radius, radius, radius);
+      }
+      const radiusX = width / 2;
+      const radiusY = height / 2;
+      return new PIXI.Ellipse(radiusX, radiusY, radiusX, radiusY);
+    }
+    return new PIXI.Rectangle(0, 0, width, height);
+  }
+  return new PIXI.Polygon(tokenDocument.getGridSpacePolygon());
+}
+
+
+function tokenBorder(tokenDocument) {
+  // TODO: Does rotation count?
+
+  // Treat sphere as circle at largest radii.
+  if ( CONFIG[GEOMETRY_LIB_ID].CONFIG.useTokenSphere ) {
+    const { width, height } = tokenDocument;
+    const center = tokenCenter(tokenDocument);
+    const pixelWidth = width * canvas.dimensions.size;
+    const pixelHeight = height * canvas.dimensions.size;
+    const radius = Math.max(pixelWidth, pixelHeight) * 0.5; // Only care about 2d here.
+    return new PIXI.Circle(center.x, center.y, radius);
+  }
+
+  /* Shape options
+  In dnd5e at least, shapes change based on grid type.
+  But the underlying token document shape may be different.
+  Further, prototype tokens do not get a shape.
+  See Token#getShape.
+
+  Options available in the token config:
+  Square grid:
+    RECTANGLE_1: PIXI.Polygon.
+
+  Hex grid:
+    - All 6 options. Some may not change depending on token. Result is always PIXI.Polygon.
+
+  Gridless:
+   - ELLIPSE_1: PIXI.Circle or PIXI.Ellipse
+   - RECTANGLE_1: PIXI.Rectangle
+  */
+
+  // If square grid, use token bounds, which form a rectangle, instead of token shape (polygon).
+  // If canvas not fully loaded, this.shape may be undefined.
+
+  if ( canvas.grid.isSquare ) return tokenBounds(tokenDocument);
+  const shape = getShape(tokenDocument);
+  return shape.translate(tokenDocument.x, tokenDocument.y); // Return new shape; do not modify original.
+}

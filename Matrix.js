@@ -4,7 +4,7 @@ PIXI,
 "use strict";
 
 import { Point3d } from "./3d/Point3d.js";
-import { PoolableMixin } from "./Pool.js";
+import { PoolableMixin, BufferManager } from "./Pool.js";
 import { mix } from "./mixwith.js";
 
 // Basic matrix operations
@@ -24,11 +24,24 @@ import { mix } from "./mixwith.js";
 // Keep separate for the moment until tested.
 class AbstractMatrix {
 
-  static [Symbol.hasInstance](instance) {
-    return instance && instance.constructor && instance.constructor._geoLibType === this._geoLibType;
-  }
+  /* Replacement for "instanceof" that works across modules. */
 
-  static get _geoLibType() { return this.name; }
+  /** @type {string} */
+  static TYPE = "AbstractMatrix";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE];
+
+  /**
+   * Check if this instance matches a given type name,
+   * supporting inheritance from parent classes.
+   * @param {string} typeName
+   * @returns {boolean}
+   */
+  is(typeName) { return this.constructor.TYPE_HIERARCHY.includes(typeName); }
+
+
+  release() { this.arr.length = 0; }
 
   /** @type {Array} */
   arr = [];
@@ -42,7 +55,16 @@ class AbstractMatrix {
   constructor(nrow = 0, ncol = 0) {
     this.nrow = nrow;
     this.ncol = ncol;
-    this.arr.length = nrow * ncol;
+  }
+
+  /**
+   * Create a new point. Meant to be overridden using pooling, but kept here for testing.
+   * @returns {PointArrayAbstract}
+   */
+  static create(nrow = 0, ncol = 0) {
+    const out = new this(nrow, ncol);
+    out.arr.length = out.size;
+    return out;
   }
 
   // ----- NOTE: Getters and indexers ---- //
@@ -67,32 +89,6 @@ class AbstractMatrix {
   getIndex(row, col) { return this.arr[this._idx(row, col)]; }
 
   setIndex(row, col, value) { this.arr[this._idx(row, col)] = value; }
-
-  /**
-   * Return a new matrix with smaller or equal dimensions from this matrix.
-   * @param {object} [opts]
-   * @param {number} [opts.rowStart=0]      First row to keep, indexed from 0
-   * @param {number} [opts.rowEnd]          Last row to keep, inclusive; defaults to last row
-   * @param {number} [opts.colStart=0]      First column to keep, indexed from 0
-   * @param {number} [opts.colEnd]          Last column to keep, inclusive; defaults to last column
-   * @returns {Matrix} New matrix
-   */
-  subset({ rowStart = 0, rowEnd = this.nrow - 1, colStart = 0, colEnd = this.ncol - 1, out } = {}) {
-    rowEnd += 1;
-    colEnd += 1;
-    out ??= this.constructor.tmpMatrix(rowEnd - rowStart, colEnd - colStart)
-
-    // Rows are easy.
-    const rowArr = this.arr.subarray(rowStart * this.nrow, rowEnd * this.nrow);
-    let i = 0;
-    for ( let r = 0, rMax = rowEnd - rowStart; r < rMax; r += 1 ) {
-      const cIdx = r * this.ncol;
-      const newRow = rowArr.subarray(cIdx + colStart, cIdx + colEnd);
-      out.arr.set(newRow, i);
-      i += newRow.length;
-    }
-   return out;
-  }
 
   // ----- NOTE: Iterators ----- //
 
@@ -188,6 +184,150 @@ class AbstractMatrix {
     for ( let r = 0, i = 0; r < nr; r += 1, i += 1 ) this.setIndex(r, col, values[i]);
     return this; // For convenience.
   }
+
+  // ----- NOTE: Subsetting ----- //
+
+  /**
+   * Return a new matrix with smaller or equal dimensions from this matrix.
+   * @param {object} [opts]
+   * @param {number} [opts.rowStart=0]      First row to keep, indexed from 0
+   * @param {number} [opts.rowEnd]          Last row to keep, inclusive; defaults to last row
+   * @param {number} [opts.colStart=0]      First column to keep, indexed from 0
+   * @param {number} [opts.colEnd]          Last column to keep, inclusive; defaults to last column
+   * @returns {Matrix} New matrix
+   */
+  subset({ rowStart = 0, rowEnd = this.nrow - 1, colStart = 0, colEnd = this.ncol - 1, out } = {}) {
+    rowEnd += 1;
+    colEnd += 1;
+    out ||= this.constructor.create(rowEnd - rowStart, colEnd - colStart)
+
+    // Rows are easy.
+    const rowArr = this.arr.subarray(rowStart * this.nrow, rowEnd * this.nrow);
+    let i = 0;
+    for ( let r = 0, rMax = rowEnd - rowStart; r < rMax; r += 1 ) {
+      const cIdx = r * this.ncol;
+      const newRow = rowArr.subarray(cIdx + colStart, cIdx + colEnd);
+      out.arr.set(newRow, i);
+      i += newRow.length;
+    }
+   return out;
+  }
+
+  /**
+   * Return a new matrix that omits a specific row from this matrix.
+   * @param {number} row            Row number to omit
+   * @param {Matrix} out            Out matrix
+   * @returns {Matrix} New matrix
+   */
+  dropRow(row = 0, out) {
+    const { nrow, ncol } = this;
+    out ||= this.constructor.create(nrow - 1, ncol);
+    const a = this.arr;
+    const b = out.arr;
+
+    // Set everything before the row to omit.
+    if ( row > 0 ) {
+      const idx = this._idx(row, 0); // Slice does not include the last index, so add 1 to include row - 1, col - 1.
+      b.set(a.slice(0, idx), 0);
+    }
+
+    // Set everything after the row to omit.
+    if ( row < (nrow - 1) ) {
+      const idx = this._idx(row + 1, 0);
+      const newIdx = out._idx(row, 0);
+      b.set(a.slice(idx), newIdx);
+    }
+
+    return out;
+  }
+
+  /**
+   * Return a new matrix that omits a specific row from this matrix.
+   * @param {number} col            Column number to omit
+   * @param {Matrix} out            Out matrix
+   * @returns {Matrix} New matrix
+   */
+  dropColumn(col = 0, out) {
+    const { nrow, ncol } = this;
+    out ||= this.constructor.create(nrow, ncol - 1);
+
+    // For speed, set as much data linearly as possible; don't use setColumn method repeatedly.
+    // Process each row in turn.
+    const a = this.arr;
+    const b = out.arr;
+    for ( let r = 0; r < nrow; r += 1 ) {
+      const aColIdx = this._idx(r, col);
+      const bColIdx = out._idx(r, col);
+
+      // Set everything for this row before the dropped column.
+      if ( col > 0 ) b.set(a.slice(aColIdx - col, aColIdx), bColIdx - col);
+
+      // Set everything for this row after the dropped column.
+      if ( col < ncol ) b.set(a.slice(aColIdx + 1, aColIdx + ncol - col), bColIdx);
+    }
+    return out;
+  }
+
+  /**
+   * Return a new matrix that adds a specific row to this matrix.
+   * @param {TypedArray|number[]}		Row data to add
+   * @param {number} row            Row number to insert. 0 will insert first, 1 after row 0, ...
+   * @param {Matrix} out            Out matrix
+   * @returns {Matrix} New matrix
+   */
+  addRow(row, data = [], out) {
+    const { nrow, ncol } = this;
+    out ||= this.constructor.create(nrow + 1, ncol);
+    const a = this.arr;
+    const b = out.arr;
+    const aRowIdx = this._idx(row, 0)
+
+    // Set everything before the row to add.
+    if ( row > 0 ) b.set(a.slice(0, aRowIdx), 0);
+
+    // Add the row data.
+    b.set(data, aRowIdx);
+
+    // Set everything after the row to add, bumping each row down one.
+    if ( row < nrow ) {
+      const newIdx = out._idx(row + 1, 0);
+      b.set(a.slice(aRowIdx), newIdx);
+    }
+    return out;
+  }
+
+  /**
+   * Return a new matrix that adds a specific column to this matrix.
+   * @param {TypedArray|number[]}		Column data to add
+   * @param {number} col            Column number to insert
+   * @param {Matrix} out            Out matrix
+   * @returns {Matrix} New matrix
+   */
+  addColumn(col, data = [], out) {
+    const { nrow, ncol } = this;
+    out ||= this.constructor.create(nrow, ncol + 1);
+
+    // For speed, set as much data linearly as possible; don't use setColumn method repeatedly.
+    // Process each row in turn.
+    const a = this.arr;
+    const b = out.arr;
+    for ( let r = 0; r < nrow; r += 1 ) {
+      // Set everything for this row before the new column.
+      const aColIdx = this._idx(r, col);
+      const bColIdx = out._idx(r, col);
+
+      // Add in the new data.
+      if ( col > 0 ) b.set(a.slice(aColIdx - col, aColIdx), bColIdx - col, bColIdx);
+
+      // Add the column data for this row.
+      b[bColIdx] = data[r];
+
+      // Set everything for this row after the new column.
+      if ( col < ncol ) b.set(a.slice(aColIdx, aColIdx - col + ncol), bColIdx + 1);
+    }
+    return out;
+  }
+
 
   // ----- NOTE: Construction from arrays ----- //
 
@@ -670,13 +810,21 @@ class AbstractMatrix {
     return { M, Minv };
   }
 
+  // ----- NOTE: Transformations ----- //
+
   /**
    * Rotation matrix for a given angle, rotating around X axis.
    * @param {number} angle          Radians
-   * @param {boolean} [d3 = true]    If d3, use a 4-d matrix. Otherwise, 3-d matrix.
+   * @param {object} [opts]
+   * @param {boolean} [opts.d3]           If d3, use a 4-d matrix. Otherwise, 3-d matrix.
+   * @param {Matrix} [opts.outMatrix]     If provided, will control 3d vs 4d unless 3d is set
+   *   It is assumed that providing outMatrix of different dimensions is intentional.
+   *   Matrix will be set from 0,0.
+   *   Default is a 4x4 matrix.
    * @returns {Matrix}
    */
-  static rotationX(angle, d3 = true, outMatrix) {
+  static rotationX(angle, { d3, outMatrix } = {}) {
+    if ( typeof d3 === "undefined" ) d3 = outMatrix ? outMatrix.nrow === 4 : true;
     const n = 3 + d3;
     outMatrix ??= this.empty(n);
     outMatrix.identity();
@@ -711,10 +859,16 @@ class AbstractMatrix {
   /**
    * Rotation matrix for a given angle, rotating around Y axis.
    * @param {number} angle          Radians
-   * @param {boolean} [d3 = true]    If d3, use a 4-d matrix. Otherwise, 3-d matrix.
+   * @param {object} [opts]
+   * @param {boolean} [opts.d3]           If d3, use a 4-d matrix. Otherwise, 3-d matrix.
+   * @param {Matrix} [opts.outMatrix]     If provided, will control 3d vs 4d unless 3d is set
+   *   It is assumed that providing outMatrix of different dimensions is intentional.
+   *   Matrix will be set from 0,0.
+   *   Default is a 4x4 matrix.
    * @returns {Matrix}
    */
-  static rotationY(angle, d3 = true, outMatrix) {
+  static rotationY(angle, { d3, outMatrix } = {}) {
+    if ( typeof d3 === "undefined" ) d3 = outMatrix ? outMatrix.nrow === 4 : true;
     const n = 3 + d3;
     outMatrix ??= this.empty(n);
     outMatrix.identity();
@@ -747,11 +901,17 @@ class AbstractMatrix {
 
   /**
    * Rotation matrix for a given angle, rotating around Z axis.
-   * @param {number} angle
-   * @param {boolean} [d3 = true]    If d3, use a 4-d matrix. Otherwise, 3-d matrix.
+   * @param {number} angle          Radians
+   * @param {object} [opts]
+   * @param {boolean} [opts.d3]           If d3, use a 4-d matrix. Otherwise, 3-d matrix.
+   * @param {Matrix} [opts.outMatrix]     If provided, will control 3d vs 4d unless 3d is set
+   *   It is assumed that providing outMatrix of different dimensions is intentional.
+   *   Matrix will be set from 0,0.
+   *   Default is a 4x4 matrix.
    * @returns {Matrix}
    */
-  static rotationZ(angle, d3 = true, outMatrix) {
+  static rotationZ(angle, { d3, outMatrix } = {}) {
+    if ( typeof d3 === "undefined" ) d3 = outMatrix ? outMatrix.nrow === 4 : true;
     const n = 3 + d3;
     outMatrix ??= this.empty(n);
     outMatrix.identity();
@@ -784,31 +944,56 @@ class AbstractMatrix {
 
   /**
    * Combine rotation matrixes for x, y, and z.
-   * @param {number} angleX   Radians
-   * @param {number} angleY   Radians
-   * @param {number} angleZ   Radians
-   * @param {boolean} [d3 = true]    If d3, use a 4-d matrix. Otherwise, 3-d matrix.
+   * @param {Point3d|PIXI.Point|object} angles      The x,y, and optionally z angles, in radians
+   * @param {object} [opts]
+   * @param {boolean} [opts.d3]           If d3, use a 4-d matrix. Otherwise, 3-d matrix.
+   * @param {Matrix} [opts.outMatrix]     If provided, will control 3d vs 4d unless 3d is set
    * @returns {Matrix}
    */
-  static rotationXYZ(angleX, angleY, angleZ, d3 = true, outMatrix) {
-    outMatrix = angleX ? this.rotationX(angleX, d3, outMatrix) : angleY
-      ? this.rotationY(angleY, d3, outMatrix) : angleZ
-        ? this.rotationZ(angleZ, d3, outMatrix) : outMatrix.identity();
+  static rotationXYZ(angles, { d3, outMatrix } = {}) {
+    if ( typeof d3 === "undefined" ) d3 = outMatrix ? outMatrix.nrow === 4 : true;
+    let multFn = d3 ? "multiply4x4" : "multiply3x3";
+    const n = 3 + d3;
+    if ( outMatrix ) {
+      // If an out matrix is provided, ensure the multiplication function is correct.
+      if ( outMatrix.nrow !== outMatrix.ncol || outMatrix.ncol !== n ) multFn = "multiply";
+    } else outMatrix = this.empty(n);
 
-    const multFn = d3 ? "multiply4x4" : "multiply3x3";
+    const angleX = angles.x || 0;
+    const angleY = angles.y || 0;
+    const angleZ = angles.z || 0;
+    const opts = { d3, outMatrix };
+
+    // Process the first angle. Skip 0 angles.
+    angleX ? this.rotationX(angleX, opts) : angleY
+      ? this.rotationY(angleY, opts) : (angleZ && d3)
+        ? this.rotationZ(angleZ, opts) : outMatrix.identity();
+
+    // If x and y angles, process the y angle.
     if ( angleX && angleY ) {
-      const rotY = this.rotationY(angleY, d3);
-      outMatrix = outMatrix[multFn](rotY); // Cannot pass outMatrix as tmp if it is rot.
+      const rotY = this.rotationY(angleY, { d3 }); // Get a new matrix
+      outMatrix[multFn](rotY, outMatrix);
     }
-    if ( (angleX || angleY) && angleZ ) {
-      const rotZ = this.rotationZ(angleZ, d3);
-      outMatrix = outMatrix[multFn](rotZ);
+
+    // If x/y/z, process the z angle.
+    if ( d3 && (angleX || angleY) && angleZ ) {
+      const rotZ = this.rotationZ(angleZ, { d3 }); // Get a new matrix
+      outMatrix[multFn](rotZ, outMatrix);
     }
     return outMatrix;
   }
 
-  static translation(x = 0, y = 0, z, outMatrix) {
-    const n = typeof z === "undefined" ? 3 : 4;
+  /**
+   * Build translation matrix for x, y, and z translation.
+   * @param {Point3d|PIXI.Point|object} vector      The x,y, and optionally z translation vector
+   * @param {object} [opts]
+   * @param {boolean} [opts.d3]           If d3, use a 4-d matrix. Otherwise, 3-d matrix.
+   * @param {Matrix} [opts.outMatrix]     If provided, will control 3d vs 4d unless 3d is set
+   * @returns {Matrix}
+   */
+  static translation(vector, { d3, outMatrix } = {}) {
+    if ( typeof d3 === "undefined" ) d3 = outMatrix ? outMatrix.nrow === 4 : true;
+    const n = 3 + d3;
     outMatrix ??= this.empty(n);
     outMatrix.identity();
 
@@ -823,14 +1008,23 @@ class AbstractMatrix {
     [x, y, z, 1]
     */
     const r = n - 1;
-    outMatrix.setIndex(r, 0, x);
-    outMatrix.setIndex(r, 1, y);
-    if ( typeof z !== "undefined" ) outMatrix.setIndex(r, 2, z);
+    outMatrix.setIndex(r, 0, vector.x || 0);
+    outMatrix.setIndex(r, 1, vector.y || 0);
+    if ( d3 ) outMatrix.setIndex(r, 2, vector.z || 0);
     return outMatrix;
   }
 
-  static scale(x = 1, y = 1, z, outMatrix) {
-    const n = typeof z === "undefined" ? 3 : 4;
+  /**
+   * Build scale matrix for x, y, and z dimensions.
+   * @param {Point3d|PIXI.Point|object} dims      The x,y, and optionally z sizes
+   * @param {object} [opts]
+   * @param {boolean} [opts.d3]           If d3, use a 4-d matrix. Otherwise, 3-d matrix.
+   * @param {Matrix} [opts.outMatrix]     If provided, will control 3d vs 4d unless 3d is set
+   * @returns {Matrix}
+   */
+  static scale(dims, { d3, outMatrix } = {}) {
+    if ( typeof d3 === "undefined" ) d3 = outMatrix ? outMatrix.nrow === 4 : true;
+    const n = 3 + d3;
     outMatrix ??= this.empty(n);
     outMatrix.identity();
     /*
@@ -843,9 +1037,9 @@ class AbstractMatrix {
     [0, 0, z, 0],
     [0, 0, 0, 1]
     */
-   outMatrix.setIndex(0, 0, x);
-   outMatrix.setIndex(1, 1, y);
-   if ( typeof z !== "undefined" ) outMatrix.setIndex(2, 2, z);
+   outMatrix.setIndex(0, 0, dims.x || 1);
+   outMatrix.setIndex(1, 1, dims.y || 1);
+   if ( d3 ) outMatrix.setIndex(2, 2, dims.z || 1);
    return outMatrix;
   }
 
@@ -927,8 +1121,9 @@ class AbstractMatrix {
    * @returns {Matrix}
    */
   transpose(outMatrix) {
-    outMatrix ??= this.constructor.empty(this.nrow, this.ncol);
+    outMatrix ??= this.constructor.empty(this.ncol, this.nrow);
     this.forEach((elem, r, c) => outMatrix.setIndex(c, r, elem));
+
     return outMatrix;
   }
 
@@ -957,7 +1152,7 @@ class AbstractMatrix {
   /**
    * Multiply this and another matrix. this • other.
    * @param {Matrix} other
-   * @param {Matrix} [outMatrix]    Must have this.nrow and other.ncol; cannot be this or other.
+   * @param {Matrix} [outMatrix]    Must have this.nrow and other.ncol
    * @returns {Matrix}
    */
   multiply(other, out) {
@@ -1065,9 +1260,17 @@ class AbstractMatrix {
     return outMatrix;
   }
 
-  multiplyPoint(point, outPoint) {
-    if ( Object.hasOwn(point, "z") ) return this.multiplyPoint2d(point, outPoint);
-    else return this.multiplyPoint3d(point, outPoint);
+  multiplyPoint(point, outPoint, pointW = 1) {
+    if ( this.nrow === 4 && this.ncol === 4 ) {
+      if ( !Object.hasOwn(point, "z") ) console.warn("Matrix#multiplyPoint|Attempting to multiply a 4x4 matrix with a 2d point.");
+      return this.multiplyPoint3d(point, outPoint, pointW);
+    }
+    if ( this.nrow === 3 && this.ncol === 3 ) {
+      if ( Object.hasOwn(point, "z") ) console.warn("Matrix#multiplyPoint|Attempting to multiply a 3x3 matrix with a 3d point.");
+      return this.multiplyPoint2d(point, outPoint, pointW);
+    }
+    console.warn("Matrix#multiplyPoint|Attempting to multiply a point with a non-3x3, non-4x4 matrix.");
+    return this.multiplyPoint3d(point, outPoint, pointW);
   }
 
   /**
@@ -1075,12 +1278,11 @@ class AbstractMatrix {
    * For speed, the input is not checked against the matrix for correct dimensionality.
    * Foundry bench puts this at ~ 68% of multiply.
    * @param {Point3d} point    The point to multiply
-   * @param {Point3d} outPoint Optional point in which to store the result.
+   * @param {boolean|number} [pointW=1]    Default is to treat as normal point (1); set to 0 to treat as vector
    * @returns {Point3d}
    */
-  multiplyPoint2d(point, outPoint = new PIXI.Point()) {
-    // For speed, assume _idx is (col * this.nrow) + row
-    // Array organized col0, row0, row1, row2, ... col1, row0, row1, ...
+  multiplyPoint2d(point, outPoint = new PIXI.Point(), pointW = 1) {
+    // Assumes row-major order.
     const a00 = this.arr[0]; // aRC
     const a01 = this.arr[1];
     const a02 = this.arr[2];
@@ -1095,14 +1297,16 @@ class AbstractMatrix {
 
     const b00 = point.x;
     const b01 = point.y;
-    const b02 = 1;
+    const b02 = pointW; // 1 if point, 0 if vector (w value).
 
     outPoint.x = a00 * b00 + a10 * b01 + a20 * b02;
     outPoint.y = a01 * b00 + a11 * b01 + a21 * b02;
     const w = a02 * b00 + a12 * b01 + a22 * b02;
 
-    outPoint.x /= w;
-    outPoint.y /= w;
+    if ( w && pointW ) { // Only perspective divide finite points, not vectors.
+      outPoint.x /= w;
+      outPoint.y /= w;
+    }
 
     return outPoint;
   }
@@ -1111,14 +1315,13 @@ class AbstractMatrix {
    * Multiply a Point3d by this matrix and output a different Point3d.
    * For speed, the input is not checked against the matrix for correct dimensionality.
    * Foundry bench puts this at ~ 68% of multiply.
-   * @param {Point3d} point    The point to multiply
-   * @param {Point3d} outPoint Optional point in which to store the result.
+   * @param {Point3d} point       The point to multiply
+   * @param {Point3d} [outPoint]  Optional point in which to store the result.
+   * @param {boolean|number} [pointW=1]    Default is to treat as normal point (1); set to 0 to treat as vector
    * @returns {Point3d}
    */
-  multiplyPoint3d(point, outPoint = Point3d.tmp) {
-
-    // For speed, assume _idx is (col * this.nrow) + row
-    // Array organized col0, row0, row1, row2, ... col1, row0, row1, ...
+  multiplyPoint3d(point, outPoint = Point3d.tmp, pointW = 1) {
+    // Assume row-major array order.
     const a00 = this.arr[0]; // aRC
     const a01 = this.arr[1];
     const a02 = this.arr[2];
@@ -1142,16 +1345,18 @@ class AbstractMatrix {
     const b00 = point.x;
     const b01 = point.y;
     const b02 = point.z;
-    const b03 = 1;
+    const b03 = pointW; // 1 if point, 0 if vector (w value).
 
     outPoint.x = a00 * b00 + a10 * b01 + a20 * b02 + a30 * b03;
     outPoint.y = a01 * b00 + a11 * b01 + a21 * b02 + a31 * b03;
     outPoint.z = a02 * b00 + a12 * b01 + a22 * b02 + a32 * b03;
     const w = a03 * b00 + a13 * b01 + a23 * b02 + a33 * b03;
 
-    outPoint.x /= w;
-    outPoint.y /= w;
-    outPoint.z /= w;
+    if ( w && pointW ) { // Only perspective divide finite points, not vectors.
+      outPoint.x /= w;
+      outPoint.y /= w;
+      outPoint.z /= w;
+    }
 
     return outPoint;
   }
@@ -1385,7 +1590,7 @@ class AbstractMatrix {
    */
   invert(outMatrix) {
     outMatrix ??= this.constructor.empty(this.nrow, this.ncol);
-    if ( this === outMatrix ) console.error("Must supply a distinct matrix to store the inversion.");
+    if ( this === outMatrix ) throw new Error("Must supply a distinct matrix to store the inversion.");
 
     if ( this.nrow < 2 || this.nrow !== this.ncol ) {
       console.error("Cannot use invert on a non-square matrix.");
@@ -1397,7 +1602,10 @@ class AbstractMatrix {
     const y = Array.fromRange(n);
     const k = {};
     let det = this.constructor.optimizedNDet(n, this, x, y, k);
-    if ( !det ) throw new Error("Matrix is not invertible");
+    if ( !det ) {
+      console.error("Matrix is not invertible");
+      return undefined;
+    }
 
     det = 1 / det;
 
@@ -1502,20 +1710,29 @@ AbstractMatrix.prototype.copyTo = AbstractMatrix.prototype.clone;
 // Pooling
 export class Matrix extends mix(AbstractMatrix).with(PoolableMixin) {
 
+  /** @type {string} */
+  static TYPE = "Matrix";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
+
   // Pooling
+
   /**
-   * Return a temporary matrix of a given size.
+   * Get an object from the pool.
    * @param {number} nrow
    * @param {number} ncol
    * @returns {Matrix}
    */
-  static tmpMatrix(nrow, ncol) {
-    const obj = this.tmp;
+  static create(nrow = 0, ncol = 0) {
+    const obj = super.create();
     obj.nrow = nrow;
     obj.ncol = ncol;
-    obj.arr.length = obj.size;
+    obj.arr.length = obj.nrow * obj.ncol;
     return obj;
   }
+
+  static tmpMatrix = this.create; // Backward-compatibility
 
   /**
    * Callback to release a Matrix object, zeroing out its values.
@@ -1526,119 +1743,14 @@ export class Matrix extends mix(AbstractMatrix).with(PoolableMixin) {
     obj.nrow = 0;
     obj.ncol = 0;
   }
-}
 
-
-/**
- * Manage a typed array buffer size.
- * Allocate space on a first-fit strategy. (Free List alogrithm.)
- * Tracks contiguous blocks of empty space and allocates accordingly.
- */
-class BufferManager {
-  /** @type {ArrayBuffer} */
-  buffer;
-
-  /** @type {object[]} */
-  freeSegments = [];
-
-  /** @type {TypedArray} */
-  typedClass;
-
-  /** @type {number} */
-  get bytesPerElement() { return this.typedClass.BYTES_PER_ELEMENT; }
-
-  constructor(totalSize = 0, { typedClass = Float32Array, maxSize = totalSize } = {}) {
-    this.typedClass = typedClass;
-    const byteSize = totalSize * this.bytesPerElement;
-    this.buffer = new ArrayBuffer(byteSize, { maxByteLength: maxSize * this.bytesPerElement });
-    this.freeSegments.push({ byteOffset: 0, byteSize });
-  }
-
-  /**
-   * Return a new array of the requested size.
-   * @param {number} size     Number of elements
-   * @returns {TypedArray<size>}
-   */
-  newArray(size) {
-    const byteOffset = this.allocate(size);
-    return new this.typedClass(this.buffer, byteOffset, size);
-  }
-
-  /**
-   * Reserve a block of space.
-   * If out of space, constructs a new buffer.
-   * @param {number} size       Number of elements to reserve
-   * @returns {number} The byte offset.
-   */
-  allocate(size) {
-    const byteSize = size * this.bytesPerElement;
-    for ( let i = 0, iMax = this.freeSegments.length; i < iMax; i += 1 ) {
-      const segment = this.freeSegments[i];
-      if ( segment.byteSize >= byteSize ) {
-        const byteOffset = segment.byteOffset;
-        if ( segment.byteSize === byteSize ) this.freeSegments.splice(i, 1); // Perfect fit: remove the segment entirely.
-        else {
-          // Partial fit: shrink the existing fre segment.
-          segment.byteOffset += byteSize;
-          segment.byteSize -= byteSize;
-        }
-        return byteOffset;
-      }
-    }
-
-    // Insufficient memory left in the buffer.
-    // Expand buffer if possible.
-    const totalBytesNeeded = this.buffer.byteLength + byteSize;
-    if ( this.buffer.maxByteLength > totalBytesNeeded ) {
-      // Grow the buffer and use the resized portion for this allocation.
-      const byteOffset = this.buffer.byteLength;
-      this.buffer.resize(totalBytesNeeded);
-      return byteOffset;
-    } else {
-      // Trash the buffer and start anew.
-      this.freeSegments.length = 1;
-      this.freeSegments[0] = { byteOffset: 0, byteSize: this.buffer.byteLength };
-      this.buffer = new ArrayBuffer(Math.max(this.buffer.byteLength, byteSize), { maxByteLength: Math.max(this.buffer.maxByteLength, byteSize) });
-      return this.allocate(size);
-    }
-  }
-
-  /**
-   * Release a block of space and merges it with adjacent free blocks.
-   * @param {TypedArray} arr        The array being freed.
-   */
-  release(arr) {
-    arr.fill(0); // Good practice to limit caching errors.
-    if ( arr.buffer !== this.buffer ) return;
-    const byteSize = arr.byteLength;
-    const byteOffset = arr.byteOffset;
-    const newSegment = { byteSize, byteOffset };
-
-    // Insert and maintain sorted order by offset to allow merging.
-    const idx = this.freeSegments.findIndex(s => s.byteOffset > byteOffset);
-    if ( ~idx ) this.freeSegments.splice(idx, 0, newSegment);
-    else this.freeSegments.push(newSegment);
-    this._mergeNeighbors();
-  }
-
-  /**
-   * Combines adjacent free blocks to limit fragmentation.
-   */
-  _mergeNeighbors() {
-    for ( let i = 0, iMax = this.freeSegments.length - 1; i < iMax; i += 1 ) {
-      const current = this.freeSegments[i];
-      const next = this.freeSegments[i+1];
-
-      // If current block ends exactly where the next starts, merge.
-      if ( current.byteOffset + current.byteSize === next.byteOffset ) {
-        current.byteSize += next.byteSize;
-        this.freeSegments.splice(i + 1, 1);
-        iMax--;
-        i--; // Check again with the newly merged block.
-      }
-    }
+  constructor(nrow, ncol) {
+     super(nrow, ncol);
+     this.arr.length = this.nrow * this.ncol;
   }
 }
+
+
 
 /** Testing
 mgr = new BufferManager(16, { maxSize: 32 })
@@ -1660,239 +1772,84 @@ arr6 = mgr.newArray(35)
 
 // Example typed class
 
-export class MatrixFloat32 extends Matrix {
+export class MatrixFloat32 extends mix(AbstractMatrix).with(PoolableMixin) {
 
-  /** @type {Float32Array} */
-  arr = null;
+  /** @type {string} */
+  static TYPE = "MatrixFloat32";
 
-  constructor(nrow, ncol, buffer, offset = 0) {
-    super(nrow, ncol);
-
-    buffer ??= new ArrayBuffer(this.size * Float32Array.BYTES_PER_ELEMENT);
-    const byteOffset = offset * Float32Array.BYTES_PER_ELEMENT;
-    this.arr = new Float32Array(buffer, byteOffset, this.size);
-  }
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
 
   // ----- NOTE: Buffer manager ----- //
-  /** @type {number} */
-  static BUFFER_DEFAULT_MATRIX_SIZE = 16; // Common size for a single matrix.
 
-  /** @type {number} */
-  static BUFFER_NUM_MATRICES = 10; // How many matrices to allocate before switching buffers.
+  static BUFFER_NUM_MATRICES = 2 ** 4;
+
+  static BUFFER_MAX_NUM_MATRICES = 2 ** 7;
+
+  static BUFFER_DEFAULT_MATRIX_SIZE = 2 ** 4; // 4 x 4 default matrix.
 
   /**
    * Current buffer with usable space to define matrices.
    * @type {BufferManager}
    */
-  static bufferManager = new BufferManager(this.BUFFER_DEFAULT_MATRIX_SIZE, {
+  static bufferManager = new BufferManager(this.BUFFER_NUM_MATRICES * this.BUFFER_DEFAULT_MATRIX_SIZE, {
     typedClass: Float32Array,
-    maxSize: this.BUFFER_NUM_MATRICES * this.BUFFER_DEFAULT_MATRIX_SIZE
+    maxBufferSize: this.BUFFER_MAX_NUM_MATRICES,
   });
 
   /**
-   * Return a temporary matrix of a given size.
+   * Get an object from the pool.
    * Uses an array buffer to allocate the array, which may be reused.
    * @param {number} nrow
    * @param {number} ncol
    * @returns {Matrix}
    */
-  static tmpMatrix(nrow, ncol) {
-    const obj = this.tmp;
+  static create(nrow = 0, ncol = 0) {
+    const obj = super.create();
     obj.nrow = nrow;
     obj.ncol = ncol;
     obj.arr = this.bufferManager.newArray(obj.size);
     return obj;
   }
 
+  static tmpMatrix = this.create; // Backward-compatibility
+
   static onRelease(obj) {
     this.bufferManager.release(obj.arr);
     obj.nrow = 0;
     obj.ncol = 0;
-    obj.arr = null;
-  }
-}
-
-/**
- * Stores the rotation, translation, and scale matrices along with the model matrix.
- */
-export class ModelMatrix2d {
-  // Static getters so ModelMatrix can override.
-  static get DIM() { return 3; };
-
-  static get multiplyName() { return "multiply3x3"; } // Static getter so ModelMatrix can override.
-
-  static get DIM2() { return this.DIM * this.DIM; }; // 9
-
-  static get BUFFER_LENGTH() { return this.DIM2 * 3; }; // 9 values * 3 matrices.
-
-  /** @type {ArrayBuffer} */
-  _matrixBuffer = new ArrayBuffer(Float32Array.BYTES_PER_ELEMENT * this.constructor.BUFFER_LENGTH);
-
-  /** @type {object<MatrixFloat32>} */
-  // Could be private but may be useful to access them without triggering update.
-  // Use matrix buffer. E.g.:
-  // index 0: rotation 3 x 3.
-  // index 9: translation 3 x 3
-  // index 18: scale 3 x 3
-  _rotation = (new MatrixFloat32(
-    this.constructor.DIM,
-    this.constructor.DIM,
-    this._matrixBuffer,
-    0)).identity();
-
-  _translation = (new MatrixFloat32(
-    this.constructor.DIM,
-    this.constructor.DIM,
-    this._matrixBuffer,
-    this.constructor.DIM2)).identity();
-
-  _scale = (new MatrixFloat32(
-    this.constructor.DIM,
-    this.constructor.DIM,
-    this._matrixBuffer,
-    this.constructor.DIM2 * 2)).identity();
-
-  get rotation() { this.#updated ||= true; return this._rotation; }
-
-  get translation() { this.#updated ||= true; return this._translation; }
-
-  get scale() { this.#updated ||= true; return this._scale; }
-
-  /** @type {MatrixFloat32} */
-  _model = MatrixFloat32.identity(this.constructor.DIM);
-
-  get model() {
-    if ( this.#updated ) this.update();
-    return this._model;
+    obj.arr = [];
   }
 
-  /** @type {boolean} */
-  #updated = true;
-
-  get updated() { return this.#updated; }
-
-  set updated(value) { this.#updated ||= value; }
-
-  update() {
-    const { rotation, translation, scale } = this;
-    const M = this._model;
-    scale[this.constructor.multiplyName](rotation, M)
-    M[this.constructor.multiplyName](translation, M);
-    this.#updated = false;
-  }
-
-  clone(out) {
-    out ??= new this.constructor();
-    this.rotation.clone(out.rotation);
-    this.scale.clone(out.scale);
-    this.translation.clone(out.translation);
-    return out;
-  }
-}
-
-/**
- * Stores the rotation, translation, and scale matrices along with the model matrix.
- */
-export class ModelMatrix extends ModelMatrix2d {
-  static get DIM() { return 4; }
-
-  static get multiplyName() { return "multiply4x4"; }
-}
-
-/**
- * Center the model using a separate translation matrix before applying scale and rotation.
- */
-export const ModelCenterMixin = superclass => {
-  return class extends superclass {
-    static BUFFER_IDX = super.BUFFER_LENGTH / this.DIM2;
-
-    static get BUFFER_LENGTH() { return super.BUFFER_LENGTH + (this.DIM2 * 2); }
-
-    /** @type {MatrixFloat32} */
-    #center = (new MatrixFloat32(
-      this.constructor.DIM,
-      this.constructor.DIM,
-      this._matrixBuffer,
-      this.constructor.DIM2 * this.constructor.BUFFER_IDX)).identity();
-
-    get modelCenter() { this.updated = true; return this.#center; }
-
-    set modelCenter(ctr) {
-      this.updated = true;
-      const is3d = this.constructor.DIM === 4;
-      MatrixFloat32.translation(-ctr.x, -ctr.y, is3d ? -ctr.z : undefined, this.#center);
+  /**
+   * Like buildNObjects, but uses a distinct buffer shared only by those n object.
+   * Useful if the intent is to transfer the buffer to a worker or webGPU, for example.
+   * @param {number} n
+   * @returns {HPointAbstract[n]}
+   */
+  static allocateNObjects(n, { nrow = 0, ncol = 0 } = {}) {
+    const bm = this.bufferManager;
+    const nElems = nrow * ncol;
+    const ptBytes = bm.bytesPerElement * nElems;
+    const byteSize = ptBytes * n;
+    const buffer = new ArrayBuffer(byteSize);
+    const objs = Array(n);
+    let byteOffset = 0;
+    for ( let i = 0; i < n; i += 1 ) {
+      const obj = new this(nrow, ncol);
+      obj.arr = new bm.typedClass(buffer, byteOffset, nElems);
+      objs[i] = obj;
+      byteOffset += ptBytes;
     }
-
-    update() {
-      // Create a translation matrix to uncenter after applying the model matrix.
-      // Must consider scaling when un-centering.
-      // Do before the update so as not to trigger another.
-      // E.g. Local center 5, 5. Scaled by x10.
-      // Move -5, -5 using this.#center. TL is -5, -5; center is 0, 0.
-      // Scale x10: TL is -50, -50.
-      // Move 50, 50 using uncenter.
-      const centerMat = this.#center;
-      const is3d = this.constructor.DIM === 4;
-      const r = this.constructor.DIM - 1; // 3d: 3, 2d: 2.
-      const uncenterPt = is3d ? Point3d.tmp : PIXI.Point.tmp;
-      uncenterPt.x = centerMat.getIndex(r, 0);
-      uncenterPt.y = centerMat.getIndex(r, 1);
-      if ( is3d ) {
-        uncenterPt.z = centerMat.getIndex(r, 2);
-        this.scale.multiplyPoint3d(uncenterPt, uncenterPt);
-      } else this.scale.multiplyPoint2d(uncenterPt, uncenterPt)
-      uncenterPt.multiplyScalar(-1, uncenterPt); // Reverse translation direction.
-
-      // Set the uncenter matrix.
-      const uncenter = centerMat.clone();
-      uncenter.setIndex(r, 0, uncenterPt.x);
-      uncenter.setIndex(r, 1, uncenterPt.y);
-      if ( is3d ) uncenter.setIndex(r, 2, uncenterPt.z);
-
-      // Update the model matrix.
-      super.update();
-
-      // Center prior to applying the model matrix.
-      centerMat[this.constructor.multiplyName](this._model, this._model);
-
-      // Undo the centering after.
-      this._model[this.constructor.multiplyName](uncenter, this._model);
-    }
+    return objs;
   }
+
+  static allocate3x3(n) { return this.allocateNObjects(n, { nrow: 3, ncol: 3 }); }
+
+  static allocate4x4(n) { return this.allocateNObjects(n, { nrow: 4, ncol: 4 }); }
+
 }
 
-
-/**
- * Store the model inverse along with the model matrix.
- */
-export const ModelInverseMixin = superclass => {
-
-  return class extends superclass {
-    /** @type {MatrixFloat32} */
-    #inverse = MatrixFloat32.identity(this.constructor.DIM);
-
-    get _modelInverse() { return this.#inverse; }
-
-    get modelInverse() { if ( this.updated ) this.update(); return this.#inverse; }
-
-    update() {
-      super.update();
-      this._model.invert(this.#inverse);
-    }
-  }
-}
-
-export class ModelMatrix2dInverse extends mix(ModelMatrix2d).with(ModelInverseMixin) {}
-
-export class ModelMatrix2dCenter extends mix(ModelMatrix2d).with(ModelCenterMixin) {}
-
-export class ModelMatrix2dCenterInverse extends mix(ModelMatrix2d).with(ModelCenterMixin, ModelInverseMixin) {}
-
-export class ModelMatrixInverse extends mix(ModelMatrix).with(ModelInverseMixin) {}
-
-export class ModelMatrixCenter extends mix(ModelMatrix).with(ModelCenterMixin) {}
-
-export class ModelMatrixCenterInverse extends mix(ModelMatrix).with(ModelCenterMixin, ModelInverseMixin) {}
 
 /* Tests
 Matrix = CONFIG.GeometryLib.Matrix

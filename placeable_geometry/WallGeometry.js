@@ -1,35 +1,36 @@
 /* globals
 CONST,
+foundry,
 PIXI,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-// Mixing
-import { mix } from "../mixwith.js";
-import {
-  PlaceableGeometry,
-  PlaceableAABBMixin,
-  PlaceableModelMatrixMixin,
-  PlaceableFacesMixin
-} from "./PlaceableGeometry.js";
+// Geometry
+import { PlaceableGeometry } from "./PlaceableGeometry.js";
+import { VerticalQuadPrimitive } from "./InstancedGeometricPrimitive.js";
 
 // LibGeometry
-import { NULL_SET } from "../util.js";
-import { AABB3d } from "../3d/AABB3d.js";
-import { MatrixFloat32 } from "../Matrix.js";
-import { Quad3d } from "../3d/Polygon3d.js";
-import { gridUnitsToPixels } from "../util.js";
+import { Point3d } from "../3d/Point3d.js";
+import { Segment } from "../Segment.js";
 
+/*
 const TRACKER_TYPES = {
-  position: [
+  positionXY: [
     "c",
-    "flags-wall-height.top",
+  ],
+  elevation: [
+    "flags.wall-height.top",
     "flags.wall-height.bottom",
   ],
   direction: [
     "dir",
   ],
+  level: [
+    "levels",
+  ],
+
+  // Currently don't need restriction, door, or threshold; Handled by obstacle occlusion tracking.
   restriction: [
     "light",
     "move",
@@ -47,178 +48,191 @@ const TRACKER_TYPES = {
     "threshold.sound",
   ],
 };
+*/
 
+export class WallGeometry extends PlaceableGeometry {
 
-/**
- * Prototype order:
- * WallGeometryTracker -> PlaceableFacesMixin -> PlaceableMatricesMixin -> PlaceableAABBMixin -> PlaceableGeometry
- */
-export class WallGeometry extends mix(PlaceableGeometry).with(PlaceableAABBMixin, PlaceableModelMatrixMixin, PlaceableFacesMixin) {
   /** @type {string} */
   static PLACEABLE_NAME = "Wall";
 
   /** @type {string} */
-  static layer = "walls";
+  static LAYER = "walls";
 
-  static TRACKER_TYPES = TRACKER_TYPES;
+  static UPDATE_KEY_MAP = new Map([
+    ...super.UPDATE_KEY_MAP,
+    ["c", "position"],
+    ["flags.wall-height.top", "position"],
+    ["flags.wall-height.bottom", "position"],
+    ["dir", "direction"],
+    // ["levels", "level"],
+  ]);
 
-  static UPDATE_KEYS = {
-    position: new Set(TRACKER_TYPES.position),
-    scale: new Set(TRACKER_TYPES.position),
-    rotation: new Set(TRACKER_TYPES.position),
-    shape: NULL_SET,
-    properties: new Set(TRACKER_TYPES.direction),
-  };
+  // ----- NOTE: Wall Segments ----- //
 
-  get wall() { return this.placeable; }
+  get edge() {
+    if ( !this.wall ) {
+      // See foundry.js #createEdge
+      const wallD = this.placeableDocument;
+      let { c, id, light, sight, sound, move, dir: direction, threshold } = wallD;
+      if ( wallD.isOpen ) light = sight = sound = move = CONST.WALL_SENSE_TYPES.NONE;
+      const dpx = this.scene.dimensions.distancePixels;
+      return new foundry.canvas.geometry.edges.Edge({ x: c[0], y: c[1] }, { x: c[2], y: c[3] }, {
+        id: `wall.${id}`,
+        type: "wall",
+        object: null,
+        direction,
+        light,
+        sight,
+        sound,
+        move,
+        threshold: {
+          light: threshold.light * dpx,
+          sight: threshold.sight * dpx,
+          sound: threshold.sound * dpx,
+          attenuation: threshold.attenuation
+        }
+      });
+    }
+    if ( !this.wall.edge ) this.wall.initializeEdge();
+    return this.wall.edge;
+  }
 
-  get edge() { return this.placeable.edge; }
+  createShapes() {
+    // Reset the wall shapes.
+    // Walls are made up of multiple vertical quads, spanning the defined wall segments.
+    const shapes = this.shapes;
+    shapes.forEach(shape => shape.destroy());
+    this.shapes.length = 1;
+    const shape = new VerticalQuadPrimitive(this.placeableId);
+    this.shapes[0] = shape;
+    this._updateShapeDirection();
+  }
 
   // ----- NOTE: Updating ----- //
 
-  propertiesUpdated() {
-    this._initializePrototypeFaces(); // In case wall direction changed.
+  _update() {
+    if ( this.activeUpdates.has("position") ) this._updateShapePosition();
+    if ( this.activeUpdates.has("direction") ) this._updateShapeDirection();
+    super._update();
   }
 
-  // ----- NOTE: AABB ----- //
-  calculateAABB() { return AABB3d.fromEdge(this.edge, this.aabb); }
+  _updateShapePosition() {
+    // Wall properties
+    const wallD = this.placeableDocument;
+    using ctr2d = this.constructor.wallCenter(wallD);
+    const rotZ = this.constructor.wallAngle(wallD)
+    const lengthXY = this.constructor.wallLength(wallD);
+    const { topZ, bottomZ } = this.elevationZ;
+    const zHeight = topZ - bottomZ;
 
-  // ----- NOTE: Matrices ---- //
-
-  calculateTranslationMatrix() {
-    const mat = super.calculateTranslationMatrix();
-    const edge = this.edge;
-    const pos = this.constructor.edgeCenter(edge);
-    const { top, bottom } = this.constructor.edgeElevation(edge);
-    const zHeight = top - bottom;
-    const z = top - (zHeight * 0.5);
-    return MatrixFloat32.translation(pos.x, pos.y, z, mat);
+    using center3d = Point3d.tmp.set(ctr2d.x, ctr2d.y, 0);
+    using angles = Point3d.tmp.set(0, 0, rotZ);
+    const shape = this.shapes[0]; // Walls contain only a single shape.
+    shape.setPosition(center3d);
+    shape.setRotation(angles);
+    shape.setDims({ lengthXY, zHeight });
   }
 
-  calculateRotationMatrix() {
-    const mat = super.calculateRotationMatrix();
-    const rot = this.constructor.edgeAngle(this.edge);
-    return MatrixFloat32.rotationZ(rot, true, mat);
+  _updateShapeDirection() {
+    this.shapes[0].direction = this.constructor.cullFaceForWallDirection(this.placeableDocument.dir);
   }
 
-  calculateScaleMatrix() {
-    const mat = super.calculateScaleMatrix();
-    const edge = this.edge;
-    const ln = this.constructor.edgeLength(edge);
-    const { top, bottom } = this.constructor.edgeElevation(edge);
-    const scaleZ = top - bottom;
-    return MatrixFloat32.scale(ln, 1.0, scaleZ, mat);
+  _updateTransforms() {
+    this._updateShapePosition();
+    this._updateShapeDirection();
   }
 
-  // ----- NOTE: Faces ---- //
-
-  /** @type {Faces} */
-  _prototypeFaces = {
-    top: new Quad3d(),      // Left
-    bottom: new Quad3d(),   // Right
-    sides: [],
-  }
+  // ----- NOTE: Opacity and Levels ----- //
 
   /**
-   * Create the initial face shapes for this wall, using a 0.5 x 0.5 x 0.5 unit cube.
-   * Normal walls have front (top) and back (bottom). One-directional walls have only top.
+   * How opaque is this geometry?
+   * @param {CONST.WALL_RESTRICTION_TYPES} type
+   * @param {object} ctx
+   * @returns {number} Value between 1 (opaque) and 0 (transparent)
    */
-  _initializePrototypeFaces() {
-    this.constructor.QUADS.north.clone(this._prototypeFaces.top);
-    this.constructor.QUADS.south.clone(this._prototypeFaces.bottom);
-    super._initializePrototypeFaces();
+  opacity(senseType = "sight", ctx) {
+    const placeableD = this.placeableDocument;
+    if ( !(placeableD[senseType] || placeableD.threshold[senseType]) || placeableD.isOpen ) return 0;
+    return super.opacity(senseType, ctx);
   }
-
-  _updateFaces() {
-    const M = this.modelMatrix.model;
-    const hasTop = this.edge.direction === 0 || this.edge.direction === 1;    // 1: Restricts from left (from a --> b).
-    const hasBottom = this.edge.direction === 0 || this.edge.direction === 2; // 2: Restricts from right (from a --> b).
-
-    if ( hasTop && this._prototypeFaces.top ) {
-      this.faces.top ??= new Quad3d();
-      this._prototypeFaces.top.transform(M, this.faces.top);
-    } else this.faces.top = null;
-    if ( hasBottom && this._prototypeFaces.bottom ) {
-      this.faces.bottom ??= new Quad3d();
-      this._prototypeFaces.bottom.transform(M, this.faces.bottom);
-    } else this.faces.bottom = null;
-  }
-
-  /**
-   * Determine where a ray hits this object in 3d.
-   * Stops at the first hit for a triangle facing the correct direction.
-   * Ignores intersections behind the ray.
-   * @param {Point3d} rayOrigin
-   * @param {Point3d} rayDirection
-   * @param {object} [opts]
-   * @param {number} [opts.minT=0]        Ignore hits earlier in the segment than this (multiple of rayDirection)
-   * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
-   * @returns {number|null} The distance along the ray, as a multiple of rayDirection
-   */
-  rayIntersection(rayOrigin, rayDirection, opts) {
-    if ( this.wall.isOpen ) return null; // If door is open, no intersection.
-    return super.rayIntersection(rayOrigin, rayDirection, opts);
-  }
-
 
   // ----- NOTE: Wall characteristics ----- //
 
   /**
-   * Determine the top and bottom edge elevations. Null values will be given large constants.
-   * @param {Edge} edge
-   * @returns {object}
-   * - @prop {number} top         1e05 if null
-   * - @prop {number} bottom      -1e05 if null
+   * What cull face corresponds with given wall direction?
+   * @param {CONST.EDGE_DIRECTIONS.} wallDir
+   * @returns {CULL_FACES}
    */
-  static edgeElevation(edge) {
-    let { top, bottom } = edge.elevationLibGeometry.a;
-    top ??= 1e05;
-    bottom ??= -1e05;
-    top = gridUnitsToPixels(top);
-    bottom = gridUnitsToPixels(bottom);
-    return { top, bottom };
+  static cullFaceForWallDirection(wallDir = 0) {
+    const CF = VerticalQuadPrimitive.CULL_FACES
+    const WD = CONST.EDGE_DIRECTIONS;
+    switch ( wallDir ) {
+      case WD.BOTH: return CF.DOUBLE;
+      case WD.LEFT: return CF.LEFT;
+      case WD.RIGHT: return CF.RIGHT;
+    }
+    return CF.DOUBLE;
+  }
+
+  /**
+   * Create 2d segment points from a wall document.
+   * @param {WallDocument} wallD
+   * @returns {Segment}
+   * - @prop {PIXI.Point} a
+   * - @prop {PIXI.Point} b
+   */
+  static wallSegment2d(wallD) {
+    const [ax, ay, bx, by] = wallD.c;
+    return new Segment(
+      PIXI.Point.tmp.set(ax, ay),
+      PIXI.Point.tmp.set(bx, by),
+    );
   }
 
   /**
    * Determine the 2d center point of the edge.
-   * @param {Edge} edge
+   * @param {WallDocument} wallD
    * @returns {PIXI.Point}
    */
-  static edgeCenter(edge) {
-    const ctr = PIXI.Point.tmp;
-    return edge.a.add(edge.b, ctr).multiplyScalar(0.5, ctr);
+  static wallCenter(wallD) {
+    using s = this.wallSegment2d(wallD);
+    return s.midpoint;
   }
 
   /**
    * Determine the 2d length of the edge.
-   * @param {Edge} edge
+   * @param {WallDocument} wallD
    * @returns {number}
    */
-  static edgeLength(edge) { return PIXI.Point.distanceBetween(edge.a, edge.b); }
+  static wallLength(wallD) {
+    using s = this.wallSegment2d(wallD);
+    return s.length;
+  }
 
   /**
    * Angle of the edge on the 2d canvas.
-   * @param {Edge} edge
+   * @param {WallDocument} edge
    * @returns {number} Angle in radians
    */
-  static edgeAngle(edge) {
-    using delta = edge.b.subtract(edge.a, PIXI.Point.tmp);
-    return Math.atan2(delta.y, delta.x);
+  static wallAngle(wallD) {
+    using s = this.wallSegment2d(wallD);
+    return s.angleXY;
   }
 
   /**
    * Is this a terrain (limited) edge?
-   * @param {Edge} edge
+   * @param {WallDocument} wallD
    * @returns {boolean}
    */
-  static isTerrain(edge, { senseType = "sight" } = {}) {
-    return edge[senseType] === CONST.EDGE_SENSE_TYPES.LIMITED;
+  static isTerrain(wallD, { senseType = "sight" } = {}) {
+    return wallD[senseType] === CONST.EDGE_SENSE_TYPES.LIMITED;
   }
 
   /**
    * Is this a directional edge?
-   * @param {Edge} edge
+   * @param {WallDocument} wallD
    * @returns {boolean}
    */
-  static isDirectional(edge) { return Boolean(edge.direction); }
+  static isDirectional(wallD) { return Boolean(wallD.dir); }
+
 }

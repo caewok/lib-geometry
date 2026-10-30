@@ -5,9 +5,9 @@ PIXI,
 "use strict";
 
 import { Point3d } from "./Point3d.js";
-import { almostLessThan } from "../util.js";
+import { gridUnitsToPixels } from "../util.js";
 import { AABB2d } from "../AABB.js";
-import { Quad3d, Circle3d } from "./Polygon3d.js";
+import { Quad3d } from "./Polygon3d.js";
 
 const axes = {
   x: new Point3d(1, 0, 0),
@@ -18,8 +18,16 @@ Object.freeze(axes.x);
 Object.freeze(axes.y);
 Object.freeze(axes.z);
 
+// Temporary points. Need 8 to accommodate the transform method.
+const tmpPoints = Point3d.createN(8);
 
 export class AABB3d extends AABB2d {
+
+  /** @type {string} */
+  static TYPE = "AABB3d";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE, ...super.TYPE_HIERARCHY ];
 
   static POINT_CLASS = Point3d;
 
@@ -30,6 +38,8 @@ export class AABB3d extends AABB2d {
 
   /** @type {Point3d} */
   max = new this.constructor.POINT_CLASS(Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY);
+
+  get zHeight() { return this.max.z - this.min.z; }
 
   /**
    * Determine the min/max for a number or array of numbers.
@@ -44,6 +54,8 @@ export class AABB3d extends AABB2d {
     if ( Number.isNumeric(values) ) values = [values];
     return Math.minMax(...values);
   }
+
+  // ----- NOTE: Static factory methods ----- //
 
   /**
    * Convert a 2d AABB to a 3d AABB, by adding min and max z.
@@ -112,8 +124,6 @@ export class AABB3d extends AABB2d {
     return this.fromRectangle(rrect, z, out);
   }
 
-
-
   /**
    * @param {PIXI.Polygon} poly             2d polygon, assumed to be flat on the plane
    * @param {number|number[]} z             Elevation(s) to use
@@ -135,7 +145,10 @@ export class AABB3d extends AABB2d {
    */
   static fromShape(shape, z, out) {
     out ??= new this();
-    super.fromShape(shape, out);
+    if ( shape.is("AABB3d") ) {
+      shape.clone(out);
+      if ( !z ) return out;
+    } else super.fromShape(shape, out);
     z = this.getMinMaxForValues(z);
     out.min.z = z.min;
     out.max.z = z.max;
@@ -147,22 +160,28 @@ export class AABB3d extends AABB2d {
    * @returns {AABB3d}
    */
   static fromTile(tile, out) {
-    out = super.fromTile(tile, out);
+    out ??= new this();
+    super.fromTile(tile, out);
     const elevZ = tile.elevationZ;
     out.max.z = elevZ;
     out.min.z = elevZ;
     return out;
   }
 
-  /**
-   * @param {Tile} tile
-   * @returns {AABB3d}
-   */
-  static fromTileAlpha(tile, alphaThreshold, out) {
-    out = super.fromTileAlpha(tile, alphaThreshold, out);
-    const elevZ = tile.elevationZ;
+  static fromTileDocument(tileD, out) {
+    out ??= new this();
+    super.fromTileDocument(tileD, out);
+    const elevZ = gridUnitsToPixels(tileD.elevation);
     out.max.z = elevZ;
     out.min.z = elevZ;
+    return out;
+  }
+
+  static fromLevel(level, opts) {
+    opts.out ??= new this();
+    const out = super.fromLevel(level, opts);
+    out.min.z = gridUnitsToPixels(level.elevation.bottom);
+    out.max.z = gridUnitsToPixels(level.elevation.top);
     return out;
   }
 
@@ -171,10 +190,17 @@ export class AABB3d extends AABB2d {
    * @returns {AABB3d}
    */
   static fromWall(wall, out) {
-    const { topZ, bottomZ } = wall;
+    const { topZ, bottomZ } = wall.document;
     out = super.fromWall(wall, out);
-    out.min.z = bottomZ
+    out.min.z = bottomZ;
     out.max.z = topZ;
+    return out;
+  }
+
+  static fromWallDocument(wallD, out) {
+    out = super.fromWallDocument(wallD, out);
+    out.max.z = wallD.topZ;
+    out.min.z = wallD.bottomZ;
     return out;
   }
 
@@ -183,7 +209,8 @@ export class AABB3d extends AABB2d {
    * @returns {AABB3d}
    */
   static fromEdge(edge, out) {
-    out = super.fromEdge(edge, out);
+    out ??= new this();
+    super.fromEdge(edge, out);
     const { a, b } = edge.elevationLibGeometry;
     out.min.z = Math.min(a.bottom ?? Number.NEGATIVE_INFINITY, b.bottom ?? Number.NEGATIVE_INFINITY);
     out.max.z = Math.max(a.top ?? Number.POSITIVE_INFINITY, b.top ?? Number.POSITIVE_INFINITY);
@@ -195,9 +222,23 @@ export class AABB3d extends AABB2d {
    * @returns {AABB3d}
    */
   static fromToken(token, out) {
-    out = super.fromToken(token, out);
-    out.min.z = token.bottomZ;
-    out.max.z = token.topZ;
+    out ??= new this();
+    super.fromToken(token, out);
+    const { topZ, bottomZ } = token.document;
+    out.min.z = bottomZ;
+    out.max.z = topZ;
+    return out;
+  }
+
+  /**
+   * @param {TokenDocument} tokenD
+   * @returns {AABB3d}
+   */
+  static fromTokenDocument(tokenD, out) {
+    out ??= new this();
+    super.fromTokenDocument(tokenD, out);
+    out.min.z = tokenD.bottomZ;
+    out.max.z = tokenD.topZ;
     return out;
   }
 
@@ -213,63 +254,65 @@ export class AABB3d extends AABB2d {
     return out;
   }
 
-
-
   /**
    * @param {Polygon3d} poly3d
    * @returns {AABB3d}
    */
   static fromPolygon3d(poly3d, out) {
-    if ( poly3d instanceof Circle3d ) return this.fromCircle3d(poly3d, out);
+    if ( poly3d.is("Circle3d") ) return this.fromCircle3d(poly3d, out);
     return this.fromPoints(poly3d.points, out);
   }
 
   /**
+   * @param {Ellipse3d} ellipse3d
+   * @param {AABB3d} [out]
+   * @returns {AABB3d}
+   */
+  static fromEllipse3d(ellipse3d, out) {
+    out ??= new this();
+
+    // Half-extent along each axis is hypot(vx[axis], vy[axis]).
+    const { vx, vy } = ellipse3d.radiusVectors();
+    const c = ellipse3d.center;
+    const ex = Math.hypot(vx.x, vy.x);
+    const ey = Math.hypot(vx.y, vy.y);
+    const ez = Math.hypot(vx.z, vy.z);
+    out.min.set(c.x - ex, c.y - ey, c.z - ez);
+    out.max.set(c.x + ex, c.y + ey, c.z + ez);
+    vx.release();
+    vy.release();
+    return out;
+  }
+
+  /**
    * @param {Circle3d} circle3d
+   * @param {AABB3d} [out]
    * @returns {AABB3d}
    */
   static fromCircle3d(circle3d, out) {
     out ??= new this();
-
-    // Project the radius onto each axis: sqrt(1 - normal[axis]**2)
-    // Normal must be normalized.
-    const rX = Math.sqrt(1 - (circle3d.plane.normal.x ** 2));
-    const rY = Math.sqrt(1 - (circle3d.plane.normal.y ** 2));
-    const rZ = Math.sqrt(1 - (circle3d.plane.normal.z ** 2));
-
-    const { center, radius } = circle3d;
-    out.min.set(
-      center.x - (radius * rX),
-      center.y - (radius * rY),
-      center.z - (radius * rZ),
-    );
-    out.max.set(
-      center.x + (radius * rX),
-      center.y + (radius * rY),
-      center.z + (radius * rZ),
-    );
+    const { x: cx, y: cy, z: cz } = circle3d.center;
+    const n = circle3d.plane.normal; // Unit length; Ellipse3d#transform normalizes it.
+    const r = circle3d.radius.x;
+    const ex = r * Math.sqrt(Math.max(0, 1 - (n.x * n.x)));
+    const ey = r * Math.sqrt(Math.max(0, 1 - (n.y * n.y)));
+    const ez = r * Math.sqrt(Math.max(0, 1 - (n.z * n.z)));
+    out.min.set(cx - ex, cy - ey, cz - ez);
+    out.max.set(cx + ex, cy + ey, cz + ez);
     return out;
   }
 
-  static fromCircle3d_2(circle3d, out) {
-    out ??= new this();
+  // ----- NOTE: Overlap tests ----- //
 
-    // See https://stackoverflow.com/questions/2592011/bounding-boxes-for-circle-and-arcs-in-3d
-    const angle = (A , B) => {
-      const dot = A.dot(B);
-      return dot <= -1.0 ? Math.PI
-        : dot >= 1.0 ? 0.0
-        : Math.acos(dot);
-    }
-    const N = circle3d.plane.normal;
-    const ax = angle(N, axes.x);
-    const ay = angle(N, axes.y);
-    const az = angle(N, axes.z);
-    using R = Point3d.tmp.set(Math.sin(ax), Math.sin(ay), Math.sin(az)) * circle3d.radius;
-    const { x, y, z } = this.center;
-    out.min.set(x - R.x, y - R.y, z - R.z);
-    out.max.set(x + R.x, y + R.y, z + R.z);
-    return out;
+  /**
+   * Generic overlaps test.
+   * @param {*} shape
+   * @returns {boolean}
+   */
+  overlaps(shape) {
+    if ( shape.is("AABB3d") ) return this.overlapsAABB(shape);
+    if ( shape.is("AABB2d") ) return shape.overlapsAABB(this); // Ignore z axis.
+    return super.overlaps(shape);
   }
 
   /**
@@ -298,7 +341,19 @@ export class AABB3d extends AABB2d {
    * @return {boolean}
    */
   overlapsConvexPolygon3d(poly3d) {
-    if ( poly3d instanceof Circle3d ) return this.overlapsCircle3d(poly3d);
+    if ( poly3d.is("Circle3d") ) return this.overlapsCircle3d(poly3d);
+    if ( poly3d.is("Polygons3d") ) {
+      // Early exit if polygon is empty
+      if ( !poly3d.polygons.length) return false;
+
+      // Test 1: AABB axes. (Polygon bounding box.)
+      if ( !poly3d.aabb.overlapsAABB(this) ) return false;
+
+      for ( const poly of poly3d.polygons ) {
+        if ( this.overlapsConvexPolygon3d(poly) ) return true;
+      }
+      return false;
+    }
 
     // Early exit if polygon is empty
     if ( !poly3d.points || poly3d.points.length === 0 ) return false;
@@ -317,8 +372,7 @@ export class AABB3d extends AABB2d {
     // Test 3: Edge cross products.
     // Test axis = Cross(PolygonEdge, BoxAxis) for all combinations.
     // BoxAxes are X(1,0,0), Y(0,1,0), Z(0,0,1).
-    using axis = Point3d.tmp;
-    using edgeDir = Point3d.tmp;
+    const [axis, edgeDir] = tmpPoints;
     for ( const edge of poly3d.iterateEdges() ) {
       edge.b.subtract(edge.a, edgeDir);
 
@@ -372,20 +426,22 @@ export class AABB3d extends AABB2d {
     if ( this.containsPoint(center) ) return true;
 
     // Find the point on the AABB closest to the circle's center.
-    using closestPoint = Point3d.tmp.set(
+    const closestPoint = tmpPoints[0].set(
       Math.max(min.x, Math.min(center.x, max.x)),
       Math.max(min.y, Math.min(center.y, max.y)),
       Math.max(min.z, Math.min(center.z, max.z)),
     );
 
     // Project this closest point onto the circle's plane.
-    using planePoint = plane.projectPointOnPlane(closestPoint);
-    using centerPoint = plane.projectPointOnPlane(center);
+    const planePoint = plane.projectPointOnPlane(closestPoint, tmpPoints[1]);
+    const centerPoint = plane.projectPointOnPlane(center, tmpPoints[2]);
 
     // Check if the projected point is inside the circle.
     const dist2 = PIXI.Point.distanceSquaredBetween(planePoint, centerPoint);
-    return almostLessThan(dist2, radiusSquared);
+    return dist2.almostLessThan(radiusSquared);
   }
+
+  // ----- NOTE: Iteration ----- //
 
   /**
    * @param {Point3d} [outPoint]
@@ -403,7 +459,35 @@ export class AABB3d extends AABB2d {
     }
   }
 
-  // ----- NOTE: Projection and Separating Axis Theorem ----- //
+  // ----- NOTE: Projection and transform ----- //
+
+  /**
+   * Transform using a 4x4 matrix.
+   * @param {Matrix<4x4>} M
+   * @param {AABB3d} out
+   * @returns {AABB3d}
+   */
+  transform(M, out) {
+    const { min, max } = this;
+
+    // Generate all 8 points of the current AABB.
+    const corners = [
+      tmpPoints[0].set(min.x, min.y, min.z),
+      tmpPoints[1].set(min.x, min.y, max.z),
+      tmpPoints[2].set(min.x, max.y, min.z),
+      tmpPoints[3].set(min.x, max.y, max.z),
+      tmpPoints[4].set(max.x, min.y, min.z),
+      tmpPoints[5].set(max.x, min.y, max.z),
+      tmpPoints[6].set(max.x, max.y, min.z),
+      tmpPoints[7].set(max.x, max.y, max.z),
+    ];
+
+    // Transform each corner using the matrix.
+    corners.forEach(pt => M.multiplyPoint3d(pt, pt));
+
+    // Build the new axis-aligned bounds.
+    return this.constructor.fromPoints(corners, out);
+  }
 
 }
 
@@ -445,3 +529,4 @@ function projectPolygon(polygon, axis) {
   });
   return { min, max };
 }
+

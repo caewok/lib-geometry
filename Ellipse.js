@@ -91,6 +91,27 @@ export class Ellipse extends PIXI.Ellipse {
   }
 
   /**
+   * Check whether the given x and y coordinates are inside this ellipse.
+   * @param {number} x
+   * @param {number} y
+   * @returns {boolean}
+   */
+  contains(x, y) {
+    // Fall back to PIXI.Ellipse's default behavior if there is no rotation
+    if ( !this.rotation ) return super.contains(x, y);
+
+    // Shift coordinates to the ellipse's local coordinate space
+    const localPt = this._fromCartesianCoords({ x, y });
+
+    // Calculate distance against the normalized radii
+    // In PIXI.Ellipse, 'width' and 'height' represent the half-axes
+    const dx = localPt.x / this.width;
+    const dy = localPt.y / this.height;
+
+    return (dx * dx + dy * dy).almostLessThan(1);
+  }
+
+  /**
    * Construct an ellipse that mirrors that of a Drawing ellipse
    * @param {Drawing} drawing
    * @returns {Ellipse}
@@ -165,12 +186,12 @@ export class Ellipse extends PIXI.Ellipse {
    * @returns {boolean}
    */
   overlaps(other) {
-    if ( other instanceof PIXI.Ellipse ) return this._overlapsEllipse(other);
-    if ( other instanceof PIXI.Circle ) return this._overlapsCircle(other);
+    if ( other.is("PIXI.Ellipse") ) return this._overlapsEllipse(other);
+    if ( other.is("PIXI.Circle") ) return this._overlapsCircle(other);
 
     // Conversion to circle space may rotate the rectangle, so use polygon.
-    if ( other instanceof PIXI.Rectangle ) return this._overlapsPolygon(other.toPolygon());
-    if ( other instanceof PIXI.Polygon ) return this._overlapsPolygon(other);
+    if ( other.is("PIXI.Rectangle") ) return this._overlapsPolygon(other.toPolygon());
+    if ( other.is("PIXI.Polygon") ) return this._overlapsPolygon(other);
     if ( other.toPolygon ) return this._overlapsPolygon(other.toPolygon());
     console.warn("overlaps|shape not recognized.", other);
     return false;

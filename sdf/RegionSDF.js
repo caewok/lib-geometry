@@ -42,8 +42,8 @@ class ShapeSDFAbstract extends SDFPlaceable {
 
   _translationRotationMatrix() {
     using center = this.center;
-    using txMat = Matrix.translation(-center.x, -center.y);
-    using rotMat = Matrix.rotationZ(-this.rotation, false);
+    using txMat = Matrix.translation(center, { d3: false });
+    using rotMat = Matrix.rotationZ(-this.rotation, { d3: false });
     return rotMat.multiply3x3(txMat);
   }
 }
@@ -197,7 +197,7 @@ class RectangleShapeSDF extends ShapeSDFAbstract {
     using ctr = this.center;
     const a = PIXI.Point.tmp.set(ctr.x - w1_2, ctr.y);
     const b = PIXI.Point.tmp.set(ctr.x + w1_2, ctr.y);
-    const rotMat = Matrix.rotationZ(-this.rotation, false);
+    const rotMat = Matrix.rotationZ(-this.rotation, { d3: false });
     const M = rotMat.multiply3x3(txMat);
     M.multiplyPoint2d(a);
     M.multiplyPoint2d(b);
@@ -282,7 +282,7 @@ class PolygonShapeSDF extends ShapeSDFAbstract {
   _sdf2d() {
     // points
     // rotation
-    const rotMat = Matrix.rotationZ(-this.rotation, false);
+    const rotMat = Matrix.rotationZ(-this.rotation, { d3: false });
     const txPt = PIXI.Point.tmp;
     const poly = new PIXI.Polygon(this.points);
     return p => {
@@ -561,8 +561,8 @@ export class RegionSDF extends SDFPlaceable {
 		);
 
 		// Rotate to extrude steps perpendicular to canvas.
-		const rotMat = Matrix.rotationX(Math.PI_1_2) // 90¼ rotation around X axis.
-		const txMat = Matrix.translation(0, 0, baseH);
+		const rotMat = Matrix.rotationX(Math.PI_1_2, { d3: true }) // 90¼ rotation around X axis.
+		const txMat = Matrix.translation({ x: 0, y: 0, z: baseH }, { d3: true });
 
 		// To determine how far the stairs have to go, can either:
 		// 1. Rotate the polygons to align with the ramp direction and then get the top/bottom bounds
@@ -616,8 +616,8 @@ export class RegionSDF extends SDFPlaceable {
 		});
 
 		// Rotate to extrude steps perpendicular to canvas.
-		const rotMat = Matrix.rotationX(Math.PI_1_2) // 90¼ rotation around X axis.
-		const txMat = Matrix.translation(0, 0, baseH);
+		const rotMat = Matrix.rotationX(Math.PI_1_2, { d3: true }) // 90¼ rotation around X axis.
+		const txMat = Matrix.translation({ x: 0, y: 0, z: baseH }, { d3: true });
 
 		return p => {
 		  using pTx = p.clone();
@@ -646,51 +646,3 @@ export class RegionSDF extends SDFPlaceable {
 		};
   }
 }
-
-
-
-/* Testing
-AABB2d = CONFIG.GeometryLib.lib.AABB2d
-Draw = CONFIG.GeometryLib.lib.Draw
-Point3d = CONFIG.GeometryLib.lib.threeD.Point3d
-Matrix = CONFIG.GeometryLib.lib.Matrix
-SDF = CONFIG.GeometryLib.lib.sdf.SDF
-RegionSDF = CONFIG.GeometryLib.lib.sdf.RegionSDF
-TileSDF = CONFIG.GeometryLib.lib.sdf.TileSDF
-TokenSDF = CONFIG.GeometryLib.lib.sdf.TokenSDF
-
-cir1 = new PIXI.Circle(50, 50, 100)
-cir2 = new PIXI.Circle(120, 50, 80)
-Draw.shape(cir1, { color: Draw.COLORS.blue })
-Draw.shape(cir2, { color: Draw.COLORS.green })
-
-txMat1 = Matrix.translation(-cir1.x, -cir1.y)
-txPt = PIXI.Point.tmp
-prim1 = p => {
-  txMat1.multiplyPoint2d(p, txPt);
-  return SDF.sdCircle(txPt, cir1.radius);
-}
-aabb1 = AABB2d.fromCircle(cir1)
-aabb1.pad({ x: 20, y: 20 });
-
-SDF.drawHeatmap2d(prim1, aabb1)
-Draw.shape(cir1, { color: Draw.COLORS.black })
-
-txMat2 = Matrix.translation(-cir2.x, -cir2.y)
-prim2 = p => {
-  txMat2.multiplyPoint2d(p, txPt);
-  return SDF.sdCircle(txPt, cir2.radius);
-}
-aabb2 = AABB2d.fromCircle(cir2)
-aabb2.pad({ x: 20, y: 20 });
-SDF.drawHeatmap2d(prim2, aabb2)
-Draw.shape(cir2, { color: Draw.COLORS.black })
-
-
-// combined
-aabb = AABB2d.union([aabb1, aabb2])
-prim = p => SDF.union(prim1(p), prim2(p))
-SDF.drawHeatmap2d(prim, aabb)
-Draw.shape(cir1, { color: Draw.COLORS.black })
-Draw.shape(cir2, { color: Draw.COLORS.black })
-*/

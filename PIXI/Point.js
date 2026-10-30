@@ -148,6 +148,26 @@ function invertKey(key, outPoint) {
   return outPoint;
 }
 
+/**
+ * String key, rounding to a given number of decimals. Useful for sets when the integer key is too imprecise.
+ * @param {number} [places=6]   Number of decimals
+ */
+function stringKey(places=6) {
+  return `${this.x.toFixed(places)},${this.y.toFixed(places)}`;
+}
+
+/**
+ * Invert a string key.
+ * @param {string}
+ * @param {PIXI.Point} out    The new point to copy to.
+ * @returns {PIXI.Point}
+ */
+function invertStringKey(str, out) {
+  out ??= this.tmp;
+  const [xStr, yStr] = str.split(",");
+  return out.set(Number(xStr) || 0, Number(yStr) || 0);
+}
+
 
 /**
  * Take an array of 2d points and flatten them to an array of numbers,
@@ -371,6 +391,19 @@ function ceil(outPoint) {
 }
 
 /**
+ * Take the square root of each coordinate.
+ * @param {PIXI.Point} [outPoint]    A point-like object in which to store the value.
+ *   (Will create new point if none provided.)
+ * @returns {PIXI.Point}
+ */
+function sqrt(outPoint) {
+  outPoint ??= this.constructor.tmp;
+  outPoint.x = Math.sqrt(this.x);
+  outPoint.y = Math.sqrt(this.y);
+  return outPoint;
+}
+
+/**
  * Make all coordinates finite.
  * @param {PIXI.Point} [outPoint]    A point-like object in which to store the value.
  *   (Will create new point if none provided.)
@@ -554,6 +587,20 @@ PIXI.Point.prototype[Symbol.iterator] = function() {
   };
 }
 
+/**
+ * Check if this instance matches a given type name,
+ * supporting inheritance from parent classes.
+ * @param {string} typeName
+ * @returns {boolean}
+ */
+function is(typeName) { return this.constructor.TYPE_HIERARCHY.includes(typeName); }
+
+/** @type {string} */
+PIXI.Point.TYPE = "Point2d";
+
+/** @type {string[]} */
+PIXI.Point.TYPE_HIERARCHY = [PIXI.Point.TYPE];
+
 PATCHES.PIXI.GETTERS = {
   key,
 };
@@ -561,6 +608,7 @@ PATCHES.PIXI.GETTERS = {
 PATCHES.PIXI.STATIC_GETTERS = {
   pool: function() { return Pool.getPool(this); },
   tmp: function() { return this.pool.acquire(); },
+  createN: function(n) { return this.pool.acquireMultiple(n); }
 }
 
 PATCHES.PIXI.STATIC_METHODS = {
@@ -574,6 +622,7 @@ PATCHES.PIXI.STATIC_METHODS = {
   invertKey,
   key: staticKey,
   rotate,
+  invertStringKey,
 
   // Pool
   onRelease,
@@ -614,9 +663,12 @@ PATCHES.PIXI.METHODS = {
   fromAngle,
   to2d,
   toString: function() { return `{x: ${this.x}, y: ${this.y}}`},
+  stringKey,
 
   // Pool
   release: function() { this.constructor.release(this); },
+
+  is,
 
   // Patching cannot handle this approach because Symbol.dispose is special and will not be listed as an Object.entries().
   // [Symbol.dispose]: function() { this.constructor._release(this); },

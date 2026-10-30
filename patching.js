@@ -28,8 +28,10 @@ import { PATCHES as PATCHES_Edge } from "./Edge.js";
 import { PATCHES as PATCHES_AmbientLight } from "./AmbientLight.js";
 import { PATCHES as PATCHES_AmbientSound } from "./AmbientSound.js";
 
-// PixelCache
-import { PATCHES as PATCHES_Tile } from "./Tile.js";
+// Configs
+import { PATCHES as PATCHES_WallConfig } from "./WallConfig.js";
+import { PATCHES as PATCHES_WallHeight } from "./WallHeightManager.js";
+import { PATCHES as PATCHES_TokenConfig } from "./TokenConfig.js";
 
 const PATCHES = {
   // Don't need CanvasEdges b/c quadtree already in v13.
@@ -42,12 +44,18 @@ const PATCHES = {
   "PIXI.Ellipse": PATCHES_Ellipse,
   "PIXI.RoundedRectangle": PATCHES_RoundedRectangle,
 
-  // PixelCache
-  "foundry.canvas.placeables.Tile": PATCHES_Tile,
+  // Elevation document patches
+  "foundry.documents.TokenDocument": PATCHES_ELEVATION.TokenDocument,
+  "foundry.documents.WallDocument": PATCHES_ELEVATION.WallDocument,
+  "foundry.documents.TileDocument": PATCHES_ELEVATION.TileDocument,
+  "foundry.documents.RegionDocument": PATCHES_ELEVATION.RegionDocument,
+  "foundry.documents.Level": PATCHES_ELEVATION.LevelDocument,
 
-  // Elevation patches.
-  "foundry.canvas.sources.BaseEffectSource": PATCHES_ELEVATION.PointSource,
-  "foundry.canvas.sources.PointVisionSource": PATCHES_ELEVATION.VisionSource,
+  // Source document patches
+  "foundry.canvas.sources.BaseEffectSource": PATCHES_ELEVATION.BaseEffectSource,
+  "foundry.canvas.sources.PointVisionSource": PATCHES_ELEVATION.PointVisionSource,
+
+  // Elevation patches (deprecated).
   "foundry.canvas.placeables.PlaceableObject": PATCHES_ELEVATION.PlaceableObject,
   "foundry.canvas.placeables.Wall": PATCHES_ELEVATION.Wall,
   "foundry.canvas.placeables.Region": PATCHES_ELEVATION.Region,
@@ -59,6 +67,11 @@ const PATCHES = {
   "ConstrainedTokenBorder": PATCHES_ConstrainedTokenBorder,
   "foundry.documents.BaseAmbientLight": PATCHES_AmbientLight,
   "foundry.documents.BaseAmbientSound": PATCHES_AmbientSound,
+
+  // Configs
+  "foundry.applications.sheets.WallConfig": PATCHES_WallConfig,
+  "foundry.applications.sheets.TokenConfig": PATCHES_TokenConfig,
+  "wallHeight": PATCHES_WallHeight, // Hooks only.
 }
 
 export function registerGeometryLibPatches() {
@@ -66,13 +79,25 @@ export function registerGeometryLibPatches() {
   if ( CONFIG[GEOMETRY_LIB_ID].PATCHER ) deRegister();
 
   // Create a new Patcher object and register the patches.
-  const patcher = CONFIG[GEOMETRY_LIB_ID].PATCHER = new Patcher();
+  const patcher = CONFIG[GEOMETRY_LIB_ID].PATCHER ??= new Patcher();
   patcher.addPatchesFromRegistrationObject(PATCHES);
   patcher.registerGroup("PIXI");
   patcher.registerGroup("CONSTRAINED_TOKEN_BORDER");
   patcher.registerGroup("PIXEL_CACHE");
   patcher.registerGroup("ELEVATION");
   patcher.registerGroup("CANVAS_EDGES");
+}
+
+export function registerWallHeight() {
+  const patcher = CONFIG[GEOMETRY_LIB_ID].PATCHER ??= new Patcher();
+  patcher.deregisterGroup("WALL_HEIGHT");
+  patcher.registerGroup("WALL_HEIGHT");
+}
+
+export function registerTokenHeight() {
+  const patcher = CONFIG[GEOMETRY_LIB_ID].PATCHER ??= new Patcher();
+  patcher.deregisterGroup("TOKEN_HEIGHT");
+  patcher.registerGroup("TOKEN_HEIGHT");
 }
 
 export function deRegister() {

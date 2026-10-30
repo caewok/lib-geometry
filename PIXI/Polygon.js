@@ -12,6 +12,7 @@ PATCHES.PIXI = {};
 import { AABB2d } from "../AABB.js";
 import { lineSegmentCrosses } from "../util.js";
 import { CutawayPolygon } from "../CutawayPolygon.js";
+import { Segment } from "../Segment.js";
 
 /**
  * Calculate the area of this polygon.
@@ -31,9 +32,12 @@ function area() {
  */
 function centroid() {
   switch ( this.points.length ) {
-    case 0: return undefined;
-    case 1: return PIXI.Point.tmp.set(this.points[0], this.points[1]); // Should not happen if close is true
-    case 2: {
+    case 0:
+    case 1: return undefined;
+    case 2:
+    case 3: return PIXI.Point.tmp.set(this.points[0], this.points[1]);
+    case 4:
+    case 5:  {
       const [a, b] = [...this.iteratePoints()];
       return PIXI.Point.midPoint(a, b);
     }
@@ -196,13 +200,13 @@ function* iterateEdges({ close = true } = {}) {
   let a = firstA;
   for (let i = 2; i < ln; i += 2) {
     const b = PIXI.Point.tmp.set(this.points[i], this.points[i + 1]);
-    yield { a, b };
+    yield new Segment(a, b);
     a = b;
   }
 
   if ( close ) {
     const b = firstA;
-    yield { a, b };
+    yield new Segment(a, b);
   }
 }
 
@@ -221,13 +225,13 @@ function* reverseIterateEdges({ close = true } = {}) {
   let a = firstA;
   for (let i = ln - 4; i > -1; i -= 2) {
     const b = PIXI.Point.tmp.set(this.points[i], this.points[i + 1]);
-    yield { a, b };
+    yield new Segment(a, b);
     a = b;
   }
 
   if ( close ) {
     const b = firstA;
-    yield { a, b };
+    yield new Segment(a, b);
   }
 }
 
@@ -260,14 +264,14 @@ function* reverseIteratePoints() {
  * @returns {PIXI.Polygon}
  */
 function transform(M, out) {
-  out ??= new this();
+  out ??= new this.constructor();
   out.points.length = this.points.length;
   let i = 0;
   for ( using pt of this.iteratePoints() ) {
     M.multiplyPoint2d(pt, pt);
-    
+
     // Either overwrites this.points at that position or at a new out.
-    out.points[i++] = pt.x; 
+    out.points[i++] = pt.x;
     out.points[i++] = pt.y;
   }
   return out;
@@ -374,12 +378,13 @@ function _ixToPoint(ix) {
 function lineIntersections(a, b, { indices = false, tangents = true } = {}) {
   const ixIndices = [];
   const ixs = [];
-  this.iterateEdges().forEach((edge, i) => {
+  const edges = [...this.iterateEdges()];
+  edges.forEach((edge, i) => {
     // Test if the line intersects the edge segment (first half of lineSegmentIntersects test)
-    const xa = foundry.utils.orient2dFast(a, b, edge.a);  
+    const xa = foundry.utils.orient2dFast(a, b, edge.a);
     const xb = foundry.utils.orient2dFast(a, b, edge.b);
     if ( (xa * xb) > 0 ) return;
-    
+
     // Determine the actual intersection.
     const ix = foundry.utils.lineLineIntersection(a, b, edge.a, edge.b);
     if ( !ix ) return;
@@ -466,10 +471,10 @@ function pointsBetween(a, b) {
  * @returns {boolean}
  */
 function overlaps(other) {
-  if ( other instanceof PIXI.Polygon ) { return this._overlapsPolygon(other); }
-  if ( other instanceof PIXI.Circle ) { return this._overlapsCircle(other); }
-  if ( other instanceof PIXI.Rectangle ) { return other._overlapsPolygon(this); }
-  if ( other instanceof PIXI.Ellipse ) return other._overlapsPolygon(this);
+  if ( other.is("PIXI.Circle") ) { return this._overlapsCircle(other); }
+  if ( other.is("PIXI.Ellipse") ) return other._overlapsPolygon(this);
+  if ( other.is("PIXI.Rectangle") ) { return other._overlapsPolygon(this); }
+  if ( other.is("PIXI.Polygon") ) { return this._overlapsPolygon(other); }
   if ( other.toPolygon) return this._overlapsPolygon(other.toPolygon());
   console.warn("overlaps|shape not recognized.", other);
   return false;
@@ -482,10 +487,10 @@ function overlaps(other) {
  * @returns {boolean}
  */
 function envelops(shape) {
-  if ( shape instanceof PIXI.Polygon ) { return this._envelopsPolygon(shape); }
-  if ( shape instanceof PIXI.Circle ) { return this._envelopsCircle(shape); }
-  if ( shape instanceof PIXI.Rectangle ) { return this._envelopsRectangle(shape); }
-  if ( shape instanceof PIXI.Point ) { return this._envelopsPoint(shape); }
+  if ( shape.is("PIXI.Circle") ) { return this._envelopsCircle(shape); }
+  if ( shape.is("PIXI.Rectangle") ) { return this._envelopsRectangle(shape); }
+  if ( shape.is("PIXI.Polygon") ) { return this._envelopsPolygon(shape); }
+  if ( shape.is("PIXI.Point") ) { return this._envelopsPoint(shape); }
   if ( shape.toPolygon) return this._envelopsPolygon(shape.toPolygon());
   console.warn("overlaps|shape not recognized.", shape);
   return false;
@@ -1036,7 +1041,7 @@ function key() {
  * @returns {boolean}
  */
 function equals(other) {
-  if ( !(other instanceof PIXI.Polygon) ) return false;
+  if ( !(other.is("PIXI.Polygon")) ) return false;
   if ( this.points.length !== other.points.length ) return false;
   if ( this.isClockwise ^ other.isClockwise ) return false;
 
@@ -1074,7 +1079,7 @@ function equals(other) {
  * @returns {boolean}
  */
 function almostEqual(other, epsilon = 1e-08) {
-  if ( !(other instanceof PIXI.Polygon) ) return false;
+  if ( !(other.is("PIXI.Polygon")) ) return false;
   if ( this.points.length !== other.points.length ) return false;
 
   const thisPoints = this.iteratePoints();
@@ -1106,11 +1111,11 @@ function almostEqual(other, epsilon = 1e-08) {
 /**
  * Cutaway a line segment start|end that moves through this polygon.
  * Depending on the line and the polygon, could have multiple quads.
- * @param {Point3d} a     Starting endpoint for the segment
- * @param {Point3d} b       Ending endpoint for the segment
+ * @param {PIXI.Point} a     Starting endpoint for the segment
+ * @param {PIXI.Point} b       Ending endpoint for the segment
  * @param {object} [opts]
- * @param {Point3d} [opts.start]              Starting endpoint for the segment
- * @param {Point3d} [opts.end]                Ending endpoint for the segment
+ * @param {PIXI.Point} [opts.start]              Starting endpoint for the segment
+ * @param {PIXI.Point} [opts.end]                Ending endpoint for the segment
  * @param {number} [opts.top=1e06]        Top (elevation in pixel units) of the polygon
  * @param {number} [opts.bottom=-1e06]    Bottom (elevation in pixel units) of the polygon
  * @returns {CutawayPolygon[]}
@@ -1191,6 +1196,69 @@ function pointsLattice({ spacing = 1, startAtEdge = false } = {}) {
   return pts.filter(pt => this.contains(pt.x, pt.y));
 }
 
+/**
+ * Compute a point guaranteed to lie inside a simple polygon (convex or concave)
+ * Unlike a vertex-average or area-weighted centroid, this cannot fall outside the ring.
+ * @returns {PIXI.Point}
+ */
+function interiorPoint() {
+  // Pick a scanline y that doesn't pass exactly through a vertex to avoid degenerate crossings.
+  let yMin = Number.POSITIVE_INFINITY;
+  let yMax = Number.NEGATIVE_INFINITY;
+  const vertexYs = new Set();
+  for ( const pt of this.iteratePoints() ) {
+    const y = pt.y;
+    yMin = Math.min(yMin, y);
+    yMax = Math.max(yMax, y);
+    vertexYs.add(y);
+  }
+
+  // Slowly move y until it misses the vertex.
+  let y = (yMin + yMax) / 2;
+  const eps = (yMax - yMin) * 1e-06 || 1e-06;
+  while ( vertexYs.has(y) ) y += eps;
+
+  // Collect every x where an edge crosses the scanline.
+  const xs = [];
+  const a = PIXI.Point.tmp.set(this.points.at(-2), this.points.at(-1));
+  for ( const b of this.iteratePoints() ) {
+    const x0 = a.x;
+    const y0 = a.y;
+    const x1 = b.x;
+    const y1 = b.y;
+    if ( (y0 > y) !== (y1 > y) ) xs.push(x0 + ((y - y0) / (y1 - y0)) * (x1 - x0));
+    xs.sort((a, b) => a - b);
+  }
+
+  // Take the widest interior span's midpoint. More robust than always taking the first pair.
+  // (A thin sliver near the boundary is a valid crossing but a fragile test point.)
+  let bestSpan = Number.NEGATIVE_INFINITY;
+  let bestMid = (xs[0] + xs[1]) / 2;
+  for ( let i = 0, n = xs.length; (i + 1) < n; i += 2 ) {
+    const span = xs[i + 1] - xs[i];
+    if ( span > bestSpan ) {
+      bestSpan = span;
+      bestMid = (xs[i] + xs[i + 1]) / 2;
+    }
+  }
+  return PIXI.Point.tmp.set(bestMid, y);
+}
+
+/**
+ * Check if this instance matches a given type name,
+ * supporting inheritance from parent classes.
+ * @param {string} typeName
+ * @returns {boolean}
+ */
+function is(typeName) { return this.constructor.TYPE_HIERARCHY.includes(typeName); }
+
+/** @type {string} */
+PIXI.Polygon.TYPE = "PIXI.Polygon";
+
+/** @type {string[]} */
+PIXI.Polygon.TYPE_HIERARCHY = [PIXI.Polygon.TYPE];
+
+
 
 PATCHES.PIXI.GETTERS = {
   area,
@@ -1234,6 +1302,7 @@ PATCHES.PIXI.METHODS = {
   pointsBetween,
   viewablePoints,
   pointsLattice,
+  interiorPoint,
 
   // Overlap methods
   overlaps,
@@ -1251,7 +1320,9 @@ PATCHES.PIXI.METHODS = {
   cutaway,
 
   // Helper/internal methods
-  scaledArea
+  scaledArea,
+
+  is,
 };
 
 PATCHES.PIXI.STATIC_METHODS = {

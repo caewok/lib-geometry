@@ -200,12 +200,12 @@ function lineSegmentIntersects(a, b) {
  * @returns {boolean}
  */
 function overlaps(other) {
-  if ( other instanceof PIXI.Ellipse ) return this._overlapsEllipse(other);
-  if ( other instanceof PIXI.Circle ) return this._overlapsCircle(other);
+  if ( other instanceof ("PIXI.Ellipse") ) return this._overlapsEllipse(other);
+  if ( other instanceof ("PIXI.Circle") ) return this._overlapsCircle(other);
 
   // Conversion to circle space may rotate the rectangle, so use polygon.
-  if ( other instanceof PIXI.Rectangle ) return this._overlapsPolygon(other.toPolygon());
-  if ( other instanceof PIXI.Polygon ) return this._overlapsPolygon(other);
+  if ( other.is("PIXI.Rectangle") ) return this._overlapsPolygon(other.toPolygon());
+  if ( other.is("PIXI.Polygon") ) return this._overlapsPolygon(other);
   if ( other.toPolygon ) return this._overlapsPolygon(other.toPolygon());
   console.warn("overlaps|shape not recognized.", other);
   return false;
@@ -334,11 +334,11 @@ function intersectPolygon(polygon, { density, clipType, weilerAtherton=true, ...
 
 /**
  * Return a quadrangle cutaway for this ellipse
- * @param {Point3d} a       Starting endpoint for the segment
- * @param {Point3d} b       Ending endpoint for the segment
+ * @param {PIXI.Point} a       Starting endpoint for the segment
+ * @param {PIXI.Point} b       Ending endpoint for the segment
  * @param {object} [opts]
- * @param {Point3d} [opts.start]              Starting endpoint for the segment
- * @param {Point3d} [opts.end]                Ending endpoint for the segment
+ * @param {PIXI.Point} [opts.start]              Starting endpoint for the segment
+ * @param {PIXI.Point} [opts.end]                Ending endpoint for the segment
  * @param {function} [opts.topElevationFn]    Function to calculate the top elevation for a position
  * @param {function} [opts.bottomElevationFn] Function to calculate the bottom elevation for a position
  * @param {function} [opts.cutPointsFn]       Function that returns the steps along the a|b segment top
@@ -353,7 +353,7 @@ function cutaway(a, b, opts) { return CutawayPolygon.cutawayBasicShape(this, a, 
  * @returns {boolean}
  */
 function equals(other) {
-  if ( !(other instanceof PIXI.Ellipse) ) return false;
+  if ( !(other.is("PIXI.Ellipse")) ) return false;
   return this.x === other.x
     && this.y === other.y
     && this.width === other.width
@@ -367,7 +367,7 @@ function equals(other) {
  * @returns {boolean}
  */
 function almostEqual(other, epsilon = 1e-08) {
-  if ( !(other instanceof PIXI.Ellipse) ) return false;
+  if ( !(other.is("PIXI.Ellipse")) ) return false;
   return this.x.almostEqual(other.x, epsilon)
     && this.y.almostEqual(other.y, epsilon)
     && this.width.almostEqual(other.width, epsilon)
@@ -396,6 +396,20 @@ function angleAtPoint(point) {
   return Math.atan2(point.y - this.y, point.x - this.x);
 }
 
+
+/**
+ * Check if this instance matches a given type name,
+ * supporting inheritance from parent classes.
+ * @param {string} typeName
+ * @returns {boolean}
+ */
+function is(typeName) { return this.constructor.TYPE_HIERARCHY.includes(typeName); }
+
+/** @type {string} */
+PIXI.Ellipse.TYPE = "PIXI.Ellipse";
+
+/** @type {string[]} */
+PIXI.Ellipse.TYPE_HIERARCHY = [PIXI.Ellipse.TYPE];
 
 PATCHES.PIXI.GETTERS = {
   majorRadius,
@@ -442,6 +456,8 @@ PATCHES.PIXI.METHODS = {
   angleAtPoint,
   scaledArea,
   translate,
+
+  is,
 };
 
 PATCHES.PIXI.STATIC_METHODS = {

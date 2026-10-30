@@ -212,7 +212,7 @@ export class TriangleSplitter {
       console.error(`this.constructor.name|_splitTriangle3d|No intersecting segments found for tri`, tri);
       return false;
     }
-    if ( ixSegment instanceof Point3d ) return numIn > 1; // 1 point is on the plane.
+    if ( ixSegment.is("Point3d") ) return numIn > 1; // 1 point is on the plane.
 
     // TODO: Copy normal and update UVs.
     if ( numIn === 1 ) return [new Triangle3d.from3Points(ixSegment.a, ixSegment.b, inEndpoints[0])];

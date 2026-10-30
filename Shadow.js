@@ -1027,7 +1027,7 @@ export class Shadow extends PIXI.Polygon {
    * @returns {ClipperPaths|PIXI.Polygon} Array of Clipper paths representing the resulting combination.
    */
   static combinePolygonWithShadows(boundary, shadows, { scalingFactor = 1, cleanDelta = 0.1 } = {}) {
-    if ( shadows instanceof PIXI.Polygon ) shadows = [shadows];
+    if ( shadows.is("PIXI.Polygon") ) shadows = [shadows];
 
     if ( !shadows.length ) return boundary;
 

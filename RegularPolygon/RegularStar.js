@@ -19,6 +19,12 @@ import { NULL_SET } from "../util.js";
  */
 export class RegularStar extends RegularPolygon {
 
+  /** @type {string} */
+  static TYPE = "RegularStar";
+
+  /** @type {string[]} */
+  static TYPE_HIERARCHY = [this.TYPE];
+
   /** @type {PIXI.Point[]} */
   _outerPoints;
 
