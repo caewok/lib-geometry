@@ -172,6 +172,14 @@ export class QuadPrimitive extends InstancedGeometricPrimitive {
     return cutaways
   }
 
+  /**
+   * Validate that this quad faces the correct direction.
+   * @returns {boolean} True if valid (tests pass).
+   */
+  validate() {
+    return (this.prototypeFacesOutward() ^ this.isHole) && (this.facesOutward() ^ this.isHole);
+  }
+
   prototypeFacesOutward() {
     // Should face up before any rotations.
     using ctr = Point3d.tmp.set(0, 0, 1);
@@ -258,14 +266,6 @@ export class VerticalQuadPrimitive extends QuadPrimitive {
       if ( poly.isPositive ^ isHole ) poly.reverseOrientation();
     });
     return cutaways
-  }
-
-  /**
-   * Validate that this quad faces the correct direction.
-   * @returns {boolean} True if valid (tests pass).
-   */
-  validate() {
-    return (this.prototypeFacesOutward() ^ this.isHole) && (this.facesOutward() ^ this.isHole);
   }
 
   prototypeFacesOutward() {
