@@ -45,6 +45,8 @@ export class ObstacleOcclusionTest {
     "backgroundLevels",
   ]);
 
+  get hasObstacles() { return Object.values(this.obstacleGeometries).some(obstacleSet => obstacleSet.size); }
+
   /**
    * @param {object} [opts]
    * @param {CONST.WALL_RESTRICTION_TYPES} [opts.senseType]   If provided, will return early if geometry does not block this sense type.
