@@ -597,6 +597,19 @@ export class Point3d extends mix(PIXI.Point).with(PoolableMixin) {
   }
 
   /**
+   * Get the sign of the coordinates.
+   * @param {Point3d} [outPoint]    A point-like object in which to store the value.
+   *   (Will create new point if none provided.)
+   * @returns {Point3d}
+   */
+  sign(outPoint) {
+    outPoint ??= this.constructor.tmp;
+    super.sign(outPoint);
+    outPoint.z = Math.sign(this.z);
+    return outPoint;
+  }
+
+  /**
    * Get the floor of the coordinates.
    * @param {Point3d} [outPoint]    A point-like object in which to store the value.
    *   (Will create new point if none provided.)

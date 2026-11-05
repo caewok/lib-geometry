@@ -410,7 +410,7 @@ export class HoledPrimitive extends CombinedGeometricPrimitive {
     for ( const bucket of BUCKETS ) {
       ip[bucket] = {
         corners: (solidPoints[bucket].corners).filter(pt => !inHole(pt)),
-        mids: (solidPoints[bucket].mids).filter(pt => !inHole(pt)),
+        sides: (solidPoints[bucket].sides).filter(pt => !inHole(pt)),
       };
     }
     return ip;

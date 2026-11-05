@@ -4,15 +4,11 @@ Hooks
 */
 "use strict";
 
-export const VERSION = "0.6.2";
-
-import { MODULE_ID as thisModuleId } from "../const.js";
+export const VERSION = "0.7.0";
 
 export const GEOMETRY_LIB_ID = "GeometryLib";
 
 export const GEOMETRY_ID = "geometry";
-
-export const MODULE_ID = thisModuleId;
 
 // Accessed at CONFIG.GeometryLib.
 // Add various groupings (folders).

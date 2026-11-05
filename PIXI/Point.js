@@ -365,6 +365,19 @@ function abs(outPoint) {
 }
 
 /**
+ * Get the sign of the coordinates.
+ * @param {PIXI.Point} [outPoint]    A point-like object in which to store the value.
+ *   (Will create new point if none provided.)
+ * @returns {PIXI.Point}
+ */
+function sign(outPoint) {
+  outPoint ??= this.constructor.tmp;
+  outPoint.x = Math.sign(this.x);
+  outPoint.y = Math.sign(this.y);
+  return outPoint;
+}
+
+/**
  * Get the floor of the coordinates.
  * @param {PIXI.Point} [outPoint]    A point-like object in which to store the value.
  *   (Will create new point if none provided.)
@@ -645,6 +658,7 @@ PATCHES.PIXI.METHODS = {
   max,
   copyPartial,
   abs,
+  sign,
   floor,
   ceil,
   makeFinite,
