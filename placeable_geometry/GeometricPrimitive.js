@@ -922,7 +922,7 @@ export class GeometricPrimitive {
 
   /** @type {enum<number>} */
   static POINT_INDICES = {
-    CENTER: 0,
+    CENTER: 0, // Default is mid-center if no index is provided.
     CORNERS: {
       FACING: 1,
       MID: 2,
@@ -933,7 +933,7 @@ export class GeometricPrimitive {
       MID: 5,
       BACK: 6,
     },
-    D3: {
+    ELEVATION: {
       // If none of TOP, MID, or BOTTOM, then midpoint is assumed.
       // Otherwise, MID may be omitted.
       TOP: 7,
@@ -962,13 +962,13 @@ export class GeometricPrimitive {
    * - @prop {Point3d} center
    * - @prop {object} top
    *    - @prop {Point3d[]} corners
-   *    - @prop {Point3d[]} mids
+   *    - @prop {Point3d[]} sides
    * - @prop {object} middle
    *    - @prop {Point3d[]} corners
-   *    - @prop {Point3d[]} mids
+   *    - @prop {Point3d[]} sides
    * - @prop {object} bottom
    *    - @prop {Point3d[]} corners
-   *    - @prop {Point3d[]} mids
+   *    - @prop {Point3d[]} sides
    */
   /** @typedef {InternalPoints} */
   #internalPoints = {};
@@ -1005,7 +1005,7 @@ export class GeometricPrimitive {
         Point3d.tmp.set(max.x, max.y, max.z),
         Point3d.tmp.set(max.x, min.y, max.z),
       ],
-      mids: [
+      sides: [
         Point3d.tmp.set(center.x, min.y, max.z),
         Point3d.tmp.set(center.x, max.y, max.z),
         Point3d.tmp.set(min.x, center.y, max.z),
@@ -1020,7 +1020,7 @@ export class GeometricPrimitive {
         Point3d.tmp.set(max.x, max.y, center.z),
         Point3d.tmp.set(max.x, min.y, center.z),
       ],
-      mids: [
+      sides: [
         Point3d.tmp.set(center.x, min.y, center.z),
         Point3d.tmp.set(center.x, max.y, center.z),
         Point3d.tmp.set(min.x, center.y, center.z),
@@ -1035,7 +1035,7 @@ export class GeometricPrimitive {
         Point3d.tmp.set(max.x, max.y, min.z),
         Point3d.tmp.set(max.x, min.y, min.z),
       ],
-      mids: [
+      sides: [
         Point3d.tmp.set(center.x, min.y, min.z),
         Point3d.tmp.set(center.x, max.y, min.z),
         Point3d.tmp.set(min.x, center.y, min.z),

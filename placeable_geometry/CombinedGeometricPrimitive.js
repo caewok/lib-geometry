@@ -291,7 +291,7 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
       const childPoints = child.internalPoints;
       for ( const bucket of BUCKETS ) {
         ip[bucket].corners.push(...(childPoints[bucket].corners || []));
-        ip[bucket].mids.push(...(childPoints[bucket].mids || []));
+        ip[bucket].sides.push(...(childPoints[bucket].mids || []));
       }
     }
     return ip;
