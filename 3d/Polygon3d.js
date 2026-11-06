@@ -3239,7 +3239,7 @@ export class Polygons3d extends Polygon3d {
       const first = polys[0];
       using flipped = first.plane.clone().reverse();
       for ( const poly of polys ) {
-        const expected = first.isHole === first.isHole ? first.plane : flipped;
+        const expected = poly.isHole === first.isHole ? first.plane : flipped;
         if ( !poly.plane.almostEqual(expected) ) console.warn("Polygons3d#from3dPolygons|Ring plane mismatch", poly);
       }
     }

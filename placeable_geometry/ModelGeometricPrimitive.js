@@ -517,5 +517,38 @@ export class ExtrudedPolygonPrimitiveWithHoles extends ExtrudedPolygonPrimitive 
     return cutaways;
   }
 
+  /**
+   * Validate this shape. If this instance represents open caps (no vertical side walls),
+   * validate cap face orientations; otherwise use standard closed-solid validation.
+   * @returns {boolean}
+   */
+  validate() {
+    const isCaps = this.prototypeFaces.length === 2
+      || this.prototypeFaces.every(face => !face.plane.normal.z.almostEqual(0));
+
+    if ( isCaps ) {
+      const worldDir = this.isHole ? -1 : 1;
+      const protoDir = (this.isHole !== this.reversed) ? -1 : 1;
+      return this._validateCapFaces(this.prototypeFaces, protoDir)
+        && this._validateCapFaces(this.faces, worldDir);
+    }
+    return super.validate();
+  }
+
+  /**
+   * @param {Polygon3d[]} faces
+   * @param {1|-1} expectedDir
+   * @returns {boolean}
+   */
+  _validateCapFaces(faces, expectedDir = 1) {
+    if ( !faces || faces.length < 2 ) return false;
+    if ( faces.some(face => !face.isValid()) ) return false;
+    const bottomFace = faces[0];
+    if ( Math.sign(bottomFace.plane.normal.z) !== -expectedDir ) return false;
+    for ( let i = 1, iMax = faces.length; i < iMax; i += 1 ) {
+      if ( Math.sign(faces[i].plane.normal.z) !== expectedDir ) return false;
+    }
+    return true;
+  }
 
 }

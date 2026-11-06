@@ -217,7 +217,7 @@ export class HoledPrimitive extends CombinedGeometricPrimitive {
    * @returns {Polygon3d[]}
    */
   _buildBottomFaces() {
-    if ( !this.holes.length && this.solid.bottomFaces.length === 1 ) return [Polygon3d.from3dPolygon(this.solid.bottomFaces)];
+    if ( !this.holes.length && this.solid.bottomFaces.length === 1 ) return this.solid.bottomFaces;
     const polys = [...this.solid.bottomFaces, ...this.holes.flatMap(h => h.bottomFaces)];
     return [Polygons3d.from3dPolygons(polys)];
   }
