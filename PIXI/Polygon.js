@@ -66,8 +66,8 @@ function centroid() {
  * @param {PIXI.Point} [out]
  * @returns {PIXI.Point}
  */
-_calculateAverageVertexCentroid(out) {
-  out ??= Point3d.tmp;
+function _calculateAverageVertexCentroid(out) {
+  out ??= PIXI.Point.tmp;
 
   // If less than three points, return best approximation.
   if ( this.points.length === 0 ) return out.set(0, 0);
@@ -583,7 +583,7 @@ function _overlapsPolygon(other) {
       || other.contains(b.x, b.y) ) return true;
 
     for ( const otherEdge of other.iterateEdges() ) {
-      const { a: c, b: d } = edge;
+      const { a: c, b: d } = otherEdge;
       if ( foundry.utils.lineSegmentIntersects(a, b, c, d) ) return true;
     }
   }
@@ -1041,7 +1041,7 @@ function key() {
   for ( let i = 0; i < ln; i += 2 ) {
     const x = points[i];
     const y = points[i + 1];
-    if ( (x < minX || (x === minX && y < minY) ) {
+    if ( (x < minX) || (x === minX && y < minY) ) {
       minIndex = i;
       minX = x;
       minY = y;
@@ -1245,7 +1245,6 @@ function interiorPoint() {
 
   // Collect every x where an edge crosses the scanline.
   const xs = [];
-  const a = PIXI.Point.tmp.set(this.points.at(-2), this.points.at(-1));
   for ( const { a, b } of this.iterateEdges() ) {
     if ( (a.y > y) !== (b.y > y) ) xs.push(a.x + ((y - a.y) / (b.y - a.y)) * (b.x - a.x));
   }
