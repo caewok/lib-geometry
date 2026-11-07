@@ -65,10 +65,12 @@ export const GeometrySubclassMixin = superclass => class extends superclass {
     super();
     this.placeableDocument = placeableDocument;
 
-    // Set up subclass access.
+    // Set up subclass access for keys not explicitly defined on the prototype.
+    const proto = Object.getPrototypeOf(this);
     for ( const key of Object.keys(this.constructor.SUBCLASSES) ) {
+      if ( Object.getOwnPropertyDescriptor(proto, key)?.get ) continue;
       Object.defineProperty(this, key, {
-        get: () => (this.#subclasses[key] ||= this.constructor._createSubclass(key, this.placeableDocument)),
+        get: () => this._getSubclass(key),
         enumerable: true,
         configurable: true,
       });
@@ -79,6 +81,15 @@ export const GeometrySubclassMixin = superclass => class extends superclass {
    * Subclass holder.
    */
   #subclasses = {}
+
+  /**
+   * Retrieve or instantiate a subclass geometry by key.
+   * @param {string} key
+   * @returns {PlaceableGeometry}
+   */
+  _getSubclass(key) {
+    return (this.#subclasses[key] ||= this.constructor._createSubclass(key, this.placeableDocument));
+  }
 
   /** @type {boolean} */
   static HAS_SUBTYPES = true;
@@ -93,13 +104,13 @@ export const GeometrySubclassMixin = superclass => class extends superclass {
   }
 
   _iterateSubclasses(methodName, ...args) {
-    for ( const key of Object.keys(this.#subclasses) ) this[key][methodName](...args);
+    for ( const key of Object.keys(this.#subclasses) ) this.#subclasses[key][methodName](...args);
   }
 
   _iterateGeometriesBoolean(methodName, ...args) {
     let out = false;
     for ( const key of Object.keys(this.#subclasses) ) {
-      const res = this[key][methodName](...args);
+      const res = this.#subclasses[key][methodName](...args);
       out ||= res;
     }
     return out;
@@ -311,10 +322,10 @@ const TokenDocumentCalculationsMixin = superclass => class extends superclass {
     return true;
   }
 
-  static includeToken(tokenD, { blockingCfg = {}, subjectToken, tokensToExclude = NULL_SET }) {
-    if ( subjectToken && subjectToken.document ) subjectToken = subjectToken.document;
-    if ( tokenD === subjectToken || tokensToExclude.has(tokenD) ) return false;
-    return this.tokenBlocks(tokenD, subjectToken, blockingCfg);
+  static includeToken(tokenD, { blockingCfg = {}, subjectTokenD, tokensToExclude = NULL_SET }) {
+    if ( subjectTokenD && subjectToken.document ) subjectTokenD = subjectToken.document;
+    if ( tokenD === subjectTokenD || tokensToExclude.has(tokenD) ) return false;
+    return this.tokenBlocks(tokenD, subjectTokenD, blockingCfg);
   }
 
 
@@ -430,23 +441,26 @@ export class TokenSubGeometry extends mix(PlaceableGeometry).with(TokenDocumentC
   }
 
   _updateShapePosition() {
+    if ( !this.shape ) return;
     const ctr = this.constructor.tokenCenter(this.placeableDocument);
     this.shape.setPosition(ctr);
   }
 
   _updateShapeScale() {
+    if ( !this.shape ) return;
     const dims = this.constructor.tokenDimensions(this.placeableDocument);
     this.shape.setScale(dims);
   }
 
   _updateTransforms() {
+    if ( !this.shape ) return;
     this._updateShapePosition();
     this._updateShapeScale();
   }
 
   shapeUpdated() {
     const primitiveCl = this.constructor.primitiveClassForToken(this.placeableDocument);
-    if ( this.shape.is(primitiveCl.TYPE) ) return;
+    if ( this.shape?.is(primitiveCl.TYPE) ) return;
     this.initialize();
   }
 }
@@ -498,6 +512,8 @@ export class TokenConstrainedGeometry extends TokenSubGeometry {
   }
 
   createShapes() {
+    this.shapes.forEach(shape => shape.destroy());
+    this.shapes.length = 0;
     // If unconstrained, ignore.
     if ( this.isConstrained ) createShape.call(this, "constrainedTokenBorder");
   }
@@ -523,6 +539,8 @@ export class TokenLitGeometry extends TokenSubGeometry {
   }
 
   createShapes() {
+    this.shapes.forEach(shape => shape.destroy());
+    this.shapes.length = 0;
     // If unconstrained, ignore.
     if ( this.isConstrainedLit ) createShape.call(this, "litTokenBorder");
   }
@@ -541,13 +559,15 @@ export class TokenBrightGeometry extends TokenSubGeometry {
   _update() {
     // If the token is constrained, redraw.
     // If the token is not constrained, ignore.
-    if ( this.isConstrainedLit ) {
+    if ( this.isConstrainedBrightLit ) {
       this.shapeUpdated();
       super._update();
     }
   }
 
   createShapes() {
+    this.shapes.forEach(shape => shape.destroy());
+    this.shapes.length = 0;
     // If unconstrained, ignore.
     if ( this.isConstrainedBrightLit ) createShape.call(this, "brightLitTokenBorder");
   }
@@ -579,10 +599,10 @@ export class TokenGeometry extends mix(Object).with(GeometrySubclassMixin, Token
 
   get calculated() { return this.isConstrained ? this.constrained : this.full; }
 
-  get constrained() { return this.isConstrained ? super.constrained : this.full; }
+  get constrained() { return this.isConstrained ? this._getSubclass("constrained") : this.full; }
 
-  get lit () { return this.isConstrainedLit ? super.lit : this.full; }
+  get lit () { return this.isConstrainedLit ? this._getSubclass("lit") : this.full; }
 
-  get bright () { return this.isConstrainedBrightLit ? super.bright : this.full; }
+  get bright () { return this.isConstrainedBrightLit ? this._getSubclass("bright") : this.full; }
 
 }
