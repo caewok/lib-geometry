@@ -3548,7 +3548,7 @@ export class Polygons3d extends Polygon3d {
   containsProjectedXY(canvasLoc) {
     let count = 0;
     for ( const poly of this.polygons ) {
-      count += poly.containsProjectedXY(canvasLoc) * (poly.isHole === this.isHole ? -1 : 1);
+      count += poly.containsProjectedXY(canvasLoc) * (poly.isHole === this.isHole ? 1 : -1);
     }
     return count > 0;
   }
@@ -3598,7 +3598,7 @@ export class Polygons3d extends Polygon3d {
       if ( !polyIx ) continue;
       ix ??= polyIx;
       if ( opts.holesBlock ) return ix;
-      holeCount += (poly.isHole === this.isHole ? -1 : 1);
+      holeCount += (poly.isHole === this.isHole ? 1 : -1);
     }
     return holeCount > 0 ? ix : null;
   }
@@ -3620,7 +3620,7 @@ export class Polygons3d extends Polygon3d {
       const hasIx = poly._isIntersectionWithinPolygon(ix);
       if ( !hasIx ) continue;
       if ( holesBlock ) return true;
-      holeCount += (poly.isHole === this.isHole ? -1 : 1);
+      holeCount += (poly.isHole === this.isHole ? 1 : -1);
     }
     return holeCount > 0;
   }
