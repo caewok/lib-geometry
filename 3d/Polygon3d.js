@@ -114,6 +114,7 @@ export class Polygon3d {
 
     // Copy over the points if necessary.
     if ( result.length < this.points.length ) {
+      Point3d.release(...this.points.splice(result.length));
       this.points.length = result.length;
       this.points.forEach((pt, idx) => pt.copyFrom(result[idx]));
     }
@@ -126,6 +127,7 @@ export class Polygon3d {
   setZ(z = 0) {
     this.points.forEach(pt => pt.z = z);
     this.#dirtyPlane = true;
+    PIXI.Point.release(...this.#planarPoints)
     this.#planarPoints.length = 0;
     if ( !this.dirtyAABB ) {
       this.aabb.min.z = z;
@@ -607,7 +609,9 @@ export class Polygon3d {
    */
   toVertices(opts) {
     const tris = this.triangulate();
-    return Triangle3d.trianglesToVertices(tris, opts);
+    const out = Triangle3d.trianglesToVertices(tris, opts);
+    tris.forEach(tri => tri.release());
+    return out;
   }
 
   /**
@@ -1567,7 +1571,14 @@ export class Ellipse3d extends Polygon3d {
   /** @type {Point3d} */
   get majorRadiusAxis() {
     const { vx, vy } = this.radiusVectors();
-    return (vx.magnitudeSquared() > vy.magnitudeSquared()) ? vx : vy;
+    const isX = (vx.magnitudeSquared() > vy.magnitudeSquared());
+    if ( isX ) {
+      vy.release();
+      return vx;
+    } else {
+      vx.release();
+      return vy;
+    }
   }
 
   /** @type {Point3d} */
@@ -2076,7 +2087,7 @@ export class Ellipse3d extends Polygon3d {
   // ----- NOTE: Transformations ----- //
   isValid() {
     this.clean();
-    return this.points.length === 1;
+    return this.points.length === 1 && this.radiusX > 0 && this.radiusY > 0;
   }
 
   /**
@@ -2585,7 +2596,7 @@ export class Triangle3d extends Polygon3d {
    * the function returns null.
    * @param {Point3d} rayOrigin
    * @param {Point3d} rayDirection
-   * @param {boolean} [signed=false]      Get any t, not just t greater than 0
+   * @param {boolean} [signed=false]      If true, get any t, not just t greater than 0
    * @returns {number} Distance from ray origin to the point of intersection.
    *
    */
@@ -2784,9 +2795,10 @@ export class Quad3d extends Polygon3d {
    * Intersection test, splitting the quad into two Müller-Trumbore triangles.
    * @param {Point3d} rayOrigin
    * @param {Point3d} rayDirection
+   * @param {boolean} [signed=false]      If true, get any t, not just t greater than 0
    * @returns {number|null}  Null if no intersection. If negative, the intersection is behind the ray origin.
    */
-  rayIntersectionMT(rayOrigin, rayDirection) {
+  rayIntersectionMT(rayOrigin, rayDirection, { signed = false } = {}) {
     const [v0, v1, v2, v3] = this.points;
     const tmpPoints = Point3d.createN(10);
     // rayDirection = rayDirection.normalize();
@@ -2859,9 +2871,8 @@ export class Quad3d extends Polygon3d {
     // Note: Mapping barycentric to bilinear for T2 is complex.
     // Simple approximation: u = 1-beta', v = 1-alpha' (valid for parallelograms)
     const tPrime = edge2Prime.dot(qPrime) * invDetPrime;
-    if ( tPrime.strictlyGreaterThan(0.0, EPSILON) ) { Point3d.release(...tmpPoints); return tPrime; }
     Point3d.release(...tmpPoints);
-    return null;
+    return (signed || t.strictlyGreaterThan(0, EPSILON)) ? t : null;
   }
 
   /**
@@ -3405,7 +3416,7 @@ export class Polygons3d extends Polygon3d {
    */
   toVertices(opts) {
     const tris = this.triangulate();
-    return Triangle3d.trianglesToVertices(tris.polygons, opts);
+    const out = Triangle3d.trianglesToVertices(tris.polygons, opts);
   }
 
   /**
@@ -3434,9 +3445,10 @@ export class Polygons3d extends Polygon3d {
     const vertsFlat = [];
     const holeIndices = [];
     const allPts3d = [];
+    using tmpPt = Point3d.tmp
     const addRing = ring => {
       for ( const pt of ring.iteratePoints() ) {
-        const pt2d = to2dM.multiplyPoint3d(pt);
+        const pt2d = to2dM.multiplyPoint3d(pt, tmpPt);
         vertsFlat.push(pt2d.x, pt2d.y);
         allPts3d.push(pt);
       }
