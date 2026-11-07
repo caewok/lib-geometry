@@ -127,8 +127,10 @@ export class Polygon3d {
   setZ(z = 0) {
     this.points.forEach(pt => pt.z = z);
     this.#dirtyPlane = true;
-    PIXI.Point.release(...this.#planarPoints)
-    this.#planarPoints.length = 0;
+    if ( this.#planarPoints.length ) {
+      PIXI.Point.release(...this.#planarPoints)
+      this.#planarPoints.length = 0;
+    }
     if ( !this.dirtyAABB ) {
       this.aabb.min.z = z;
       this.aabb.max.z = z;
@@ -2906,7 +2908,7 @@ export class Quad3d extends Polygon3d {
     // Simple approximation: u = 1-beta', v = 1-alpha' (valid for parallelograms)
     const tPrime = edge2Prime.dot(qPrime) * invDetPrime;
     Point3d.release(...tmpPoints);
-    return (signed || t.strictlyGreaterThan(0, EPSILON)) ? t : null;
+    return (signed || tPrime.strictlyGreaterThan(0, EPSILON)) ? tPrime : null;
   }
 
   /**
