@@ -3485,6 +3485,57 @@ export class Polygons3d extends Polygon3d {
     return sides;
   }
 
+  /**
+   * Create a grid of points within this polygon.
+   * Collects lattice points from constituent planar rings, filtering out points inside holes.
+   * @param {object} [opts]
+   * @param {number} [opts.spacing = 1]              How many pixels between each point?
+   * @param {boolean} [opts.startAtEdge = false]     Are points allowed within spacing of the edges? Otherwise will be at least spacing away.
+   * @returns {Point3d[]} Points in order from left to right, top to bottom.
+   */
+  pointsLattice(opts) {
+    if ( !this.polygons.length ) return [];
+
+    const outerRole = this.isHole;
+    const solids2d = [];
+    const holes2d = [];
+    const poly2ds = this.toPlanarPolygon();
+    for ( let i = 0; i < this.polygons.length; i++ ) {
+      const poly3d = this.polygons[i];
+      const poly2d = poly2ds[i];
+      if ( poly3d.isHole === outerRole ) solids2d.push(poly2d);
+      else holes2d.push(poly2d);
+    }
+    if ( !solids2d.length ) return [];
+
+    // Collect lattice points across constituent solid polygons in 2d.
+    let latticePoints = [];
+    for ( const poly2d of solids2d ) {
+      latticePoints.push(...poly2d.pointsLattice(opts));
+    }
+
+    // Filter out points contained within holes.
+    if ( holes2d.length ) {
+      const discardedPoints = [];
+      latticePoints = latticePoints.filter(pt => {
+        let count = 0;
+        for ( const poly2d of poly2ds ) {
+          count += poly2d.contains(pt.x, pt.y) * (poly2d.isPositive ? 1 : -1);
+        }
+        const isInside = count > 0;
+        if ( !isInside ) discardedPoints.push(pt);
+        return isInside;
+      });
+      if ( discardedPoints.length ) PIXI.Point.release(...discardedPoints);
+    }
+
+    // Convert back to 3d.
+    const out = this._convert2dPointsTo3d(latticePoints);
+    if ( latticePoints.length ) PIXI.Point.release(...latticePoints);
+    return out;
+  }
+
+
   // ----- NOTE: Iterators ----- //
 
   /**
@@ -3676,7 +3727,7 @@ export class Polygons3d extends Polygon3d {
     }
   }
 
-  clipPlanePoints(...args) { this.#applyMethodToAllWithReturn("clipPlanePoints", ...args); }
+  clipPlanePoints(...args) { return this.#applyMethodToAllWithReturn("clipPlanePoints", ...args); }
 
   clipZ(...args) {
     const out = this._cloneEmpty();

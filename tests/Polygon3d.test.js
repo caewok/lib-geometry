@@ -3,7 +3,7 @@
 "use strict";
 
 import { Point3d } from "../3d/Point3d.js";
-import { Polygon3d } from '../3d/Polygon3d.js';
+import { Polygon3d, Polygons3d } from '../3d/Polygon3d.js';
 import { Plane } from '../3d/Plane.js';
 import { MODULE_ID } from "../../const.js";
 
@@ -136,6 +136,56 @@ describe("3D Geometry Intersections", () => {
 
     it("should return true when polygons share the exact same plane", () => {
       expect(polyXY.intersectsPolygon3d(polyXY)).to.be.true;
+    });
+  });
+
+  describe("Polygons3d#pointsLattice", () => {
+
+    it("should return an empty array when Polygons3d has no constituent polygons", () => {
+      const emptyPoly = new Polygons3d(0);
+      expect(emptyPoly.pointsLattice()).to.be.an("array").that.is.empty;
+    });
+
+    it("should generate lattice points and filter out points inside holes", () => {
+      // Outer square from -10 to 10 on Z=0 plane
+      const outerPts = [
+        Point3d.tmp.set(-10, -10, 0),
+        Point3d.tmp.set(10, -10, 0),
+        Point3d.tmp.set(10, 10, 0),
+        Point3d.tmp.set(-10, 10, 0)
+      ];
+      const outerPoly = Polygon3d.from3dPoints(outerPts);
+      outerPoly.plane.point = new Point3d(0, 0, 0);
+      outerPoly.normal = { x: 0, y: 0, z: 1 };
+      Point3d.release(...outerPts);
+
+      // Hole square from -4 to 4 on Z=0 plane (isHole = true)
+      const holePts = [
+        Point3d.tmp.set(-4, -4, 0),
+        Point3d.tmp.set(4, -4, 0),
+        Point3d.tmp.set(4, 4, 0),
+        Point3d.tmp.set(-4, 4, 0)
+      ];
+      const holePoly = Polygon3d.from3dPoints(holePts, { isHole: true });
+      holePoly.plane.point = new Point3d(0, 0, 0);
+      holePoly.normal = { x: 0, y: 0, z: 1 };
+      Point3d.release(...holePts);
+
+      const shapeWithHole = new Polygons3d();
+      shapeWithHole.polygons = [outerPoly, holePoly];
+
+      const latticePoints = shapeWithHole.pointsLattice({ spacing: 2, startAtEdge: true });
+      expect(latticePoints).to.be.an("array").that.is.not.empty;
+
+      // Verify that no returned point falls strictly inside the hole bounds (-4 to 4)
+      for ( const pt of latticePoints ) {
+        const insideHole = pt.x > -4 && pt.x < 4 && pt.y > -4 && pt.y < 4;
+        expect(insideHole).to.be.false;
+      }
+
+      // Also verify that points outside the hole were generated
+      const hasPointsOutsideHole = latticePoints.some(pt => Math.abs(pt.x) >= 4 || Math.abs(pt.y) >= 4);
+      expect(hasPointsOutsideHole).to.be.true;
     });
   });
 });
