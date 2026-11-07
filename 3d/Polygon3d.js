@@ -2561,16 +2561,50 @@ export class Triangle3d extends Polygon3d {
    * @param {boolean} [opts.addNormals=false]         If true, add the normal to this polygon, facing CCW.
    * @param {Float32Array} [opts.outArr]              Where to store the vertices
    * @param {number} [opts.outIdx=0]                  What index to start setting each vertex
-   * @returns {Float32Array[]}
+   * @returns {Float32Array}
    */
   toVertices({ addNormals = false, outArr, outIdx = 0 } = {}) {
     const { NUM_POSITION_COORDS, NUM_NORMAL_COORDS, NUM_POINTS } = this.constructor;
     const stride = NUM_POSITION_COORDS + (addNormals * NUM_NORMAL_COORDS);
     outArr ??= new Float32Array(stride * NUM_POINTS);
+    const { a, b, c } = this;
+    let idx = outIdx;
     if ( addNormals ) {
-      const normal = [...this.plane.normal];
-      outArr.set([...this.a, ...normal, ...this.b, ...normal, ...this.c, ...normal], outIdx);
-    } else outArr.set([...this.a, ...this.b, ...this.c], outIdx);
+      const { x: nx, y: ny, z: nz } = this.plane.normal;
+
+      outArr[idx++] = a.x;
+      outArr[idx++] = a.y;
+      outArr[idx++] = a.z;
+      outArr[idx++] = nx;
+      outArr[idx++] = ny;
+      outArr[idx++] = nz;
+
+      outArr[idx++] = b.x;
+      outArr[idx++] = b.y;
+      outArr[idx++] = b.z;
+      outArr[idx++] = nx;
+      outArr[idx++] = ny;
+      outArr[idx++] = nz;
+
+      outArr[idx++] = c.x;
+      outArr[idx++] = c.y;
+      outArr[idx++] = c.z;
+      outArr[idx++] = nx;
+      outArr[idx++] = ny;
+      outArr[idx++] = nz;
+    } else {
+      outArr[idx++] = a.x;
+      outArr[idx++] = a.y;
+      outArr[idx++] = a.z;
+
+      outArr[idx++] = b.x;
+      outArr[idx++] = b.y;
+      outArr[idx++] = b.z;
+
+      outArr[idx++] = c.x;
+      outArr[idx++] = c.y;
+      outArr[idx++] = c.z;
+    }
     return outArr;
   }
 
@@ -3416,7 +3450,7 @@ export class Polygons3d extends Polygon3d {
    */
   toVertices(opts) {
     const tris = this.triangulate();
-    const out = Triangle3d.trianglesToVertices(tris.polygons, opts);
+    return Triangle3d.trianglesToVertices(tris.polygons, opts);
   }
 
   /**

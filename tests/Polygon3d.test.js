@@ -3,7 +3,7 @@
 "use strict";
 
 import { Point3d } from "../3d/Point3d.js";
-import { Polygon3d, Polygons3d } from '../3d/Polygon3d.js';
+import { Polygon3d, Polygons3d, Triangle3d } from '../3d/Polygon3d.js';
 import { Plane } from '../3d/Plane.js';
 import { MODULE_ID } from "../../const.js";
 
@@ -186,6 +186,71 @@ describe("3D Geometry Intersections", () => {
       // Also verify that points outside the hole were generated
       const hasPointsOutsideHole = latticePoints.some(pt => Math.abs(pt.x) >= 4 || Math.abs(pt.y) >= 4);
       expect(hasPointsOutsideHole).to.be.true;
+    });
+  });
+
+  describe("Triangle3d#toVertices", () => {
+
+    it("should write triangle position coordinates directly to Float32Array (without normals)", () => {
+      const a = new Point3d(0, 0, 0);
+      const b = new Point3d(1, 0, 0);
+      const c = new Point3d(0, 1, 0);
+      const tri = Triangle3d.from3Points(a, b, c);
+
+      const vertices = tri.toVertices({ addNormals: false });
+      expect(vertices).to.be.an.instanceOf(Float32Array);
+      expect(vertices.length).to.equal(9);
+      expect(Array.from(vertices)).to.deep.equal([
+        0, 0, 0,
+        1, 0, 0,
+        0, 1, 0
+      ]);
+    });
+
+    it("should write triangle positions and normals directly to Float32Array (with normals)", () => {
+      const a = new Point3d(0, 0, 0);
+      const b = new Point3d(1, 0, 0);
+      const c = new Point3d(0, 1, 0);
+      const tri = Triangle3d.from3Points(a, b, c);
+      tri.normal = { x: 0, y: 0, z: 1 };
+
+      const vertices = tri.toVertices({ addNormals: true });
+      expect(vertices).to.be.an.instanceOf(Float32Array);
+      expect(vertices.length).to.equal(18);
+      expect(Array.from(vertices)).to.deep.equal([
+        0, 0, 0, 0, 0, 1,
+        1, 0, 0, 0, 0, 1,
+        0, 1, 0, 0, 0, 1
+      ]);
+    });
+
+    it("should write at specified outIdx into existing outArr", () => {
+      const a = new Point3d(2, 3, 4);
+      const b = new Point3d(5, 6, 7);
+      const c = new Point3d(8, 9, 10);
+      const tri = Triangle3d.from3Points(a, b, c);
+
+      const target = new Float32Array(12);
+      tri.toVertices({ outArr: target, outIdx: 3 });
+
+      expect(Array.from(target)).to.deep.equal([
+        0, 0, 0,
+        2, 3, 4,
+        5, 6, 7,
+        8, 9, 10
+      ]);
+    });
+
+    it("should support bulk conversion via Triangle3d.trianglesToVertices", () => {
+      const tri1 = Triangle3d.from3Points(new Point3d(0, 0, 0), new Point3d(1, 0, 0), new Point3d(0, 1, 0));
+      const tri2 = Triangle3d.from3Points(new Point3d(1, 0, 0), new Point3d(1, 1, 0), new Point3d(0, 1, 0));
+
+      const vertices = Triangle3d.trianglesToVertices([tri1, tri2], { addNormals: false });
+      expect(vertices.length).to.equal(18);
+      expect(Array.from(vertices)).to.deep.equal([
+        0, 0, 0, 1, 0, 0, 0, 1, 0,
+        1, 0, 0, 1, 1, 0, 0, 1, 0
+      ]);
     });
   });
 });
