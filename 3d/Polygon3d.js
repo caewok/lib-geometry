@@ -667,7 +667,19 @@ export class Polygon3d {
     const to2dM = this.plane.conversion2dMatrix;
     const pts2d = pts.map(pt => to2dM.multiplyPoint3d(pt));
 
-    const cw = pts2d.length > 2 && foundry.utils.orient2dFast(pts2d[0], pts2d[1], pts2d[2]) < 0;
+    // Determine 2D winding via signed area (shoelace sum).
+    // In Foundry's y-down coordinate system, a negative sum corresponds to clockwise winding.
+    let cw = false;
+    const n = pts2d.length;
+    if ( n > 2 ) {
+      let area = 0;
+      for ( let i = 0; i < n; i++ ) {
+        const a = pts2d[i];
+        const b = pts2d[(i + 1) % n];
+        area += (a.x + b.x) * (a.y - b.y);
+      }
+      cw = area < 0;
+    }
     if ( !this.isHole ^ cw ) pts2d.reverse();
     // Poly equivalent: if ( !this.isHole ^ poly.isPositive ) poly.reverseOrientation();
     return pts2d;
