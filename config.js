@@ -114,7 +114,7 @@ const OBSTACLE_TEST_CONFIG = {
   /**
    * Function to determine if a token is alive.
    * @type {function}
-   * @param {Token} token
+   * @param {TokenDocument} token
    * @returns {boolean} True if alive.
    */
   tokenIsAlive,
@@ -122,7 +122,7 @@ const OBSTACLE_TEST_CONFIG = {
   /**
    * Function to determine if a token is dead
    * @type {function}
-   * @param {Token} token
+   * @param {TokenDocument} token
    * @returns {boolean} True if dead.
    */
   tokenIsDead,
@@ -130,8 +130,8 @@ const OBSTACLE_TEST_CONFIG = {
   /**
    * Function to determine if token is enemy in relation to another.
    * @type {function}
-   * @param {Token} subjectToken
-   * @param {Token} testToken
+   * @param {TokenDocument} subjectToken
+   * @param {TokenDocument} testToken
    * @returns {boolean} True if test token is enemy of subject token, from perspective of subject token.
    */
   tokenIsEnemy,
@@ -139,8 +139,8 @@ const OBSTACLE_TEST_CONFIG = {
   /**
    * Function to determine if token is ally in relation to another.
    * @type {function}
-   * @param {Token} subjectToken
-   * @param {Token} testToken
+   * @param {TokenDocument} subjectToken
+   * @param {TokenDocument} testToken
    * @returns {boolean} True if test token is ally of subject token, from perspective of subject token.
    */
   tokenIsAlly,
