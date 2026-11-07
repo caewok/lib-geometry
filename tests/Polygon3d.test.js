@@ -117,6 +117,27 @@ describe("3D Geometry Intersections", () => {
       expect(result).to.be.null;
     });
   });
+
+  describe("intersectsPolygon3d()", () => {
+
+    it("should return true when polygons intersect", () => {
+      expect(polyXY.intersectsPolygon3d(polyXZ)).to.be.true;
+    });
+
+    it("should return false when planes intersect but polygon boundaries do not overlap", () => {
+      const shiftedPolyXZ = polyXZ.clone();
+      shiftedPolyXZ.points.forEach(pt => pt.x += 5);
+      expect(polyXY.intersectsPolygon3d(shiftedPolyXZ)).to.be.false;
+    });
+
+    it("should return false when polygons are on parallel, distinct planes", () => {
+      expect(polyXY.intersectsPolygon3d(polyHigh)).to.be.false;
+    });
+
+    it("should return true when polygons share the exact same plane", () => {
+      expect(polyXY.intersectsPolygon3d(polyXY)).to.be.true;
+    });
+  });
 });
 
 }); // registerBatch

@@ -1410,7 +1410,7 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
    * @returns {boolean}
    */
   intersectsPolygon3d(other) {
-    if ( !(this.isValid() || other.isValid()) ) return false;
+    if ( !(this.isValid() && other.isValid()) ) return false;
     if ( this.plane.isParallelToPlane(other.plane) ) {
       return this.plane.isCoincidentWithPlane(other.plane, { testParallel: false });
     }
@@ -1421,9 +1421,19 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
     using direction = res.direction;
     direction.normalize(direction);
 
-    // Find the intersection intervals of the planar intersection with this polygon.
-    return this._hasPlanarLineIntersections(origin, direction)
-      || other._hasPlanarLineIntersections(origin, direction);
+    // Find the intersection intervals of the planar intersection with each polygon.
+    const intervals1 = this._planarLineIntersections(origin, direction);
+    if ( !intervals1.length ) return false;
+    const intervals2 = other._planarLineIntersections(origin, direction);
+    if ( !intervals2.length ) return false;
+
+    // Check for overlap between any pair of intervals.
+    for ( const [start1, end1] of intervals1 ) {
+      for ( const [start2, end2] of intervals2 ) {
+        if ( Math.max(start1, start2) <= Math.min(end1, end2) ) return true;
+      }
+    }
+    return false;
   }
 
   /* ----- NOTE: Debug ----- */
