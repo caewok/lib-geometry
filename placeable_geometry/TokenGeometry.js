@@ -323,7 +323,7 @@ const TokenDocumentCalculationsMixin = superclass => class extends superclass {
   }
 
   static includeToken(tokenD, { blockingCfg = {}, subjectTokenD, tokensToExclude = NULL_SET }) {
-    if ( subjectTokenD && subjectToken.document ) subjectTokenD = subjectToken.document;
+    if ( subjectTokenD && subjectTokenD.document ) subjectTokenD = subjectTokenD.document;
     if ( tokenD === subjectTokenD || tokensToExclude.has(tokenD) ) return false;
     return this.tokenBlocks(tokenD, subjectTokenD, blockingCfg);
   }
