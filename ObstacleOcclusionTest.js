@@ -239,9 +239,9 @@ export class ObstacleOcclusionTest {
    * Update the obstacles in preparation for ray collision testing.
    * Optionally store the viewpoint (ray origin) and tokens to exclude.
    * @param {object} [opts]
+   * @param {TokenDocument} [opts.subjectTokenD]
    * @param {Token[]} [opts.tokensToExclude]  Tokens to exclude; must be an array of Tokens or empty array.
    * @param {Point3d} [viewpoint]             Used for _rayIsOccluded as the starting viewpoint
-   * @param {Token[]} [tokensToExclude=[]]    Exclude these tokens from collision testing
    */
   initialize({ subjectTokenD, tokensToExclude, levelId } = {}) {
     // Set privately and then trigger full update.
