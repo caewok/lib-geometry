@@ -3814,6 +3814,20 @@ export class Polygons3d extends Polygon3d {
   /* ----- NOTE: Holes ----- */
 
   /**
+   * Build islands from polygons that carry orientation (isPositive = solid, otherwise hole).
+   * @param {PIXI.Polygon[]} polygons
+   * @returns {{solid: PIXI.Polygon, holes: PIXI.Polygon[]}[]}
+   */
+  static buildIslandPolygons(polygons) {
+    const holeIndices = new Set();
+    polygons.forEach((poly, i) => { if ( !poly.isPositive ) holeIndices.add(i); });
+    return this.buildIslands(polygons, holeIndices).map(island => ({
+      solid: polygons[island.solidIndex],
+      holes: island.holeIndices.map(i => polygons[i])
+    }));
+  }
+
+  /**
    * Construct a recursive tree of solid + holes
    * A root solid pairs with its direct hole children only.
    * Each of those holes' direct solid children become new island roots one level down.
@@ -3833,13 +3847,17 @@ export class Polygons3d extends Polygon3d {
 
     const islands = []; // { solid: PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse, holes: PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse[] }
     function processSolid(solidIndex) {
-      const holeIdxs = children[solidIndex].filter(c => holeIndices.has(c));
+      const kids = children[solidIndex];
+      const holeIdxs = kids.filter(c => holeIndices.has(c));
       islands.push({ solidIndex, holeIndices: holeIdxs });
 
-      // Recurse: Any solid ring nested inside one of these holes starts a new island.
+      // Recurse: Solids inside this solid's holes start new islands.
       for ( const holeIdx of holeIdxs ) children[holeIdx]
         .filter(c => !holeIndices.has(c))
         .forEach(processSolid);
+
+      // Solids directly inside this solid (no hole between) are still separate shapes. Keep them.
+      kids.filter(c => !holeIndices.has(c)).forEach(processSolid);
     }
 
     polygons.forEach((_solidOrHole, i) => {
@@ -3866,8 +3884,12 @@ export class Polygons3d extends Polygon3d {
         const pt = r.interiorPoint();
         if ( pt ) return pt;
       }
-      // Fallback on centroid or manual bounding box center if interiorPoint fails.
-      return r.center || PIXI.Point.tmp.set(r.x, r.y);
+
+      // Polygons: midpoint of the first edge. Unlike a centroid, it cannot land outside a concave ring.
+      if ( r.points ) return { x: (r.points[0] + r.points[2]) / 2, y: (r.points[1] + r.points[3]) / 2 };
+
+      // Circle, Ellipse, Rectangle are convex, so the center is fine.
+      return r.center ?? { x: r.x, y: r.y };
     });
 
     // Construct the parent-child relationship based on area comparison. Parent area > child area.
