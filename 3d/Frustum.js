@@ -231,6 +231,8 @@ export class Frustum {
     // Derive the camera's local orthonormal basis.
     using dir = targetCenter.subtract(viewpoint);
     const distToCenter = dir.magnitude();
+    if ( distToCenter.almostEqual(0) ) dir.set(1, 0, 0); // Fall back direction if viewpoint equals target center.
+
     const N = dir.normalize(dir); // Forward/view vector.
 
     // Right vector using world's vertical axis
@@ -242,7 +244,7 @@ export class Frustum {
     vUp.normalize(vUp); // True local vertical up vector.
 
     // Establish the base plane distance
-    const distPlane = infiniteDistance ? canvas.dimensions.maxR : distToCenter;
+    const distPlane = infiniteDistance ? canvas.dimensions.maxR : Math.max(distToCenter, 1);
     using planeCenter = Point3d.tmp;
     viewpoint.add(N.multiplyScalar(distPlane, planeCenter), planeCenter);
 
@@ -273,6 +275,14 @@ export class Frustum {
       uMax = Math.max(uMax, u);
       vMin = Math.min(vMin, v);
       vMax = Math.max(vMax, v);
+    }
+
+    // Fallback if no valid points were projected or bounds are degenerate/infinite
+    if ( !Number.isFinite(uMin) || !Number.isFinite(uMax) || !Number.isFinite(vMin) || !Number.isFinite(vMax) || uMin >= uMax || vMin >= vMax ) {
+      uMin = -1;
+      uMax = 1;
+      vMin = -1;
+      vMax = 1;
     }
 
     // Map base corners.

@@ -5,7 +5,7 @@ CONFIG,
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { GEOMETRY_CONFIG } from "./const.js";
+import { GEOMETRY_CONFIG, FLAGS } from "./const.js";
 import { gridUnitsToPixels, pixelsToGridUnits, clamp } from "./util.js";
 import { OTHER_MODULES } from "./const.js";
 
@@ -101,16 +101,12 @@ Token
 // NOTE: Wall Elevation
 function wallTopZ() {
   // Previously used foundry.utils.getProperty but it is slow.
-  const WH = OTHER_MODULES.WALL_HEIGHT;
-  const elev =  (WH ? this.flags[WH.ID]?.top : undefined)
-    ?? Number.POSITIVE_INFINITY;
+  const elev = this.flags[FLAGS.WH_ID]?.[FLAGS.WALL.TOP] ?? Number.POSITIVE_INFINITY;
   return gridUnitsToPixels(elev);
 }
 
 function wallBottomZ() {
-  const WH = OTHER_MODULES.WALL_HEIGHT;
-  const elev = (WH ? this.flags[WH.ID]?.bottom : undefined)
-    ?? Number.NEGATIVE_INFINITY;
+  const elev = this.flags[FLAGS.WH_ID]?.[FLAGS.WALL.BOTTOM] ?? Number.NEGATIVE_INFINITY;
   return gridUnitsToPixels(elev);
 }
 
@@ -124,7 +120,7 @@ function wallBottomZ() {
 function getTokenVerticalHeightZ() {
   const isProne = this.isProne;
   const heightMult = isProne ? clamp(CONFIG.GeometryLib.CONFIG.proneMultiplier, 0, 1) : 1;
-  return gridUnitsToPixels((getTokenHeight(this) * heightMult)) || 1; // Force at least 1 pixel high.
+  return gridUnitsToPixels((getTokenHeight(this) || calculateTokenHeightFromTokenShape(this)) * heightMult) || 1; // Force at least 1 pixel high.
 }
 
 /**
@@ -150,12 +146,12 @@ function getIsProne() {
     && this.flags?.[OTHER_MODULES.LEVELS_AUTOCOVER.ID]?.[OTHER_MODULES.LEVELS_AUTOCOVER.FLAGS.DUCKING]));
 }
 
-function getTokenHeight(tokenD) {
-  // Use || to ignore 0 height values.
-  // Previously used foundry.utils.getProperty or getFlag but it is slow.
-  const WH = OTHER_MODULES.WALL_HEIGHT;
-  return (WH ? tokenD.flags[WH.ID]?.[WH.FLAGS.TOKEN_HEIGHT] : 0)
-    || calculateTokenHeightFromTokenShape(tokenD);
+export function getTokenHeight(tokenD) {
+  // Ignore 0 height values.
+  // Possible that height incorrectly stored as [null, null].
+  // Ignore any such values.
+  const storedHeight = tokenD.flags[FLAGS.WH_ID]?.[FLAGS.TOKEN_HEIGHT];
+  return (storedHeight && !Array.isArray(storedHeight)) ? storedHeight : null;
 }
 
 /**
@@ -163,7 +159,7 @@ function getTokenHeight(tokenD) {
  * Comparable to Wall Height method.
  * Does not consider "ducking" here—that is done in tokenVerticalHeight, tokenTopElevation.
  */
-function calculateTokenHeightFromTokenShape(tokenD) {
+export function calculateTokenHeightFromTokenShape(tokenD) {
   const { width, height, texture } = tokenD;
   return canvas.scene.dimensions.distance
     * Math.max(width, height)
@@ -171,17 +167,7 @@ function calculateTokenHeightFromTokenShape(tokenD) {
     * 0.5;
 }
 
-// NOTE: Helper functions to convert to Z pixels.
 
-/**
- * Helper to convert to Z value for a top elevation.
- */
-function zTop() { return gridUnitsToPixels(this.topE); }
-
-/**
- * Helper to convert to Z value for a bottom elevation.
- */
-function zBottom() { return gridUnitsToPixels(this.bottomE); }
 
 /**
  * Helper to convert to Z value for an elevationE.

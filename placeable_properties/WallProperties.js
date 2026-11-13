@@ -5,7 +5,7 @@ canvas,
 "use strict";
 
 import { gridUnitsToPixels, pixelsToGridUnits, clamp } from "../util.js";
-import { OTHER_MODULES } from "../const.js";
+import { FLAGS } from "../const.js";
 
 /* Wall Placeable Properties
 
@@ -23,23 +23,23 @@ export class WallProperties {
   static MAX_ELEV = 1e06;
 
   /**
-   * Is the top of this region finite or infinite?
-   * @param {RegionDocument} regionD
+   * Is the top of this wall finite or infinite?
+   * @param {WallDocument} wallD
    * @returns {boolean} True if finite.
    */
-  static topIsFinite(regionD) { return Number.isFinite(regionD.elevation.top);
-    const WH = OTHER_MODULES.WALL_HEIGHT;
-    return WH ? wallD.flags[WH.ID]?.top : false; // Wall Height uses null to indicate infinity.
+  static topIsFinite(wallD) {
+    const elev = this.flags[FLAGS.WH_ID]?.[FLAGS.WALL.TOP];
+    return Number.isFinite(elev); // Wall Height uses null to indicate infinity.
   }
 
   /**
    * Is the top of this region finite or infinite?
-   * @param {RegionDocument} regionD
+   * @param {WallDocument} wallD
    * @returns {boolean} True if finite.
    */
-  static bottomIsFinite(regionD) {
-    const WH = OTHER_MODULES.WALL_HEIGHT;
-    return WH ? wallD.flags[WH.ID]?.top : false; // Wall Height uses null to indicate infinity.
+  static bottomIsFinite(wallD) {
+    const elev = this.flags[FLAGS.WH_ID]?.[FLAGS.WALL.BOTTOM];
+    return Number.isFinite(elev); // Wall Height uses null to indicate infinity.
   }
 
 
@@ -49,12 +49,8 @@ export class WallProperties {
    * @returns {number} Finite elevation in pixel units.
    */
   static bottomZ(wallD) {
-    const WH = OTHER_MODULES.WALL_HEIGHT;
-    if ( WH ) {
-      const bottom = wallD.flags[WH.ID]?.bottom;
-      if ( bottom ) return gridUnitsToPixels(bottom);
-    }
-    return -this.MAX_ELEV;
+    const elev = this.flags[FLAGS.WH_ID]?.[FLAGS.WALL.BOTTOM];
+    return elev ? gridUnitsToPixels(elev) : -this.MAX_ELEV;
   }
 
   /**
@@ -63,12 +59,8 @@ export class WallProperties {
    * @returns {number} Finite elevation + full height in pixel units.
    */
   static topZ(wallD) {
-    const WH = OTHER_MODULES.WALL_HEIGHT;
-    if ( WH ) {
-      const top = wallD.flags[WH.ID]?.top;
-      if ( top ) return gridUnitsToPixels(top);
-    }
-    return this.MAX_ELEV;
+    const elev = this.flags[FLAGS.WH_ID]?.[FLAGS.WALL.TOP];
+    return elev ? gridUnitsToPixels(elev) : this.MAX_ELEV;
   }
 
   // ----- NOTE: Dimensions ----- //

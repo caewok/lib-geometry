@@ -1,11 +1,11 @@
 /* globals
-canvas,
+CONFIG,
 */
 /* eslint no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
 "use strict";
 
-import { gridUnitsToPixels, pixelsToGridUnits, clamp } from "../util.js";
-import { OTHER_MODULES } from "../const.js";
+import { gridUnitsToPixels, clamp } from "../util.js";
+import { getTokenHeight, calculateTokenHeightFromTokenShape } from "../elevation.js";
 
 /* Token Placeable Properties
 
@@ -46,17 +46,7 @@ export class TokenProperties {
     return proneStatusId !== "" && actor.statuses && actor.statuses.has(proneStatusId);
   }
 
-  /**
-   * Determine the token height.
-   * TODO: Add config option, replacing Wall Height.
-   * @param {TokenDocument} tokenD
-   * @returns {number} Full token height in pixel units.
-   */
-  static _fullVerticalHeight(tokenD) {
-    const WH = OTHER_MODULES.WALL_HEIGHT;
-    return (WH ? tokenD.flags[WH.ID]?.[WH.FLAGS.TOKEN_HEIGHT] : 0)
-      || this._calculateTokenHeightFromTokenShape(tokenD);
-  }
+  static tokenHeightMultiplier = getTokenHeight;
 
   /**
    * Determine the token height from its shape.
@@ -65,14 +55,7 @@ export class TokenProperties {
    * @param {TokenDocument} tokenD
    * @returns {number} Full token height in pixel units.
    */
-  static _calculateTokenHeightFromTokenShape(tokenD) {
-    const { width, height, texture } = tokenD;
-    const d = canvas.scene.dimensions.distance
-      * Math.max(width, height)
-      * (Math.abs(texture.scaleX) + Math.abs(texture.scaleY))
-      * 0.5;
-    return pixelsToGridUnits(d);
-  }
+  static calculateTokenHeightFromTokenShape = calculateTokenHeightFromTokenShape;
 
   /**
    * Calculated vertical height of a token.
@@ -81,8 +64,9 @@ export class TokenProperties {
    * @returns {number} Height in pixel units.
    */
   static verticalHeight(tokenD) {
-    const heightMult = this.isProne(tokenD) ? clamp(CONFIG.GeometryLib.CONFIG.proneMultiplier, 0, 1) : 1;
-    return heightMult * this._fullTokenHeight(tokenD);
+    const heightMult = this.isProne ? clamp(CONFIG.GeometryLib.CONFIG.proneMultiplier, 0, 1) : 1;
+    return gridUnitsToPixels((this.tokenHeightMultiplier(tokenD)
+      || this.calculateTokenHeightFromTokenShape(tokenD)) * heightMult) || 1; // Force at least 1 pixel high
   }
 
   /**
