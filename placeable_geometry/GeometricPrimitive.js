@@ -630,10 +630,14 @@ export class GeometricPrimitive {
    */
   elevationAtCanvasLocation(canvasLoc, _opts) {
     // Default approach is to shoot a ray straight down.
-    using rayOrigin = Point3d.tmp.set(canvasLoc.x, canvasLoc.y, 1e10);
+    const topZ = 1e10;
+    using rayOrigin = Point3d.tmp.set(canvasLoc.x, canvasLoc.y, topZ);
     using rayDirection = Point3d.tmp.set(0, 0, -1);
-    const ix = this.rayIntersection(rayOrigin, rayDirection);
-    return ix ? ix.z : null;
+    const t = this.rayIntersection(rayOrigin, rayDirection);
+    if ( t === null ) return null;
+
+    // Moving straight down, so z is just the starting z minus t.
+    return topZ - t;
   }
 
 

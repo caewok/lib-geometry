@@ -53,10 +53,34 @@ function centroid() {
   }
 
   area = -area * 0.5;
+  if ( !area ) return this._calculateAverageVertexCentroid();
   const areaMult = 1 / (6 * area);
   outPoint.x *= areaMult;
   outPoint.y *= areaMult;
   return outPoint;
+}
+
+/**
+ * Calculates the centroid (average/center point) of a polygon.
+ * Geometric center of the vertices.
+ * @param {PIXI.Point} [out]
+ * @returns {PIXI.Point}
+ */
+function _calculateAverageVertexCentroid(out) {
+  out ??= PIXI.Point.tmp;
+
+  // If less than three points, return best approximation.
+  if ( this.points.length === 0 ) return out.set(0, 0);
+  if ( this.points.length === 1 ) return this.iteratePoints().next().value.clone(out);
+  if ( this.points.length === 2 ) return PIXI.Point.midPoint(
+      this.iteratePoints().next().value,
+      this.iteratePoints().next().value
+    ).clone(out);
+
+  out.set(0, 0, 0);
+  for ( const p of this.iteratePoints() ) out.add(p, out);
+  const scale = 1 / (this.points.length / 2);
+  return out.multiplyScalar(scale, out);
 }
 
 /**
@@ -167,14 +191,10 @@ function isSegmentEnclosed(segment, { epsilon = 1e-08 } = {}) {
   if ( !aInside || !bInside ) return false;
 
   // Could still (a) have an endpoint on an edge or (b) be an edge or (c) cross the polygon edge 2+ times.
-  const points = this.points;
-  const ln = points.length - 2;
-  for ( let i = 0; i < ln; i += 2 ) {
-    const edgeA = { x: points[i], y: points[i+1] };
+  for ( const { a: edgeA, b: edgeB } of this.iterateEdges() ) {
     if ( edgeA.x.almostEqual(A.x, epsilon) && edgeA.y.almostEqual(A.y, epsilon) ) return false;
     if ( edgeA.x.almostEqual(B.x, epsilon) && edgeA.y.almostEqual(B.y, epsilon) ) return false;
 
-    const edgeB = { x: points[i+2], y: points[i+3] };
     if ( edgeB.x.almostEqual(A.x, epsilon) && edgeB.y.almostEqual(A.y, epsilon) ) return false;
     if ( edgeB.x.almostEqual(B.x, epsilon) && edgeB.y.almostEqual(B.y, epsilon) ) return false;
 
@@ -286,8 +306,8 @@ function linesCross(lines) {
   for ( const edge of this.iterateEdges() ) {
     for ( const line of lines ) {
       if ( lineSegmentCrosses(edge.a, edge.b, line.a, line.b) ) return true;
-      edge.a.release(); // B will later be set to A, so don't release it.
     }
+    edge.a.release(); // B will later be set to A, so don't release it.
   }
   return false;
 }
@@ -298,15 +318,18 @@ function linesCross(lines) {
  * @param {Point} b                       The second endpoint of segment AB
  * @param {object} [options]              Options affecting the intersect test.
  * @param {boolean} [options.inside]      If true, a line contained within the rectangle will
- *                                        return true.
+ *                                        return true
+ * @param {boolean} [options.convex]      If true, it will assume the polygon is convex
  * @returns {boolean} True if intersects.
  */
-function lineSegmentCrossesPolygon(a, b, { inside = false } = {}) {
-  if ( this.contains(a.x, a.y) && this.contains(b.x, b.y) ) return inside;
+function lineSegmentCrossesPolygon(a, b, { inside = false, isConvex = false } = {}) {
+  const aInside = this.contains(a.x, a.y);
+  const bInside = this.contains(b.x, b.y);
+  if ( isConvex && aInside && bInside ) return inside;
   for ( const edge of this.iterateEdges() ) {
     if ( lineSegmentCrosses(a, b, edge.a, edge.b) ) return true;
   }
-  return false;
+  return aInside && bInside ? inside : false;
 }
 
 /**
@@ -317,14 +340,17 @@ function lineSegmentCrossesPolygon(a, b, { inside = false } = {}) {
  * @param {object} [options]              Options affecting the intersect test.
  * @param {boolean} [options.inside]      If true, a line contained within the rectangle will
  *                                        return true.
+  * @param {boolean} [options.convex]      If true, it will assume the polygon is convex
  * @returns {boolean} True if intersects.
  */
-function lineSegmentIntersects(a, b, { inside = false } = {}) {
-  if ( this.contains(a.x, a.y) && this.contains(b.x, b.y) ) return inside;
+function lineSegmentIntersects(a, b, { inside = false, isConvex = false } = {}) {
+  const aInside = this.contains(a.x, a.y);
+  const bInside = this.contains(b.x, b.y);
+  if ( isConvex && aInside && bInside ) return inside;
   for ( const edge of this.iterateEdges() ) {
     if ( foundry.utils.lineSegmentIntersects(a, b, edge.a, edge.b) ) return true;
   }
-  return false;
+   return aInside && bInside ? inside : false;
 }
 
 /**
@@ -545,15 +571,19 @@ function _overlapsPolygon(other) {
 
   if ( !polyBounds.overlaps(otherBounds) ) return false;
 
+  for ( const otherEdge of other.iterateEdges() ) {
+    const { a, b } = otherEdge;
+    if ( this.contains(a.x, b.y)
+      || this.contains(b.x, b.y) ) return true;
+  }
+
   for ( const edge of this.iterateEdges() ) {
     const { a, b } = edge;
     if ( other.contains(a.x, a.y)
       || other.contains(b.x, b.y) ) return true;
 
     for ( const otherEdge of other.iterateEdges() ) {
-      const { a:c, b:d } = otherEdge;
-      if ( this.contains(c.x, c.y)
-        || this.contains(d.x, d.y) ) return true;
+      const { a: c, b: d } = otherEdge;
       if ( foundry.utils.lineSegmentIntersects(a, b, c, d) ) return true;
     }
   }
@@ -701,11 +731,10 @@ function signedArea({ scalingFactor } = {}) {
   const edges = [...this.iterateEdges()];
 
   if ( scalingFactor ) edges.forEach(edge => {
-    const { a, b } = edge;
+    const a = edge.a;
     a.x = Math.round(a.x * scalingFactor);
     a.y = Math.round(a.y * scalingFactor);
-    b.x = Math.round(b.x * scalingFactor);
-    b.y = Math.round(b.y * scalingFactor);
+    // b will be a on the next edge.
   });
 
   const ln = edges.length;
@@ -817,23 +846,23 @@ function wrapslice(arr, start, end) {
  * @param {number} maxAngle
  * @returns {boolean}
  */
-function testMaxCWAngle(pt, origin, center, angle, maxAngle) {
+function testMaxCWAngle(pt, origin, center, angle, maxAngle, bestPt) {
   if ( angle < maxAngle ) return false;
   if ( foundry.utils.orient2dFast(origin, center, pt) > 0 ) return false; // CCW
 
   // If the angles are equal, pick the closest point.
   const dist2Between = PIXI.Point.distanceSquaredBetween;
-  if ( angle === maxAngle ) return dist2Between(origin, pt) < dist2Between(origin, pt);
+  if ( angle === maxAngle ) return dist2Between(origin, pt) < dist2Between(origin, bestPt);
   return true;
 }
 
-function testMaxCCWAngle(pt, origin, center, angle, maxAngle) {
+function testMaxCCWAngle(pt, origin, center, angle, maxAngle, bestPt) {
   if ( angle < maxAngle ) return false;
   if ( foundry.utils.orient2dFast(origin, center, pt) < 0 ) return false; // CW
 
   // If the angles are equal, pick the closest point.
   const dist2Between = PIXI.Point.distanceSquaredBetween;
-  if ( angle === maxAngle ) return dist2Between(origin, pt) < dist2Between(origin, pt);
+  if ( angle === maxAngle ) return dist2Between(origin, pt) < dist2Between(origin, bestPt);
   return true;
 }
 
@@ -856,7 +885,7 @@ function viewablePoints(origin, { returnKeys = false, outermostOnly = false } = 
   // It is possible that if the polygon is not simple, one or more points that are on the
   // viewable side
 
-  const pts = [...this.iteratePoints()];
+  const pts = this.isPositive ? [...this.iteratePoints()] : [...this.reverseIteratePoints()];
 
   // Handle degenerate polygons.
   // Also, if the polygon contains this origin, use all points of the polygon.
@@ -892,26 +921,16 @@ function viewablePoints(origin, { returnKeys = false, outermostOnly = false } = 
   for ( let i = 0; i < nPoints; i += 1 ) {
     const pt = pts[i];
     const angle = PIXI.Point.angleBetween(center, origin, pt);
-    if ( testMaxCWAngle(pt, origin, center, angle, maxCWAngle) ) {
+    if ( !cwPt || testMaxCWAngle(pt, origin, center, angle, maxCWAngle, cwPt) ) {
       cwPt = pt;
       maxCWAngle = angle;
       cwIdx = i;
     }
-    if ( testMaxCCWAngle(pt, origin, center, angle, maxCCWAngle) ) {
+    if ( !ccwPt || testMaxCCWAngle(pt, origin, center, angle, maxCCWAngle, ccwPt) ) {
       ccwPt = pt;
       maxCCWAngle = angle;
       ccwIdx = i;
     }
-  }
-
-  // Given the starting max angles, should not happen.
-  if ( !cwPt ) cwPt = ccwPt;
-  if ( !ccwPt ) ccwPt = cwPt;
-
-  // Should have defined both by now.
-  if ( !cwPt ) {
-    console.warn("viewablePoints|Points not found", this);
-    return [];
   }
 
   if ( cwPt.equals(ccwPt) ) return returnKeys ? [cwIdx] : [cwPt];
@@ -1022,7 +1041,7 @@ function key() {
   for ( let i = 0; i < ln; i += 2 ) {
     const x = points[i];
     const y = points[i + 1];
-    if ( (x < minX || x === minX) && y < minY ) {
+    if ( (x < minX) || (x === minX && y < minY) ) {
       minIndex = i;
       minX = x;
       minY = y;
@@ -1052,7 +1071,10 @@ function equals(other) {
   const startPoint = thisPoints.next().value;
   const startIdx = otherPoints.findIndex(pt => pt.equals(startPoint));
   startPoint.release();
-  if ( !~startIdx ) return false;
+  if ( !~startIdx ) {
+    PIXI.Point.release(...otherPoints);
+    return false;
+  }
 
   // Test each point sequentially from each array
   let k = startIdx + 1; // +1 b/c already tested startPoint.
@@ -1088,9 +1110,12 @@ function almostEqual(other, epsilon = 1e-08) {
 
   // Find the matching point
   const startPoint = thisPoints.next().value;
-  const startIdx = otherPoints.findIndex(pt => pt.equals(startPoint));
+  const startIdx = otherPoints.findIndex(pt => pt.almostEqual(startPoint, epsilon));
   startPoint.release();
-  if ( !~startIdx ) return false;
+  if ( !~startIdx ) {
+    PIXI.Point.release(...otherPoints);
+    return false;
+  }
 
   // Test each point sequentially from each array
   let k = startIdx + 1; // +1 b/c already tested startPoint.
@@ -1168,9 +1193,9 @@ function triangulate({ useFan, centroid } = {}) {
   const ln = indices.length;
   const polys = new Array(ln / 3);
   for ( let i = 0, j = 0; i < ln; ) {
-    const idx0 = indices[i++];
-    const idx1 = indices[i++];
-    const idx2 = indices[i++];
+    const idx0 = indices[i++] * 2; // Coordinate offset for vertex idx is idx * 2 b/c points is a flat array.
+    const idx1 = indices[i++] * 2;
+    const idx2 = indices[i++] * 2;
     polys[j++] = new PIXI.Polygon(
       pts[idx0], pts[idx0 + 1], // x, y
       pts[idx1], pts[idx1 + 1],
@@ -1193,7 +1218,7 @@ function pointsLattice({ spacing = 1, startAtEdge = false } = {}) {
   const pts = bounds.pointsLattice({ spacing, startAtEdge: true }); // Start at edge b/c already padded the polygon.
 
   // For arbitrary polygon, unfortunately have to test the bounds for each.
-  return pts.filter(pt => this.contains(pt.x, pt.y));
+  return pts.filter(pt => poly.contains(pt.x, pt.y));
 }
 
 /**
@@ -1220,15 +1245,10 @@ function interiorPoint() {
 
   // Collect every x where an edge crosses the scanline.
   const xs = [];
-  const a = PIXI.Point.tmp.set(this.points.at(-2), this.points.at(-1));
-  for ( const b of this.iteratePoints() ) {
-    const x0 = a.x;
-    const y0 = a.y;
-    const x1 = b.x;
-    const y1 = b.y;
-    if ( (y0 > y) !== (y1 > y) ) xs.push(x0 + ((y - y0) / (y1 - y0)) * (x1 - x0));
-    xs.sort((a, b) => a - b);
+  for ( const { a, b } of this.iterateEdges() ) {
+    if ( (a.y > y) !== (b.y > y) ) xs.push(a.x + ((y - a.y) / (b.y - a.y)) * (b.x - a.x));
   }
+  xs.sort((a, b) => a - b);
 
   // Take the widest interior span's midpoint. More robust than always taking the first pair.
   // (A thin sliver near the boundary is a valid crossing but a fragile test point.)
@@ -1321,6 +1341,8 @@ PATCHES.PIXI.METHODS = {
 
   // Helper/internal methods
   scaledArea,
+  // signedArea, // Not needed b/c FoundryVTT v14 now defines this method.
+  _calculateAverageVertexCentroid,
 
   is,
 };

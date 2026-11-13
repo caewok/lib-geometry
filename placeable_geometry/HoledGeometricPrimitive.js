@@ -217,7 +217,7 @@ export class HoledPrimitive extends CombinedGeometricPrimitive {
    * @returns {Polygon3d[]}
    */
   _buildBottomFaces() {
-    if ( !this.holes.length && this.solid.bottomFaces.length === 1 ) return [Polygon3d.from3dPolygon(this.solid.bottomFaces)];
+    if ( !this.holes.length && this.solid.bottomFaces.length === 1 ) return this.solid.bottomFaces;
     const polys = [...this.solid.bottomFaces, ...this.holes.flatMap(h => h.bottomFaces)];
     return [Polygons3d.from3dPolygons(polys)];
   }
@@ -361,13 +361,27 @@ export class HoledPrimitive extends CombinedGeometricPrimitive {
    * @param {number} [opts.maxT=1]        Ignore hits later in the segment than this (multiple of rayDirection)
    * @returns {number|null} The distance along the ray, as a multiple of rayDirection
    */
-  rayIntersection(rayOrigin, rayDirection, { _sidesOnly = false, ...opts } = {}) {
+  rayIntersection(rayOrigin, rayDirection, { _sidesOnly = false, minT = 0, maxT = 1  } = {}) {
+    const C = this.constructor;
     const crossings = [];
     for ( const child of [this.solid, ...this.holes] ) {
-      for ( const face of child.faces ) this.constructor.faceCrossings(face, rayOrigin, rayDirection, crossings);
+      for ( const face of child.faces ) C.faceCrossings(face, rayOrigin, rayDirection, crossings);
     }
-    const clustered = this.constructor.clusterCrossings(crossings);
-    return this.constructor.firstBlockedT(clustered, { ...opts, direction: this.direction });
+    // Only crossings ahead of the origin; behind-origin state comes from containment instead.
+    const ahead = C.clusterCrossings(crossings.filter(c => c.t >= 0));
+    const start = { t: Number.NEGATIVE_INFINITY, s: 0, ds: this._originInMaterial(rayOrigin) ? 1 : 0 };
+    return C.firstBlockedT([start, ...ahead], { minT, maxT, direction: this.direction });
+  }
+
+  /**
+   * Is a point inside the solid and outside every hole?
+   * @param {Point3d} p
+   * @returns {boolean}
+   */
+  _originInMaterial(p) {
+    const { min, max } = this.solid.aabb;
+    if ( p.z < min.z || p.z > max.z ) return false;
+    return this.containsProjectedXY(p); // Solid footprint minus holes.
   }
 
   /**
@@ -410,7 +424,7 @@ export class HoledPrimitive extends CombinedGeometricPrimitive {
     for ( const bucket of BUCKETS ) {
       ip[bucket] = {
         corners: (solidPoints[bucket].corners).filter(pt => !inHole(pt)),
-        sides: (solidPoints[bucket].sides).filter(pt => !inHole(pt)),
+        mids: (solidPoints[bucket].mids).filter(pt => !inHole(pt)),
       };
     }
     return ip;

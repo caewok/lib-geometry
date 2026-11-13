@@ -1,3 +1,7 @@
+## 0.7.1
+Handle region grid shapes.
+Fix for points calculator failing to detect obstacle intersection when viewer was in hole and target was outside.
+
 ## 0.7.0
 Refactor placeable geometry handling into GeometricPrimitives and PlaceableGeometry (which relies on those primitives).
 Use static TYPE in place of modifying instanceof, for speed.

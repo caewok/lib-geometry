@@ -114,6 +114,7 @@ export class Polygon3d {
 
     // Copy over the points if necessary.
     if ( result.length < this.points.length ) {
+      Point3d.release(...this.points.splice(result.length));
       this.points.length = result.length;
       this.points.forEach((pt, idx) => pt.copyFrom(result[idx]));
     }
@@ -126,7 +127,10 @@ export class Polygon3d {
   setZ(z = 0) {
     this.points.forEach(pt => pt.z = z);
     this.#dirtyPlane = true;
-    this.#planarPoints.length = 0;
+    if ( this.#planarPoints.length ) {
+      PIXI.Point.release(...this.#planarPoints)
+      this.#planarPoints.length = 0;
+    }
     if ( !this.dirtyAABB ) {
       this.aabb.min.z = z;
       this.aabb.max.z = z;
@@ -607,7 +611,9 @@ export class Polygon3d {
    */
   toVertices(opts) {
     const tris = this.triangulate();
-    return Triangle3d.trianglesToVertices(tris, opts);
+    const out = Triangle3d.trianglesToVertices(tris, opts);
+    tris.forEach(tri => tri.release());
+    return out;
   }
 
   /**
@@ -667,7 +673,19 @@ export class Polygon3d {
     const to2dM = this.plane.conversion2dMatrix;
     const pts2d = pts.map(pt => to2dM.multiplyPoint3d(pt));
 
-    const cw = pts2d.length > 2 && foundry.utils.orient2dFast(pts2d[0], pts2d[1], pts2d[2]) < 0;
+    // Determine 2D winding via signed area (shoelace sum).
+    // In Foundry's y-down coordinate system, a negative sum corresponds to clockwise winding.
+    let cw = false;
+    const n = pts2d.length;
+    if ( n > 2 ) {
+      let area = 0;
+      for ( let i = 0; i < n; i++ ) {
+        const a = pts2d[i];
+        const b = pts2d[(i + 1) % n];
+        area += (a.x + b.x) * (a.y - b.y);
+      }
+      cw = area < 0;
+    }
     if ( !this.isHole ^ cw ) pts2d.reverse();
     // Poly equivalent: if ( !this.isHole ^ poly.isPositive ) poly.reverseOrientation();
     return pts2d;
@@ -1056,12 +1074,12 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
    *   Important for Polygons3d, which deal with multiple polygon intersections.
    * @returns {number|null} The t value of the plane intersection.
    */
-  intersectionT(rayOrigin, rayDirection, { holesBlock = false } = {}) {
+  intersectionT(rayOrigin, rayDirection, { holesBlock = false, signed = false } = {}) {
     if ( !holesBlock && this.isHole ) return null;
 
     // First get the plane intersection.
     const plane = this.plane;
-    const t = plane.rayIntersection(rayOrigin, rayDirection);
+    const t = plane.rayIntersection(rayOrigin, rayDirection, { signed });
     if ( t === null ) return null;
     const ix = Point3d.tmp;
     rayOrigin.add(rayDirection.multiplyScalar(t, ix), ix)
@@ -1410,7 +1428,7 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
    * @returns {boolean}
    */
   intersectsPolygon3d(other) {
-    if ( !(this.isValid() || other.isValid()) ) return false;
+    if ( !(this.isValid() && other.isValid()) ) return false;
     if ( this.plane.isParallelToPlane(other.plane) ) {
       return this.plane.isCoincidentWithPlane(other.plane, { testParallel: false });
     }
@@ -1421,9 +1439,19 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
     using direction = res.direction;
     direction.normalize(direction);
 
-    // Find the intersection intervals of the planar intersection with this polygon.
-    return this._hasPlanarLineIntersections(origin, direction)
-      || other._hasPlanarLineIntersections(origin, direction);
+    // Find the intersection intervals of the planar intersection with each polygon.
+    const intervals1 = this._planarLineIntersections(origin, direction);
+    if ( !intervals1.length ) return false;
+    const intervals2 = other._planarLineIntersections(origin, direction);
+    if ( !intervals2.length ) return false;
+
+    // Check for overlap between any pair of intervals.
+    for ( const [start1, end1] of intervals1 ) {
+      for ( const [start2, end2] of intervals2 ) {
+        if ( Math.max(start1, start2) <= Math.min(end1, end2) ) return true;
+      }
+    }
+    return false;
   }
 
   /* ----- NOTE: Debug ----- */
@@ -1545,7 +1573,14 @@ export class Ellipse3d extends Polygon3d {
   /** @type {Point3d} */
   get majorRadiusAxis() {
     const { vx, vy } = this.radiusVectors();
-    return (vx.magnitudeSquared() > vy.magnitudeSquared()) ? vx : vy;
+    const isX = (vx.magnitudeSquared() > vy.magnitudeSquared());
+    if ( isX ) {
+      vy.release();
+      return vx;
+    } else {
+      vx.release();
+      return vy;
+    }
   }
 
   /** @type {Point3d} */
@@ -2054,7 +2089,7 @@ export class Ellipse3d extends Polygon3d {
   // ----- NOTE: Transformations ----- //
   isValid() {
     this.clean();
-    return this.points.length === 1;
+    return this.points.length === 1 && this.radiusX > 0 && this.radiusY > 0;
   }
 
   /**
@@ -2528,16 +2563,50 @@ export class Triangle3d extends Polygon3d {
    * @param {boolean} [opts.addNormals=false]         If true, add the normal to this polygon, facing CCW.
    * @param {Float32Array} [opts.outArr]              Where to store the vertices
    * @param {number} [opts.outIdx=0]                  What index to start setting each vertex
-   * @returns {Float32Array[]}
+   * @returns {Float32Array}
    */
   toVertices({ addNormals = false, outArr, outIdx = 0 } = {}) {
     const { NUM_POSITION_COORDS, NUM_NORMAL_COORDS, NUM_POINTS } = this.constructor;
     const stride = NUM_POSITION_COORDS + (addNormals * NUM_NORMAL_COORDS);
     outArr ??= new Float32Array(stride * NUM_POINTS);
+    const { a, b, c } = this;
+    let idx = outIdx;
     if ( addNormals ) {
-      const normal = [...this.plane.normal];
-      outArr.set([...this.a, ...normal, ...this.b, ...normal, ...this.c, ...normal], outIdx);
-    } else outArr.set([...this.a, ...this.b, ...this.c], outIdx);
+      const { x: nx, y: ny, z: nz } = this.plane.normal;
+
+      outArr[idx++] = a.x;
+      outArr[idx++] = a.y;
+      outArr[idx++] = a.z;
+      outArr[idx++] = nx;
+      outArr[idx++] = ny;
+      outArr[idx++] = nz;
+
+      outArr[idx++] = b.x;
+      outArr[idx++] = b.y;
+      outArr[idx++] = b.z;
+      outArr[idx++] = nx;
+      outArr[idx++] = ny;
+      outArr[idx++] = nz;
+
+      outArr[idx++] = c.x;
+      outArr[idx++] = c.y;
+      outArr[idx++] = c.z;
+      outArr[idx++] = nx;
+      outArr[idx++] = ny;
+      outArr[idx++] = nz;
+    } else {
+      outArr[idx++] = a.x;
+      outArr[idx++] = a.y;
+      outArr[idx++] = a.z;
+
+      outArr[idx++] = b.x;
+      outArr[idx++] = b.y;
+      outArr[idx++] = b.z;
+
+      outArr[idx++] = c.x;
+      outArr[idx++] = c.y;
+      outArr[idx++] = c.z;
+    }
     return outArr;
   }
 
@@ -2563,7 +2632,7 @@ export class Triangle3d extends Polygon3d {
    * the function returns null.
    * @param {Point3d} rayOrigin
    * @param {Point3d} rayDirection
-   * @param {boolean} [signed=false]      Get any t, not just t greater than 0
+   * @param {boolean} [signed=false]      If true, get any t, not just t greater than 0
    * @returns {number} Distance from ray origin to the point of intersection.
    *
    */
@@ -2730,8 +2799,8 @@ export class Quad3d extends Polygon3d {
    * @param {Point3d} rayDirection
    * @returns {t|null} Returns null if not within the quad
    */
-  intersectionT(rayOrigin, rayDirection) {
-    return this.rayIntersectionMT(rayOrigin, rayDirection);
+  intersectionT(rayOrigin, rayDirection, opts) {
+    return this.rayIntersectionMT(rayOrigin, rayDirection, opts);
   }
 
 
@@ -2762,9 +2831,10 @@ export class Quad3d extends Polygon3d {
    * Intersection test, splitting the quad into two Müller-Trumbore triangles.
    * @param {Point3d} rayOrigin
    * @param {Point3d} rayDirection
+   * @param {boolean} [signed=false]      If true, get any t, not just t greater than 0
    * @returns {number|null}  Null if no intersection. If negative, the intersection is behind the ray origin.
    */
-  rayIntersectionMT(rayOrigin, rayDirection) {
+  rayIntersectionMT(rayOrigin, rayDirection, { signed = false } = {}) {
     const [v0, v1, v2, v3] = this.points;
     const tmpPoints = Point3d.createN(10);
     // rayDirection = rayDirection.normalize();
@@ -2810,7 +2880,7 @@ export class Quad3d extends Polygon3d {
       && (u + v).almostLessThan(1.0, EPSILON) ) {
 
       const t = edge2.dot(q) * invDet;
-      if ( t.strictlyGreaterThan(0.0, EPSILON) ) { Point3d.release(...tmpPoints); return t; } // Could return { u, v, triangle: 1 }
+      if ( signed || t.strictlyGreaterThan(0.0, EPSILON) ) { Point3d.release(...tmpPoints); return t; } // Could return { u, v, triangle: 1 }
     }
 
     // --- Triangle 2: V1, V2, V3 ---
@@ -2837,9 +2907,8 @@ export class Quad3d extends Polygon3d {
     // Note: Mapping barycentric to bilinear for T2 is complex.
     // Simple approximation: u = 1-beta', v = 1-alpha' (valid for parallelograms)
     const tPrime = edge2Prime.dot(qPrime) * invDetPrime;
-    if ( tPrime.strictlyGreaterThan(0.0, EPSILON) ) { Point3d.release(...tmpPoints); return tPrime; }
     Point3d.release(...tmpPoints);
-    return null;
+    return (signed || tPrime.strictlyGreaterThan(0, EPSILON)) ? tPrime : null;
   }
 
   /**
@@ -3239,7 +3308,7 @@ export class Polygons3d extends Polygon3d {
       const first = polys[0];
       using flipped = first.plane.clone().reverse();
       for ( const poly of polys ) {
-        const expected = first.isHole === first.isHole ? first.plane : flipped;
+        const expected = poly.isHole === first.isHole ? first.plane : flipped;
         if ( !poly.plane.almostEqual(expected) ) console.warn("Polygons3d#from3dPolygons|Ring plane mismatch", poly);
       }
     }
@@ -3412,9 +3481,10 @@ export class Polygons3d extends Polygon3d {
     const vertsFlat = [];
     const holeIndices = [];
     const allPts3d = [];
+    using tmpPt = Point3d.tmp
     const addRing = ring => {
       for ( const pt of ring.iteratePoints() ) {
-        const pt2d = to2dM.multiplyPoint3d(pt);
+        const pt2d = to2dM.multiplyPoint3d(pt, tmpPt);
         vertsFlat.push(pt2d.x, pt2d.y);
         allPts3d.push(pt);
       }
@@ -3462,6 +3532,57 @@ export class Polygons3d extends Polygon3d {
     for ( const poly3d of this.polygons ) sides.push(...poly3d.buildTopSides(bottomZ, epsilon));
     return sides;
   }
+
+  /**
+   * Create a grid of points within this polygon.
+   * Collects lattice points from constituent planar rings, filtering out points inside holes.
+   * @param {object} [opts]
+   * @param {number} [opts.spacing = 1]              How many pixels between each point?
+   * @param {boolean} [opts.startAtEdge = false]     Are points allowed within spacing of the edges? Otherwise will be at least spacing away.
+   * @returns {Point3d[]} Points in order from left to right, top to bottom.
+   */
+  pointsLattice(opts) {
+    if ( !this.polygons.length ) return [];
+
+    const outerRole = this.isHole;
+    const solids2d = [];
+    const holes2d = [];
+    const poly2ds = this.toPlanarPolygon();
+    for ( let i = 0; i < this.polygons.length; i++ ) {
+      const poly3d = this.polygons[i];
+      const poly2d = poly2ds[i];
+      if ( poly3d.isHole === outerRole ) solids2d.push(poly2d);
+      else holes2d.push(poly2d);
+    }
+    if ( !solids2d.length ) return [];
+
+    // Collect lattice points across constituent solid polygons in 2d.
+    let latticePoints = [];
+    for ( const poly2d of solids2d ) {
+      latticePoints.push(...poly2d.pointsLattice(opts));
+    }
+
+    // Filter out points contained within holes.
+    if ( holes2d.length ) {
+      const discardedPoints = [];
+      latticePoints = latticePoints.filter(pt => {
+        let count = 0;
+        for ( const poly2d of poly2ds ) {
+          count += poly2d.contains(pt.x, pt.y) * (poly2d.isPositive ? 1 : -1);
+        }
+        const isInside = count > 0;
+        if ( !isInside ) discardedPoints.push(pt);
+        return isInside;
+      });
+      if ( discardedPoints.length ) PIXI.Point.release(...discardedPoints);
+    }
+
+    // Convert back to 3d.
+    const out = this._convert2dPointsTo3d(latticePoints);
+    if ( latticePoints.length ) PIXI.Point.release(...latticePoints);
+    return out;
+  }
+
 
   // ----- NOTE: Iterators ----- //
 
@@ -3538,7 +3659,7 @@ export class Polygons3d extends Polygon3d {
   containsProjectedXY(canvasLoc) {
     let count = 0;
     for ( const poly of this.polygons ) {
-      count += poly.containsProjectedXY(canvasLoc) * (poly.isHole === this.isHole ? -1 : 1);
+      count += poly.containsProjectedXY(canvasLoc) * (poly.isHole === this.isHole ? 1 : -1);
     }
     return count > 0;
   }
@@ -3553,10 +3674,10 @@ export class Polygons3d extends Polygon3d {
    * @param {boolean} [holesBlock = false]        If false, polygon holes return null
    * @returns {number|null} The t value of the plane intersection.
    */
-  intersectionT(rayOrigin, rayDirection, { holesBlock = false } = {}) {
+  intersectionT(rayOrigin, rayDirection, { holesBlock = false, signed = false } = {}) {
     // First get the plane intersection.
     const plane = this.plane;
-    const t = plane.rayIntersection(rayOrigin, rayDirection);
+    const t = plane.rayIntersection(rayOrigin, rayDirection, { signed });
     if ( t === null ) return null;
     using ix = Point3d.tmp;
     rayOrigin.add(rayDirection.multiplyScalar(t, ix), ix)
@@ -3588,7 +3709,7 @@ export class Polygons3d extends Polygon3d {
       if ( !polyIx ) continue;
       ix ??= polyIx;
       if ( opts.holesBlock ) return ix;
-      holeCount += (poly.isHole === this.isHole ? -1 : 1);
+      holeCount += (poly.isHole === this.isHole ? 1 : -1);
     }
     return holeCount > 0 ? ix : null;
   }
@@ -3610,7 +3731,7 @@ export class Polygons3d extends Polygon3d {
       const hasIx = poly._isIntersectionWithinPolygon(ix);
       if ( !hasIx ) continue;
       if ( holesBlock ) return true;
-      holeCount += (poly.isHole === this.isHole ? -1 : 1);
+      holeCount += (poly.isHole === this.isHole ? 1 : -1);
     }
     return holeCount > 0;
   }
@@ -3654,7 +3775,7 @@ export class Polygons3d extends Polygon3d {
     }
   }
 
-  clipPlanePoints(...args) { this.#applyMethodToAllWithReturn("clipPlanePoints", ...args); }
+  clipPlanePoints(...args) { return this.#applyMethodToAllWithReturn("clipPlanePoints", ...args); }
 
   clipZ(...args) {
     const out = this._cloneEmpty();
@@ -3693,6 +3814,20 @@ export class Polygons3d extends Polygon3d {
   /* ----- NOTE: Holes ----- */
 
   /**
+   * Build islands from polygons that carry orientation (isPositive = solid, otherwise hole).
+   * @param {PIXI.Polygon[]} polygons
+   * @returns {{solid: PIXI.Polygon, holes: PIXI.Polygon[]}[]}
+   */
+  static buildIslandPolygons(polygons) {
+    const holeIndices = new Set();
+    polygons.forEach((poly, i) => { if ( !poly.isPositive ) holeIndices.add(i); });
+    return this.buildIslands(polygons, holeIndices).map(island => ({
+      solid: polygons[island.solidIndex],
+      holes: island.holeIndices.map(i => polygons[i])
+    }));
+  }
+
+  /**
    * Construct a recursive tree of solid + holes
    * A root solid pairs with its direct hole children only.
    * Each of those holes' direct solid children become new island roots one level down.
@@ -3712,13 +3847,17 @@ export class Polygons3d extends Polygon3d {
 
     const islands = []; // { solid: PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse, holes: PIXI.Polygon|PIXI.Circle|PIXI.Rectangle|PIXI.Ellipse[] }
     function processSolid(solidIndex) {
-      const holeIdxs = children[solidIndex].filter(c => holeIndices.has(c));
+      const kids = children[solidIndex];
+      const holeIdxs = kids.filter(c => holeIndices.has(c));
       islands.push({ solidIndex, holeIndices: holeIdxs });
 
-      // Recurse: Any solid ring nested inside one of these holes starts a new island.
+      // Recurse: Solids inside this solid's holes start new islands.
       for ( const holeIdx of holeIdxs ) children[holeIdx]
         .filter(c => !holeIndices.has(c))
         .forEach(processSolid);
+
+      // Solids directly inside this solid (no hole between) are still separate shapes. Keep them.
+      kids.filter(c => !holeIndices.has(c)).forEach(processSolid);
     }
 
     polygons.forEach((_solidOrHole, i) => {
@@ -3745,8 +3884,12 @@ export class Polygons3d extends Polygon3d {
         const pt = r.interiorPoint();
         if ( pt ) return pt;
       }
-      // Fallback on centroid or manual bounding box center if interiorPoint fails.
-      return r.center || PIXI.Point.tmp.set(r.x, r.y);
+
+      // Polygons: midpoint of the first edge. Unlike a centroid, it cannot land outside a concave ring.
+      if ( r.points ) return { x: (r.points[0] + r.points[2]) / 2, y: (r.points[1] + r.points[3]) / 2 };
+
+      // Circle, Ellipse, Rectangle are convex, so the center is fine.
+      return r.center ?? { x: r.x, y: r.y };
     });
 
     // Construct the parent-child relationship based on area comparison. Parent area > child area.

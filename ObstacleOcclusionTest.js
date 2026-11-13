@@ -178,20 +178,21 @@ export class ObstacleOcclusionTest {
    * Subject token for which obstacles are being tested.
    * A Subject token are excluded from obstacle tests and other tokens may be excluded
    * based on disposition vis-a-vis subject token.
-   * @type {Token}
+   * @type {TokenDocument}
    */
-  #subjectToken = null;
+  #subjectTokenD = null;
 
-  get subjectToken() { return this.#subjectToken; }
+  get subjectTokenD() { return this.#subjectTokenD; }
 
-  set subjectToken(value) {
+  /** @param {value} {Token|TokenDocument} */
+  set subjectTokenD(value) {
     if ( value.document ) value = value.document;
-    this.#subjectToken = value;
+    this.#subjectTokenD = value;
   }
 
   /**
    * Tokens to exclude from the tests. Typically viewer (subject) and target.
-   * @type {Set<Token>}
+   * @type {Set<TokenDocument>}
    */
   #tokensToExclude = new WeakSet();
 
@@ -238,15 +239,15 @@ export class ObstacleOcclusionTest {
    * Update the obstacles in preparation for ray collision testing.
    * Optionally store the viewpoint (ray origin) and tokens to exclude.
    * @param {object} [opts]
+   * @param {TokenDocument} [opts.subjectTokenD]
    * @param {Token[]} [opts.tokensToExclude]  Tokens to exclude; must be an array of Tokens or empty array.
    * @param {Point3d} [viewpoint]             Used for _rayIsOccluded as the starting viewpoint
-   * @param {Token[]} [tokensToExclude=[]]    Exclude these tokens from collision testing
    */
-  initialize({ subjectToken, tokensToExclude, levelId } = {}) {
+  initialize({ subjectTokenD, tokensToExclude, levelId } = {}) {
     // Set privately and then trigger full update.
     if ( levelId ) this.levelId = levelId;
-    if ( subjectToken ) this.#subjectToken = subjectToken.document ? subjectToken.document : subjectToken;
-    if ( tokensToExclude ) this.#tokensToExclude = new WeakSet(tokensToExclude.map(t => t.document ? t.document : t));
+    if ( subjectTokenD ) this.#subjectTokenD = subjectTokenD.document ? subjectTokenD.document : subjectTokenD;
+    if ( tokensToExclude ) this.tokensToExclude = tokensToExclude
   }
 
   /**
@@ -357,8 +358,8 @@ export class ObstacleOcclusionTest {
     if ( RIDEABLE ) tokenFilters.push(this.#filterRidingToken.bind(this));
 
     const blockingCfg = this.config.tokens;
-    const subjectToken = this.subjectToken;
-    const tokenGeoms = this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.tokens, "tokens", { subjectToken, ...blockingCfg });
+    const subjectTokenD = this.subjectTokenD;
+    const tokenGeoms = this.#filterDocGeometries(CONFIG.GeometryLib.geometryManager.tokens, "tokens", { subjectTokenD, ...blockingCfg });
 
     // Remove the temporary filters.
     if ( RIDEABLE ) tokenFilters.pop();
@@ -368,7 +369,7 @@ export class ObstacleOcclusionTest {
   }
 
   #filterExcludedToken(tokenD) {
-    return !(this.subjectToken === tokenD || this.tokensToExclude.has(tokenD));
+    return !(this.subjectTokenD === tokenD || this.tokensToExclude.has(tokenD));
   }
 
   #filterRidingToken(tokenD) {
@@ -379,7 +380,7 @@ export class ObstacleOcclusionTest {
     if ( !ridingToken ) return true;
     for ( const token of canvas.tokens.placeables ) {
       const tDoc = token.document;
-      if ( this.subjectToken === tDoc
+      if ( this.subjectTokenD === tDoc
         || this.tokensToExclude.has(tDoc) ) return !(ridingToken && RIDEABLE.API.RidingConnection(ridingToken, token))
     }
     return true;
@@ -463,7 +464,7 @@ export class ObstacleOcclusionTest {
   #geometriesOcclude(geoms, rayOrigin, rayDirection) {
     const rayEnd = rayOrigin.add(rayDirection, tmpPt1);
     return geoms.some(geom => this.#geomWithinRayBounds(geom, rayOrigin, rayEnd)
-      && geom.rayIntersection(rayOrigin, rayDirection));
+      && (geom.rayIntersection(rayOrigin, rayDirection) !== null));
   }
 
   #subGeometriesOcclude(geoms, rayOrigin, rayDirection, geomSubtypeFn = () => "calculated") {

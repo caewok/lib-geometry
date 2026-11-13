@@ -263,16 +263,16 @@ export class RegionGeometry extends PlaceableGeometry {
       let shape;
       const solid = combinedBaseShapes[island.solidIndex];
       if ( island.holeIndices.length ) {
-        for ( shape of oldShapes ) {
-          if ( shape.solid === solid ) { oldShapes.delete(shape); break; }
+        for ( const match of oldShapes ) {
+          if ( match.solid === solid ) { oldShapes.delete(match); break; }
         }
-        const id = `${this._shapeId(island.solidIndex)}_island}`;
+        const id = `${this._shapeId(island.solidIndex)}_island`;
 
         // For either the new or existing primitive, update the solid and holes.
         shape ??= new HoledPrimitive(id)
         shape.replaceSolid(solid);
         const holes = island.holeIndices.map(idx => baseShapes[idx]);
-        holes.forEach(hole => shape.addHole(hole))
+        holes.forEach(hole => { if ( hole ) shape.addHole(hole); });
 
       } else shape = solid;
       shapes.push(shape)
@@ -336,7 +336,7 @@ export class RegionGeometry extends PlaceableGeometry {
             : ExtrudedPolygonPrimitive.fromPolygon(`${baseShapes[i].id}_combined`, solids[0]);
 
       // Additional solids (islands) are added at the end.
-      for ( let j = 1, n = solids.length; j < n; i += 1 ) {
+      for ( let j = 1, n = solids.length; j < n; j += 1 ) {
         combinedBaseShapes.push(hasHoles
           ? ExtrudedPolygonPrimitiveWithHoles.fromPolygon(`${baseShapes[i].id}_combined_holes`, solids[j], holes)
             : ExtrudedPolygonPrimitive.fromPolygon(`${baseShapes[i].id}_combined`, solids[j]));
@@ -354,32 +354,33 @@ export class RegionGeometry extends PlaceableGeometry {
    */
   _instantiateRestrictedBaseShape(id, regionShape) {
     let polys = this.regionShapePolygons(regionShape);
-    if ( this.placeableDocument._shapeConstraints ) {
-      const constraintPolys = this.placeableDocument._shapeConstraints.map(arr => new PIXI.Polygon(arr));
-      const polys = this.#intersectConstraints(polys, constraintPolys);
+    const constraints = this.placeableDocument._shapeConstraints;
+    if ( constraints?.length ) {
+      polys = this.#intersectConstraints(polys, constraints.map(arr => new PIXI.Polygon(arr)));
     }
-
-    // Should only be either:
-    // (a) single polygon
-    // (b) polygon + hole polygon (ring)
-    // (c) multiple solid polygons (self-intersecting polygon, cleaned)
 
     let opts = this._shapeDimensions(regionShape);
     if ( regionShape.type === "ring" ) opts = opts.outer;
-    let out;
-    if ( polys.length === 1 ) out = ExtrudedPolygonPrimitive.fromPolygon(id, polys[0], opts)
-    else if ( !polys[1].isPositive ) {
-      // Solid and 1+ holes.
-      const solid = ExtrudedPolygonPrimitive.fromPolygon(`${id}_0`, solid);
-      const holes = polys.slice(1).map((poly, i) => ExtrudedPolygonPrimitive.fromPolygon(`${id}_${i + 1}`, poly, opts));
-      out = new HoledPrimitive(id, solid, holes);
-    } else {
-      // 2+ solids.
-      const solids = polys.map((poly, i) => ExtrudedPolygonPrimitive.fromPolygon(`${id}_${i}`, poly, opts));
-      out = CombinedGeometricPrimitive.combine(id, solids);
-    }
-    if ( regionShape.hole ) out.reverseOrientation();
-    return out;
+
+    // Tree polygons and Clipper output both mark solids with isPositive; holes are the rest.
+    const holeIndices = new Set();
+    polys.forEach((poly, i) => { if ( !poly.isPositive ) holeIndices.add(i); });
+    const islands = Polygons3d.buildIslands(polys, holeIndices).map(island => ({
+      solid: polys[island.solidIndex],
+      holes: island.holeIndices.map(i => polys[i])
+    }));
+
+    const prims = islands.map(({ solid, holes }, i) => {
+      const sid = islands.length > 1 ? `${id}_${i}` : id;
+      if ( !holes.length ) return ExtrudedPolygonPrimitive.fromPolygon(sid, solid.clone(), opts);
+      const solidPrim = ExtrudedPolygonPrimitive.fromPolygon(`${sid}_solid`, solid.clone(), opts);
+      const holePrims = holes.map((hole, j) =>
+        ExtrudedPolygonPrimitive.fromPolygon(`${sid}_hole${j}`, hole.clone(), opts));
+      return new HoledPrimitive(sid, solidPrim, holePrims);
+    });
+
+    if ( !prims.length ) return CombinedGeometricPrimitive.combine(id, []); // Verify empty is accepted.
+    return prims.length === 1 ? prims[0] : CombinedGeometricPrimitive.combine(id, prims);
   }
 
   /**
@@ -607,8 +608,10 @@ export class RegionGeometry extends PlaceableGeometry {
         else keys.push("innerWidth", "outerWidth"); // Treat as cylinder, so radius handled via dimensions.
         break;
       }
+      case "grid": keys.push("offsets"); break;
     }
-    parts.push(...keys.map(key => `${key}:${regionShape[key]}`));
+    parts.push(...keys.map(key => `${key}:${signatureValue(regionShape[key])}`));
+    if ( regionShape.type === "grid" ) parts.push(`g:${canvas.grid.type}:${canvas.grid.sizeX}:${canvas.grid.sizeY}`);
     return parts.join("|");
   }
 
@@ -675,7 +678,7 @@ export class RegionGeometry extends PlaceableGeometry {
 
       case "polygon": break; // Dimensions set by the points.
 
-      case "grid": break; // Unclear what this is.
+      case "grid": break; // Absolute polygons from offsets. Rotation is always 0; rotating rewrites the offsets.
 
       case "token": break; // Unclear what this is.
     }
@@ -790,4 +793,8 @@ export class RegionGeometry extends PlaceableGeometry {
 
 }
 
+function signatureValue(value) {
+  if ( !Array.isArray(value) ) return value;
+  return value.map(v => (v && typeof v === "object") ? `${v.i}.${v.j}` : v).join(",");
+}
 

@@ -44,8 +44,8 @@ export class Segment {
   }
 
   release() {
-    this.a.release;
-    this.b.release;
+    this.a.release();
+    this.b.release();
     this.a = null;
     this.b = null;
   }
