@@ -20,14 +20,14 @@ GEOMETRY_CONFIG.threeD = {};
 GEOMETRY_CONFIG.placeableTrackers = {};
 GEOMETRY_CONFIG.placeableGeometry = {};
 
-const FLAGS = {
+export const FLAGS = {
   WH_ID: "wall-height", // Used for consistency with Wall Height module.
   TOKEN_HEIGHT: "tokenHeight",
   WALL: {
     TOP: "top",
     BOTTOM: "bottom",
   },
-}
+};
 
 
 // Track certain modules that complement features of this module.
