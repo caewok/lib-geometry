@@ -420,7 +420,7 @@ export class Plane {
    * @returns {number|null} Distance to the intersection along the ray, or null if none.
    *   Note: if negative, the intersection lies behind the ray origin (and thus may not be an intersection)
    */
-  rayIntersection(rayOrigin, rayDirection) {
+  rayIntersection(rayOrigin, rayDirection, { signed = false } = {}) {
     const { normal, point } = this;
 
     const denom = normal.dot(rayDirection);
@@ -429,7 +429,9 @@ export class Plane {
     if ( Math.abs(denom) < Number.EPSILON ) return null;
 
     // Calculate the distance along the ray
-    return normal.dot(point.subtract(rayOrigin)) / denom;
+    const t = normal.dot(point.subtract(rayOrigin)) / denom;
+    if ( signed || t.strictlyGreaterThan(0.0, Number.EPSILON) ) return t;
+    return null;
   }
 
   /**
