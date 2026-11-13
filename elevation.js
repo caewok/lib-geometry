@@ -106,7 +106,7 @@ function wallTopZ() {
 }
 
 function wallBottomZ() {
-  const elev = this.flags[FLAGS.WH_ID]?.[FLAGS.WALL.BOTTOM] ?? Number.POSITIVE_INFINITY;
+  const elev = this.flags[FLAGS.WH_ID]?.[FLAGS.WALL.BOTTOM] ?? Number.NEGATIVE_INFINITY;
   return gridUnitsToPixels(elev);
 }
 
