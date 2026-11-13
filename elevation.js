@@ -151,7 +151,7 @@ export function getTokenHeight(tokenD) {
   // Possible that height incorrectly stored as [null, null].
   // Ignore any such values.
   const storedHeight = tokenD.flags[FLAGS.WH_ID]?.[FLAGS.TOKEN_HEIGHT];
-  return (storedHeight || !Array.isArray(storedHeight)) ? storedHeight : null;
+  return (storedHeight && !Array.isArray(storedHeight)) ? storedHeight : null;
 }
 
 /**
