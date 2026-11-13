@@ -120,7 +120,7 @@ function wallBottomZ() {
 function getTokenVerticalHeightZ() {
   const isProne = this.isProne;
   const heightMult = isProne ? clamp(CONFIG.GeometryLib.CONFIG.proneMultiplier, 0, 1) : 1;
-  return gridUnitsToPixels((getTokenHeight(this) || calculateTokenHeightFromTokenShape(tokenD)) * heightMult) || 1; // Force at least 1 pixel high.
+  return gridUnitsToPixels((getTokenHeight(this) || calculateTokenHeightFromTokenShape(this)) * heightMult) || 1; // Force at least 1 pixel high.
 }
 
 /**
@@ -151,7 +151,7 @@ export function getTokenHeight(tokenD) {
   // Possible that height incorrectly stored as [null, null].
   // Ignore any such values.
   const storedHeight = tokenD.flags[FLAGS.WH_ID]?.[FLAGS.TOKEN_HEIGHT];
-  return (storedHeight || !Array.isArray(storedHeight) ) storedHeight : null;
+  return (storedHeight || !Array.isArray(storedHeight)) ? storedHeight : null;
 }
 
 /**
@@ -167,17 +167,7 @@ export function calculateTokenHeightFromTokenShape(tokenD) {
     * 0.5;
 }
 
-// NOTE: Helper functions to convert to Z pixels.
 
-/**
- * Helper to convert to Z value for a top elevation.
- */
-function zTop() { return gridUnitsToPixels(this.topE); }
-
-/**
- * Helper to convert to Z value for a bottom elevation.
- */
-function zBottom() { return gridUnitsToPixels(this.bottomE); }
 
 /**
  * Helper to convert to Z value for an elevationE.
