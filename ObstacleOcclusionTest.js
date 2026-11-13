@@ -464,7 +464,7 @@ export class ObstacleOcclusionTest {
   #geometriesOcclude(geoms, rayOrigin, rayDirection) {
     const rayEnd = rayOrigin.add(rayDirection, tmpPt1);
     return geoms.some(geom => this.#geomWithinRayBounds(geom, rayOrigin, rayEnd)
-      && geom.rayIntersection(rayOrigin, rayDirection));
+      && (geom.rayIntersection(rayOrigin, rayDirection) !== null));
   }
 
   #subGeometriesOcclude(geoms, rayOrigin, rayDirection, geomSubtypeFn = () => "calculated") {

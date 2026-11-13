@@ -1074,12 +1074,12 @@ static combineCoplanar(polys, { scalingFactor = 100 } = {}) {
    *   Important for Polygons3d, which deal with multiple polygon intersections.
    * @returns {number|null} The t value of the plane intersection.
    */
-  intersectionT(rayOrigin, rayDirection, { holesBlock = false } = {}) {
+  intersectionT(rayOrigin, rayDirection, { holesBlock = false, signed = false } = {}) {
     if ( !holesBlock && this.isHole ) return null;
 
     // First get the plane intersection.
     const plane = this.plane;
-    const t = plane.rayIntersection(rayOrigin, rayDirection);
+    const t = plane.rayIntersection(rayOrigin, rayDirection, { signed });
     if ( t === null ) return null;
     const ix = Point3d.tmp;
     rayOrigin.add(rayDirection.multiplyScalar(t, ix), ix)
@@ -2799,8 +2799,8 @@ export class Quad3d extends Polygon3d {
    * @param {Point3d} rayDirection
    * @returns {t|null} Returns null if not within the quad
    */
-  intersectionT(rayOrigin, rayDirection) {
-    return this.rayIntersectionMT(rayOrigin, rayDirection);
+  intersectionT(rayOrigin, rayDirection, opts) {
+    return this.rayIntersectionMT(rayOrigin, rayDirection, opts);
   }
 
 
@@ -2880,7 +2880,7 @@ export class Quad3d extends Polygon3d {
       && (u + v).almostLessThan(1.0, EPSILON) ) {
 
       const t = edge2.dot(q) * invDet;
-      if ( t.strictlyGreaterThan(0.0, EPSILON) ) { Point3d.release(...tmpPoints); return t; } // Could return { u, v, triangle: 1 }
+      if ( signed || t.strictlyGreaterThan(0.0, EPSILON) ) { Point3d.release(...tmpPoints); return t; } // Could return { u, v, triangle: 1 }
     }
 
     // --- Triangle 2: V1, V2, V3 ---
@@ -3674,10 +3674,10 @@ export class Polygons3d extends Polygon3d {
    * @param {boolean} [holesBlock = false]        If false, polygon holes return null
    * @returns {number|null} The t value of the plane intersection.
    */
-  intersectionT(rayOrigin, rayDirection, { holesBlock = false } = {}) {
+  intersectionT(rayOrigin, rayDirection, { holesBlock = false, signed = false } = {}) {
     // First get the plane intersection.
     const plane = this.plane;
-    const t = plane.rayIntersection(rayOrigin, rayDirection);
+    const t = plane.rayIntersection(rayOrigin, rayDirection, { signed });
     if ( t === null ) return null;
     using ix = Point3d.tmp;
     rayOrigin.add(rayDirection.multiplyScalar(t, ix), ix)

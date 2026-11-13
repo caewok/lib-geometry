@@ -263,16 +263,16 @@ export class RegionGeometry extends PlaceableGeometry {
       let shape;
       const solid = combinedBaseShapes[island.solidIndex];
       if ( island.holeIndices.length ) {
-        for ( shape of oldShapes ) {
-          if ( shape.solid === solid ) { oldShapes.delete(shape); break; }
+        for ( const match of oldShapes ) {
+          if ( match.solid === solid ) { oldShapes.delete(match); break; }
         }
-        const id = `${this._shapeId(island.solidIndex)}_island}`;
+        const id = `${this._shapeId(island.solidIndex)}_island`;
 
         // For either the new or existing primitive, update the solid and holes.
         shape ??= new HoledPrimitive(id)
         shape.replaceSolid(solid);
         const holes = island.holeIndices.map(idx => baseShapes[idx]);
-        holes.forEach(hole => shape.addHole(hole))
+        holes.forEach(hole => { if ( hole ) shape.addHole(hole); });
 
       } else shape = solid;
       shapes.push(shape)
@@ -336,7 +336,7 @@ export class RegionGeometry extends PlaceableGeometry {
             : ExtrudedPolygonPrimitive.fromPolygon(`${baseShapes[i].id}_combined`, solids[0]);
 
       // Additional solids (islands) are added at the end.
-      for ( let j = 1, n = solids.length; j < n; i += 1 ) {
+      for ( let j = 1, n = solids.length; j < n; j += 1 ) {
         combinedBaseShapes.push(hasHoles
           ? ExtrudedPolygonPrimitiveWithHoles.fromPolygon(`${baseShapes[i].id}_combined_holes`, solids[j], holes)
             : ExtrudedPolygonPrimitive.fromPolygon(`${baseShapes[i].id}_combined`, solids[j]));

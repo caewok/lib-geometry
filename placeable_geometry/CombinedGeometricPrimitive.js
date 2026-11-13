@@ -197,7 +197,7 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
    */
   elevationAtCanvasLocation(canvasLoc, opts) {
     let maxZ = Number.NEGATIVE_INFINITY;
-    for ( const shape of this.shapes ) {
+    for ( const shape of this.children ) {
       const z = shape.elevationAtCanvasLocation(canvasLoc, opts);
       if ( z !== null ) maxZ = Math.max(z, maxZ);
     }
@@ -291,7 +291,7 @@ export class CombinedGeometricPrimitive extends GeometricPrimitive {
       const childPoints = child.internalPoints;
       for ( const bucket of BUCKETS ) {
         ip[bucket].corners.push(...(childPoints[bucket].corners || []));
-        ip[bucket].sides.push(...(childPoints[bucket].mids || []));
+        ip[bucket].mids.push(...(childPoints[bucket].mids || []));
       }
     }
     return ip;
