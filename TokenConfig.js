@@ -7,6 +7,7 @@ game,
 
 import { GEOMETRY_LIB_ID, OTHER_MODULES } from "./const.js";
 import { renderTemplateSync, pixelsToGridUnits } from "./util.js";
+import { getTokenHeight } from "./elevation.js";
 
 // Patches for the Wall Config
 export const PATCHES = {};
@@ -15,7 +16,7 @@ PATCHES.TOKEN_HEIGHT = {};
 function renderTokenConfig(app, html, data) {
   const WH = OTHER_MODULES.WALL_HEIGHT;
   const doc = app.document ?? app.token.document;
-  const tokenVerticalHeight = doc.flags?.[WH.ID]?.[WH.FLAGS.TOKEN_HEIGHT] ?? null; // Null is calculated default.
+  const tokenVerticalHeight = getTokenHeight(doc); // Null is calculated default.
 
   // Identify the modules that requested token height configuration.'
   const moduleNames = [...CONFIG[GEOMETRY_LIB_ID].CONFIG.tokenHeightModules.values()].map(id => game.i18n.localize(`${id}.name`));
