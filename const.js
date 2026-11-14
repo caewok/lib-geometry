@@ -4,7 +4,7 @@ Hooks
 */
 "use strict";
 
-export const VERSION = "0.7.1";
+export const VERSION = "0.7.2";
 
 export const GEOMETRY_LIB_ID = "GeometryLib";
 
