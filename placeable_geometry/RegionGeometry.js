@@ -64,7 +64,7 @@ export class RegionGeometry extends PlaceableGeometry {
     ...super.UPDATE_KEY_MAP,
     ["elevation.bottom", "elevation"],
     ["elevation.top", "elevation"],
-    ["elevation.top.inclusive", "elevation"],
+    ["elevation.topInclusive", "elevation"],
 
     ["restriction.enabled", "wallRestriction"],
     ["restriction.type", "wallRestriction"],
