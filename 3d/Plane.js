@@ -218,13 +218,13 @@ export class Plane {
    * PIXI-positive (clockwise on canvas) ring --> normal.z < 0 (solid, faces down)
    *                counterclockwise ring     --> normal.z > 0 (hole, faces up)
    * @param {Point3d[]} pts       Ring points, at least 3, not closed
-   * @returns {Plane}
+   * @returns {Plane|null} Null if the points are insufficient to define a plane.
    */
   static fromMultiplePoints(pts, out) {
     pts = cleanPolygonPoints([...pts]);
 
     const res = this._fromPointsNewell(pts, out);
-    if ( !res ) {
+    if ( !res || res.normal.magnitudeSquared().almostEqual(0, 1e-12) ) {
       console.warn("Plane.fromMultiplePoints|Insufficient points to create the plane.");
       return null;
     }
