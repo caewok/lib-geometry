@@ -47,7 +47,7 @@ export class CanvasGeometryManager {
    * @returns {PlaceableGeometry}
    */
   geomForDocument(doc) {
-    if ( !this.geometryMap.has(document.uuid) ) this.create(document);
+    if ( !this.geometryMap.has(doc.uuid) ) this.create(doc);
     return this.geometryMap.get(doc.uuid);
   }
 
@@ -223,7 +223,7 @@ export class TokenGeometryManager extends CanvasGeometryManager {
       if ( token.isPreview ) return;
 
       // Flags have boolean values, but always seem to be set to true.
-      if ( Object.values(flags).some(flag => !Boolean(flag)) ) console.warn("Some flags set to false.", { ...flags });
+      if ( Object.values(flags).some(flag => !flag) ) console.warn("Some flags set to false.", { ...flags });
       this.update(token.document, new Set(Object.keys(flags)));
     });
   }
