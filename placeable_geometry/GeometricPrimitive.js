@@ -674,7 +674,9 @@ export class GeometricPrimitive {
     // Outward for solids, inward for holes.
     const worldDir = this.isHole ? -1 : 1;
     const protoDir = (this.isHole !== this.reversed) ? -1 : 1;
-    if ( this.prototypeFaces.some(face => face.points.length === 0) ) return false;
+    if ( this.prototypeFaces.some(face =>  face.polygons
+      ? face.polygons.some(poly => poly.points.length === 0)
+      : face.points.length === 0) ) return false;
     return this._hasConsistentFaceDirection(this.prototypeFaces) === protoDir
       && this._hasConsistentFaceDirection(this.faces) === worldDir;
   }
