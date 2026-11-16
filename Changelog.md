@@ -1,3 +1,7 @@
+## 0.7.2
+Update region geometry when topInclusive is changed.
+Fix for elevationAtCanvasLocation calculation.
+
 ## 0.7.1
 Handle region grid shapes.
 Fix for points calculator failing to detect obstacle intersection when viewer was in hole and target was outside.

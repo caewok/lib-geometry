@@ -277,7 +277,7 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
   elevationAtCanvasLocation(canvasLoc, opts) {
     // Shoot ray straight down; test only top faces.
     using rayOrigin = Point3d.tmp.set(canvasLoc.x, canvasLoc.y, 1e10);
-    using dir = Point3d.tmp.set(0, 0, -1);
+    using rayDirection = Point3d.tmp.set(0, 0, -1);
     const ix = this.rayIntersection(rayOrigin, rayDirection, { faces: this.topFaces });
     return ix ? ix.z : null;
   }
