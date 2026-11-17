@@ -1,3 +1,6 @@
+## 0.7.3
+Fix validation test for extruded polygon.
+
 ## 0.7.2
 Update region geometry when topInclusive is changed.
 Fix for elevationAtCanvasLocation calculation.
