@@ -471,8 +471,6 @@ export class Clipper2Paths {
     // Trim any empty paths or broken polygon paths.
     out.paths = cleanedPaths.filter(path => path.length > 2);
     return out;
-
-    return out;
   }
 
   /**

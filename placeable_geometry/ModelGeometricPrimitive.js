@@ -401,26 +401,19 @@ export class ExtrudedPolygonPrimitive extends ModelGeometricPrimitive {
    // ----- NOTE: Debug ----- //
 
   _hasConsistentFaceDirection(faces) {
-    if ( !faces || faces.length < 3 ) return false;
+    if ( !faces || faces.length < 3 ) return 0;
 
-    // Must account for concave polygons, where the face could be facing opposite a centroid.
-    // For each face, moving opposite the normal should intersect an odd number of other faces.
-    // (Draw line from face through the polygon, out the other side. Line should be moving into the polygon.)
-
-    // While ExtrudedPolygonPrimitive should not have holes, its child class may.
-    // Handle holes here to avoid duplicating the code. Performance hit can be avoided by turning off validation except for debugging.
-
-    // Could test top and bottom using the centroid, but not guaranteed to have top at 0 and bottom at 1.
-    // Simpler to test all faces using shoelace.
     const iter = faces.values();
     const firstFace = iter.next().value;
-    const isInside = this.constructor.testFaceOrientation(firstFace, faces);
+    const expectedDir = this.constructor.testFaceOrientation(firstFace, faces);
+    if ( expectedDir === 0 ) return 0;
+
     for ( const face of iter ) {
-      // TODO: Special handling for Polygons3d, which may have solid + holes?
-      if ( this.constructor.testFaceOrientation(face, faces) !== isInside ) return 0;
+      if ( this.constructor.testFaceOrientation(face, faces) !== expectedDir ) return 0;
     }
-    return isInside ? 1 : -1;
+    return expectedDir;
   }
+
 }
 
 export class ExtrudedPolygonPrimitiveWithHoles extends ExtrudedPolygonPrimitive {

@@ -8,7 +8,6 @@ PIXI,
 
 import { Draw } from "./Draw.js";
 
-
 /**
  * Class to manage ClipperPaths for multiple polygons.
  */
@@ -152,8 +151,7 @@ export class ClipperPaths {
    * @returns {ClipperPaths}
    */
   static fromPolygons(polygons, { scalingFactor = CONST.CLIPPER_SCALING_FACTOR } = {}) {
-    const out = new this(polygons.map(p => p.toClipperPoints({scalingFactor})), { scalingFactor });
-    return out;
+    return new this(polygons.map(p => p.toClipperPoints({scalingFactor})), { scalingFactor });
   }
 
   /**
@@ -640,3 +638,4 @@ export class ClipperPaths {
     graphics.endFill();
   }
 }
+console.log("ClipperPaths loaded with simplifyPolygons:", typeof ClipperPaths.prototype.simplifyPolygons);
