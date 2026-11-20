@@ -13,6 +13,9 @@ import { ExtrudedPolygonPrimitive } from "./ModelGeometricPrimitive.js";
 import { Segment } from "../Segment.js";
 import { GEOMETRY_LIB_ID } from "../const.js";
 
+const origin2d = new PIXI.Point(0, 0);
+Object.freeze(origin2d);
+
 /**
  * A ConePrimitive can represent a 3d extruded cone that is either flat, round, or semicircular.
  * Made up of a triangle base and arc shape, if any.
@@ -47,58 +50,58 @@ export class ConePrimitive extends ExtrudedPolygonPrimitive {
 
   /**
    * Cone built from a single triangle or a triangle + arc or half-circle.
-   * The default position is centered, with the apex at x = -0.5, y = 0 and the base vertical along x = 0.5
    */
   static create(id, angle, { curvature = "rounded", density } = {}) {
-    let baseSegment;
-    let arcCircle;
-    let arcStartAngle;
-    let arcEndAngle;
     const rotation = 0;
     const theta = Math.toRadians(angle);
     const radius = 1;
-    using apex = PIXI.Point.tmp.set(0, 0);
-    switch ( curvature ) {
-      case "flat":
-        baseSegment = this.flatConeBase(apex, radius, theta, rotation);
-        break;
-      case "semicircle": {
-        baseSegment = this.semiCircleConeBase(apex, radius, theta, rotation);
-        arcCircle = this.semiCircleConeCircle(apex, radius, theta, rotation);
-        arcStartAngle = Math.normalizeRadians(-Math.PI_1_2 + rotation);
-        arcEndAngle = Math.normalizeRadians(Math.PI_1_2 + rotation);
-        break;
-      }
-      case "round": {
-        baseSegment = this.roundConeBase(apex, radius, theta, rotation);
-        arcCircle = this.roundConeCircle(apex, radius);
-        arcStartAngle = Math.normalizeRadians(-(theta / 2) + rotation);
-        arcEndAngle = Math.normalizeRadians((theta / 2) + rotation);
-        break;
-      }
-      default: throw new Error("Cone type not recognized.");
-    }
-
-    let conePoly = this._createTrianglePrototype(`${id}_tri`, apex, baseSegment);
-    if ( curvature !== "flat" ) {
-      // Create the arc polygon.
-      density ||= PIXI.Circle.approximateVertexDensity(canvas.grid.size * 2);
-      const arcPoints = arcCircle.pointsForArc(arcStartAngle, arcEndAngle, { density, includeEndpoints: false });
-      const arcShape = new PIXI.Polygon(baseSegment.a, ...arcPoints, baseSegment.b);
-
-      // Combine the triangle with the arc.
-      const ClipperPaths = CONFIG[GEOMETRY_LIB_ID].CONFIG.ClipperPaths;
-      conePoly = ClipperPaths.unionPolygons([conePoly, arcShape])[0];
-    }
-
+    const conePoly = this.construct2dConeShape(origin2d, radius, theta, rotation, curvature, density);
     const out = this.fromPrototypePolygon(id, conePoly, { density });
     out.curvature = curvature;
     out.angle = angle;
     return out;
   }
 
-  static _createTrianglePrototype(id, apex, baseSegment) {
-    return new PIXI.Polygon([apex.x, apex.y, baseSegment.a.x, baseSegment.a.y, baseSegment.b.x, baseSegment.b.y]);
+  /**
+   * Build a 2d cone shape per FoundryVTT rules.
+   * @param {Point2d} apex            Origin of the cone
+   * @param {number} radius           Distance from apex along center of cone to the curve, in pixel units
+   * @param {number} theta            Angle of the cone, in radians
+   * @param {number} rotation         Rotation of the cone, in radians
+   * @returns {PIXI.Polygon}
+   */
+  static construct2dConeShape(apex, radius, theta, rotation, curvature = "flat", density = 0) {
+    let arcCircle;
+    let arcStartAngle;
+    let arcEndAngle;
+    switch ( curvature ) {
+      case "flat": {
+        const base = this.flatConeBase(apex, radius, theta, rotation)
+        const poly = new PIXI.Polygon(apex, base.a, base.b);
+        base.release();
+        return poly;
+      }
+
+      case "round":
+        arcCircle = this.roundConeCircle(apex, radius, theta, rotation);
+        arcStartAngle = Math.normalizeRadians(-Math.PI_1_2 + rotation);
+        arcEndAngle = Math.normalizeRadians(Math.PI_1_2 + rotation);
+        break;
+
+      case "semicircle":
+        arcCircle = this.semiCircleConeCircle(apex, radius, theta, rotation);
+        arcStartAngle = Math.normalizeRadians(-Math.PI_1_2 + rotation);
+        arcEndAngle = Math.normalizeRadians(Math.PI_1_2 + rotation);
+        break;
+
+      default: throw new Error("Cone type not recognized.");
+    }
+
+    // Construct the arc polygon.
+    density ||= PIXI.Circle.approximateVertexDensity(canvas.grid.size * 2);
+    const arcPoints = arcCircle.pointsForArc(arcStartAngle, arcEndAngle, { density, includeEndpoints: true });
+    const coneShape = new PIXI.Polygon(apex, ...arcPoints);
+    return coneShape;
   }
 
   // ----- NOTE: Math helpers ----- //
