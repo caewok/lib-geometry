@@ -621,7 +621,6 @@ PATCHES.PIXI.GETTERS = {
 PATCHES.PIXI.STATIC_GETTERS = {
   pool: function() { return Pool.getPool(this); },
   tmp: function() { return this.pool.acquire(); },
-  createN: function(n) { return this.pool.acquireMultiple(n); }
 }
 
 PATCHES.PIXI.STATIC_METHODS = {
@@ -642,7 +641,7 @@ PATCHES.PIXI.STATIC_METHODS = {
   release: Poolable.release,
   _release: Poolable._release,
   buildNObjects: Poolable.buildNObjects,
-
+  createN: function(n) { return this.pool.acquireMultiple(n); }
 };
 
 
